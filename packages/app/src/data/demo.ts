@@ -501,12 +501,56 @@ export function createDemoState(now = new Date()): State {
         updatedAt: minutesAgo(1500),
       },
     ],
+    // Varios días, autores y formatos para poder revisar cómo se ve el chat.
     groupMessages: [
+      {
+        id: 'g2',
+        senderId: 'demo-3',
+        text: 'Hola a todos. Este es un mensaje de prueba para ver cómo se ve el canal del salón.',
+        sentAt: minutesAgo(2900),
+      },
+      { id: 'g3', senderId: 'demo-4', text: 'Así se ve la respuesta de otro compañero.', sentAt: minutesAgo(2895) },
+      {
+        id: 'g4',
+        senderId: 'demo-4',
+        text: 'Y un segundo mensaje seguido se agrupa con el anterior.',
+        sentAt: minutesAgo(2894),
+      },
+      { id: 'g5', senderId: 'demo-1', text: 'Mensaje de prueba del creador de la app.', sentAt: minutesAgo(2880) },
+      {
+        id: 'g6',
+        senderId: 'demo-2',
+        text:
+          'Ejemplo de mensaje largo: sirve para revisar que el texto se acomode en varias líneas ' +
+          'sin salirse de la burbuja, tanto en la computadora como en el celular y en el panel ' +
+          'lateral de la extensión.',
+        sentAt: minutesAgo(1500),
+      },
+      {
+        id: 'g7',
+        senderId: 'demo-3',
+        text:
+          'Ejemplo con código:\n```js\nfunction saludar(nombre) {\n  return `Hola, ${nombre}`;\n}\n```\n' +
+          'Los bloques conservan sus espacios.',
+        sentAt: minutesAgo(1490),
+      },
+      {
+        id: 'g8',
+        senderId: 'demo-1',
+        text: 'También se reconocen enlaces como https://example.com/apuntes y código en línea como `npm run dev`.',
+        sentAt: minutesAgo(1480),
+      },
+      { id: 'g9', senderId: 'demo-4', text: 'Mensaje de prueba de hoy.', sentAt: minutesAgo(95) },
       { id: 'g1', senderId: 'demo-2', text: 'Mensaje de prueba en el canal del grupo.', sentAt: minutesAgo(30) },
     ],
-    directConversations: [{ id: 'c1', participantIds: ['demo-2', 'demo-3'] }],
+    directConversations: [
+      { id: 'c1', participantIds: ['demo-2', 'demo-3'] },
+      { id: 'c2', participantIds: ['demo-3', 'demo-4'] },
+    ],
     directMessages: [
       { id: 'd1', conversationId: 'c1', senderId: 'demo-2', text: 'Mensaje privado de prueba.', sentAt: minutesAgo(20) },
+      { id: 'd2', conversationId: 'c2', senderId: 'demo-4', text: 'Otro mensaje privado de prueba.', sentAt: minutesAgo(1600) },
+      { id: 'd3', conversationId: 'c2', senderId: 'demo-3', text: 'Respuesta privada de prueba.', sentAt: minutesAgo(1590) },
     ],
     birthdays: [{ memberId: 'demo-3', day: 15, month: 11, remind: true }],
     activities: [

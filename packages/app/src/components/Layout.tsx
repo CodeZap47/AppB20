@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router';
+import { NavLink, Outlet, useMatches } from 'react-router';
 import { modulesForStage } from '@b20/core';
 import { usePlatform } from './PlatformContext';
 import { DemoBanner } from './DemoBanner';
@@ -10,9 +10,12 @@ export function Layout() {
   const platform = usePlatform();
   const { me } = useSnapshot();
   const compact = platform === 'extension-panel';
+  // Una ruta con `handle: { fill: true }` (el chat) usa todo el alto en vez de alargar la página.
+  const fill = useMatches().some((m) => (m.handle as { fill?: boolean } | undefined)?.fill);
+  const shell = ['shell', compact && 'shell--compact', fill && 'shell--fill'].filter(Boolean).join(' ');
 
   return (
-    <div className={compact ? 'shell shell--compact' : 'shell'}>
+    <div className={shell}>
       <header className="topbar">
         <NavLink to="/" className="brand">
           B20

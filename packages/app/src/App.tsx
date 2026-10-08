@@ -5,7 +5,7 @@ import { HomePage } from './pages/HomePage';
 import { ModulePage } from './pages/ModulePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { InstallPage } from './pages/InstallPage';
-import { DirectConversationPage, DirectInboxPage, GroupChatPage } from './pages/MessagesPage';
+import { DirectThread, GroupThread, MessagesLayout, ThreadPlaceholder } from './pages/MessagesPage';
 import { WorksPage } from './pages/WorksPage';
 import { ProfilePage, ProfilesPage } from './pages/ProfilesPage';
 import { BirthdaysPage } from './pages/BirthdaysPage';
@@ -32,9 +32,17 @@ const router = createHashRouter([
       { index: true, element: <WhatsNewPage /> },
       { path: 'm/inicio', element: <WhatsNewPage /> },
       { path: 'modulos', element: <HomePage /> },
-      { path: 'm/mensajes', element: <GroupChatPage /> },
-      { path: 'm/mensajes/directos', element: <DirectInboxPage /> },
-      { path: 'm/mensajes/directos/:conversationId', element: <DirectConversationPage /> },
+      {
+        path: 'm/mensajes',
+        element: <MessagesLayout />,
+        // `fill`: la pantalla ocupa todo el alto y se desplaza por dentro (ver Layout).
+        handle: { fill: true },
+        children: [
+          { index: true, element: <GroupThread /> },
+          { path: 'directos', element: <ThreadPlaceholder /> },
+          { path: 'directos/:conversationId', element: <DirectThread /> },
+        ],
+      },
       { path: 'm/tareas', element: <WorksPage /> },
       { path: 'm/perfiles', element: <ProfilesPage /> },
       { path: 'perfil/:memberId', element: <ProfilePage /> },

@@ -1,140 +1,375 @@
-import { NavLink, useNavigate, useParams } from 'react-router';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { Link, NavLink, Outlet, useMatch, useNavigate, useParams } from 'react-router';
 import { useDataSource, useSnapshot } from '../data/DataContext';
+import { Avatar } from '../components/Avatar';
 import { Composer } from '../components/Composer';
+import { Icon } from '../components/Icon';
 import { MessageList } from '../components/MessageList';
 import { useAction } from '../components/useAction';
-import { memberName } from '../lib/format';
+import { formatListTime, memberName } from '../lib/format';
+import { previewText, type ChatMessage } from '../lib/messages';
+import { matches } from '../lib/search';
 
-function Tabs() {
+const GROUP_NAME = 'Canal del salón';
+
+/**
+ * Mensajes en dos paneles: la lista de conversaciones y la conversación abierta.
+ * En pantallas angostas (celular, panel lateral de la extensión) se ve un panel a la vez:
+ * `/m/mensajes/directos` es la lista y las demás rutas son una conversación.
+ */
+export function MessagesLayout() {
+  const onList = useMatch('/m/mensajes/directos');
   return (
-    <nav className="tabs" aria-label="Bandejas">
-      <NavLink to="/m/mensajes" end className="tabs__link">
-        Grupo
-      </NavLink>
-      <NavLink to="/m/mensajes/directos" className="tabs__link">
-        Directos
-      </NavLink>
-    </nav>
+    <div className={onList ? 'chat chat--list' : 'chat chat--thread'}>
+      <ConversationList />
+      <section className="chat__thread" aria-label="Conversación">
+        <Outlet />
+      </section>
+    </div>
   );
 }
 
-export function GroupChatPage() {
+function GroupAvatar({ size = 40 }: { size?: number }) {
+  return (
+    <span className="avatar avatar--group" style={{ width: size, height: size }} aria-hidden="true">
+      <Icon name="users" size={Math.round(size * 0.55)} />
+    </span>
+  );
+}
+
+function ConversationRow({
+  to,
+  end,
+  avatar,
+  name,
+  last,
+  preview,
+}: {
+  to: string;
+  end?: boolean;
+  avatar: ReactNode;
+  name: string;
+  last: ChatMessage | undefined;
+  preview: string;
+}) {
+  return (
+    <li>
+      <NavLink to={to} end={end} className="conv">
+        {avatar}
+        <span className="conv__main">
+          <span className="conv__top">
+            <strong className="conv__name">{name}</strong>
+            {last && (
+              <time className="conv__time" dateTime={last.sentAt.toISOString()}>
+                {formatListTime(last.sentAt)}
+              </time>
+            )}
+          </span>
+          <span className="conv__preview">{preview}</span>
+        </span>
+      </NavLink>
+    </li>
+  );
+}
+
+function ConversationList() {
+  const source = useDataSource();
+  const navigate = useNavigate();
+  const { me, members, groupMessages, directConversations, directMessages } = useSnapshot();
+  const { error, run } = useAction();
+  const [query, setQuery] = useState('');
+  const [picking, setPicking] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  const directs = useMemo(
+    () =>
+      directConversations
+        .map((c) => {
+          const otherId = c.participantIds.find((id) => id !== me?.id) ?? '';
+          return {
+            id: c.id,
+            otherId,
+            other: members.find((m) => m.id === otherId),
+            name: memberName(members, otherId),
+            last: directMessages.findLast((m) => m.conversationId === c.id),
+          };
+        })
+        .sort((a, b) => (b.last?.sentAt.getTime() ?? 0) - (a.last?.sentAt.getTime() ?? 0)),
+    [directConversations, directMessages, members, me?.id],
+  );
+
+  const previewOf = (last: ChatMessage | undefined, inGroup: boolean) => {
+    if (!last) return 'Sin mensajes todavía';
+    const who = last.senderId === me?.id ? 'Tú' : inGroup ? memberName(members, last.senderId) : '';
+    return `${who ? `${who}: ` : ''}${previewText(last.text)}`;
+  };
+
+  const lastGroup = groupMessages.at(-1);
+  const showGroup = matches(query, GROUP_NAME, 'grupo');
+  const shownDirects = directs.filter((d) => matches(query, d.name));
+  const newPeople = members.filter(
+    (m) =>
+      m.id !== me?.id &&
+      m.status === 'active' &&
+      !directs.some((d) => d.otherId === m.id) &&
+      matches(query, m.displayName),
+  );
+  const showPeople = (picking || query.trim() !== '') && newPeople.length > 0;
+  const nothing = !showGroup && !shownDirects.length && !showPeople;
+
+  const start = (memberId: string) => {
+    const id = run(() => source.openDirectConversation(memberId));
+    if (!id) return;
+    setPicking(false);
+    setQuery('');
+    void navigate(`/m/mensajes/directos/${id}`);
+  };
+
+  return (
+    <aside className="chat__list" aria-label="Conversaciones">
+      <header className="chat__list-header">
+        <h1>Mensajes</h1>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label={picking ? 'Cerrar la lista de compañeros' : 'Nueva conversación'}
+          title={picking ? 'Cerrar' : 'Nueva conversación'}
+          aria-expanded={picking}
+          onClick={() => {
+            setPicking(!picking);
+            if (!picking) searchRef.current?.focus();
+          }}
+        >
+          <Icon name={picking ? 'close' : 'plus'} />
+        </button>
+      </header>
+      <label className="search">
+        <Icon name="search" size={18} />
+        <input
+          ref={searchRef}
+          type="search"
+          placeholder="Buscar"
+          aria-label="Buscar conversación o compañero"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </label>
+      {error && (
+        <p className="error chat__list-note" role="alert">
+          {error}
+        </p>
+      )}
+
+      <div className="chat__list-scroll">
+        {showGroup && (
+          <ul className="convs">
+            <ConversationRow
+              to="/m/mensajes"
+              end
+              avatar={<GroupAvatar />}
+              name={GROUP_NAME}
+              last={lastGroup}
+              preview={previewOf(lastGroup, true)}
+            />
+          </ul>
+        )}
+
+        {(shownDirects.length > 0 || (!query && !picking)) && (
+          <>
+            <h2 className="chat__list-title">Directos</h2>
+            {shownDirects.length ? (
+              <ul className="convs">
+                {shownDirects.map((d) => (
+                  <ConversationRow
+                    key={d.id}
+                    to={`/m/mensajes/directos/${d.id}`}
+                    avatar={<Avatar member={d.other} size={40} />}
+                    name={d.name}
+                    last={d.last}
+                    preview={previewOf(d.last, false)}
+                  />
+                ))}
+              </ul>
+            ) : (
+              <p className="muted chat__list-note">
+                Aún no tienes conversaciones directas.{' '}
+                <button type="button" className="link-button" onClick={() => setPicking(true)}>
+                  Escríbele a un compañero
+                </button>
+              </p>
+            )}
+          </>
+        )}
+
+        {showPeople && (
+          <>
+            <h2 className="chat__list-title">Iniciar conversación</h2>
+            <ul className="convs">
+              {newPeople.map((m) => (
+                <li key={m.id}>
+                  <button type="button" className="conv" onClick={() => start(m.id)}>
+                    <Avatar member={m} size={40} />
+                    <span className="conv__main">
+                      <strong className="conv__name">{m.displayName}</strong>
+                      <span className="conv__preview">Escribirle por primera vez</span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+
+        {picking && !query && !newPeople.length && (
+          <p className="muted chat__list-note">Ya tienes una conversación con cada compañero.</p>
+        )}
+        {nothing && query && <p className="muted chat__list-note">Sin resultados para «{query.trim()}».</p>}
+      </div>
+    </aside>
+  );
+}
+
+function ThreadHeader({
+  avatar,
+  title,
+  subtitle,
+  action,
+}: {
+  avatar: ReactNode;
+  title: ReactNode;
+  subtitle: ReactNode;
+  action?: ReactNode;
+}) {
+  return (
+    <header className="thread__header">
+      <Link to="/m/mensajes/directos" className="icon-button thread__back" aria-label="Ver todas las conversaciones">
+        <Icon name="back" />
+      </Link>
+      {avatar}
+      <div className="thread__heading">
+        <h2>{title}</h2>
+        <p>{subtitle}</p>
+      </div>
+      {action}
+    </header>
+  );
+}
+
+function ThreadNotice({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="thread__notice">
+      <span className="thread__notice-icon" aria-hidden="true">
+        <Icon name="chat" size={28} />
+      </span>
+      <h2>{title}</h2>
+      <p className="muted">{children}</p>
+    </div>
+  );
+}
+
+export function GroupThread() {
   const source = useDataSource();
   const { me, members, groupMessages } = useSnapshot();
   const { error, run } = useAction();
+  const count = members.filter((m) => m.status === 'active').length;
 
   return (
     <>
-      <h1>Mensajes</h1>
-      <Tabs />
-      <p className="muted">Canal del salón: lo ven todos los compañeros del grupo.</p>
+      <ThreadHeader
+        avatar={<GroupAvatar />}
+        title={GROUP_NAME}
+        subtitle={`${count} ${count === 1 ? 'integrante' : 'integrantes'} · lo ve todo el grupo`}
+      />
       <MessageList
         messages={groupMessages}
         members={members}
         meId={me?.id}
-        empty="Todavía no hay mensajes en el canal."
+        showSenders
+        empty={
+          <ThreadNotice title="El canal está en silencio">
+            Escribe el primer mensaje para todo el salón.
+          </ThreadNotice>
+        }
       />
-      {error && <p className="error">{error}</p>}
       <Composer
+        key={me?.id}
+        draftKey={`${me?.id}:grupo`}
         placeholder="Escribe al grupo"
+        error={error}
         onSend={(text) => run(() => (source.sendGroupMessage(text), true)) ?? false}
       />
     </>
   );
 }
 
-export function DirectInboxPage() {
-  const source = useDataSource();
-  const navigate = useNavigate();
-  const { me, members, directConversations, directMessages } = useSnapshot();
-  const { error, run } = useAction();
-  const others = members.filter((m) => m.id !== me?.id && m.status === 'active');
-
-  const lastMessage = (conversationId: string) =>
-    directMessages.filter((m) => m.conversationId === conversationId).at(-1);
-
+/** Panel derecho cuando estás en la lista sin abrir ninguna conversación (solo pantallas anchas). */
+export function ThreadPlaceholder() {
   return (
-    <>
-      <h1>Mensajes</h1>
-      <Tabs />
-      <p className="muted">Solo tú y la otra persona ven cada conversación.</p>
-
-      {directConversations.length ? (
-        <ul className="list">
-          {directConversations.map((c) => {
-            const otherId = c.participantIds.find((id) => id !== me?.id) ?? '';
-            const last = lastMessage(c.id);
-            return (
-              <li key={c.id}>
-                <NavLink to={`/m/mensajes/directos/${c.id}`} className="list__item">
-                  <strong>{memberName(members, otherId)}</strong>
-                  <span className="muted">{last ? last.text : 'Sin mensajes'}</span>
-                </NavLink>
-              </li>
-            );
-          })}
-        </ul>
-      ) : (
-        <p className="muted">No tienes conversaciones directas.</p>
-      )}
-
-      <label className="field">
-        Nueva conversación con
-        <select
-          value=""
-          onChange={(e) => {
-            const id = run(() => source.openDirectConversation(e.target.value));
-            if (id) void navigate(`/m/mensajes/directos/${id}`);
-          }}
-        >
-          <option value="" disabled>
-            Elige a un compañero
-          </option>
-          {others.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.displayName}
-            </option>
-          ))}
-        </select>
-      </label>
-      {error && <p className="error">{error}</p>}
-    </>
+    <ThreadNotice title="Elige una conversación">
+      Abre una de la lista o entra al <Link to="/m/mensajes">canal del salón</Link>.
+    </ThreadNotice>
   );
 }
 
-export function DirectConversationPage() {
+export function DirectThread() {
   const { conversationId = '' } = useParams();
   const source = useDataSource();
   const { me, members, directConversations, directMessages } = useSnapshot();
   const { error, run } = useAction();
   const conversation = directConversations.find((c) => c.id === conversationId);
+  const messages = useMemo(
+    () => directMessages.filter((m) => m.conversationId === conversationId),
+    [directMessages, conversationId],
+  );
 
   // Si no participas, la vista del servidor no la entrega: se trata igual que inexistente.
   if (!conversation) {
     return (
-      <>
-        <h1>Conversación no disponible</h1>
-        <NavLink to="/m/mensajes/directos">Volver a tus conversaciones</NavLink>
-      </>
+      <ThreadNotice title="Conversación no disponible">
+        No existe o no participas en ella.{' '}
+        <Link to="/m/mensajes/directos">Volver a tus conversaciones</Link>
+      </ThreadNotice>
     );
   }
 
   const otherId = conversation.participantIds.find((id) => id !== me?.id) ?? '';
+  const other = members.find((m) => m.id === otherId);
+  const name = memberName(members, otherId);
+  const draftKey = `${me?.id}:${conversation.id}`;
+
   return (
     <>
-      <NavLink to="/m/mensajes/directos" className="back">
-        ← Directos
-      </NavLink>
-      <h1>{memberName(members, otherId)}</h1>
+      <ThreadHeader
+        avatar={<Avatar member={other} size={40} />}
+        title={<Link to={`/perfil/${otherId}`}>{name}</Link>}
+        subtitle={
+          <>
+            <Icon name="lock" size={13} /> Solo ustedes dos ven esta conversación
+          </>
+        }
+        action={
+          <Link to={`/perfil/${otherId}`} className="button secondary thread__action">
+            Ver perfil
+          </Link>
+        }
+      />
       <MessageList
-        messages={directMessages.filter((m) => m.conversationId === conversation.id)}
+        key={conversation.id}
+        messages={messages}
         members={members}
         meId={me?.id}
-        empty="Escribe el primer mensaje."
+        showSenders={false}
+        empty={
+          <ThreadNotice title={`Saluda a ${name}`}>
+            Todavía no se han escrito. Lo que envíes aquí queda entre ustedes dos.
+          </ThreadNotice>
+        }
       />
-      {error && <p className="error">{error}</p>}
       <Composer
-        placeholder="Escribe un mensaje"
+        key={draftKey}
+        draftKey={draftKey}
+        placeholder={`Escribe a ${name}`}
+        error={error}
         onSend={(text) => run(() => (source.sendDirectMessage(conversation.id, text), true)) ?? false}
       />
     </>
