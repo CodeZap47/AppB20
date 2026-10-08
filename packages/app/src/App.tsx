@@ -9,6 +9,10 @@ import { DirectConversationPage, DirectInboxPage, GroupChatPage } from './pages/
 import { WorksPage } from './pages/WorksPage';
 import { ProfilePage, ProfilesPage } from './pages/ProfilesPage';
 import { BirthdaysPage } from './pages/BirthdaysPage';
+import { WhatsNewPage } from './pages/WhatsNewPage';
+import { ActivitiesPage, ActivityPage } from './pages/ActivitiesPage';
+import { NoteFormPage, NotePage, NotesPage } from './pages/NotesPage';
+import { AskQuestionPage, QuestionPage, QuestionsPage } from './pages/QuestionsPage';
 import { SpacetimeProvider } from './lib/spacetime';
 import { PlatformContext } from './components/PlatformContext';
 import { DataProvider } from './data/DataContext';
@@ -25,7 +29,9 @@ const router = createHashRouter([
   {
     element: <Layout />,
     children: [
-      { index: true, element: <HomePage /> },
+      { index: true, element: <WhatsNewPage /> },
+      { path: 'm/inicio', element: <WhatsNewPage /> },
+      { path: 'modulos', element: <HomePage /> },
       { path: 'm/mensajes', element: <GroupChatPage /> },
       { path: 'm/mensajes/directos', element: <DirectInboxPage /> },
       { path: 'm/mensajes/directos/:conversationId', element: <DirectConversationPage /> },
@@ -33,6 +39,15 @@ const router = createHashRouter([
       { path: 'm/perfiles', element: <ProfilesPage /> },
       { path: 'perfil/:memberId', element: <ProfilePage /> },
       { path: 'm/cumpleanos', element: <BirthdaysPage /> },
+      { path: 'm/actividades', element: <ActivitiesPage /> },
+      { path: 'm/actividades/:activityId', element: <ActivityPage /> },
+      { path: 'm/notas', element: <NotesPage /> },
+      { path: 'm/notas/nueva', element: <NoteFormPage /> },
+      { path: 'm/notas/:noteId', element: <NotePage /> },
+      { path: 'm/notas/:noteId/editar', element: <NoteFormPage /> },
+      { path: 'm/preguntas', element: <QuestionsPage /> },
+      { path: 'm/preguntas/nueva', element: <AskQuestionPage /> },
+      { path: 'm/preguntas/:questionId', element: <QuestionPage /> },
       { path: 'm/:moduleId', element: <ModulePage /> },
       { path: 'ajustes', element: <SettingsPage /> },
       { path: 'instalar', element: <InstallPage /> },

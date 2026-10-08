@@ -20,14 +20,16 @@ Resumen técnico de la base inicial. La fuente de verdad del alcance es
 
 Tablas privadas: `app_config`, `invitation`, `member`, `subject`, `term`, `work`,
 `work_author`, `group_message`, `direct_conversation`, `direct_message`, `birthday`,
-`change_log`.
+`change_log`, `activity`, `evidence`, `note`, `note_comment`, `question`, `answer`,
+`last_seen`.
 
 Vistas públicas con filtro por quien consulta: `my_member`, `members`, `subjects`, `terms`,
 `works`, `work_authors`, `group_messages`, `birthdays`, `change_history`,
-`my_direct_conversations`, `my_direct_messages`.
+`my_direct_conversations`, `my_direct_messages`, `activities`, `evidences`, `notes` (del grupo
+y las personales propias), `note_comments`, `questions`, `answers`, `my_last_seen`.
 
-Faltan para el MVP: actividades, notas, preguntas y respuestas, guías con fuentes, adjuntos,
-instalaciones/suscripciones push y preferencias de avisos.
+Faltan para el MVP: guías con fuentes, adjuntos, instalaciones/suscripciones push y
+preferencias de avisos.
 
 ## Capa de datos de la interfaz
 
