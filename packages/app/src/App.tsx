@@ -6,11 +6,16 @@ import { ModulePage } from './pages/ModulePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { InstallPage } from './pages/InstallPage';
 import { DirectThread, GroupThread, MessagesLayout, ThreadPlaceholder } from './pages/MessagesPage';
-import { PublishWorkPage, WorkPage, WorksPage } from './pages/WorksPage';
+import {
+  AssignmentFormPage,
+  AssignmentPage,
+  AssignmentsPage,
+  SubmitWorkPage,
+} from './pages/WorksPage';
 import { ProfilePage, ProfilesPage } from './pages/ProfilesPage';
 import { BirthdaysPage } from './pages/BirthdaysPage';
 import { WhatsNewPage } from './pages/WhatsNewPage';
-import { ActivitiesPage, ActivityPage, NewActivityPage } from './pages/ActivitiesPage';
+import { ActivitiesPage, ActivityFormPage, ActivityPage } from './pages/ActivitiesPage';
 import { NoteFormPage, NotePage, NotesPage } from './pages/NotesPage';
 import { AskQuestionPage, QuestionPage, QuestionsPage } from './pages/QuestionsPage';
 import { SpacetimeProvider } from './lib/spacetime';
@@ -43,15 +48,18 @@ const router = createHashRouter([
           { path: 'directos/:conversationId', element: <DirectThread /> },
         ],
       },
-      { path: 'm/tareas', element: <WorksPage /> },
-      { path: 'm/tareas/nuevo', element: <PublishWorkPage /> },
-      { path: 'm/tareas/:workId', element: <WorkPage /> },
+      { path: 'm/tareas', element: <AssignmentsPage /> },
+      { path: 'm/tareas/nueva', element: <AssignmentFormPage /> },
+      { path: 'm/tareas/:assignmentId', element: <AssignmentPage /> },
+      { path: 'm/tareas/:assignmentId/editar', element: <AssignmentFormPage /> },
+      { path: 'm/tareas/:assignmentId/subir', element: <SubmitWorkPage /> },
       { path: 'm/perfiles', element: <ProfilesPage /> },
       { path: 'perfil/:memberId', element: <ProfilePage /> },
       { path: 'm/cumpleanos', element: <BirthdaysPage /> },
       { path: 'm/actividades', element: <ActivitiesPage /> },
-      { path: 'm/actividades/nueva', element: <NewActivityPage /> },
+      { path: 'm/actividades/nueva', element: <ActivityFormPage /> },
       { path: 'm/actividades/:activityId', element: <ActivityPage /> },
+      { path: 'm/actividades/:activityId/editar', element: <ActivityFormPage /> },
       { path: 'm/notas', element: <NotesPage /> },
       { path: 'm/notas/nueva', element: <NoteFormPage /> },
       { path: 'm/notas/:noteId', element: <NotePage /> },

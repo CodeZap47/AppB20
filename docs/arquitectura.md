@@ -19,17 +19,31 @@ Resumen técnico de la base inicial. La fuente de verdad del alcance es
 ## Modelo de datos inicial (`packages/spacetime-module`)
 
 Tablas privadas: `app_config`, `invitation`, `member`, `subject`, `term`, `work`,
-`work_author`, `work_file`, `group_message`, `direct_conversation`, `direct_message`, `birthday`,
+`assignment`, `page_revision`, `work_author`, `work_file`, `group_message`, `direct_conversation`, `direct_message`, `birthday`,
 `change_log`, `activity`, `evidence`, `note`, `note_comment`, `question`, `answer`,
 `last_seen`.
 
 Vistas públicas con filtro por quien consulta: `my_member`, `members`, `subjects`, `terms`,
-`works`, `work_authors`, `work_files`, `group_messages`, `birthdays`, `change_history`,
+`assignments`, `page_revisions`, `works`, `work_authors`, `work_files`, `group_messages`, `birthdays`, `change_history`,
 `my_direct_conversations`, `my_direct_messages`, `activities`, `evidences`, `notes` (del grupo
 y las personales propias), `note_comments`, `questions`, `answers`, `my_last_seen`.
 
 Faltan para el MVP: guías con fuentes, adjuntos fuera de los trabajos, instalaciones/suscripciones
 push y preferencias de avisos.
+
+### Páginas que edita todo el grupo
+
+Una tarea, actividad, exposición o examen es un `Assignment`: la página principal con lo que se
+pidió. Los trabajos de cada alumno o equipo (`Work`) cuelgan de ella con `assignmentId`; la
+materia, el parcial y el tipo se leen de la página, no se repiten en el trabajo.
+
+`update_assignment` y `update_activity` no comprueban autoría: basta ser miembro activo, como
+en un wiki. Cada creación o edición guarda el texto completo en `page_revision` (título,
+objetivo e instrucciones) con quién y cuándo, y aumenta `version`. Restaurar una versión es
+editar con el texto de esa versión, así que nunca se borra historial. No hay bloqueo de edición
+simultánea: gana el último que guarda y el anterior queda en el historial.
+
+`update_work`, `attach_work_file` y `remove_work_file` sí exigen ser autor del trabajo.
 
 ### Plan de estudios y tipos de trabajo
 
@@ -39,8 +53,8 @@ el reducer `import_curriculum`, que solo ejecutan los creadores y no duplica mat
 llamarlo desde la interfaz cuando se conecte SpacetimeDB. `create_subject` sigue disponible para
 materias fuera del plan y ahora pide el cuatrimestre.
 
-Cada trabajo lleva `kind`: `tarea`, `actividad`, `exposicion` o `examen` (`WORK_KINDS` en
-`@b20/core`, repetido en el módulo). `publish_work` y `update_work` lo validan.
+Cada página principal lleva `kind`: `tarea`, `actividad`, `exposicion` o `examen` (`WORK_KINDS` en
+`@b20/core`, repetido en el módulo). `create_assignment` y `update_assignment` lo validan.
 
 ### Archivos adjuntos y su límite
 

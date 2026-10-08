@@ -1,6 +1,6 @@
 import type { Id, Snapshot } from '../data/types';
 
-export type NewsKind = 'trabajo' | 'nota' | 'actividad' | 'evidencia' | 'pregunta' | 'respuesta' | 'resuelta';
+export type NewsKind = 'tarea' | 'trabajo' | 'nota' | 'actividad' | 'evidencia' | 'pregunta' | 'respuesta' | 'resuelta';
 
 export interface NewsItem {
   key: string;
@@ -13,7 +13,8 @@ export interface NewsItem {
 }
 
 export const NEWS_LABEL: Record<NewsKind, string> = {
-  trabajo: 'Trabajos',
+  tarea: 'Tareas y actividades',
+  trabajo: 'Trabajos subidos',
   nota: 'Apuntes',
   actividad: 'Actividades',
   evidencia: 'Evidencias',
@@ -28,19 +29,33 @@ export const NEWS_LABEL: Record<NewsKind, string> = {
  */
 export function buildNews(snapshot: Snapshot): NewsItem[] {
   const meId = snapshot.me?.id;
+  const assignmentOf = (id: Id) => snapshot.assignments.find((a) => a.id === id);
   const questionOf = (id: Id) => snapshot.questions.find((q) => q.id === id);
   const activityOf = (id: Id) => snapshot.activities.find((a) => a.id === id);
 
   const items: NewsItem[] = [
-    ...snapshot.works.map((w) => ({
-      key: `w${w.id}`,
-      kind: 'trabajo' as const,
-      subjectId: w.subjectId,
-      actorId: w.authorIds[0] ?? '',
-      text: `publicó el trabajo «${w.title}»`,
-      link: `/m/tareas/${w.id}`,
-      at: w.createdAt,
+    // Una página nueva la anuncia quien la creó; una edición, quien guardó la última versión.
+    ...snapshot.assignments.map((a) => ({
+      key: `t${a.id}`,
+      kind: 'tarea' as const,
+      subjectId: a.subjectId,
+      actorId: a.updatedBy,
+      text: `${a.version > 1 ? 'editó' : 'creó'} la página de «${a.title}»`,
+      link: `/m/tareas/${a.id}`,
+      at: a.updatedAt,
     })),
+    ...snapshot.works.map((w) => {
+      const assignment = assignmentOf(w.assignmentId);
+      return {
+        key: `w${w.id}`,
+        kind: 'trabajo' as const,
+        subjectId: assignment?.subjectId,
+        actorId: w.authorIds[0] ?? '',
+        text: `subió su trabajo a «${assignment?.title ?? 'una tarea'}»`,
+        link: `/m/tareas/${w.assignmentId}?trabajo=${w.id}`,
+        at: w.createdAt,
+      };
+    }),
     ...snapshot.notes
       .filter((n) => n.visibility === 'group')
       .map((n) => ({

@@ -2,9 +2,10 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import { Avatar } from '../components/Avatar';
-import { WorkArchive } from '../components/WorkArchive';
 import { useAction } from '../components/useAction';
-import { formatDayMonth } from '../lib/format';
+import { WORK_KIND_LABEL, workKindGroup } from '@b20/core';
+import { formatDate, formatDayMonth } from '../lib/format';
+import { authorsLabel } from '../lib/works';
 
 export function ProfilesPage() {
   const { me, members, works } = useSnapshot();
@@ -55,7 +56,7 @@ export function ProfilePage() {
   const { memberId = '' } = useParams();
   const source = useDataSource();
   const navigate = useNavigate();
-  const { me, members, works, workFiles, subjects, terms, birthdays } = useSnapshot();
+  const { me, members, assignments, works, workFiles, subjects, terms, birthdays } = useSnapshot();
   const { error, run } = useAction();
   const [editing, setEditing] = useState(false);
   const member = members.find((m) => m.id === memberId);
@@ -64,7 +65,9 @@ export function ProfilePage() {
 
   const isMe = member.id === me?.id;
   const birthday = birthdays.find((b) => b.memberId === member.id);
-  const ownWorks = works.filter((w) => w.authorIds.includes(member.id));
+  const ownWorks = works
+    .filter((w) => w.authorIds.includes(member.id))
+    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 
   return (
     <>
@@ -101,16 +104,49 @@ export function ProfilePage() {
           {error && <p className="error">{error}</p>}
         </div>
       </div>
-      <h2>Trabajos</h2>
-      <WorkArchive
-        works={ownWorks}
-        subjects={subjects}
-        terms={terms}
-        members={members}
-        files={workFiles}
-        meId={me?.id}
-        empty="Sin trabajos publicados."
-      />
+      <h2>Trabajos que subió</h2>
+      {ownWorks.length ? (
+        <ul className="rows">
+          {ownWorks.map((work) => {
+            const assignment = assignments.find((a) => a.id === work.assignmentId);
+            const subject = subjects.find((s) => s.id === assignment?.subjectId);
+            const term = terms.find((t) => t.id === assignment?.termId);
+            const fileCount = workFiles.filter((f) => f.workId === work.id).length;
+            return (
+              <li key={work.id}>
+                <Link to={`/m/tareas/${work.assignmentId}?trabajo=${work.id}`} className="row-card">
+                  <span className="row-card__main">
+                    <span className="work-card__top">
+                      {assignment && (
+                        <span className={`badge badge--${workKindGroup(assignment.kind)}`}>
+                          {WORK_KIND_LABEL[assignment.kind]}
+                        </span>
+                      )}
+                      <span className="work-card__context">
+                        {[subject?.name, term?.name].filter(Boolean).join(' · ')}
+                      </span>
+                    </span>
+                    <strong className="row-card__title">{assignment?.title ?? 'Tarea desconocida'}</strong>
+                    {(work.title || work.authorIds.length > 1) && (
+                      <span className="row-card__meta">
+                        {[work.title, work.authorIds.length > 1 && `Con ${authorsLabel(work.authorIds.filter((id) => id !== member.id), members, me?.id)}`]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </span>
+                    )}
+                  </span>
+                  <span className="row-card__side">
+                    {fileCount > 0 && `${fileCount} ${fileCount === 1 ? 'archivo' : 'archivos'} · `}
+                    {formatDate(work.updatedAt)}
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="muted">Sin trabajos subidos.</p>
+      )}
     </>
   );
 }

@@ -14,8 +14,11 @@ const activity = (id: string, date: string, over: Partial<Activity> = {}): Activ
   title: id,
   objective: '',
   instructions: '',
+  version: 1,
   createdBy: 'ana',
   createdAt: new Date(2026, 9, 1),
+  updatedBy: 'ana',
+  updatedAt: new Date(2026, 9, 1),
   ...over,
 });
 const activities = [

@@ -2,11 +2,12 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { isValidPeriod, PERIOD_COUNT, periodLabel } from '@b20/core';
 import { useDataSource, useSnapshot } from '../data/DataContext';
-import type { Activity, Evidence, Member } from '../data/types';
+import type { Activity, Evidence, Member, Revision } from '../data/types';
 import { Avatar } from '../components/Avatar';
 import { AvatarStack } from '../components/AvatarStack';
 import { Empty } from '../components/Empty';
 import { Icon } from '../components/Icon';
+import { RevisionHistory } from '../components/RevisionHistory';
 import { RichText } from '../components/RichText';
 import { useAction } from '../components/useAction';
 import { filterActivities, groupByMonth, participantsOf, type ActivityFilters } from '../lib/activities';
@@ -23,7 +24,7 @@ import {
 } from '../lib/format';
 import { lastPeriod, rememberPeriod } from '../lib/period';
 import { normalize } from '../lib/search';
-import { bySubject } from '../lib/works';
+import { bySubject, revisionsOf } from '../lib/works';
 
 const PERIODS = Array.from({ length: PERIOD_COUNT }, (_, i) => i + 1);
 
@@ -364,8 +365,11 @@ function EvidenceForm({ activityId, onDone }: { activityId: string; onDone: () =
 
 export function ActivityPage() {
   const { activityId = '' } = useParams();
-  const { me, activities, evidences, members, subjects, notes } = useSnapshot();
+  const source = useDataSource();
+  const { me, activities, evidences, members, subjects, notes, revisions } = useSnapshot();
+  const { error, run } = useAction();
   const [adding, setAdding] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const activity = activities.find((a) => a.id === activityId);
 
   if (!activity) {
@@ -396,6 +400,20 @@ export function ActivityPage() {
         .slice(0, 4)
     : [];
   const inSubject = { ...(subject && { cuatri: String(subject.period) }), materia: activity.subjectId };
+  const history = revisionsOf('activity', activity.id, revisions);
+
+  // Restaurar es editar con el texto de antes: crea una versión nueva y no borra ninguna.
+  const restore = (revision: Revision) =>
+    run(() =>
+      source.updateActivity(activity.id, {
+        subjectId: activity.subjectId,
+        topic: activity.topic,
+        date: activity.date,
+        title: revision.title,
+        objective: revision.summary,
+        instructions: revision.body,
+      }),
+    );
 
   return (
     <>
@@ -421,11 +439,16 @@ export function ActivityPage() {
             {activity.topic && ` · ${activity.topic}`}
           </p>
         </div>
-        {!adding && (
-          <button type="button" className="with-icon" onClick={() => setAdding(true)}>
-            <Icon name="plus" size={18} /> Agregar evidencia
-          </button>
-        )}
+        <div className="row">
+          <Link to={`/m/actividades/${activity.id}/editar`} className="button secondary with-icon">
+            <Icon name="edit" size={16} /> Editar página
+          </Link>
+          {!adding && (
+            <button type="button" className="with-icon" onClick={() => setAdding(true)}>
+              <Icon name="plus" size={18} /> Agregar evidencia
+            </button>
+          )}
+        </div>
       </header>
 
       <div className="detail">
@@ -441,9 +464,36 @@ export function ActivityPage() {
             {activity.instructions ? (
               <RichText text={activity.instructions} />
             ) : (
-              <p className="muted">No se registraron las instrucciones de esta actividad.</p>
+              <p className="muted">
+                Nadie ha escrito las instrucciones. Usa «Editar página» para agregarlas: cualquiera del
+                grupo puede hacerlo.
+              </p>
             )}
+            <p className="wiki-footer">
+              <Icon name="users" size={16} />
+              <span>
+                Página del grupo · versión {activity.version} · última edición de{' '}
+                {memberName(members, activity.updatedBy)}, {formatTime(activity.updatedAt)}
+              </span>
+              <button
+                type="button"
+                className="link-button"
+                aria-expanded={showHistory}
+                onClick={() => setShowHistory(!showHistory)}
+              >
+                {showHistory ? 'Ocultar historial' : 'Ver historial'}
+              </button>
+            </p>
           </section>
+          {showHistory && (
+            <RevisionHistory
+              revisions={history}
+              members={members}
+              summaryLabel="Objetivo"
+              onRestore={restore}
+              error={error}
+            />
+          )}
 
           <h2 className="section-title">
             Evidencias <span className="muted">{own.length}</span>
@@ -527,29 +577,67 @@ export function ActivityPage() {
   );
 }
 
-export function NewActivityPage() {
+/** Registrar una actividad o editar su página (cualquier integrante, como en un wiki). */
+export function ActivityFormPage() {
+  const { activityId } = useParams();
+  const { activities } = useSnapshot();
+  const activity = activities.find((a) => a.id === activityId);
+
+  if (activityId && !activity) {
+    return (
+      <Empty
+        icon="folder"
+        title="Actividad no encontrada"
+        action={
+          <Link to="/m/actividades" className="button">
+            Ver las actividades
+          </Link>
+        }
+      >
+        Puede que el enlace esté incompleto o que la actividad ya no exista.
+      </Empty>
+    );
+  }
+  return <ActivityForm key={activity?.id ?? 'nueva'} activity={activity} />;
+}
+
+function ActivityForm({ activity }: { activity: Activity | undefined }) {
   const source = useDataSource();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { subjects } = useSnapshot();
+  const { subjects, members } = useSnapshot();
   const { error, run } = useAction();
+  const backTo = activity ? `/m/actividades/${activity.id}` : '/m/actividades';
 
   const inPeriod = (period: number) => subjects.filter((s) => s.period === period).sort(bySubject);
-  const asked = subjects.find((s) => s.id === params.get('materia'));
+  const asked = subjects.find((s) => s.id === (activity?.subjectId ?? params.get('materia')));
   const [period, setPeriod] = useState(() => {
     const fromFilter = Number(params.get('cuatri'));
     return asked?.period ?? (isValidPeriod(fromFilter) ? fromFilter : lastPeriod());
   });
   const [subjectId, setSubjectId] = useState(() => asked?.id ?? inPeriod(period)[0]?.id ?? '');
-  const [date, setDate] = useState(() => toDay(new Date()));
-  const [title, setTitle] = useState('');
-  const [topic, setTopic] = useState('');
-  const [objective, setObjective] = useState('');
-  const [instructions, setInstructions] = useState('');
+  const [date, setDate] = useState(() => activity?.date ?? toDay(new Date()));
+  const [title, setTitle] = useState(activity?.title ?? '');
+  const [topic, setTopic] = useState(activity?.topic ?? '');
+  const [objective, setObjective] = useState(activity?.objective ?? '');
+  const [instructions, setInstructions] = useState(activity?.instructions ?? '');
+  const changed =
+    !activity ||
+    subjectId !== activity.subjectId ||
+    date !== activity.date ||
+    title.trim() !== activity.title ||
+    topic.trim() !== activity.topic ||
+    objective.trim() !== activity.objective ||
+    instructions.trim() !== activity.instructions;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    const id = run(() => source.createActivity({ subjectId, topic, date, title, objective, instructions }));
+    const input = { subjectId, topic, date, title, objective, instructions };
+    const id = run(() => {
+      if (!activity) return source.createActivity(input);
+      source.updateActivity(activity.id, input);
+      return activity.id;
+    });
     if (!id) return;
     rememberPeriod(period);
     void navigate(`/m/actividades/${id}`);
@@ -557,14 +645,16 @@ export function NewActivityPage() {
 
   return (
     <>
-      <Link to="/m/actividades" className="back with-icon">
-        <Icon name="back" size={16} /> Actividades de clase
+      <Link to={backTo} className="back with-icon">
+        <Icon name="back" size={16} /> {activity ? activity.title : 'Actividades de clase'}
       </Link>
       <header className="page-header">
         <div>
-          <h1>Registrar actividad</h1>
+          <h1>{activity ? 'Editar página' : 'Registrar actividad'}</h1>
           <p className="muted">
-            Deja lo que se hizo en la sesión. Después cada equipo agrega su evidencia por separado.
+            {activity
+              ? `Es la página de todo el grupo. Tu cambio se guardará como versión ${activity.version + 1} a tu nombre y las anteriores quedan en el historial.`
+              : 'Deja lo que se hizo en la sesión. Después cualquiera podrá corregir la página y cada equipo agregará su evidencia.'}
           </p>
         </div>
       </header>
@@ -649,10 +739,17 @@ export function NewActivityPage() {
           </p>
         )}
         <div className="form__actions">
-          <Link to="/m/actividades" className="button secondary">
+          {activity && (
+            <span className="muted form__note">
+              Última edición de {memberName(members, activity.updatedBy)}, {formatTime(activity.updatedAt)}
+            </span>
+          )}
+          <Link to={backTo} className="button secondary">
             Cancelar
           </Link>
-          <button type="submit">Registrar</button>
+          <button type="submit" disabled={!changed}>
+            {activity ? 'Guardar versión nueva' : 'Registrar'}
+          </button>
         </div>
       </form>
     </>

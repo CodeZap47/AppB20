@@ -36,45 +36,90 @@ describe('DemoDataSource', () => {
     expect(() => data.sendGroupMessage('hola')).toThrow('miembro activo');
   });
 
-  it('publica un trabajo con coautores y conserva la autoría', () => {
+  it('sube un trabajo con coautores a una tarea y conserva la autoría', () => {
     const data = source('demo-1');
-    const id = data.publishWork({
-      subjectId: 'IDSE-05010103',
-      termId: 'IDSE-05010103-p2',
-      kind: 'examen',
-      title: 'Nuevo',
-      assignment: '',
-      description: '',
-      coauthorIds: ['demo-4'],
+    const id = data.publishWork({ assignmentId: 't4', title: '', description: 'Nuevo', coauthorIds: ['demo-4'] });
+    expect(data.getSnapshot().works.find((w) => w.id === id)).toMatchObject({
+      assignmentId: 't4',
+      authorIds: ['demo-1', 'demo-4'],
     });
-    const work = data.getSnapshot().works.find((w) => w.id === id);
-    expect(work?.authorIds).toEqual(['demo-1', 'demo-4']);
-    expect(work?.kind).toBe('examen');
-  });
-
-  it('rechaza un parcial de otra materia', () => {
-    const data = source('demo-1');
     expect(() =>
-      data.publishWork({
-        subjectId: 'IDSE-05010104',
-        termId: 'IDSE-05010103-p1',
-        kind: 'tarea',
-        title: 'X',
-        assignment: '',
-        description: '',
-        coauthorIds: [],
-      }),
-    ).toThrow('no pertenece');
+      data.publishWork({ assignmentId: 'no-existe', title: '', description: 'x', coauthorIds: [] }),
+    ).toThrow('La tarea no existe');
   });
 
   it('solo autores editan un trabajo', () => {
     const data = source('demo-4');
-    expect(() => data.updateWork('w1', 'Otro', '', 'actividad')).toThrow('Solo el autor');
+    expect(() => data.updateWork('w1', 'Otro', '')).toThrow('Solo el autor');
     data.setViewer('demo-2');
-    data.updateWork('w1', 'Otro', '', 'actividad');
-    expect(data.getSnapshot().works.find((w) => w.id === 'w1')).toMatchObject({
+    data.updateWork('w1', 'Otro', '');
+    expect(data.getSnapshot().works.find((w) => w.id === 'w1')).toMatchObject({ version: 2, title: 'Otro' });
+  });
+
+  describe('página principal de una tarea', () => {
+    const input = {
+      subjectId: 'IDSE-05010103',
+      termId: 'IDSE-05010103-p2',
+      kind: 'examen' as const,
+      title: 'Examen parcial',
+      instructions: 'Temas 1 a 3.',
+      dueDate: '2026-10-20',
+    };
+
+    it('se crea con su primera versión en el historial', () => {
+      const data = source('demo-1');
+      const id = data.createAssignment(input);
+      const snap = data.getSnapshot();
+      expect(snap.assignments.find((a) => a.id === id)).toMatchObject({ ...input, version: 1, createdBy: 'demo-1' });
+      expect(snap.revisions.filter((r) => r.pageId === id)).toMatchObject([
+        { page: 'assignment', version: 1, editedBy: 'demo-1', body: 'Temas 1 a 3.' },
+      ]);
+    });
+
+    it('rechaza un parcial de otra materia y una fecha mal escrita', () => {
+      const data = source('demo-1');
+      expect(() => data.createAssignment({ ...input, subjectId: 'IDSE-05010104' })).toThrow('no pertenece');
+      expect(() => data.createAssignment({ ...input, dueDate: '20/10/2026' })).toThrow('Fecha de entrega');
+    });
+
+    it('cualquier integrante la edita, como un wiki, y queda quién cambió cada versión', () => {
+      const data = source('demo-1');
+      const id = data.createAssignment(input);
+      data.setViewer('demo-4');
+      data.updateAssignment(id, { ...input, instructions: 'Temas 1 a 4.' });
+      const snap = data.getSnapshot();
+      expect(snap.assignments.find((a) => a.id === id)).toMatchObject({
+        version: 2,
+        instructions: 'Temas 1 a 4.',
+        createdBy: 'demo-1',
+        updatedBy: 'demo-4',
+      });
+      expect(snap.revisions.filter((r) => r.pageId === id).map((r) => [r.version, r.editedBy, r.body])).toEqual([
+        [1, 'demo-1', 'Temas 1 a 3.'],
+        [2, 'demo-4', 'Temas 1 a 4.'],
+      ]);
+    });
+
+    it('quien no es miembro no puede editarla', () => {
+      const data = source('externo');
+      expect(() => data.updateAssignment('t1', input)).toThrow('miembro activo');
+    });
+  });
+
+  it('una actividad de clase también se edita entre todos y guarda su historial', () => {
+    const data = source('demo-4');
+    const before = data.getSnapshot().activities.find((a) => a.id === 'a1')!;
+    data.updateActivity('a1', { ...before, objective: 'Objetivo corregido.' });
+    const snap = data.getSnapshot();
+    expect(snap.activities.find((a) => a.id === 'a1')).toMatchObject({
       version: 2,
-      kind: 'actividad',
+      objective: 'Objetivo corregido.',
+      updatedBy: 'demo-4',
+    });
+    expect(snap.revisions.filter((r) => r.page === 'activity' && r.pageId === 'a1').at(-1)).toMatchObject({
+      version: 2,
+      editedBy: 'demo-4',
+      summary: 'Objetivo corregido.',
     });
   });
 

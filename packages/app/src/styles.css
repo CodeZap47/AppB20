@@ -1898,3 +1898,123 @@ fieldset.field > legend {
       box-shadow 120ms ease;
   }
 }
+
+/* ---- Páginas del grupo (edición tipo wiki) y trabajos por alumno ---- */
+
+.wiki-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.5rem;
+  margin: 1rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.wiki-footer span {
+  flex: 1 1 12rem;
+}
+
+.history__list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.history__item + .history__item {
+  border-top: 1px solid var(--border);
+}
+
+.history__row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 0;
+}
+
+.history__who {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  font-size: 0.82rem;
+}
+
+.history__who strong {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.history__preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0 0 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 10px;
+  background: var(--bg);
+}
+
+.history__preview .label {
+  margin: 0.5rem 0 0;
+}
+
+.submission {
+  scroll-margin-top: 1rem;
+}
+
+.submission--highlighted {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.submission__title {
+  margin: 0 0 0.4rem;
+  font-size: 1rem;
+}
+
+.submission > .files,
+.submission > .file-picker,
+.submission > .file-picker__errors {
+  margin-top: 0.75rem;
+}
+
+.roster a,
+.roster__pending {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.3rem 0.4rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+}
+
+.roster__name {
+  flex: 1;
+  min-width: 0;
+}
+
+.roster__pending .muted {
+  font-size: 0.8rem;
+}
+
+.roster__done {
+  display: inline-flex;
+  color: #1b7f4b;
+}
+
+@media (prefers-color-scheme: dark) {
+  .roster__done {
+    color: #6fd39b;
+  }
+}
+
+.page-header > .row {
+  flex: none;
+}

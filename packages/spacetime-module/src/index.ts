@@ -1,7 +1,8 @@
 /**
  * Módulo SpacetimeDB de App B20, alcance de la Etapa 0 / MVP:
- * membresía por invitación, perfiles, materias por cuatrimestre con sus parciales, trabajos
- * por tipo (tarea, actividad, exposición o examen) con coautores y
+ * membresía por invitación, perfiles, materias por cuatrimestre con sus parciales, páginas
+ * principales de tareas, actividades, exposiciones y exámenes que todos editan como wiki (con
+ * historial), los trabajos que sube cada alumno o equipo con sus coautores y
  * archivos adjuntos (máximo 50 MB cada uno),
  * canal del grupo, mensajes 1 a 1 y cumpleaños voluntarios.
  *
@@ -75,9 +76,12 @@ const term = table(
   },
 );
 
-/** Trabajo compartido: conserva materia, consigna y autores (sección 3.2 y 9). */
-const work = table(
-  { name: 'work' },
+/**
+ * Página principal de una tarea, actividad, exposición o examen: lo que se pidió. Cualquier
+ * miembro activo la edita, como un wiki; cada versión queda en `page_revision`.
+ */
+const assignment = table(
+  { name: 'assignment' },
   {
     id: t.u64().primaryKey().autoInc(),
     subjectId: t.u64().index('btree'),
@@ -85,7 +89,43 @@ const work = table(
     /** `tarea`, `actividad`, `exposicion` o `examen`. */
     kind: t.string(),
     title: t.string(),
-    assignment: t.string(),
+    instructions: t.string(),
+    /** Fecha de entrega `AAAA-MM-DD`; vacía si no tiene. */
+    dueDate: t.string(),
+    version: t.u32(),
+    createdBy: t.identity(),
+    createdAt: t.timestamp(),
+    updatedBy: t.identity(),
+    updatedAt: t.timestamp(),
+  },
+);
+
+/** Versión guardada de una página que todos editan (`assignment` o `activity`). */
+const pageRevision = table(
+  { name: 'page_revision' },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    /** `assignment` o `activity`. */
+    page: t.string(),
+    pageId: t.u64().index('btree'),
+    version: t.u32(),
+    editedBy: t.identity(),
+    editedAt: t.timestamp(),
+    title: t.string(),
+    /** Solo actividades de clase: el objetivo. */
+    summary: t.string(),
+    body: t.string(),
+  },
+);
+
+/** Trabajo que subió un alumno o un equipo para una página principal (sección 3.2 y 9). */
+const work = table(
+  { name: 'work' },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    assignmentId: t.u64().index('btree'),
+    /** Tema o título propio; vacío si basta con el de la tarea. */
+    title: t.string(),
     description: t.string(),
     version: t.u32(),
     createdBy: t.identity(),
@@ -190,8 +230,12 @@ const activity = table(
     title: t.string(),
     objective: t.string(),
     instructions: t.string(),
+    /** Cualquier miembro activo la edita; cada versión queda en `page_revision`. */
+    version: t.u32(),
     createdBy: t.identity(),
     createdAt: t.timestamp(),
+    updatedBy: t.identity(),
+    updatedAt: t.timestamp(),
   },
 );
 
@@ -282,6 +326,8 @@ const spacetimedb = schema({
   member,
   subject,
   term,
+  assignment,
+  pageRevision,
   work,
   workAuthor,
   workFile,
@@ -516,25 +562,110 @@ export const create_term = spacetimedb.reducer(
   },
 );
 
+function saveRevision(
+  ctx: Ctx,
+  page: 'assignment' | 'activity',
+  pageId: bigint,
+  version: number,
+  content: { title: string; summary: string; body: string },
+) {
+  ctx.db.pageRevision.insert({
+    id: 0n,
+    page,
+    pageId,
+    version,
+    editedBy: ctx.sender,
+    editedAt: ctx.timestamp,
+    ...content,
+  });
+}
+
+const ASSIGNMENT_ARGS = {
+  subjectId: t.u64(),
+  termId: t.u64().optional(),
+  kind: t.string(),
+  title: t.string(),
+  instructions: t.string(),
+  dueDate: t.string(),
+};
+
+function checkAssignment(
+  ctx: Ctx,
+  input: { subjectId: bigint; termId?: bigint; kind: string; title: string; instructions: string; dueDate: string },
+) {
+  if (!ctx.db.subject.id.find(input.subjectId)) throw new SenderError('La materia no existe.');
+  if (input.termId !== undefined) {
+    const termRow = ctx.db.term.id.find(input.termId);
+    if (!termRow || termRow.subjectId !== input.subjectId) {
+      throw new SenderError('El parcial no pertenece a esa materia.');
+    }
+  }
+  if (input.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(input.dueDate)) {
+    throw new SenderError('Fecha de entrega inválida.');
+  }
+  return {
+    subjectId: input.subjectId,
+    termId: input.termId,
+    kind: requireWorkKind(input.kind),
+    title: requireText(input.title, 'El título', 200),
+    instructions: input.instructions.trim(),
+    dueDate: input.dueDate,
+  };
+}
+
+export const create_assignment = spacetimedb.reducer(ASSIGNMENT_ARGS, (ctx, input) => {
+  activeMember(ctx);
+  const row = ctx.db.assignment.insert({
+    id: 0n,
+    ...checkAssignment(ctx, input),
+    version: 1,
+    createdBy: ctx.sender,
+    createdAt: ctx.timestamp,
+    updatedBy: ctx.sender,
+    updatedAt: ctx.timestamp,
+  });
+  saveRevision(ctx, 'assignment', row.id, 1, { title: row.title, summary: '', body: row.instructions });
+  log(ctx, 'create', 'assignment', row.id);
+});
+
+/**
+ * Edición tipo wiki: no exige ser quien creó la página, solo ser miembro activo. La
+ * responsabilidad de cada cambio queda en `page_revision` y en `change_log`.
+ */
+export const update_assignment = spacetimedb.reducer(
+  { assignmentId: t.u64(), ...ASSIGNMENT_ARGS },
+  (ctx, { assignmentId, ...input }) => {
+    activeMember(ctx);
+    const row = ctx.db.assignment.id.find(assignmentId);
+    if (!row) throw new SenderError('La tarea no existe.');
+    const next = {
+      ...row,
+      ...checkAssignment(ctx, input),
+      version: row.version + 1,
+      updatedBy: ctx.sender,
+      updatedAt: ctx.timestamp,
+    };
+    ctx.db.assignment.id.update(next);
+    saveRevision(ctx, 'assignment', assignmentId, next.version, {
+      title: next.title,
+      summary: '',
+      body: next.instructions,
+    });
+    log(ctx, 'update', 'assignment', assignmentId);
+  },
+);
+
 export const publish_work = spacetimedb.reducer(
   {
-    subjectId: t.u64(),
-    termId: t.u64().optional(),
-    kind: t.string(),
+    assignmentId: t.u64(),
     title: t.string(),
-    assignment: t.string(),
     description: t.string(),
     coauthors: t.array(t.identity()),
   },
-  (ctx, { subjectId, termId, kind, title, assignment, description, coauthors }) => {
+  (ctx, { assignmentId, title, description, coauthors }) => {
     activeMember(ctx);
-    if (!ctx.db.subject.id.find(subjectId)) throw new SenderError('La materia no existe.');
-    if (termId !== undefined) {
-      const termRow = ctx.db.term.id.find(termId);
-      if (!termRow || termRow.subjectId !== subjectId) {
-        throw new SenderError('El parcial no pertenece a esa materia.');
-      }
-    }
+    if (!ctx.db.assignment.id.find(assignmentId)) throw new SenderError('La tarea no existe.');
+    if (title.trim().length > 200) throw new SenderError('El título excede 200 caracteres.');
     const authors = new Map([[ctx.sender.toHexString(), ctx.sender]]);
     for (const coauthor of coauthors) {
       const row = ctx.db.member.identity.find(coauthor);
@@ -543,11 +674,8 @@ export const publish_work = spacetimedb.reducer(
     }
     const row = ctx.db.work.insert({
       id: 0n,
-      subjectId,
-      termId,
-      kind: requireWorkKind(kind),
-      title: requireText(title, 'El título', 200),
-      assignment: assignment.trim(),
+      assignmentId,
+      title: title.trim(),
       description: description.trim(),
       version: 1,
       createdBy: ctx.sender,
@@ -562,8 +690,8 @@ export const publish_work = spacetimedb.reducer(
 );
 
 export const update_work = spacetimedb.reducer(
-  { workId: t.u64(), title: t.string(), description: t.string(), kind: t.string() },
-  (ctx, { workId, title, description, kind }) => {
+  { workId: t.u64(), title: t.string(), description: t.string() },
+  (ctx, { workId, title, description }) => {
     activeMember(ctx);
     const row = ctx.db.work.id.find(workId);
     if (!row) throw new SenderError('El trabajo no existe.');
@@ -571,11 +699,11 @@ export const update_work = spacetimedb.reducer(
       a.author.isEqual(ctx.sender),
     );
     if (!isAuthor) throw new SenderError('Solo el autor o los coautores editan este trabajo.');
+    if (title.trim().length > 200) throw new SenderError('El título excede 200 caracteres.');
     ctx.db.work.id.update({
       ...row,
-      title: requireText(title, 'El título', 200),
+      title: title.trim(),
       description: description.trim(),
-      kind: requireWorkKind(kind),
       version: row.version + 1,
       updatedAt: ctx.timestamp,
     });
@@ -726,31 +854,71 @@ function requireSubject(ctx: Ctx, subjectId: bigint) {
 const NOTE_VISIBILITY = ['personal', 'group'];
 const NOTE_SOURCE = ['student', 'teacher', 'ai'];
 
-export const create_activity = spacetimedb.reducer(
-  {
-    subjectId: t.u64(),
-    topic: t.string(),
-    date: t.string(),
-    title: t.string(),
-    objective: t.string(),
-    instructions: t.string(),
-  },
-  (ctx, { subjectId, topic, date, title, objective, instructions }) => {
+const ACTIVITY_ARGS = {
+  subjectId: t.u64(),
+  topic: t.string(),
+  date: t.string(),
+  title: t.string(),
+  objective: t.string(),
+  instructions: t.string(),
+};
+
+function checkActivity(
+  ctx: Ctx,
+  input: { subjectId: bigint; topic: string; date: string; title: string; objective: string; instructions: string },
+) {
+  requireSubject(ctx, input.subjectId);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new SenderError('Fecha inválida.');
+  return {
+    subjectId: input.subjectId,
+    topic: input.topic.trim(),
+    date: input.date,
+    title: requireText(input.title, 'El título', 200),
+    objective: input.objective.trim(),
+    instructions: input.instructions.trim(),
+  };
+}
+
+export const create_activity = spacetimedb.reducer(ACTIVITY_ARGS, (ctx, input) => {
+  activeMember(ctx);
+  const row = ctx.db.activity.insert({
+    id: 0n,
+    ...checkActivity(ctx, input),
+    version: 1,
+    createdBy: ctx.sender,
+    createdAt: ctx.timestamp,
+    updatedBy: ctx.sender,
+    updatedAt: ctx.timestamp,
+  });
+  saveRevision(ctx, 'activity', row.id, 1, {
+    title: row.title,
+    summary: row.objective,
+    body: row.instructions,
+  });
+  log(ctx, 'create', 'activity', row.id);
+});
+
+/** Edición tipo wiki, igual que `update_assignment`: cualquier miembro activo. */
+export const update_activity = spacetimedb.reducer(
+  { activityId: t.u64(), ...ACTIVITY_ARGS },
+  (ctx, { activityId, ...input }) => {
     activeMember(ctx);
-    requireSubject(ctx, subjectId);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new SenderError('Fecha inválida.');
-    const row = ctx.db.activity.insert({
-      id: 0n,
-      subjectId,
-      topic: topic.trim(),
-      date,
-      title: requireText(title, 'El título', 200),
-      objective: objective.trim(),
-      instructions: instructions.trim(),
-      createdBy: ctx.sender,
-      createdAt: ctx.timestamp,
+    const row = ctx.db.activity.id.find(activityId);
+    if (!row) throw new SenderError('La actividad no existe.');
+    const next = {
+      ...row,
+      ...checkActivity(ctx, input),
+      version: row.version + 1,
+      updatedBy: ctx.sender,
+      updatedAt: ctx.timestamp,
+    };
+    ctx.db.activity.id.update(next);
+    saveRevision(ctx, 'activity', activityId, next.version, {
+      title: next.title,
+      summary: next.objective,
+      body: next.instructions,
     });
-    log(ctx, 'create', 'activity', row.id);
+    log(ctx, 'update', 'activity', activityId);
   },
 );
 
@@ -949,6 +1117,18 @@ export const terms = spacetimedb.view(
   { name: 'terms', public: true },
   t.array(term.rowType),
   (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.term.iter()] : []),
+);
+
+export const assignments = spacetimedb.view(
+  { name: 'assignments', public: true },
+  t.array(assignment.rowType),
+  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.assignment.iter()] : []),
+);
+
+export const page_revisions = spacetimedb.view(
+  { name: 'page_revisions', public: true },
+  t.array(pageRevision.rowType),
+  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.pageRevision.iter()] : []),
 );
 
 export const works = spacetimedb.view(

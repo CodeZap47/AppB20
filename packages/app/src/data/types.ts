@@ -33,19 +33,53 @@ export interface Term {
   position: number;
 }
 
-export interface Work {
+/**
+ * Página principal de una tarea, actividad, exposición o examen: lo que se pidió. Cualquier
+ * integrante la edita, como un wiki; cada edición guarda una versión con su responsable.
+ */
+export interface Assignment {
   id: Id;
   subjectId: Id;
   termId?: Id;
   /** Tarea, actividad, exposición o examen. */
   kind: WorkKind;
   title: string;
-  assignment: string;
+  instructions: string;
+  /** Fecha de entrega `AAAA-MM-DD`, si la hay. */
+  dueDate?: string;
+  version: number;
+  createdBy: Id;
+  createdAt: Date;
+  updatedBy: Id;
+  updatedAt: Date;
+}
+
+/** Trabajo que subió un alumno o un equipo para una página principal. */
+export interface Work {
+  id: Id;
+  assignmentId: Id;
+  /** Tema o título propio; vacío si basta con el de la tarea. */
+  title: string;
   description: string;
   version: number;
   authorIds: Id[];
   createdAt: Date;
   updatedAt: Date;
+}
+
+/** Versión guardada de una página que todos editan: tarea principal o actividad de clase. */
+export interface Revision {
+  id: Id;
+  page: 'assignment' | 'activity';
+  pageId: Id;
+  version: number;
+  editedBy: Id;
+  editedAt: Date;
+  title: string;
+  /** Solo actividades de clase: el objetivo. */
+  summary: string;
+  /** Las instrucciones. */
+  body: string;
 }
 
 /** Archivo adjunto a un trabajo. El contenido vive en el almacenamiento; aquí van sus datos. */
@@ -99,8 +133,12 @@ export interface Activity {
   title: string;
   objective: string;
   instructions: string;
+  /** Cualquier integrante la edita; cada edición guarda una versión. */
+  version: number;
   createdBy: Id;
   createdAt: Date;
+  updatedBy: Id;
+  updatedAt: Date;
 }
 
 /** Evidencia de un equipo o persona; cada una es independiente y no sobrescribe a otra. */
@@ -168,8 +206,11 @@ export interface Snapshot {
   members: Member[];
   subjects: Subject[];
   terms: Term[];
+  assignments: Assignment[];
   works: Work[];
   workFiles: WorkFile[];
+  /** Historial de las páginas editables (tareas principales y actividades de clase). */
+  revisions: Revision[];
   groupMessages: GroupMessage[];
   directConversations: DirectConversation[];
   directMessages: DirectMessage[];
@@ -185,12 +226,18 @@ export interface Snapshot {
   lastSeenAt: Date | undefined;
 }
 
-export interface PublishWorkInput {
+export interface AssignmentInput {
   subjectId: Id;
   termId?: Id;
   kind: WorkKind;
   title: string;
-  assignment: string;
+  instructions: string;
+  dueDate?: string;
+}
+
+export interface PublishWorkInput {
+  assignmentId: Id;
+  title: string;
   description: string;
   coauthorIds: Id[];
 }
@@ -201,9 +248,13 @@ export interface Actions {
   /** Materia fuera del plan de estudios, dentro de un cuatrimestre (1 a 9). */
   createSubject(name: string, period: number): Id;
   createTerm(subjectId: Id, name: string): Id;
+  createAssignment(input: AssignmentInput): Id;
+  /** Como en un wiki: cualquier miembro activo edita y se guarda una versión a su nombre. */
+  updateAssignment(assignmentId: Id, input: AssignmentInput): void;
+  /** Sube el trabajo propio o del equipo a una página principal. */
   publishWork(input: PublishWorkInput): Id;
   /** Solo sus autores; cada edición guarda una versión nueva. */
-  updateWork(workId: Id, title: string, description: string, kind: WorkKind): void;
+  updateWork(workId: Id, title: string, description: string): void;
   /**
    * Sube un archivo y lo adjunta al trabajo; solo sus autores. Rechaza archivos vacíos o de
    * más de 50 MB (`MAX_FILE_BYTES`). Es la única acción asíncrona: subir toma tiempo.
@@ -217,6 +268,8 @@ export interface Actions {
   shareBirthday(day: number, month: number, remind: boolean): void;
   withdrawBirthday(): void;
   createActivity(input: CreateActivityInput): Id;
+  /** Como en un wiki: cualquier miembro activo edita y se guarda una versión a su nombre. */
+  updateActivity(activityId: Id, input: CreateActivityInput): void;
   addEvidence(activityId: Id, content: string, participantIds: Id[]): Id;
   saveNote(input: SaveNoteInput): Id;
   commentNote(noteId: Id, text: string): void;

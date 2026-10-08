@@ -80,7 +80,9 @@ Los mensajes y felicitaciones no generarán puntos por volumen. Las claves, toke
 
 **Funciones**
 
-- Cada trabajo indica su tipo: **tarea, actividad, exposición o examen**. El archivo se puede filtrar por dos familias: «Tareas y actividades» y «Exposiciones y exámenes».
+- Cada tarea, actividad, exposición o examen tiene una **página principal** con lo que se pidió. Cualquier integrante la edita, como en un wiki; cada edición guarda una versión con su responsable y se puede restaurar una anterior.
+- En esa misma página, por separado, están **los trabajos que subió cada alumno o equipo**, con la lista de quién ya subió y quién falta. Solo sus autores modifican un trabajo.
+- Cada página indica su tipo: **tarea, actividad, exposición o examen**. El archivo se puede filtrar por dos familias: «Tareas y actividades» y «Exposiciones y exámenes».
 - Consigna con título, materia, parcial o unidad, instrucciones, fechas y recursos.
 - Trabajos asociados con uno o varios autores, tema específico, descripción, archivos, código, enlaces y versiones.
 - Publicaciones individuales y de equipo, aunque los equipos desarrollen temas o proyectos diferentes.
@@ -796,6 +798,7 @@ Todas las ideas están incluidas en el proyecto. La siguiente distribución orga
 | Motivación | Leaderboard incluido; reglas de puntos pendientes de validación. |
 | Perfil | Foto, nombre y archivo de trabajos por materia y parcial, con coautorías y versiones. |
 | Archivos | Máximo 50 MB por archivo subido a la app. |
+| Páginas principales | Lo que se pidió vive en una página que todo el grupo edita como wiki, con historial y restauración; los trabajos de cada alumno se suben aparte en esa página. Aplica también a las actividades de clase. |
 | Tipos de trabajo | Tarea, actividad, exposición o examen; se elige al publicar y se filtra por «Tareas y actividades» o «Exposiciones y exámenes». |
 | Plan de estudios | Nueve cuatrimestres de cinco materias; cada cuatrimestre se divide en tres parciales. La lista de materias está en `packages/core/src/curriculum.ts`. |
 | Resultado educativo | Ayudar a comprender y realizar tareas y construir guías integrales de los parciales a partir de los materiales del grupo. |

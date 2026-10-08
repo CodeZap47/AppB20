@@ -7,10 +7,12 @@ import {
   isValidPeriod,
   isWorkKind,
   termNames,
-  type WorkKind,
 } from '@b20/core';
 import type {
   Activity,
+  Assignment,
+  AssignmentInput,
+  Revision,
   Answer,
   AskQuestionInput,
   Birthday,
@@ -48,8 +50,10 @@ interface State {
   members: Member[];
   subjects: Subject[];
   terms: Term[];
+  assignments: Assignment[];
   works: Work[];
   workFiles: WorkFile[];
+  revisions: Revision[];
   groupMessages: GroupMessage[];
   directConversations: DirectConversation[];
   directMessages: DirectMessage[];
@@ -116,8 +120,10 @@ export class DemoDataSource implements DataSource {
         members: [],
         subjects: [],
         terms: [],
+        assignments: [],
         works: [],
         workFiles: [],
+        revisions: [],
         groupMessages: [],
         directConversations: [],
         directMessages: [],
@@ -142,8 +148,10 @@ export class DemoDataSource implements DataSource {
       members: s.members,
       subjects: s.subjects,
       terms: s.terms,
+      assignments: s.assignments,
       works: s.works,
       workFiles: s.workFiles,
+      revisions: s.revisions,
       groupMessages: s.groupMessages,
       directConversations,
       directMessages: s.directMessages.filter((m) => visible.has(m.conversationId)),
@@ -205,27 +213,98 @@ export class DemoDataSource implements DataSource {
     return term.id;
   }
 
-  publishWork(input: PublishWorkInput): Id {
-    const me = this.#activeMember();
-    if (!this.#state.subjects.some((s) => s.id === input.subjectId)) {
-      throw new Error('La materia no existe.');
-    }
+  #checkAssignment(input: AssignmentInput) {
+    this.#requireSubject(input.subjectId);
     if (input.termId) {
       const term = this.#state.terms.find((t) => t.id === input.termId);
       if (term?.subjectId !== input.subjectId) throw new Error('El parcial no pertenece a esa materia.');
     }
     if (!isWorkKind(input.kind)) throw new Error('El tipo de trabajo no existe.');
-    for (const id of input.coauthorIds) {
-      if (!this.#isActive(id)) throw new Error('Un coautor no es miembro activo.');
+    if (input.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(input.dueDate)) {
+      throw new Error('Fecha de entrega inválida.');
     }
-    const now = this.#now();
-    const work: Work = {
-      id: this.#id(),
+    return {
       subjectId: input.subjectId,
       termId: input.termId,
       kind: input.kind,
       title: requireText(input.title, 'El título', 200),
-      assignment: input.assignment.trim(),
+      instructions: input.instructions.trim(),
+      dueDate: input.dueDate || undefined,
+    };
+  }
+
+  /** Guarda en el historial cómo quedó una página editable después de crearla o editarla. */
+  #saveRevision(page: Revision['page'], pageId: Id, version: number, content: Pick<Revision, 'title' | 'summary' | 'body'>) {
+    const revision: Revision = {
+      id: this.#id(),
+      page,
+      pageId,
+      version,
+      editedBy: this.#viewerId,
+      editedAt: this.#now(),
+      ...content,
+    };
+    this.#state.revisions = [...this.#state.revisions, revision];
+  }
+
+  createAssignment(input: AssignmentInput): Id {
+    const me = this.#activeMember();
+    const now = this.#now();
+    const assignment: Assignment = {
+      id: this.#id(),
+      ...this.#checkAssignment(input),
+      version: 1,
+      createdBy: me.id,
+      createdAt: now,
+      updatedBy: me.id,
+      updatedAt: now,
+    };
+    this.#state.assignments = [...this.#state.assignments, assignment];
+    this.#saveRevision('assignment', assignment.id, 1, {
+      title: assignment.title,
+      summary: '',
+      body: assignment.instructions,
+    });
+    this.#emit();
+    return assignment.id;
+  }
+
+  /** Sin restricción de autoría: es la página del grupo. La responsabilidad queda en el historial. */
+  updateAssignment(assignmentId: Id, input: AssignmentInput) {
+    const me = this.#activeMember();
+    const current = this.#state.assignments.find((a) => a.id === assignmentId);
+    if (!current) throw new Error('La tarea no existe.');
+    const next: Assignment = {
+      ...current,
+      ...this.#checkAssignment(input),
+      version: current.version + 1,
+      updatedBy: me.id,
+      updatedAt: this.#now(),
+    };
+    this.#state.assignments = this.#state.assignments.map((a) => (a.id === assignmentId ? next : a));
+    this.#saveRevision('assignment', assignmentId, next.version, {
+      title: next.title,
+      summary: '',
+      body: next.instructions,
+    });
+    this.#emit();
+  }
+
+  publishWork(input: PublishWorkInput): Id {
+    const me = this.#activeMember();
+    if (!this.#state.assignments.some((a) => a.id === input.assignmentId)) {
+      throw new Error('La tarea no existe.');
+    }
+    for (const id of input.coauthorIds) {
+      if (!this.#isActive(id)) throw new Error('Un coautor no es miembro activo.');
+    }
+    const title = input.title.trim();
+    if (title.length > 200) throw new Error('El título excede 200 caracteres.');
+    const now = this.#now();
+    const work: Work = {
+      id: this.#id(),
+      assignmentId: input.assignmentId,
+      title,
       description: input.description.trim(),
       version: 1,
       authorIds: [...new Set([me.id, ...input.coauthorIds])],
@@ -237,21 +316,20 @@ export class DemoDataSource implements DataSource {
     return work.id;
   }
 
-  updateWork(workId: Id, title: string, description: string, kind: WorkKind) {
+  updateWork(workId: Id, title: string, description: string) {
     const me = this.#activeMember();
     const work = this.#state.works.find((w) => w.id === workId);
     if (!work) throw new Error('El trabajo no existe.');
     if (!canEditWork(me.id, work.authorIds)) {
       throw new Error('Solo el autor o los coautores editan este trabajo.');
     }
-    if (!isWorkKind(kind)) throw new Error('El tipo de trabajo no existe.');
+    if (title.trim().length > 200) throw new Error('El título excede 200 caracteres.');
     this.#state.works = this.#state.works.map((w) =>
       w.id === workId
         ? {
             ...w,
-            title: requireText(title, 'El título', 200),
+            title: title.trim(),
             description: description.trim(),
-            kind,
             version: w.version + 1,
             updatedAt: this.#now(),
           }
@@ -357,24 +435,60 @@ export class DemoDataSource implements DataSource {
     if (!this.#state.subjects.some((s) => s.id === subjectId)) throw new Error('La materia no existe.');
   }
 
-  createActivity(input: CreateActivityInput): Id {
-    const me = this.#activeMember();
+  #checkActivity(input: CreateActivityInput) {
     this.#requireSubject(input.subjectId);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new Error('Fecha inválida.');
-    const activity: Activity = {
-      id: this.#id(),
+    return {
       subjectId: input.subjectId,
       topic: input.topic.trim(),
       date: input.date,
       title: requireText(input.title, 'El título', 200),
       objective: input.objective.trim(),
       instructions: input.instructions.trim(),
+    };
+  }
+
+  createActivity(input: CreateActivityInput): Id {
+    const me = this.#activeMember();
+    const now = this.#now();
+    const activity: Activity = {
+      id: this.#id(),
+      ...this.#checkActivity(input),
+      version: 1,
       createdBy: me.id,
-      createdAt: this.#now(),
+      createdAt: now,
+      updatedBy: me.id,
+      updatedAt: now,
     };
     this.#state.activities = [...this.#state.activities, activity];
+    this.#saveRevision('activity', activity.id, 1, {
+      title: activity.title,
+      summary: activity.objective,
+      body: activity.instructions,
+    });
     this.#emit();
     return activity.id;
+  }
+
+  /** Sin restricción de autoría: es la página del grupo. La responsabilidad queda en el historial. */
+  updateActivity(activityId: Id, input: CreateActivityInput) {
+    const me = this.#activeMember();
+    const current = this.#state.activities.find((a) => a.id === activityId);
+    if (!current) throw new Error('La actividad no existe.');
+    const next: Activity = {
+      ...current,
+      ...this.#checkActivity(input),
+      version: current.version + 1,
+      updatedBy: me.id,
+      updatedAt: this.#now(),
+    };
+    this.#state.activities = this.#state.activities.map((a) => (a.id === activityId ? next : a));
+    this.#saveRevision('activity', activityId, next.version, {
+      title: next.title,
+      summary: next.objective,
+      body: next.instructions,
+    });
+    this.#emit();
   }
 
   addEvidence(activityId: Id, content: string, participantIds: Id[]): Id {
@@ -535,45 +649,213 @@ export function createDemoState(now = new Date()): State {
       position: i + 1,
     })),
   );
+  // Páginas principales: lo que se pidió. La primera ya fue editada por tres personas.
+  const assignments: Assignment[] = [
+    {
+      id: 't1',
+      subjectId: LOGICA,
+      termId: `${LOGICA}-p1`,
+      kind: 'tarea',
+      title: 'Tarea de prueba 1',
+      instructions:
+        'Instrucciones de ejemplo, ya corregidas entre varios:\n1. Resolver el ejercicio.\n2. Explicar la solución.\n' +
+        '3. Subir el trabajo en esta página.',
+      dueDate: daysAgo(-5),
+      version: 3,
+      createdBy: 'demo-2',
+      createdAt: minutesAgo(3100),
+      updatedBy: 'demo-3',
+      updatedAt: minutesAgo(700),
+    },
+    {
+      id: 't2',
+      subjectId: FUNDAMENTOS,
+      termId: `${FUNDAMENTOS}-p1`,
+      kind: 'actividad',
+      title: 'Actividad de prueba',
+      instructions: 'Instrucciones de ejemplo de una actividad.',
+      version: 1,
+      createdBy: 'demo-3',
+      createdAt: minutesAgo(1600),
+      updatedBy: 'demo-3',
+      updatedAt: minutesAgo(1600),
+    },
+    {
+      id: 't3',
+      subjectId: LOGICA,
+      termId: `${LOGICA}-p1`,
+      kind: 'exposicion',
+      title: 'Exposición de prueba en equipos',
+      instructions: 'Instrucciones de ejemplo: cada equipo expone un tema distinto y sube su material.',
+      dueDate: daysAgo(-12),
+      version: 1,
+      createdBy: 'demo-2',
+      createdAt: minutesAgo(2300),
+      updatedBy: 'demo-2',
+      updatedAt: minutesAgo(2300),
+    },
+    {
+      id: 't4',
+      subjectId: LOGICA,
+      termId: `${LOGICA}-p2`,
+      kind: 'tarea',
+      title: 'Tarea de prueba 2',
+      instructions: 'Instrucciones de ejemplo del segundo parcial.',
+      version: 1,
+      createdBy: 'demo-4',
+      createdAt: minutesAgo(950),
+      updatedBy: 'demo-4',
+      updatedAt: minutesAgo(950),
+    },
+    {
+      id: 't5',
+      subjectId: FUNDAMENTOS,
+      kind: 'examen',
+      title: 'Examen de prueba (sin parcial)',
+      instructions: '',
+      version: 1,
+      createdBy: 'demo-1',
+      createdAt: minutesAgo(650),
+      updatedBy: 'demo-1',
+      updatedAt: minutesAgo(650),
+    },
+  ];
+  // Sesiones en fechas distintas: con una evidencia, con varios equipos y sin ninguna.
+  const activities: Activity[] = [
+    {
+      id: 'a1',
+      subjectId: LOGICA,
+      topic: 'Tema de prueba',
+      date: daysAgo(2),
+      title: 'Actividad de prueba en clase',
+      objective: 'Objetivo de ejemplo.',
+      instructions: 'Instrucciones de ejemplo.',
+      createdBy: 'demo-2',
+      createdAt: minutesAgo(2900),
+    },
+    {
+      id: 'a2',
+      subjectId: FUNDAMENTOS,
+      topic: 'Ciclos',
+      date: daysAgo(1),
+      title: 'Práctica de prueba en equipos',
+      objective: 'Objetivo de ejemplo: resolver el mismo ejercicio de dos maneras y compararlas.',
+      instructions: 'Instrucciones de ejemplo:\n1. Formen equipos.\n2. Resuelvan el ejercicio.\n3. Suban su evidencia.',
+      createdBy: 'demo-3',
+      createdAt: minutesAgo(1400),
+    },
+    {
+      id: 'a3',
+      subjectId: LOGICA,
+      topic: '',
+      date: daysAgo(9),
+      title: 'Dinámica de prueba sin evidencias',
+      objective: '',
+      instructions: '',
+      createdBy: 'demo-1',
+      createdAt: minutesAgo(12_900),
+    },
+    {
+      id: 'a4',
+      subjectId: FUNDAMENTOS,
+      topic: 'Tema de prueba',
+      date: daysAgo(36),
+      title: 'Laboratorio de prueba del mes pasado',
+      objective: 'Objetivo de ejemplo.',
+      instructions: 'Instrucciones de ejemplo.',
+      createdBy: 'demo-4',
+      createdAt: minutesAgo(51_800),
+    },
+  ].map((a) => ({ ...a, version: 1, updatedBy: a.createdBy, updatedAt: a.createdAt }));
+
+  // Historial: versiones anteriores de la primera tarea y la versión vigente de todo lo demás.
+  const revisions: Revision[] = [
+    {
+      id: 'r1',
+      page: 'assignment',
+      pageId: 't1',
+      version: 1,
+      editedBy: 'demo-2',
+      editedAt: minutesAgo(3100),
+      title: 'Tarea de prueba 1',
+      summary: '',
+      body: 'Primera versión de las instrucciones de ejemplo.',
+    },
+    {
+      id: 'r2',
+      page: 'assignment',
+      pageId: 't1',
+      version: 2,
+      editedBy: 'demo-4',
+      editedAt: minutesAgo(2000),
+      title: 'Tarea de prueba 1',
+      summary: '',
+      body: 'Segunda versión de ejemplo:\n1. Resolver el ejercicio.\n2. Explicar la solución.',
+    },
+    ...assignments.map((a): Revision => ({
+      id: `r-${a.id}`,
+      page: 'assignment',
+      pageId: a.id,
+      version: a.version,
+      editedBy: a.updatedBy,
+      editedAt: a.updatedAt,
+      title: a.title,
+      summary: '',
+      body: a.instructions,
+    })),
+    ...activities.map((a): Revision => ({
+      id: `r-${a.id}`,
+      page: 'activity',
+      pageId: a.id,
+      version: a.version,
+      editedBy: a.updatedBy,
+      editedAt: a.updatedAt,
+      title: a.title,
+      summary: a.objective,
+      body: a.instructions,
+    })),
+  ];
   return {
     members,
     subjects,
     terms,
+    assignments,
+    // Lo que subió cada quien: en equipo, con código, con versiones y más de uno por tarea.
     works: [
       {
         id: 'w1',
-        subjectId: LOGICA,
-        termId: `${LOGICA}-p1`,
-        kind: 'tarea',
-        title: 'Tarea de prueba 1',
-        assignment: 'Consigna de ejemplo.',
-        description: 'Descripción de ejemplo.',
+        assignmentId: 't1',
+        title: '',
+        description: 'Descripción de ejemplo del trabajo de un equipo.',
         version: 1,
         authorIds: ['demo-1', 'demo-2'],
         createdAt: minutesAgo(3000),
         updatedAt: minutesAgo(3000),
       },
       {
+        id: 'w6',
+        assignmentId: 't1',
+        title: 'Otra solución de prueba',
+        description: 'Ejemplo de un segundo trabajo en la misma tarea. No reemplaza al primero.',
+        version: 1,
+        authorIds: ['demo-3'],
+        createdAt: minutesAgo(2600),
+        updatedAt: minutesAgo(2600),
+      },
+      {
         id: 'w2',
-        subjectId: FUNDAMENTOS,
-        termId: `${FUNDAMENTOS}-p1`,
-        kind: 'actividad',
-        title: 'Actividad de prueba',
-        assignment: 'Otra consigna de ejemplo.',
-        description: '',
+        assignmentId: 't2',
+        title: '',
+        description: 'Descripción de ejemplo.',
         version: 1,
         authorIds: ['demo-3'],
         createdAt: minutesAgo(1500),
         updatedAt: minutesAgo(1500),
       },
-      // Más ejemplos para revisar el archivo: equipo de tres, código, versiones y sin parcial.
       {
         id: 'w3',
-        subjectId: LOGICA,
-        termId: `${LOGICA}-p1`,
-        kind: 'exposicion',
-        title: 'Exposición de prueba (en equipo, con código)',
-        assignment: 'Consigna de ejemplo: resolver un ejercicio en equipo y explicar la solución.',
+        assignmentId: 't3',
+        title: 'Tema de prueba del equipo',
         description:
           'Descripción de ejemplo con un fragmento de código:\n```js\nconst suma = (a, b) => a + b;\n```\n' +
           'El texto de después conserva su formato.',
@@ -584,11 +866,8 @@ export function createDemoState(now = new Date()): State {
       },
       {
         id: 'w4',
-        subjectId: LOGICA,
-        termId: `${LOGICA}-p2`,
-        kind: 'tarea',
-        title: 'Tarea de prueba 2 (con una versión nueva)',
-        assignment: 'Consigna de ejemplo del segundo parcial.',
+        assignmentId: 't4',
+        title: '',
         description: 'Descripción de ejemplo, ya corregida una vez.',
         version: 2,
         authorIds: ['demo-4'],
@@ -597,17 +876,16 @@ export function createDemoState(now = new Date()): State {
       },
       {
         id: 'w5',
-        subjectId: FUNDAMENTOS,
-        kind: 'examen',
-        title: 'Examen de prueba (sin parcial)',
-        assignment: '',
-        description: 'Ejemplo de un trabajo que no se clasificó en ningún parcial ni registró su consigna.',
+        assignmentId: 't5',
+        title: '',
+        description: 'Ejemplo de un trabajo subido a un examen sin parcial.',
         version: 1,
         authorIds: ['demo-1'],
         createdAt: minutesAgo(600),
         updatedAt: minutesAgo(600),
       },
     ],
+    revisions,
     // Solo los datos del archivo: en modo de prueba no hay contenido que descargar.
     workFiles: [
       {
@@ -681,53 +959,7 @@ export function createDemoState(now = new Date()): State {
       { id: 'd3', conversationId: 'c2', senderId: 'demo-3', text: 'Respuesta privada de prueba.', sentAt: minutesAgo(1590) },
     ],
     birthdays: [{ memberId: 'demo-3', day: 15, month: 11, remind: true }],
-    // Sesiones en fechas distintas: con una evidencia, con varios equipos y sin ninguna.
-    activities: [
-      {
-        id: 'a1',
-        subjectId: LOGICA,
-        topic: 'Tema de prueba',
-        date: daysAgo(2),
-        title: 'Actividad de prueba en clase',
-        objective: 'Objetivo de ejemplo.',
-        instructions: 'Instrucciones de ejemplo.',
-        createdBy: 'demo-2',
-        createdAt: minutesAgo(2900),
-      },
-      {
-        id: 'a2',
-        subjectId: FUNDAMENTOS,
-        topic: 'Ciclos',
-        date: daysAgo(1),
-        title: 'Práctica de prueba en equipos',
-        objective: 'Objetivo de ejemplo: resolver el mismo ejercicio de dos maneras y compararlas.',
-        instructions: 'Instrucciones de ejemplo:\n1. Formen equipos.\n2. Resuelvan el ejercicio.\n3. Suban su evidencia.',
-        createdBy: 'demo-3',
-        createdAt: minutesAgo(1400),
-      },
-      {
-        id: 'a3',
-        subjectId: LOGICA,
-        topic: '',
-        date: daysAgo(9),
-        title: 'Dinámica de prueba sin evidencias',
-        objective: '',
-        instructions: '',
-        createdBy: 'demo-1',
-        createdAt: minutesAgo(12_900),
-      },
-      {
-        id: 'a4',
-        subjectId: FUNDAMENTOS,
-        topic: 'Tema de prueba',
-        date: daysAgo(36),
-        title: 'Laboratorio de prueba del mes pasado',
-        objective: 'Objetivo de ejemplo.',
-        instructions: 'Instrucciones de ejemplo.',
-        createdBy: 'demo-4',
-        createdAt: minutesAgo(51_800),
-      },
-    ],
+    activities,
     evidences: [
       {
         id: 'e1',
