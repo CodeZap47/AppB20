@@ -38,7 +38,7 @@ export function buildNews(snapshot: Snapshot): NewsItem[] {
       subjectId: w.subjectId,
       actorId: w.authorIds[0] ?? '',
       text: `publicó el trabajo «${w.title}»`,
-      link: `/m/tareas`,
+      link: `/m/tareas/${w.id}`,
       at: w.createdAt,
     })),
     ...snapshot.notes

@@ -6,7 +6,7 @@ import { ModulePage } from './pages/ModulePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { InstallPage } from './pages/InstallPage';
 import { DirectThread, GroupThread, MessagesLayout, ThreadPlaceholder } from './pages/MessagesPage';
-import { WorksPage } from './pages/WorksPage';
+import { PublishWorkPage, WorkPage, WorksPage } from './pages/WorksPage';
 import { ProfilePage, ProfilesPage } from './pages/ProfilesPage';
 import { BirthdaysPage } from './pages/BirthdaysPage';
 import { WhatsNewPage } from './pages/WhatsNewPage';
@@ -44,6 +44,8 @@ const router = createHashRouter([
         ],
       },
       { path: 'm/tareas', element: <WorksPage /> },
+      { path: 'm/tareas/nuevo', element: <PublishWorkPage /> },
+      { path: 'm/tareas/:workId', element: <WorkPage /> },
       { path: 'm/perfiles', element: <ProfilesPage /> },
       { path: 'perfil/:memberId', element: <ProfilePage /> },
       { path: 'm/cumpleanos', element: <BirthdaysPage /> },

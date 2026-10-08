@@ -3,8 +3,16 @@ import type { ReactNode } from 'react';
 const ICONS = {
   back: <path d="M15 5l-7 7 7 7" />,
   chat: <path d="M4 5h16v11H9.5L4 20z" />,
+  check: <path d="M5 12.5l4.5 4.5L19 7.5" />,
   close: <path d="M6 6l12 12M18 6L6 18" />,
   down: <path d="M12 5v14M5 12l7 7 7-7" />,
+  edit: (
+    <>
+      <path d="M4 20h4L19 9l-4-4L4 16z" />
+      <path d="M13 7l4 4" />
+    </>
+  ),
+  folder: <path d="M3 7.5a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
   lock: (
     <>
       <rect x="5" y="11" width="14" height="10" rx="2" />

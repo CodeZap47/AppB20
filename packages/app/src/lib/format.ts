@@ -16,6 +16,13 @@ export function formatDate(date: Date): string {
 const weekdayFormat = new Intl.DateTimeFormat('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
 const fullDateFormat = new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'long', year: 'numeric' });
 
+const mediumDateFormat = new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
+
+/** «6 oct 2026», para fichas de detalle donde el año importa. */
+export function formatMediumDate(date: Date): string {
+  return mediumDateFormat.format(date);
+}
+
 /** Días de calendario transcurridos entre `date` y `now` (0 = hoy, 1 = ayer). */
 function daysAgo(date: Date, now: Date): number {
   const start = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();

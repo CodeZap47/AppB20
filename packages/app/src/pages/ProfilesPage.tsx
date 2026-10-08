@@ -107,6 +107,7 @@ export function ProfilePage() {
         subjects={subjects}
         terms={terms}
         members={members}
+        meId={me?.id}
         empty="Sin trabajos publicados."
       />
     </>

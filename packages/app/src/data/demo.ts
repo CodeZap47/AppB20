@@ -223,7 +223,6 @@ export class DemoDataSource implements DataSource {
     return work.id;
   }
 
-  /** No es parte de `Actions` todavía; sirve para probar la regla de autoría. */
   updateWork(workId: Id, title: string, description: string) {
     const me = this.#activeMember();
     const work = this.#state.works.find((w) => w.id === workId);
@@ -499,6 +498,44 @@ export function createDemoState(now = new Date()): State {
         authorIds: ['demo-3'],
         createdAt: minutesAgo(1500),
         updatedAt: minutesAgo(1500),
+      },
+      // Más ejemplos para revisar el archivo: equipo de tres, código, versiones y sin parcial.
+      {
+        id: 'w3',
+        subjectId: 's1',
+        termId: 't1',
+        title: 'Trabajo de prueba 3 (en equipo, con código)',
+        assignment: 'Consigna de ejemplo: resolver un ejercicio en equipo y explicar la solución.',
+        description:
+          'Descripción de ejemplo con un fragmento de código:\n```js\nconst suma = (a, b) => a + b;\n```\n' +
+          'El texto de después conserva su formato.',
+        version: 1,
+        authorIds: ['demo-2', 'demo-3', 'demo-4'],
+        createdAt: minutesAgo(2200),
+        updatedAt: minutesAgo(2200),
+      },
+      {
+        id: 'w4',
+        subjectId: 's1',
+        termId: 't2',
+        title: 'Trabajo de prueba 4 (con una versión nueva)',
+        assignment: 'Consigna de ejemplo del segundo parcial.',
+        description: 'Descripción de ejemplo, ya corregida una vez.',
+        version: 2,
+        authorIds: ['demo-4'],
+        createdAt: minutesAgo(900),
+        updatedAt: minutesAgo(240),
+      },
+      {
+        id: 'w5',
+        subjectId: 's2',
+        title: 'Trabajo de prueba 5 (sin parcial)',
+        assignment: '',
+        description: 'Ejemplo de un trabajo que no se clasificó en ningún parcial ni registró su consigna.',
+        version: 1,
+        authorIds: ['demo-1'],
+        createdAt: minutesAgo(600),
+        updatedAt: minutesAgo(600),
       },
     ],
     // Varios días, autores y formatos para poder revisar cómo se ve el chat.

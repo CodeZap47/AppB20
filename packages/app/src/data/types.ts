@@ -177,6 +177,8 @@ export interface Actions {
   createSubject(name: string): Id;
   createTerm(subjectId: Id, name: string): Id;
   publishWork(input: PublishWorkInput): Id;
+  /** Solo sus autores; cada edición guarda una versión nueva. */
+  updateWork(workId: Id, title: string, description: string): void;
   sendGroupMessage(text: string): void;
   /** Devuelve la conversación existente o la nueva. */
   openDirectConversation(otherId: Id): Id;
