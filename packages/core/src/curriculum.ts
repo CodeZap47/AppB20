@@ -2,6 +2,9 @@
  * Plan de estudios de Ingeniería en Desarrollo de Software que cursa el grupo B20:
  * nueve cuatrimestres con cinco materias cada uno. Cada cuatrimestre se divide en tres
  * parciales, así que cada materia tiene «Parcial 1», «Parcial 2» y «Parcial 3».
+ *
+ * Los nombres van tal como aparecen en el plan oficial, incluidos «Fronted I» y «Fronted II»:
+ * el grupo pidió conservarlos así, no son una errata por corregir.
  */
 
 export interface CurriculumSubject {
@@ -55,14 +58,14 @@ const BY_PERIOD: readonly (readonly [code: string, name: string])[][] = [
     ['IDSE-05060226', 'Realidad Virtual'],
     ['IDSE-05060227', 'Redes I'],
     ['IDSE-05060228', 'Desarrollo de Software Backend I'],
-    ['IDSE-05060229', 'Desarrollo de Software Frontend I'],
+    ['IDSE-05060229', 'Desarrollo de Software Fronted I'],
     ['IDSE-05060230', 'Aplicaciones Electrónicas'],
   ],
   [
     ['IDSE-05070331', 'Desarrollo de Aplicaciones de Realidad Virtual'],
     ['IDSE-05070332', 'Redes II'],
     ['IDSE-05070333', 'Desarrollo de Software Backend II'],
-    ['IDSE-05070334', 'Desarrollo de Software Frontend II'],
+    ['IDSE-05070334', 'Desarrollo de Software Fronted II'],
     ['IDSE-05070335', 'Ciencia de Datos'],
   ],
   [
