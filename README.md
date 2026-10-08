@@ -4,7 +4,7 @@ Plataforma colaborativa del grupo B20 de Ingeniería en Desarrollo de Software: 
 trabajos por materia y parcial, mensajería del grupo y 1 a 1, perfiles, cumpleaños, guías de
 estudio y Gemini con clave propia (BYOK).
 
-La definición completa está en `../docs/app-b20-definicion-del-proyecto.md`. Este repositorio
+La definición completa está en [`docs/definicion-del-proyecto.md`](docs/definicion-del-proyecto.md). Este repositorio
 es la base de la **Etapa 0** (prototipo técnico) y del **MVP** (Etapa 1).
 
 ## Estructura
@@ -21,7 +21,8 @@ app-b20/
 │   ├── core/             Catálogo de módulos, reglas de permisos y cumpleaños (con pruebas)
 │   └── spacetime-module/ Módulo de servidor SpacetimeDB: tablas, reducers y vistas
 └── docs/
-    └── arquitectura.md   Cómo encajan las piezas y qué falta validar
+    ├── arquitectura.md   Cómo encajan las piezas y qué falta validar
+    └── definicion-del-proyecto.md   Alcance funcional completo
 ```
 
 Las tres presentaciones (web/PWA, extensión, APK) son la misma app con los mismos datos; solo

@@ -1,7 +1,7 @@
 # Arquitectura
 
 Resumen técnico de la base inicial. La fuente de verdad del alcance es
-`../../docs/app-b20-definicion-del-proyecto.md` (secciones 5, 6 y 9).
+[`definicion-del-proyecto.md`](definicion-del-proyecto.md) (secciones 5, 6 y 9).
 
 ## Piezas
 
