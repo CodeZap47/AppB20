@@ -1,12 +1,15 @@
 import type { Activity, Evidence, Id, Subject } from '../data/types';
 import { parseDay } from './format';
 import { matches } from './search';
+import { NO_TERM } from './works';
 
 export interface ActivityFilters {
   query: string;
   /** Cuatrimestre de la materia; 0 para todos. */
   period: number;
   subjectId: Id;
+  /** Id de un parcial, `NO_TERM` o vacío para todos. */
+  termId: Id;
   /** Solo las actividades donde quien mira aparece en alguna evidencia. */
   mine: boolean;
 }
@@ -34,6 +37,7 @@ export function filterActivities(
     const subject = ctx.subjects.find((s) => s.id === a.subjectId);
     if (filters.period && subject?.period !== filters.period) return false;
     if (filters.subjectId && a.subjectId !== filters.subjectId) return false;
+    if (filters.termId === NO_TERM ? a.termId : filters.termId && a.termId !== filters.termId) return false;
     if (filters.mine && !(ctx.meId && participantsOf(a.id, ctx.evidences).includes(ctx.meId))) {
       return false;
     }

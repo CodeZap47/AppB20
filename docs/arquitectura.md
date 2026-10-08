@@ -19,12 +19,12 @@ Resumen técnico de la base inicial. La fuente de verdad del alcance es
 ## Modelo de datos inicial (`packages/spacetime-module`)
 
 Tablas privadas: `app_config`, `invitation`, `member`, `subject`, `term`, `work`,
-`assignment`, `page_revision`, `work_author`, `work_file`, `group_message`, `direct_conversation`, `direct_message`, `birthday`,
+`term_dates`, `assignment`, `page_revision`, `work_author`, `work_file`, `group_message`, `direct_conversation`, `direct_message`, `birthday`,
 `change_log`, `activity`, `evidence`, `note`, `note_comment`, `question`, `answer`,
 `last_seen`.
 
 Vistas públicas con filtro por quien consulta: `my_member`, `members`, `subjects`, `terms`,
-`assignments`, `page_revisions`, `works`, `work_authors`, `work_files`, `group_messages`, `birthdays`, `change_history`,
+`calendar`, `assignments`, `page_revisions`, `works`, `work_authors`, `work_files`, `group_messages`, `birthdays`, `change_history`,
 `my_direct_conversations`, `my_direct_messages`, `activities`, `evidences`, `notes` (del grupo
 y las personales propias), `note_comments`, `questions`, `answers`, `my_last_seen`.
 
@@ -44,6 +44,28 @@ editar con el texto de esa versión, así que nunca se borra historial. No hay b
 simultánea: gana el último que guarda y el anterior queda en el historial.
 
 `update_work`, `attach_work_file` y `remove_work_file` sí exigen ser autor del trabajo.
+
+### Calendario de parciales y parcial vigente
+
+`term_dates` guarda el primer y el último día de cada parcial (cuatrimestre 1 a 9, parcial 1 a
+3). Lo cambia el reducer `save_calendar`, que solo ejecutan los creadores (`requireCreator`) y
+reemplaza de una vez las fechas de un cuatrimestre; valida fechas reales, en orden y sin
+encimarse. En la interfaz está en Ajustes (`CalendarSettings`): todos lo ven, solo los
+administradores lo editan (`canManageCalendar` en `@b20/core`).
+
+El parcial vigente es el último que ya empezó (`currentTerm` en `@b20/core`): cambia el día en
+que inicia el siguiente y, entre dos parciales, sigue valiendo el anterior. Los formularios de
+«Registrar actividad» y «Nueva tarea o actividad» abren con ese cuatrimestre y ese parcial,
+salvo que se llegue desde una lista ya filtrada. Si no hay fechas, abren en el último
+cuatrimestre que la persona usó.
+
+### Cómo se relacionan «Tareas y Actividades» y «Actividades de clase»
+
+Son módulos distintos: uno guarda lo que se entrega (página principal y trabajos de cada
+alumno) y el otro lo que se hizo en una sesión (página y evidencias por equipo). No se enlazan
+registro a registro; comparten la clasificación cuatrimestre → materia → parcial. Por eso cada
+página lista lo del otro módulo en su misma materia y parcial. Las actividades de clase guardan
+ahora su parcial (`termId`).
 
 ### Plan de estudios y tipos de trabajo
 

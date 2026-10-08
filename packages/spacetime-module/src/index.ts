@@ -77,6 +77,25 @@ const term = table(
 );
 
 /**
+ * Calendario escolar: fechas de cada parcial de cada cuatrimestre. Solo los creadores las
+ * cambian; con ellas los clientes saben en qué cuatrimestre y parcial va el grupo.
+ */
+const termDates = table(
+  { name: 'term_dates' },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    period: t.u32().index('btree'),
+    /** Número de parcial dentro del cuatrimestre, de 1 a 3. */
+    term: t.u32(),
+    /** Primer y último día, `AAAA-MM-DD`. */
+    startDate: t.string(),
+    endDate: t.string(),
+    updatedBy: t.identity(),
+    updatedAt: t.timestamp(),
+  },
+);
+
+/**
  * Página principal de una tarea, actividad, exposición o examen: lo que se pidió. Cualquier
  * miembro activo la edita, como un wiki; cada versión queda en `page_revision`.
  */
@@ -225,6 +244,8 @@ const activity = table(
   {
     id: t.u64().primaryKey().autoInc(),
     subjectId: t.u64().index('btree'),
+    /** Parcial de la materia en que ocurrió la sesión. */
+    termId: t.u64().optional(),
     topic: t.string(),
     date: t.string(),
     title: t.string(),
@@ -326,6 +347,7 @@ const spacetimedb = schema({
   member,
   subject,
   term,
+  termDates,
   assignment,
   pageRevision,
   work,
@@ -559,6 +581,62 @@ export const create_term = spacetimedb.reducer(
       position,
     });
     log(ctx, 'create', 'term', row.id);
+  },
+);
+
+function isRealDay(day: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return false;
+  const [year, month, date] = day.split('-').map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, date));
+  return parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === date;
+}
+
+/**
+ * Fija las fechas de los parciales de un cuatrimestre: una posición por parcial, con las dos
+ * fechas vacías para dejarlo sin configurar. Reemplaza lo que ese cuatrimestre tuviera. Aplica
+ * las mismas reglas que `buildPeriodCalendar` de `@b20/core`: fechas reales y en orden, sin
+ * encimarse entre parciales ni con otro cuatrimestre.
+ */
+export const save_calendar = spacetimedb.reducer(
+  { period: t.u32(), startDates: t.array(t.string()), endDates: t.array(t.string()) },
+  (ctx, { period, startDates, endDates }) => {
+    requireCreator(ctx);
+    requirePeriod(period);
+    if (startDates.length !== TERMS_PER_PERIOD || endDates.length !== TERMS_PER_PERIOD) {
+      throw new SenderError(`Cada cuatrimestre tiene ${TERMS_PER_PERIOD} parciales.`);
+    }
+    const others = [...ctx.db.termDates.iter()].filter((row) => row.period !== period);
+    const entries: { term: number; startDate: string; endDate: string }[] = [];
+    for (let index = 0; index < TERMS_PER_PERIOD; index++) {
+      const term = index + 1;
+      const startDate = startDates[index];
+      const endDate = endDates[index];
+      if (!startDate && !endDate) continue;
+      if (!isRealDay(startDate) || !isRealDay(endDate)) {
+        throw new SenderError(`Al parcial ${term} le falta la fecha de inicio o la de fin.`);
+      }
+      if (startDate > endDate) {
+        throw new SenderError(`El parcial ${term} no puede terminar antes de empezar.`);
+      }
+      const previous = entries[entries.length - 1];
+      if (previous && previous.endDate >= startDate) {
+        throw new SenderError(
+          `El parcial ${term} debe empezar después de que termine el parcial ${previous.term}.`,
+        );
+      }
+      const clash = others.find((row) => startDate <= row.endDate && row.startDate <= endDate);
+      if (clash) {
+        throw new SenderError(
+          `El parcial ${term} se encima con el parcial ${clash.term} del cuatrimestre ${clash.period}.`,
+        );
+      }
+      entries.push({ term, startDate, endDate });
+    }
+    for (const row of [...ctx.db.termDates.period.filter(period)]) ctx.db.termDates.id.delete(row.id);
+    for (const entry of entries) {
+      ctx.db.termDates.insert({ id: 0n, period, ...entry, updatedBy: ctx.sender, updatedAt: ctx.timestamp });
+    }
+    log(ctx, 'update', 'calendar', BigInt(period));
   },
 );
 
@@ -856,6 +934,7 @@ const NOTE_SOURCE = ['student', 'teacher', 'ai'];
 
 const ACTIVITY_ARGS = {
   subjectId: t.u64(),
+  termId: t.u64().optional(),
   topic: t.string(),
   date: t.string(),
   title: t.string(),
@@ -865,12 +944,27 @@ const ACTIVITY_ARGS = {
 
 function checkActivity(
   ctx: Ctx,
-  input: { subjectId: bigint; topic: string; date: string; title: string; objective: string; instructions: string },
+  input: {
+    subjectId: bigint;
+    termId?: bigint;
+    topic: string;
+    date: string;
+    title: string;
+    objective: string;
+    instructions: string;
+  },
 ) {
   requireSubject(ctx, input.subjectId);
+  if (input.termId !== undefined) {
+    const termRow = ctx.db.term.id.find(input.termId);
+    if (!termRow || termRow.subjectId !== input.subjectId) {
+      throw new SenderError('El parcial no pertenece a esa materia.');
+    }
+  }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new SenderError('Fecha inválida.');
   return {
     subjectId: input.subjectId,
+    termId: input.termId,
     topic: input.topic.trim(),
     date: input.date,
     title: requireText(input.title, 'El título', 200),
@@ -1117,6 +1211,12 @@ export const terms = spacetimedb.view(
   { name: 'terms', public: true },
   t.array(term.rowType),
   (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.term.iter()] : []),
+);
+
+export const calendar = spacetimedb.view(
+  { name: 'calendar', public: true },
+  t.array(termDates.rowType),
+  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.termDates.iter()] : []),
 );
 
 export const assignments = spacetimedb.view(

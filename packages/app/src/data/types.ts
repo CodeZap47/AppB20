@@ -3,7 +3,7 @@
  * (`packages/spacetime-module`), con identidades e ids como texto para simplificar la UI.
  */
 
-import type { WorkKind } from '@b20/core';
+import type { TermDates, TermDatesInput, WorkKind } from '@b20/core';
 
 export type Id = string;
 
@@ -127,6 +127,8 @@ export interface Birthday {
 export interface Activity {
   id: Id;
   subjectId: Id;
+  /** Parcial de la materia en que ocurrió la sesión. */
+  termId?: Id;
   topic: string;
   /** Fecha de la sesión, `AAAA-MM-DD`. */
   date: string;
@@ -206,6 +208,8 @@ export interface Snapshot {
   members: Member[];
   subjects: Subject[];
   terms: Term[];
+  /** Fechas de los parciales ya configurados; de aquí sale el cuatrimestre y parcial vigente. */
+  calendar: TermDates[];
   assignments: Assignment[];
   works: Work[];
   workFiles: WorkFile[];
@@ -248,6 +252,11 @@ export interface Actions {
   /** Materia fuera del plan de estudios, dentro de un cuatrimestre (1 a 9). */
   createSubject(name: string, period: number): Id;
   createTerm(subjectId: Id, name: string): Id;
+  /**
+   * Solo administradores (creadores de la app): fija las fechas de los parciales de un
+   * cuatrimestre, una posición por parcial; las dos fechas vacías lo dejan sin configurar.
+   */
+  saveCalendar(period: number, terms: TermDatesInput[]): void;
   createAssignment(input: AssignmentInput): Id;
   /** Como en un wiki: cualquier miembro activo edita y se guarda una versión a su nombre. */
   updateAssignment(assignmentId: Id, input: AssignmentInput): void;
@@ -283,6 +292,7 @@ export interface Actions {
 
 export interface CreateActivityInput {
   subjectId: Id;
+  termId?: Id;
   topic: string;
   date: string;
   title: string;

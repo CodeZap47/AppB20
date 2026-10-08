@@ -205,6 +205,75 @@ describe('notas, actividades y preguntas', () => {
     expect(data.getSnapshot().subjects.find((s) => s.id === id)?.period).toBe(3);
   });
 
+  describe('calendario de parciales', () => {
+    const terms = [
+      { startDate: '2027-01-11', endDate: '2027-02-12' },
+      { startDate: '2027-02-15', endDate: '2027-03-19' },
+      { startDate: '', endDate: '' },
+    ];
+
+    it('trae el primer cuatrimestre configurado con el parcial 2 vigente', () => {
+      const { calendar } = source('demo-2').getSnapshot();
+      expect(calendar.map((entry) => [entry.period, entry.term])).toEqual([
+        [1, 1],
+        [1, 2],
+        [1, 3],
+      ]);
+      const today = '2026-10-08';
+      expect(calendar.filter((entry) => entry.startDate <= today && today <= entry.endDate)).toMatchObject([
+        { period: 1, term: 2 },
+      ]);
+    });
+
+    it('solo un administrador cambia las fechas', () => {
+      const data = source('demo-2');
+      expect(() => data.saveCalendar(2, terms)).toThrow('Solo los administradores');
+      data.setViewer('demo-1');
+      data.saveCalendar(2, terms);
+      expect(data.getSnapshot().calendar.filter((entry) => entry.period === 2)).toEqual([
+        { period: 2, term: 1, startDate: '2027-01-11', endDate: '2027-02-12' },
+        { period: 2, term: 2, startDate: '2027-02-15', endDate: '2027-03-19' },
+      ]);
+    });
+
+    it('guardar un cuatrimestre reemplaza sus fechas sin tocar los demás', () => {
+      const data = source('demo-1');
+      data.saveCalendar(2, terms);
+      data.saveCalendar(2, [terms[0]!, { startDate: '', endDate: '' }, { startDate: '', endDate: '' }]);
+      const { calendar } = data.getSnapshot();
+      expect(calendar.filter((entry) => entry.period === 2)).toHaveLength(1);
+      expect(calendar.filter((entry) => entry.period === 1)).toHaveLength(3);
+    });
+
+    it('rechaza fechas que se enciman con otro cuatrimestre', () => {
+      const data = source('demo-1');
+      const [first] = data.getSnapshot().calendar;
+      expect(() =>
+        data.saveCalendar(2, [
+          { startDate: first!.startDate, endDate: first!.endDate },
+          { startDate: '', endDate: '' },
+          { startDate: '', endDate: '' },
+        ]),
+      ).toThrow('se encima');
+    });
+  });
+
+  it('una actividad de clase guarda su parcial y rechaza uno de otra materia', () => {
+    const data = source('demo-1');
+    const input = {
+      subjectId: 'IDSE-05010103',
+      termId: 'IDSE-05010103-p2',
+      topic: '',
+      date: '2026-10-08',
+      title: 'Práctica',
+      objective: '',
+      instructions: '',
+    };
+    const id = data.createActivity(input);
+    expect(data.getSnapshot().activities.find((a) => a.id === id)?.termId).toBe('IDSE-05010103-p2');
+    expect(() => data.createActivity({ ...input, termId: 'IDSE-05010104-p1' })).toThrow('no pertenece');
+  });
+
   describe('archivos de un trabajo', () => {
     /** Archivo del tamaño indicado sin reservar esa memoria. */
     const fileOf = (name: string, size: number) => {

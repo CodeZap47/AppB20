@@ -22,7 +22,7 @@ const activity = (id: string, date: string, over: Partial<Activity> = {}): Activ
   ...over,
 });
 const activities = [
-  activity('a', '2026-09-28', { topic: 'Diagramas de flujo' }),
+  activity('a', '2026-09-28', { topic: 'Diagramas de flujo', termId: 'log-p1' }),
   activity('b', '2026-10-06', { title: 'Práctica de ciclos' }),
   activity('c', '2026-10-02', { subjectId: 'poo' }),
   activity('d', '2026-10-06', { createdAt: new Date(2026, 9, 7) }),
@@ -37,7 +37,7 @@ const evidence = (id: string, activityId: string, participantIds: string[]): Evi
 });
 const evidences = [evidence('e1', 'b', ['ana', 'luis']), evidence('e2', 'b', ['eva', 'luis']), evidence('e3', 'c', ['eva'])];
 const ctx = { subjects, evidences, meId: 'eva' };
-const all = { query: '', period: 0, subjectId: '', mine: false };
+const all = { query: '', period: 0, subjectId: '', termId: '', mine: false };
 const ids = (list: Activity[]) => list.map((a) => a.id);
 
 describe('participantsOf', () => {
@@ -53,6 +53,14 @@ describe('filterActivities', () => {
     expect(ids(filterActivities(activities, { ...all, subjectId: 'log' }, ctx))).toEqual(['a', 'b', 'd']);
     expect(ids(filterActivities(activities, { ...all, mine: true }, ctx))).toEqual(['b', 'c']);
     expect(ids(filterActivities(activities, { ...all, mine: true }, { ...ctx, meId: undefined }))).toEqual([]);
+  });
+
+  it('filtra por parcial, incluidas las que no tienen', () => {
+    expect(ids(filterActivities(activities, { ...all, termId: 'log-p1' }, ctx))).toEqual(['a']);
+    expect(ids(filterActivities(activities, { ...all, subjectId: 'log', termId: 'ninguno' }, ctx))).toEqual([
+      'b',
+      'd',
+    ]);
   });
 
   it('busca sin acentos en título, tema y materia', () => {

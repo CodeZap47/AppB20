@@ -33,7 +33,7 @@ import {
   parseDay,
   peopleList,
 } from '../lib/format';
-import { lastPeriod, rememberPeriod } from '../lib/period';
+import { currentPlacement, lastPeriod, rememberPeriod, termAt } from '../lib/period';
 import {
   bySubject,
   filterAssignments,
@@ -510,7 +510,8 @@ export function AssignmentPage() {
   const source = useDataSource();
   const location = useLocation();
   const [params] = useSearchParams();
-  const { me, assignments, works, workFiles, revisions, subjects, terms, members } = useSnapshot();
+  const { me, assignments, activities, works, workFiles, revisions, subjects, terms, members } =
+    useSnapshot();
   const { error, run } = useAction();
   const [showHistory, setShowHistory] = useState(false);
   const highlighted = params.get('trabajo') ?? '';
@@ -547,6 +548,11 @@ export function AssignmentPage() {
   const alreadyMine = Boolean(me && submitted.includes(me.id));
   const fileErrors = (location.state as { fileErrors?: string[] } | null)?.fileErrors ?? [];
   const inSubject = { ...(subject && { cuatri: String(subject.period) }), materia: assignment.subjectId };
+  // El vínculo con «Actividades de clase»: las sesiones de esta misma materia y parcial.
+  const sessions = activities
+    .filter((a) => a.subjectId === assignment.subjectId && a.termId === assignment.termId)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const sessionsLink = `/m/actividades?${new URLSearchParams({ ...inSubject, parcial: assignment.termId ?? NO_TERM })}`;
 
   // Restaurar es editar con el texto de antes: crea una versión nueva y no borra ninguna.
   const restore = (revision: Revision) =>
@@ -703,6 +709,27 @@ export function AssignmentPage() {
             </ul>
           </section>
 
+          {sessions.length > 0 && (
+            <section className="panel">
+              <h2 className="label">Actividades de clase de {term ? 'este parcial' : 'esta materia'}</h2>
+              <ul className="links">
+                {sessions.slice(0, 4).map((a) => (
+                  <li key={a.id}>
+                    <Link to={`/m/actividades/${a.id}`}>
+                      <strong>{a.title}</strong>
+                      <span className="muted">{formatDate(parseDay(a.date))}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              {sessions.length > 4 && (
+                <p className="panel__more">
+                  <Link to={sessionsLink}>Ver las {sessions.length}</Link>
+                </p>
+              )}
+            </section>
+          )}
+
           <section className="panel">
             <h2 className="label">Detalles</h2>
             <dl className="facts">
@@ -754,24 +781,30 @@ function AssignmentForm({ assignment }: { assignment: Assignment | undefined }) 
   const source = useDataSource();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { members, subjects, terms } = useSnapshot();
+  const { members, subjects, terms, calendar } = useSnapshot();
   const { error, run } = useAction();
   const backTo = assignment ? `/m/tareas/${assignment.id}` : '/m/tareas';
+  // Al crear, el formulario abre en el cuatrimestre y parcial vigentes según Ajustes.
+  const current = currentPlacement(calendar);
+  const currentTermOf = (subject: string, inPeriodNumber: number) =>
+    inPeriodNumber === current?.period ? (termAt(terms, subject, current.term)?.id ?? '') : '';
 
   const firstIn = (period: number) =>
     subjects.filter((s) => s.period === period).sort(bySubject)[0]?.id ?? NEW;
   const asked = subjects.find((s) => s.id === (assignment?.subjectId ?? params.get('materia')));
   const [period, setPeriod] = useState(() => {
     const fromFilter = Number(params.get('cuatri'));
-    return asked?.period ?? (isValidPeriod(fromFilter) ? fromFilter : lastPeriod());
+    return asked?.period ?? (isValidPeriod(fromFilter) ? fromFilter : (current?.period ?? lastPeriod()));
   });
   const [subjectId, setSubjectId] = useState(() => asked?.id ?? firstIn(period));
-  const [termId, setTermId] = useState(
-    () =>
-      assignment?.termId ??
-      terms.find((t) => t.id === params.get('parcial') && t.subjectId === subjectId)?.id ??
-      '',
-  );
+  const [termId, setTermId] = useState(() => {
+    if (assignment) return assignment.termId ?? '';
+    const askedTerm = terms.find((t) => t.id === params.get('parcial') && t.subjectId === subjectId);
+    return askedTerm?.id ?? currentTermOf(subjectId, period);
+  });
+  /** Al cambiar de materia se conserva el mismo número de parcial. */
+  const samePosition = (subject: string) =>
+    termAt(terms, subject, terms.find((t) => t.id === termId)?.position)?.id ?? '';
   const [kind, setKind] = useState<WorkKind>(
     () =>
       assignment?.kind ??
@@ -855,6 +888,12 @@ function AssignmentForm({ assignment }: { assignment: Assignment | undefined }) 
 
         <section className="form__section">
           <h2>De qué materia</h2>
+          {!assignment && current && period === current.period && (
+            <p className="field__hint">
+              Abre en {periodLabel(current.period)}, parcial {current.term}: el que está en curso según
+              Ajustes.
+            </p>
+          )}
           <div className="form__grid">
             <label className="field">
               <span className="field__label">Cuatrimestre</span>
@@ -862,9 +901,10 @@ function AssignmentForm({ assignment }: { assignment: Assignment | undefined }) 
                 value={period}
                 onChange={(e) => {
                   const next = Number(e.target.value);
+                  const subject = firstIn(next);
                   setPeriod(next);
-                  setSubjectId(firstIn(next));
-                  setTermId('');
+                  setSubjectId(subject);
+                  setTermId(currentTermOf(subject, next));
                 }}
               >
                 {PERIODS.map((n) => (
@@ -879,8 +919,8 @@ function AssignmentForm({ assignment }: { assignment: Assignment | undefined }) 
               <select
                 value={subjectId}
                 onChange={(e) => {
+                  setTermId(samePosition(e.target.value));
                   setSubjectId(e.target.value);
-                  setTermId('');
                 }}
               >
                 {periodSubjects.map((s) => (

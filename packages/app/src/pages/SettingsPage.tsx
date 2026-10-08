@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { requestNotificationPermission, webPushSupport } from '../lib/notifications';
+import { CalendarSettings } from '../components/CalendarSettings';
 import { usePlatform } from '../components/PlatformContext';
 
 export function SettingsPage() {
@@ -13,6 +14,8 @@ export function SettingsPage() {
   return (
     <>
       <h1>Ajustes</h1>
+
+      <CalendarSettings />
 
       <section>
         <h2>Gemini (BYOK)</h2>

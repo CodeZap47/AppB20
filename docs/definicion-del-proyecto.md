@@ -800,6 +800,7 @@ Todas las ideas están incluidas en el proyecto. La siguiente distribución orga
 | Archivos | Máximo 50 MB por archivo subido a la app. |
 | Páginas principales | Lo que se pidió vive en una página que todo el grupo edita como wiki, con historial y restauración; los trabajos de cada alumno se suben aparte en esa página. Aplica también a las actividades de clase. |
 | Tipos de trabajo | Tarea, actividad, exposición o examen; se elige al publicar y se filtra por «Tareas y actividades» o «Exposiciones y exámenes». |
+| Calendario de parciales | En Ajustes, los administradores (creadores de la app) fijan cuándo empieza y termina cada parcial de cada cuatrimestre. Con eso la app sabe cuál está en curso y abre así los formularios de «Registrar actividad» y «Nueva tarea o actividad». |
 | Plan de estudios | Nueve cuatrimestres de cinco materias; cada cuatrimestre se divide en tres parciales. La lista de materias está en `packages/core/src/curriculum.ts`. |
 | Resultado educativo | Ayudar a comprender y realizar tareas y construir guías integrales de los parciales a partir de los materiales del grupo. |
 

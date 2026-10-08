@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import { isValidPeriod, PERIOD_COUNT, periodLabel } from '@b20/core';
+import { isValidPeriod, PERIOD_COUNT, periodLabel, WORK_KIND_LABEL } from '@b20/core';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import type { Activity, Evidence, Member, Revision } from '../data/types';
 import { Avatar } from '../components/Avatar';
@@ -22,9 +22,9 @@ import {
   peopleList,
   toDay,
 } from '../lib/format';
-import { lastPeriod, rememberPeriod } from '../lib/period';
+import { currentPlacement, lastPeriod, rememberPeriod, termAt } from '../lib/period';
 import { normalize } from '../lib/search';
-import { bySubject, revisionsOf } from '../lib/works';
+import { bySubject, NO_TERM, revisionsOf } from '../lib/works';
 
 const PERIODS = Array.from({ length: PERIOD_COUNT }, (_, i) => i + 1);
 
@@ -108,13 +108,14 @@ function EvidenceCard({
 
 /** Sesiones de clase en orden cronológico. Los filtros viven en la URL. */
 export function ActivitiesPage() {
-  const { me, activities, subjects, evidences, members } = useSnapshot();
+  const { me, activities, subjects, terms, evidences, members } = useSnapshot();
   const [params, setParams] = useSearchParams();
   const periodParam = Number(params.get('cuatri'));
   const filters: ActivityFilters = {
     query: params.get('q') ?? '',
     period: isValidPeriod(periodParam) ? periodParam : 0,
     subjectId: params.get('materia') ?? '',
+    termId: params.get('parcial') ?? '',
     mine: params.get('mias') === '1',
   };
 
@@ -133,7 +134,7 @@ export function ActivitiesPage() {
 
   const ctx = { subjects, evidences, meId: me?.id };
   const shown = filterActivities(activities, filters, ctx);
-  const beforeSubject = filterActivities(activities, { ...filters, subjectId: '' }, ctx);
+  const beforeSubject = filterActivities(activities, { ...filters, subjectId: '', termId: '' }, ctx);
   // Con un cuatrimestre elegido se ven sus materias aunque estén vacías; sin él, solo las que
   // ya tienen actividades.
   const subjectChips = subjects
@@ -141,11 +142,24 @@ export function ActivitiesPage() {
     .sort(bySubject)
     .map((s) => ({ ...s, count: beforeSubject.filter((a) => a.subjectId === s.id).length }))
     .filter((s) => filters.period || s.count > 0 || s.id === filters.subjectId);
-  const filtering = Boolean(filters.query || filters.period || filters.subjectId || filters.mine);
+  const inSubject = beforeSubject.filter((a) => a.subjectId === filters.subjectId);
+  const termChips = filters.subjectId
+    ? [
+        ...terms
+          .filter((t) => t.subjectId === filters.subjectId)
+          .sort((a, b) => a.position - b.position)
+          .map((t) => ({ id: t.id, name: t.name, count: inSubject.filter((a) => a.termId === t.id).length })),
+        { id: NO_TERM, name: 'Sin parcial', count: inSubject.filter((a) => !a.termId).length },
+      ].filter((t) => t.id !== NO_TERM || t.count > 0 || t.id === filters.termId)
+    : [];
+  const filtering = Boolean(
+    filters.query || filters.period || filters.subjectId || filters.termId || filters.mine,
+  );
 
   const newParams = new URLSearchParams();
   if (filters.period) newParams.set('cuatri', String(filters.period));
   if (filters.subjectId) newParams.set('materia', filters.subjectId);
+  if (filters.termId && filters.termId !== NO_TERM) newParams.set('parcial', filters.termId);
   const newTo = `/m/actividades/nueva${newParams.size ? `?${newParams}` : ''}`;
 
   return (
@@ -191,7 +205,7 @@ export function ActivitiesPage() {
             <select
               aria-label="Cuatrimestre"
               value={filters.period || ''}
-              onChange={(e) => update({ cuatri: e.target.value, materia: '' })}
+              onChange={(e) => update({ cuatri: e.target.value, materia: '', parcial: '' })}
             >
               <option value="">Todos los cuatrimestres</option>
               {PERIODS.map((period) => (
@@ -216,7 +230,7 @@ export function ActivitiesPage() {
               type="button"
               className="chip"
               aria-pressed={!filters.subjectId}
-              onClick={() => update({ materia: '' })}
+              onClick={() => update({ materia: '', parcial: '' })}
             >
               Todas las materias
             </button>
@@ -226,12 +240,36 @@ export function ActivitiesPage() {
                 type="button"
                 className="chip"
                 aria-pressed={filters.subjectId === s.id}
-                onClick={() => update({ materia: s.id })}
+                onClick={() => update({ materia: s.id, parcial: '' })}
               >
                 {s.name} <span className="chip__count">{s.count}</span>
               </button>
             ))}
           </div>
+
+          {termChips.length > 0 && (
+            <div className="chips chips--small chips--scroll" role="group" aria-label="Parcial">
+              <button
+                type="button"
+                className="chip"
+                aria-pressed={!filters.termId}
+                onClick={() => update({ parcial: '' })}
+              >
+                Todos los parciales
+              </button>
+              {termChips.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  className="chip"
+                  aria-pressed={filters.termId === t.id}
+                  onClick={() => update({ parcial: t.id })}
+                >
+                  {t.name} <span className="chip__count">{t.count}</span>
+                </button>
+              ))}
+            </div>
+          )}
 
           <p className="results muted" aria-live="polite">
             {shown.length} {shown.length === 1 ? 'actividad' : 'actividades'}
@@ -257,9 +295,12 @@ export function ActivitiesPage() {
                       <li key={activity.id}>
                         <ActivityRow
                           activity={activity}
-                          subjectName={
-                            subjects.find((s) => s.id === activity.subjectId)?.name ?? 'Materia desconocida'
-                          }
+                          subjectName={[
+                            subjects.find((s) => s.id === activity.subjectId)?.name ?? 'Materia desconocida',
+                            terms.find((t) => t.id === activity.termId)?.name,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
                           count={evidences.filter((e) => e.activityId === activity.id).length}
                           participants={participantIds.map((id) => members.find((m) => m.id === id))}
                           mine={Boolean(me && participantIds.includes(me.id))}
@@ -366,7 +407,7 @@ function EvidenceForm({ activityId, onDone }: { activityId: string; onDone: () =
 export function ActivityPage() {
   const { activityId = '' } = useParams();
   const source = useDataSource();
-  const { me, activities, evidences, members, subjects, notes, revisions } = useSnapshot();
+  const { me, activities, assignments, evidences, members, subjects, terms, notes, revisions } = useSnapshot();
   const { error, run } = useAction();
   const [adding, setAdding] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -401,6 +442,12 @@ export function ActivityPage() {
     : [];
   const inSubject = { ...(subject && { cuatri: String(subject.period) }), materia: activity.subjectId };
   const history = revisionsOf('activity', activity.id, revisions);
+  const term = terms.find((t) => t.id === activity.termId);
+  // El vínculo con «Tareas y Actividades»: lo que se entrega en esta misma materia y parcial.
+  const sameTerm = assignments
+    .filter((a) => a.subjectId === activity.subjectId && a.termId === activity.termId)
+    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  const tasksLink = `/m/tareas?${new URLSearchParams({ ...inSubject, parcial: activity.termId ?? NO_TERM })}`;
 
   // Restaurar es editar con el texto de antes: crea una versión nueva y no borra ninguna.
   const restore = (revision: Revision) =>
@@ -431,6 +478,12 @@ export function ActivityPage() {
             )}
             <Link to={`/m/actividades?${new URLSearchParams(inSubject)}`}>
               {subject?.name ?? 'Materia desconocida'}
+            </Link>
+            {' · '}
+            <Link
+              to={`/m/actividades?${new URLSearchParams({ ...inSubject, parcial: activity.termId ?? NO_TERM })}`}
+            >
+              {term?.name ?? 'Sin parcial'}
             </Link>
           </p>
           <h1>{activity.title}</h1>
@@ -556,6 +609,27 @@ export function ActivityPage() {
             </section>
           )}
 
+          {sameTerm.length > 0 && (
+            <section className="panel">
+              <h2 className="label">Tareas de {term ? `este parcial` : 'esta materia'}</h2>
+              <ul className="links">
+                {sameTerm.slice(0, 4).map((a) => (
+                  <li key={a.id}>
+                    <Link to={`/m/tareas/${a.id}`}>
+                      <strong>{a.title}</strong>
+                      <span className="muted">{WORK_KIND_LABEL[a.kind]}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              {sameTerm.length > 4 && (
+                <p className="panel__more">
+                  <Link to={tasksLink}>Ver las {sameTerm.length}</Link>
+                </p>
+              )}
+            </section>
+          )}
+
           {related.length > 0 && (
             <section className="panel">
               <h2 className="label">Notas del mismo tema</h2>
@@ -605,17 +679,30 @@ function ActivityForm({ activity }: { activity: Activity | undefined }) {
   const source = useDataSource();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { subjects, members } = useSnapshot();
+  const { subjects, terms, members, calendar } = useSnapshot();
   const { error, run } = useAction();
   const backTo = activity ? `/m/actividades/${activity.id}` : '/m/actividades';
+  // Al registrar, el formulario abre en el cuatrimestre y parcial vigentes según Ajustes.
+  const current = currentPlacement(calendar);
 
   const inPeriod = (period: number) => subjects.filter((s) => s.period === period).sort(bySubject);
   const asked = subjects.find((s) => s.id === (activity?.subjectId ?? params.get('materia')));
   const [period, setPeriod] = useState(() => {
     const fromFilter = Number(params.get('cuatri'));
-    return asked?.period ?? (isValidPeriod(fromFilter) ? fromFilter : lastPeriod());
+    return asked?.period ?? (isValidPeriod(fromFilter) ? fromFilter : (current?.period ?? lastPeriod()));
   });
   const [subjectId, setSubjectId] = useState(() => asked?.id ?? inPeriod(period)[0]?.id ?? '');
+  const currentTermOf = (subject: string, inPeriodNumber: number) =>
+    inPeriodNumber === current?.period ? (termAt(terms, subject, current.term)?.id ?? '') : '';
+  const [termId, setTermId] = useState(() => {
+    if (activity) return activity.termId ?? '';
+    const askedTerm = terms.find((t) => t.id === params.get('parcial') && t.subjectId === subjectId);
+    return askedTerm?.id ?? currentTermOf(subjectId, period);
+  });
+  const subjectTerms = terms.filter((t) => t.subjectId === subjectId).sort((a, b) => a.position - b.position);
+  /** Al cambiar de materia se conserva el mismo número de parcial. */
+  const samePosition = (subject: string) =>
+    termAt(terms, subject, terms.find((t) => t.id === termId)?.position)?.id ?? '';
   const [date, setDate] = useState(() => activity?.date ?? toDay(new Date()));
   const [title, setTitle] = useState(activity?.title ?? '');
   const [topic, setTopic] = useState(activity?.topic ?? '');
@@ -624,6 +711,7 @@ function ActivityForm({ activity }: { activity: Activity | undefined }) {
   const changed =
     !activity ||
     subjectId !== activity.subjectId ||
+    termId !== (activity.termId ?? '') ||
     date !== activity.date ||
     title.trim() !== activity.title ||
     topic.trim() !== activity.topic ||
@@ -632,7 +720,7 @@ function ActivityForm({ activity }: { activity: Activity | undefined }) {
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    const input = { subjectId, topic, date, title, objective, instructions };
+    const input = { subjectId, termId: termId || undefined, topic, date, title, objective, instructions };
     const id = run(() => {
       if (!activity) return source.createActivity(input);
       source.updateActivity(activity.id, input);
@@ -662,6 +750,12 @@ function ActivityForm({ activity }: { activity: Activity | undefined }) {
       <form className="panel form form--wide" onSubmit={submit}>
         <section className="form__section">
           <h2>Cuándo y en qué materia</h2>
+          {!activity && current && period === current.period && (
+            <p className="field__hint">
+              Abre en {periodLabel(current.period)}, parcial {current.term}: el que está en curso según
+              Ajustes.
+            </p>
+          )}
           <div className="form__grid">
             <label className="field">
               <span className="field__label">Fecha de la sesión</span>
@@ -673,8 +767,10 @@ function ActivityForm({ activity }: { activity: Activity | undefined }) {
                 value={period}
                 onChange={(e) => {
                   const next = Number(e.target.value);
+                  const subject = inPeriod(next)[0]?.id ?? '';
                   setPeriod(next);
-                  setSubjectId(inPeriod(next)[0]?.id ?? '');
+                  setSubjectId(subject);
+                  setTermId(currentTermOf(subject, next));
                 }}
               >
                 {PERIODS.map((n) => (
@@ -686,10 +782,28 @@ function ActivityForm({ activity }: { activity: Activity | undefined }) {
             </label>
             <label className="field">
               <span className="field__label">Materia</span>
-              <select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} required>
+              <select
+                value={subjectId}
+                onChange={(e) => {
+                  setTermId(samePosition(e.target.value));
+                  setSubjectId(e.target.value);
+                }}
+                required
+              >
                 {inPeriod(period).map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span className="field__label">Parcial</span>
+              <select value={termId} onChange={(e) => setTermId(e.target.value)}>
+                <option value="">Sin parcial</option>
+                {subjectTerms.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
                   </option>
                 ))}
               </select>

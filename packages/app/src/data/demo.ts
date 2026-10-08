@@ -1,5 +1,7 @@
 import {
+  buildPeriodCalendar,
   canEditWork,
+  canManageCalendar,
   canReadDirectConversation,
   CURRICULUM,
   fileSizeError,
@@ -7,6 +9,8 @@ import {
   isValidPeriod,
   isWorkKind,
   termNames,
+  type TermDates,
+  type TermDatesInput,
 } from '@b20/core';
 import type {
   Activity,
@@ -50,6 +54,7 @@ interface State {
   members: Member[];
   subjects: Subject[];
   terms: Term[];
+  calendar: TermDates[];
   assignments: Assignment[];
   works: Work[];
   workFiles: WorkFile[];
@@ -120,6 +125,7 @@ export class DemoDataSource implements DataSource {
         members: [],
         subjects: [],
         terms: [],
+        calendar: [],
         assignments: [],
         works: [],
         workFiles: [],
@@ -148,6 +154,7 @@ export class DemoDataSource implements DataSource {
       members: s.members,
       subjects: s.subjects,
       terms: s.terms,
+      calendar: s.calendar,
       assignments: s.assignments,
       works: s.works,
       workFiles: s.workFiles,
@@ -211,6 +218,16 @@ export class DemoDataSource implements DataSource {
     this.#state.terms = [...this.#state.terms, term];
     this.#emit();
     return term.id;
+  }
+
+  saveCalendar(period: number, terms: TermDatesInput[]) {
+    const me = this.#activeMember();
+    if (!canManageCalendar(me)) throw new Error('Solo los administradores cambian las fechas de los parciales.');
+    const others = this.#state.calendar.filter((entry) => entry.period !== period);
+    const result = buildPeriodCalendar(period, terms, others);
+    if ('problem' in result) throw new Error(result.problem);
+    this.#state.calendar = [...others, ...result.entries];
+    this.#emit();
   }
 
   #checkAssignment(input: AssignmentInput) {
@@ -437,9 +454,14 @@ export class DemoDataSource implements DataSource {
 
   #checkActivity(input: CreateActivityInput) {
     this.#requireSubject(input.subjectId);
+    if (input.termId) {
+      const term = this.#state.terms.find((t) => t.id === input.termId);
+      if (term?.subjectId !== input.subjectId) throw new Error('El parcial no pertenece a esa materia.');
+    }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new Error('Fecha inválida.');
     return {
       subjectId: input.subjectId,
+      termId: input.termId || undefined,
       topic: input.topic.trim(),
       date: input.date,
       title: requireText(input.title, 'El título', 200),
@@ -649,6 +671,12 @@ export function createDemoState(now = new Date()): State {
       position: i + 1,
     })),
   );
+  // Fechas del primer cuatrimestre, relativas a hoy para que el parcial 2 sea siempre el vigente.
+  const calendar: TermDates[] = [
+    { period: 1, term: 1, startDate: daysAgo(40), endDate: daysAgo(8) },
+    { period: 1, term: 2, startDate: daysAgo(7), endDate: daysAgo(-25) },
+    { period: 1, term: 3, startDate: daysAgo(-26), endDate: daysAgo(-60) },
+  ];
   // Páginas principales: lo que se pidió. La primera ya fue editada por tres personas.
   const assignments: Assignment[] = [
     {
@@ -725,6 +753,7 @@ export function createDemoState(now = new Date()): State {
     {
       id: 'a1',
       subjectId: LOGICA,
+      termId: `${LOGICA}-p2`,
       topic: 'Tema de prueba',
       date: daysAgo(2),
       title: 'Actividad de prueba en clase',
@@ -736,6 +765,7 @@ export function createDemoState(now = new Date()): State {
     {
       id: 'a2',
       subjectId: FUNDAMENTOS,
+      termId: `${FUNDAMENTOS}-p2`,
       topic: 'Ciclos',
       date: daysAgo(1),
       title: 'Práctica de prueba en equipos',
@@ -747,6 +777,7 @@ export function createDemoState(now = new Date()): State {
     {
       id: 'a3',
       subjectId: LOGICA,
+      termId: `${LOGICA}-p1`,
       topic: '',
       date: daysAgo(9),
       title: 'Dinámica de prueba sin evidencias',
@@ -758,6 +789,7 @@ export function createDemoState(now = new Date()): State {
     {
       id: 'a4',
       subjectId: FUNDAMENTOS,
+      termId: `${FUNDAMENTOS}-p1`,
       topic: 'Tema de prueba',
       date: daysAgo(36),
       title: 'Laboratorio de prueba del mes pasado',
@@ -819,6 +851,7 @@ export function createDemoState(now = new Date()): State {
     members,
     subjects,
     terms,
+    calendar,
     assignments,
     // Lo que subió cada quien: en equipo, con código, con versiones y más de uno por tarea.
     works: [

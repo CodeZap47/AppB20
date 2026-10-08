@@ -33,3 +33,11 @@ export function canEditWork(viewerId: string, authorIds: readonly string[]): boo
 export function canManageMembership(m: Membership | undefined): boolean {
   return isActiveMember(m) && m.isCreator;
 }
+
+/**
+ * Los administradores son los creadores de la app. Solo ellos fijan las fechas de los
+ * parciales, porque de ellas depende lo que ve todo el grupo.
+ */
+export function canManageCalendar(m: Pick<Membership, 'status' | 'isCreator'> | undefined): boolean {
+  return m?.status === 'active' && m.isCreator;
+}
