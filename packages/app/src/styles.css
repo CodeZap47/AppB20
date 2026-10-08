@@ -96,6 +96,7 @@ button {
 
 .content {
   grid-area: main;
+  min-width: 0;
   padding: 1rem 1.25rem 2rem;
   max-width: 960px;
 }
@@ -134,7 +135,7 @@ button {
 /* Pantallas angostas y panel lateral de la extensión: navegación horizontal arriba. */
 @media (max-width: 720px) {
   .shell {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       'top'
       'nav'
@@ -144,7 +145,7 @@ button {
 }
 
 .shell--compact {
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-areas:
     'top'
     'nav'
@@ -177,4 +178,227 @@ button {
 
 .shell--compact .content {
   padding: 0.75rem;
+}
+
+/* ---- Componentes del MVP ---- */
+
+:root {
+  --error: #c62828;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --error: #ff8a80;
+  }
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.65rem;
+  min-width: 0;
+}
+
+button.secondary {
+  background: transparent;
+  color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.row--between {
+  justify-content: space-between;
+}
+
+.error {
+  color: var(--error);
+}
+
+.back {
+  display: inline-block;
+  margin-top: 0.5rem;
+}
+
+.demo-banner {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.5rem;
+}
+
+.tabs__link {
+  padding: 0.5rem 0.75rem;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+}
+
+.tabs__link.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface));
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.messages {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.message {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+}
+
+.message__meta time {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.message__text {
+  margin: 0.15rem 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.message--mine .message__meta strong {
+  color: var(--accent);
+}
+
+.composer {
+  display: flex;
+  gap: 0.5rem;
+  position: sticky;
+  bottom: 0;
+  padding: 0.5rem 0 max(0.5rem, env(safe-area-inset-bottom));
+  background: var(--bg);
+}
+
+.composer input {
+  flex: 1;
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.list__item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.65rem 0.85rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+}
+
+.list__item--row {
+  flex-direction: row;
+  justify-content: space-between;
+}
+
+.card-surface {
+  padding: 1rem;
+  margin: 0.75rem 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.form h2 {
+  margin-top: 0;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.archive h3 {
+  margin-bottom: 0.25rem;
+  font-size: 1rem;
+  color: var(--muted);
+}
+
+.profile-card {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.75rem !important;
+}
+
+.profile-header {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
+.profile-header h1 {
+  margin: 0;
 }

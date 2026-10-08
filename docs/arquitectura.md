@@ -29,10 +29,18 @@ Vistas públicas con filtro por quien consulta: `my_member`, `members`, `subject
 Faltan para el MVP: actividades, notas, preguntas y respuestas, guías con fuentes, adjuntos,
 instalaciones/suscripciones push y preferencias de avisos.
 
+## Capa de datos de la interfaz
+
+Las pantallas leen y escriben a través de `DataSource` (`packages/app/src/data/types.ts`),
+cuyas acciones corresponden a los reducers del módulo y cuyo `Snapshot` corresponde a sus
+vistas. Mientras no hay SpacetimeDB, la app usa `DemoDataSource`: datos de prueba en memoria
+que aplican las mismas reglas de permisos, con un selector «Ver como» para revisar qué ve cada
+miembro. Conectar SpacetimeDB consiste en escribir otra implementación de `DataSource`.
+
 ## Pendientes de la Etapa 0
 
-- Instalar la CLI de SpacetimeDB, publicar el módulo y generar bindings; conectar
-  `packages/app/src/lib/spacetime.tsx` con `SpacetimeDBProvider`. El módulo solo se ha
+- Instalar la CLI de SpacetimeDB, publicar el módulo y generar bindings; escribir
+  una implementación de `DataSource` sobre `SpacetimeDBProvider` (`packages/app/src/lib/spacetime.tsx`). El módulo solo se ha
   revisado con `tsc`; falta publicarlo en un servidor real.
 - Elegir flujo de inicio de sesión con Google por presentación (web, páginas de extensión,
   WebView de Capacitor) y validar la audiencia en el módulo.
