@@ -1,3 +1,4 @@
+import { MAX_FILE_BYTES } from '@b20/core';
 import { describe, expect, it } from 'vitest';
 import { createDemoState, DemoDataSource } from './demo';
 
@@ -130,5 +131,47 @@ describe('notas, actividades y preguntas', () => {
     expect(data.getSnapshot().questions[0]?.status).toBe('resolved');
     data.reopenQuestion('q1');
     expect(data.getSnapshot().questions[0]?.acceptedAnswerId).toBeUndefined();
+  });
+
+  describe('archivos de un trabajo', () => {
+    /** Archivo del tamaño indicado sin reservar esa memoria. */
+    const fileOf = (name: string, size: number) => {
+      const file = new File(['x'], name, { type: 'text/plain' });
+      Object.defineProperty(file, 'size', { value: size });
+      return file;
+    };
+
+    it('un autor adjunta hasta 50 MB exactos y el archivo queda en el trabajo', async () => {
+      const data = source('demo-1');
+      const id = await data.attachWorkFile('w1', fileOf('reporte.pdf', MAX_FILE_BYTES));
+      expect(data.getSnapshot().workFiles.find((f) => f.id === id)).toMatchObject({
+        workId: 'w1',
+        name: 'reporte.pdf',
+        size: MAX_FILE_BYTES,
+        uploadedBy: 'demo-1',
+      });
+    });
+
+    it('rechaza archivos de más de 50 MB y archivos vacíos', async () => {
+      const data = source('demo-1');
+      const before = data.getSnapshot().workFiles.length;
+      await expect(data.attachWorkFile('w1', fileOf('video.mp4', MAX_FILE_BYTES + 1))).rejects.toThrow(
+        'el límite es de 50 MB por archivo',
+      );
+      await expect(data.attachWorkFile('w1', fileOf('vacio.txt', 0))).rejects.toThrow('está vacío');
+      expect(data.getSnapshot().workFiles).toHaveLength(before);
+    });
+
+    it('solo los autores adjuntan y quitan archivos', async () => {
+      const data = source('demo-3');
+      await expect(data.attachWorkFile('w1', fileOf('a.txt', 10))).rejects.toThrow('Solo el autor');
+      data.setViewer('demo-1');
+      const id = await data.attachWorkFile('w1', fileOf('a.txt', 10));
+      data.setViewer('demo-3');
+      expect(() => data.removeWorkFile(id)).toThrow('Solo el autor');
+      data.setViewer('demo-2');
+      data.removeWorkFile(id);
+      expect(data.getSnapshot().workFiles.some((f) => f.id === id)).toBe(false);
+    });
   });
 });

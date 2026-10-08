@@ -1,4 +1,4 @@
-import type { Id, Member, Subject, Term, Work } from '../data/types';
+import type { Id, Member, Subject, Term, Work, WorkFile } from '../data/types';
 import { matches } from './search';
 
 /** Valor del filtro de parcial para los trabajos que no tienen uno. */
@@ -16,9 +16,13 @@ export interface WorkContext {
   subjects: Subject[];
   terms: Term[];
   members: Member[];
+  files?: WorkFile[];
 }
 
-/** La búsqueda mira título, consigna, descripción, materia, parcial y nombres de los autores. */
+/**
+ * La búsqueda mira título, consigna, descripción, materia, parcial, nombres de los autores y
+ * nombres de los archivos adjuntos.
+ */
 export function filterWorks(works: Work[], filters: WorkFilters, ctx: WorkContext): Work[] {
   return works.filter((w) => {
     if (filters.subjectId && w.subjectId !== filters.subjectId) return false;
@@ -32,6 +36,7 @@ export function filterWorks(works: Work[], filters: WorkFilters, ctx: WorkContex
       ctx.subjects.find((s) => s.id === w.subjectId)?.name ?? '',
       ctx.terms.find((t) => t.id === w.termId)?.name ?? '',
       ...w.authorIds.map((id) => ctx.members.find((m) => m.id === id)?.displayName ?? ''),
+      ...(ctx.files ?? []).filter((f) => f.workId === w.id).map((f) => f.name),
     );
   });
 }

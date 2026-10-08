@@ -1,6 +1,7 @@
 /**
  * Módulo SpacetimeDB de App B20, alcance de la Etapa 0 / MVP:
- * membresía por invitación, perfiles, materias y parciales, trabajos con coautores,
+ * membresía por invitación, perfiles, materias y parciales, trabajos con coautores y
+ * archivos adjuntos (máximo 50 MB cada uno),
  * canal del grupo, mensajes 1 a 1 y cumpleaños voluntarios.
  *
  * Reglas (sección 2 y 5 de la definición):
@@ -92,6 +93,25 @@ const workAuthor = table(
     id: t.u64().primaryKey().autoInc(),
     workId: t.u64().index('btree'),
     author: t.identity().index('btree'),
+  },
+);
+
+/**
+ * Datos de un archivo adjunto a un trabajo. El contenido vive en el almacenamiento de
+ * archivos y `storageKey` es su ubicación ahí. La clave no da acceso por sí sola: cada
+ * descarga pasa por el backend, que comprueba membresía y firma un enlace temporal.
+ */
+const workFile = table(
+  { name: 'work_file' },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    workId: t.u64().index('btree'),
+    name: t.string(),
+    size: t.u64(),
+    contentType: t.string(),
+    storageKey: t.string(),
+    uploadedBy: t.identity(),
+    createdAt: t.timestamp(),
   },
 );
 
@@ -257,6 +277,7 @@ const spacetimedb = schema({
   term,
   work,
   workAuthor,
+  workFile,
   groupMessage,
   directConversation,
   directMessage,
@@ -279,6 +300,8 @@ type Ctx = ReducerCtx<typeof spacetimedb.schemaType>;
 // ---------------------------------------------------------------------------
 
 const MAX_MESSAGE_LENGTH = 4000;
+/** 50 MB por archivo. Debe coincidir con `MAX_FILE_BYTES` de `@b20/core`. */
+const MAX_FILE_BYTES = 50n * 1024n * 1024n;
 const ALLOWED_ISSUERS = ['https://accounts.google.com', 'accounts.google.com'];
 
 function activeMember(ctx: Ctx) {
@@ -495,6 +518,55 @@ export const update_work = spacetimedb.reducer(
     log(ctx, 'update', 'work', workId);
   },
 );
+
+function requireWorkAuthor(ctx: Ctx, workId: bigint, action: string) {
+  if (!ctx.db.work.id.find(workId)) throw new SenderError('El trabajo no existe.');
+  const isAuthor = [...ctx.db.workAuthor.workId.filter(workId)].some((a) =>
+    a.author.isEqual(ctx.sender),
+  );
+  if (!isAuthor) throw new SenderError(`Solo el autor o los coautores ${action} de este trabajo.`);
+}
+
+/**
+ * Registra un archivo ya subido al almacenamiento. El tamaño se valida aquí para que el
+ * límite no dependa de la interfaz; el almacenamiento debe rechazar además las subidas que
+ * lo excedan (el backend firma cada subida con ese tope).
+ */
+export const attach_work_file = spacetimedb.reducer(
+  {
+    workId: t.u64(),
+    name: t.string(),
+    size: t.u64(),
+    contentType: t.string(),
+    storageKey: t.string(),
+  },
+  (ctx, { workId, name, size, contentType, storageKey }) => {
+    activeMember(ctx);
+    requireWorkAuthor(ctx, workId, 'adjuntan archivos');
+    if (size === 0n) throw new SenderError('El archivo está vacío.');
+    if (size > MAX_FILE_BYTES) throw new SenderError('El límite es de 50 MB por archivo.');
+    const row = ctx.db.workFile.insert({
+      id: 0n,
+      workId,
+      name: requireText(name, 'El nombre del archivo', 200),
+      size,
+      contentType: contentType.trim() || 'application/octet-stream',
+      storageKey: requireText(storageKey, 'La ubicación del archivo', 500),
+      uploadedBy: ctx.sender,
+      createdAt: ctx.timestamp,
+    });
+    log(ctx, 'attach', 'work_file', row.id);
+  },
+);
+
+export const remove_work_file = spacetimedb.reducer({ fileId: t.u64() }, (ctx, { fileId }) => {
+  activeMember(ctx);
+  const row = ctx.db.workFile.id.find(fileId);
+  if (!row) throw new SenderError('El archivo no existe.');
+  requireWorkAuthor(ctx, row.workId, 'quitan archivos');
+  ctx.db.workFile.id.delete(fileId);
+  log(ctx, 'remove', 'work_file', fileId);
+});
 
 // ---------------------------------------------------------------------------
 // Mensajería
@@ -825,6 +897,12 @@ export const work_authors = spacetimedb.view(
   { name: 'work_authors', public: true },
   t.array(workAuthor.rowType),
   (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.workAuthor.iter()] : []),
+);
+
+export const work_files = spacetimedb.view(
+  { name: 'work_files', public: true },
+  t.array(workFile.rowType),
+  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.workFile.iter()] : []),
 );
 
 export const group_messages = spacetimedb.view(

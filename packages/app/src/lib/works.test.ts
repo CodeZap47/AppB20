@@ -54,6 +54,21 @@ describe('filterWorks', () => {
     expect(ids(filterWorks(works, { ...all, query: 'redes' }, ctx))).toEqual(['e']);
     expect(ids(filterWorks(works, { ...all, query: 'luis perez' }, ctx))).toEqual(['b']);
   });
+
+  it('busca también por el nombre de los archivos adjuntos', () => {
+    const files = [
+      {
+        id: 'f',
+        workId: 'c',
+        name: 'diagrama-final.png',
+        size: 1024,
+        contentType: 'image/png',
+        uploadedBy: 'ana',
+        createdAt: new Date(2026, 9, 1),
+      },
+    ];
+    expect(ids(filterWorks(works, { ...all, query: 'diagrama' }, { ...ctx, files }))).toEqual(['c']);
+  });
 });
 
 describe('groupWorks', () => {

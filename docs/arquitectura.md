@@ -19,17 +19,31 @@ Resumen técnico de la base inicial. La fuente de verdad del alcance es
 ## Modelo de datos inicial (`packages/spacetime-module`)
 
 Tablas privadas: `app_config`, `invitation`, `member`, `subject`, `term`, `work`,
-`work_author`, `group_message`, `direct_conversation`, `direct_message`, `birthday`,
+`work_author`, `work_file`, `group_message`, `direct_conversation`, `direct_message`, `birthday`,
 `change_log`, `activity`, `evidence`, `note`, `note_comment`, `question`, `answer`,
 `last_seen`.
 
 Vistas públicas con filtro por quien consulta: `my_member`, `members`, `subjects`, `terms`,
-`works`, `work_authors`, `group_messages`, `birthdays`, `change_history`,
+`works`, `work_authors`, `work_files`, `group_messages`, `birthdays`, `change_history`,
 `my_direct_conversations`, `my_direct_messages`, `activities`, `evidences`, `notes` (del grupo
 y las personales propias), `note_comments`, `questions`, `answers`, `my_last_seen`.
 
-Faltan para el MVP: guías con fuentes, adjuntos, instalaciones/suscripciones push y
-preferencias de avisos.
+Faltan para el MVP: guías con fuentes, adjuntos fuera de los trabajos, instalaciones/suscripciones
+push y preferencias de avisos.
+
+### Archivos adjuntos y su límite
+
+Cada archivo pesa como máximo **50 MB**. El valor vive en `MAX_FILE_BYTES` de `@b20/core`
+(`packages/core/src/files.ts`) y se comprueba en tres lugares:
+
+1. La interfaz (`FilePicker`) descarta el archivo y explica por qué antes de subirlo.
+2. El reducer `attach_work_file` rechaza registrar un archivo vacío o de más de 50 MB. El módulo
+   repite la constante porque no importa `@b20/core`; hay que cambiar las dos juntas.
+3. Pendiente con el almacenamiento: el backend debe firmar cada subida con ese mismo tope, para
+   que el servicio de archivos rechace el exceso aunque alguien salte la interfaz.
+
+Por ahora solo los trabajos aceptan adjuntos (`attachWorkFile` y `removeWorkFile` en
+`DataSource`). En modo de prueba el archivo no sale del navegador.
 
 ## Capa de datos de la interfaz
 

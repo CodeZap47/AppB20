@@ -55,7 +55,7 @@ export function ProfilePage() {
   const { memberId = '' } = useParams();
   const source = useDataSource();
   const navigate = useNavigate();
-  const { me, members, works, subjects, terms, birthdays } = useSnapshot();
+  const { me, members, works, workFiles, subjects, terms, birthdays } = useSnapshot();
   const { error, run } = useAction();
   const [editing, setEditing] = useState(false);
   const member = members.find((m) => m.id === memberId);
@@ -107,6 +107,7 @@ export function ProfilePage() {
         subjects={subjects}
         terms={terms}
         members={members}
+        files={workFiles}
         meId={me?.id}
         empty="Sin trabajos publicados."
       />

@@ -426,7 +426,9 @@ Validar emisor, audiencia, identidad y pertenencia antes de permitir lectura o e
 
 Propuesta: **Google Cloud Storage para fotos, documentos, imágenes y otros adjuntos**, con metadatos y referencias en SpacetimeDB. El backend comprobará membresía y emitirá accesos de duración limitada cuando corresponda. Las URLs firmadas permiten acceso temporal, pero cualquiera que tenga una puede utilizarla mientras siga activa; no se tratarán como autorización permanente del grupo. [[11]](https://docs.cloud.google.com/storage/docs/access-control/signed-urls)
 
-Mantener el almacenamiento cerrado al público general, definir límites y tipos de archivo, evitar duplicados y conservar versiones. Costos, cuotas, región y política de eliminación quedan por verificar antes de contratar o desplegar servicios.
+**Límite confirmado: 50 MB por archivo**, igual para adjuntos de trabajos, mensajes, evidencias y fotos. La interfaz avisa antes de subir y el servidor lo vuelve a comprobar.
+
+Mantener el almacenamiento cerrado al público general, definir los tipos de archivo permitidos, evitar duplicados y conservar versiones. Costos, cuotas, región y política de eliminación quedan por verificar antes de contratar o desplegar servicios.
 
 ### Gemini y secretos
 
@@ -792,6 +794,7 @@ Todas las ideas están incluidas en el proyecto. La siguiente distribución orga
 | IA | Gemini como proveedor principal, conservando BYOK y comprobando elegibilidad y consumo. |
 | Motivación | Leaderboard incluido; reglas de puntos pendientes de validación. |
 | Perfil | Foto, nombre y archivo de trabajos por materia y parcial, con coautorías y versiones. |
+| Archivos | Máximo 50 MB por archivo subido a la app. |
 | Resultado educativo | Ayudar a comprender y realizar tareas y construir guías integrales de los parciales a partir de los materiales del grupo. |
 
 ### Recomendaciones técnicas por validar

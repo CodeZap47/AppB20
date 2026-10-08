@@ -40,6 +40,20 @@ export interface Work {
   updatedAt: Date;
 }
 
+/** Archivo adjunto a un trabajo. El contenido vive en el almacenamiento; aquí van sus datos. */
+export interface WorkFile {
+  id: Id;
+  workId: Id;
+  name: string;
+  /** Tamaño en bytes; nunca mayor que `MAX_FILE_BYTES` de `@b20/core` (50 MB). */
+  size: number;
+  contentType: string;
+  uploadedBy: Id;
+  createdAt: Date;
+  /** Enlace de descarga, cuando la fuente de datos puede dar uno. */
+  url?: string;
+}
+
 export interface GroupMessage {
   id: Id;
   senderId: Id;
@@ -147,6 +161,7 @@ export interface Snapshot {
   subjects: Subject[];
   terms: Term[];
   works: Work[];
+  workFiles: WorkFile[];
   groupMessages: GroupMessage[];
   directConversations: DirectConversation[];
   directMessages: DirectMessage[];
@@ -179,6 +194,12 @@ export interface Actions {
   publishWork(input: PublishWorkInput): Id;
   /** Solo sus autores; cada edición guarda una versión nueva. */
   updateWork(workId: Id, title: string, description: string): void;
+  /**
+   * Sube un archivo y lo adjunta al trabajo; solo sus autores. Rechaza archivos vacíos o de
+   * más de 50 MB (`MAX_FILE_BYTES`). Es la única acción asíncrona: subir toma tiempo.
+   */
+  attachWorkFile(workId: Id, file: File): Promise<Id>;
+  removeWorkFile(fileId: Id): void;
   sendGroupMessage(text: string): void;
   /** Devuelve la conversación existente o la nueva. */
   openDirectConversation(otherId: Id): Id;

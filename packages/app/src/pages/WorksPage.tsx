@@ -1,15 +1,17 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { canEditWork } from '@b20/core';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import type { Work } from '../data/types';
 import { Avatar } from '../components/Avatar';
 import { Empty } from '../components/Empty';
+import { FileList } from '../components/FileList';
+import { FilePicker } from '../components/FilePicker';
 import { Icon } from '../components/Icon';
 import { RichText } from '../components/RichText';
 import { WorkArchive } from '../components/WorkArchive';
 import { useAction } from '../components/useAction';
-import { formatMediumDate } from '../lib/format';
+import { formatDate, formatMediumDate, memberName } from '../lib/format';
 import { authorsLabel, filterWorks, NO_TERM, sortRecent, type WorkFilters } from '../lib/works';
 
 /** Opción de los selectores para crear una materia o un parcial al publicar. */
@@ -17,9 +19,12 @@ const NEW = '__nuevo__';
 
 const countLabel = (n: number) => `${n} ${n === 1 ? 'trabajo' : 'trabajos'}`;
 
+const uploadError = (error: unknown, file: File) =>
+  error instanceof Error ? error.message : `No se pudo subir «${file.name}».`;
+
 /** Archivo del grupo. Los filtros viven en la URL para conservarlos al volver de un trabajo. */
 export function WorksPage() {
-  const { me, works, subjects, terms, members } = useSnapshot();
+  const { me, works, workFiles, subjects, terms, members } = useSnapshot();
   const [params, setParams] = useSearchParams();
   const filters: WorkFilters = {
     query: params.get('q') ?? '',
@@ -42,7 +47,7 @@ export function WorksPage() {
       { replace: true },
     );
 
-  const ctx = { subjects, terms, members };
+  const ctx = { subjects, terms, members, files: workFiles };
   const shown = filterWorks(works, filters, ctx);
   // Los conteos de cada materia respetan la búsqueda y el autor elegidos.
   const beforeSubject = filterWorks(works, { ...filters, subjectId: '', termId: '' }, ctx);
@@ -197,6 +202,7 @@ export function WorksPage() {
               subjects={subjects}
               terms={terms}
               members={members}
+              files={workFiles}
               meId={me?.id}
               view={view}
             />
@@ -254,8 +260,15 @@ function EditWorkForm({ work, onDone }: { work: Work; onDone: () => void }) {
 
 export function WorkPage() {
   const { workId = '' } = useParams();
-  const { me, works, subjects, terms, members } = useSnapshot();
+  const source = useDataSource();
+  const location = useLocation();
+  const { me, works, workFiles, subjects, terms, members } = useSnapshot();
   const [editing, setEditing] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  // Al llegar desde «Publicar», trae los archivos que no pudieron subirse.
+  const [fileErrors, setFileErrors] = useState<string[]>(
+    () => (location.state as { fileErrors?: string[] } | null)?.fileErrors ?? [],
+  );
   const work = works.find((w) => w.id === workId);
 
   if (!work) {
@@ -282,6 +295,32 @@ export function WorkPage() {
   const siblings = sortRecent(
     works.filter((w) => w.id !== work.id && w.subjectId === work.subjectId && w.termId === work.termId),
   ).slice(0, 4);
+  const files = workFiles.filter((f) => f.workId === work.id);
+
+  const upload = async (list: File[]) => {
+    setUploading(true);
+    const failed: string[] = [];
+    for (const file of list) {
+      try {
+        await source.attachWorkFile(work.id, file);
+      } catch (error) {
+        failed.push(uploadError(error, file));
+      }
+    }
+    setFileErrors(failed);
+    setUploading(false);
+  };
+
+  const removeFile = (fileId: string) => {
+    const file = files.find((f) => f.id === fileId);
+    if (!file || !window.confirm(`¿Quitar «${file.name}» de este trabajo?`)) return;
+    try {
+      source.removeWorkFile(fileId);
+      setFileErrors([]);
+    } catch (error) {
+      setFileErrors([error instanceof Error ? error.message : 'No se pudo quitar el archivo.']);
+    }
+  };
 
   return (
     <>
@@ -334,6 +373,30 @@ export function WorkPage() {
               )}
             </section>
           )}
+          <section className="panel">
+            <h2 className="label">Archivos{files.length > 0 && ` (${files.length})`}</h2>
+            <FileList
+              items={files.map((f) => ({
+                key: f.id,
+                name: f.name,
+                size: f.size,
+                url: f.url,
+                detail: `${memberName(members, f.uploadedBy)} · ${formatDate(f.createdAt)}`,
+              }))}
+              onRemove={canEdit ? removeFile : undefined}
+            />
+            {files.length === 0 && !canEdit && (
+              <p className="muted">Este trabajo no tiene archivos adjuntos.</p>
+            )}
+            {canEdit && <FilePicker onFiles={(list) => void upload(list)} busy={uploading} />}
+            {fileErrors.length > 0 && (
+              <ul className="file-picker__errors error" role="alert">
+                {fileErrors.map((problem) => (
+                  <li key={problem}>{problem}</li>
+                ))}
+              </ul>
+            )}
+          </section>
         </div>
 
         <aside className="detail__side">
@@ -413,6 +476,15 @@ export function PublishWorkPage() {
   const [assignment, setAssignment] = useState('');
   const [description, setDescription] = useState('');
   const [coauthorIds, setCoauthorIds] = useState<string[]>([]);
+  const [files, setFiles] = useState<File[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  const fileKey = (f: File) => `${f.name}:${f.size}:${f.lastModified}`;
+  const addFiles = (list: File[]) =>
+    setFiles((current) => [
+      ...current,
+      ...list.filter((f) => !current.some((c) => fileKey(c) === fileKey(f))),
+    ]);
 
   const subjectTerms = terms
     .filter((t) => t.subjectId === subjectId)
@@ -421,7 +493,7 @@ export function PublishWorkPage() {
   const toggleCoauthor = (id: string) =>
     setCoauthorIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     const id = run(() => {
       // Si la materia o el parcial nuevos se crean pero publicar falla, quedan elegidos para
@@ -447,7 +519,18 @@ export function PublishWorkPage() {
         coauthorIds,
       });
     });
-    if (id) void navigate(`/m/tareas/${id}`);
+    if (!id) return;
+    // El trabajo ya existe: lo que no se pueda subir se avisa en su página, sin repetir el alta.
+    setBusy(true);
+    const fileErrors: string[] = [];
+    for (const file of files) {
+      try {
+        await source.attachWorkFile(id, file);
+      } catch (error) {
+        fileErrors.push(uploadError(error, file));
+      }
+    }
+    void navigate(`/m/tareas/${id}`, { state: fileErrors.length ? { fileErrors } : null });
   };
 
   return (
@@ -462,7 +545,7 @@ export function PublishWorkPage() {
         </div>
       </header>
 
-      <form className="panel form form--wide" onSubmit={submit}>
+      <form className="panel form form--wide" onSubmit={(e) => void submit(e)}>
         <section className="form__section">
           <h2>Dónde va</h2>
           <div className="form__grid">
@@ -547,6 +630,17 @@ export function PublishWorkPage() {
           </label>
         </section>
 
+        <section className="form__section">
+          <h2>
+            Archivos <span className="field__optional">opcional</span>
+          </h2>
+          <FilePicker onFiles={addFiles} disabled={busy} />
+          <FileList
+            items={files.map((f) => ({ key: fileKey(f), name: f.name, size: f.size }))}
+            onRemove={busy ? undefined : (key) => setFiles((list) => list.filter((f) => fileKey(f) !== key))}
+          />
+        </section>
+
         {others.length > 0 && (
           <section className="form__section">
             <h2>Con quién lo hiciste</h2>
@@ -583,7 +677,9 @@ export function PublishWorkPage() {
           <Link to="/m/tareas" className="button secondary">
             Cancelar
           </Link>
-          <button type="submit">Publicar</button>
+          <button type="submit" disabled={busy}>
+            {busy ? 'Subiendo archivos…' : 'Publicar'}
+          </button>
         </div>
       </form>
     </>

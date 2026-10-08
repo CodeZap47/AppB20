@@ -1,6 +1,7 @@
 import {
   canEditWork,
   canReadDirectConversation,
+  fileSizeError,
   isValidBirthday,
 } from '@b20/core';
 import type {
@@ -25,6 +26,7 @@ import type {
   Subject,
   Term,
   Work,
+  WorkFile,
 } from './types';
 
 /**
@@ -41,6 +43,7 @@ interface State {
   subjects: Subject[];
   terms: Term[];
   works: Work[];
+  workFiles: WorkFile[];
   groupMessages: GroupMessage[];
   directConversations: DirectConversation[];
   directMessages: DirectMessage[];
@@ -108,6 +111,7 @@ export class DemoDataSource implements DataSource {
         subjects: [],
         terms: [],
         works: [],
+        workFiles: [],
         groupMessages: [],
         directConversations: [],
         directMessages: [],
@@ -133,6 +137,7 @@ export class DemoDataSource implements DataSource {
       subjects: s.subjects,
       terms: s.terms,
       works: s.works,
+      workFiles: s.workFiles,
       groupMessages: s.groupMessages,
       directConversations,
       directMessages: s.directMessages.filter((m) => visible.has(m.conversationId)),
@@ -241,6 +246,48 @@ export class DemoDataSource implements DataSource {
           }
         : w,
     );
+    this.#emit();
+  }
+
+  /**
+   * En modo de prueba el archivo no sale del navegador: se guarda un enlace local que dura
+   * mientras la pestaña siga abierta. Las reglas (autoría y 50 MB) son las del servidor.
+   */
+  async attachWorkFile(workId: Id, file: File): Promise<Id> {
+    const me = this.#activeMember();
+    const work = this.#state.works.find((w) => w.id === workId);
+    if (!work) throw new Error('El trabajo no existe.');
+    if (!canEditWork(me.id, work.authorIds)) {
+      throw new Error('Solo el autor o los coautores adjuntan archivos a este trabajo.');
+    }
+    const name = file.name.trim().slice(0, 200) || 'archivo';
+    const problem = fileSizeError(name, file.size);
+    if (problem) throw new Error(problem);
+    const entry: WorkFile = {
+      id: this.#id(),
+      workId,
+      name,
+      size: file.size,
+      contentType: file.type || 'application/octet-stream',
+      uploadedBy: me.id,
+      createdAt: this.#now(),
+      url: typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : undefined,
+    };
+    this.#state.workFiles = [...this.#state.workFiles, entry];
+    this.#emit();
+    return entry.id;
+  }
+
+  removeWorkFile(fileId: Id) {
+    const me = this.#activeMember();
+    const entry = this.#state.workFiles.find((f) => f.id === fileId);
+    if (!entry) throw new Error('El archivo no existe.');
+    const work = this.#state.works.find((w) => w.id === entry.workId);
+    if (!work || !canEditWork(me.id, work.authorIds)) {
+      throw new Error('Solo el autor o los coautores quitan archivos de este trabajo.');
+    }
+    if (entry.url && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(entry.url);
+    this.#state.workFiles = this.#state.workFiles.filter((f) => f.id !== fileId);
     this.#emit();
   }
 
@@ -536,6 +583,27 @@ export function createDemoState(now = new Date()): State {
         authorIds: ['demo-1'],
         createdAt: minutesAgo(600),
         updatedAt: minutesAgo(600),
+      },
+    ],
+    // Solo los datos del archivo: en modo de prueba no hay contenido que descargar.
+    workFiles: [
+      {
+        id: 'f1',
+        workId: 'w3',
+        name: 'presentacion-de-prueba.pdf',
+        size: 2_480_000,
+        contentType: 'application/pdf',
+        uploadedBy: 'demo-2',
+        createdAt: minutesAgo(2200),
+      },
+      {
+        id: 'f2',
+        workId: 'w3',
+        name: 'codigo-de-prueba.zip',
+        size: 18_300_000,
+        contentType: 'application/zip',
+        uploadedBy: 'demo-4',
+        createdAt: minutesAgo(2100),
       },
     ],
     // Varios días, autores y formatos para poder revisar cómo se ve el chat.
