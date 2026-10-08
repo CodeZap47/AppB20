@@ -94,7 +94,7 @@ export function ActivitiesPage() {
       </div>
       <p className="muted">
         Lo que se hizo en clase y las evidencias de cada equipo. Las tareas por entregar van en
-        Tareas y trabajos.
+        Tareas y Actividades.
       </p>
       {creating && <NewActivityForm onDone={() => setCreating(false)} />}
       <SubjectSelect subjects={subjects} value={subjectId} onChange={setSubjectId} allowAll />

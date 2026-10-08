@@ -1,6 +1,17 @@
-import { useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
-import { canEditWork } from '@b20/core';
+import {
+  canEditWork,
+  DEFAULT_WORK_KIND,
+  isValidPeriod,
+  isWorkKindGroup,
+  PERIOD_COUNT,
+  periodLabel,
+  WORK_KIND_GROUPS,
+  WORK_KIND_LABEL,
+  workKindGroup,
+  type WorkKind,
+} from '@b20/core';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import type { Work } from '../data/types';
 import { Avatar } from '../components/Avatar';
@@ -12,7 +23,7 @@ import { RichText } from '../components/RichText';
 import { WorkArchive } from '../components/WorkArchive';
 import { useAction } from '../components/useAction';
 import { formatDate, formatMediumDate, memberName } from '../lib/format';
-import { authorsLabel, filterWorks, NO_TERM, sortRecent, type WorkFilters } from '../lib/works';
+import { authorsLabel, bySubject, filterWorks, NO_TERM, sortRecent, type WorkFilters } from '../lib/works';
 
 /** Opción de los selectores para crear una materia o un parcial al publicar. */
 const NEW = '__nuevo__';
@@ -22,12 +33,70 @@ const countLabel = (n: number) => `${n} ${n === 1 ? 'trabajo' : 'trabajos'}`;
 const uploadError = (error: unknown, file: File) =>
   error instanceof Error ? error.message : `No se pudo subir «${file.name}».`;
 
+const PERIODS = Array.from({ length: PERIOD_COUNT }, (_, i) => i + 1);
+
+/** El formulario abre en el cuatrimestre donde publicaste la última vez. */
+const LAST_PERIOD_KEY = 'b20:ultimo-cuatrimestre';
+
+function lastPeriod(): number {
+  try {
+    const period = Number(localStorage.getItem(LAST_PERIOD_KEY));
+    return isValidPeriod(period) ? period : 1;
+  } catch {
+    return 1;
+  }
+}
+
+function rememberPeriod(period: number) {
+  try {
+    localStorage.setItem(LAST_PERIOD_KEY, String(period));
+  } catch {
+    // Sin almacenamiento local (modo privado): el formulario abrirá en el cuatrimestre 1.
+  }
+}
+
+/** Tipo de trabajo: tarea o actividad, exposición o examen. */
+function KindPicker({ value, onChange }: { value: WorkKind; onChange: (kind: WorkKind) => void }) {
+  const name = useId();
+  return (
+    <fieldset className="field">
+      <legend className="field__label">Tipo de trabajo</legend>
+      <div className="kinds">
+        {WORK_KIND_GROUPS.map((group) => (
+          <div key={group.id}>
+            <span className="field__hint">{group.label}</span>
+            <div className="chips">
+              {group.kinds.map((kind) => (
+                <label key={kind} className="chip chip--choice">
+                  <input
+                    type="radio"
+                    className="sr-only"
+                    name={name}
+                    value={kind}
+                    checked={value === kind}
+                    onChange={() => onChange(kind)}
+                  />
+                  {WORK_KIND_LABEL[kind]}
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
 /** Archivo del grupo. Los filtros viven en la URL para conservarlos al volver de un trabajo. */
 export function WorksPage() {
   const { me, works, workFiles, subjects, terms, members } = useSnapshot();
   const [params, setParams] = useSearchParams();
+  const kindParam = params.get('tipo');
+  const periodParam = Number(params.get('cuatri'));
   const filters: WorkFilters = {
     query: params.get('q') ?? '',
+    kindGroup: isWorkKindGroup(kindParam) ? kindParam : '',
+    period: isValidPeriod(periodParam) ? periodParam : 0,
     subjectId: params.get('materia') ?? '',
     termId: params.get('parcial') ?? '',
     authorId: params.get('autor') ?? '',
@@ -49,12 +118,16 @@ export function WorksPage() {
 
   const ctx = { subjects, terms, members, files: workFiles };
   const shown = filterWorks(works, filters, ctx);
-  // Los conteos de cada materia respetan la búsqueda y el autor elegidos.
+  // Cada conteo respeta los demás filtros: así se ve cuánto hay antes de elegir.
+  const beforeKind = filterWorks(works, { ...filters, kindGroup: '' }, ctx);
   const beforeSubject = filterWorks(works, { ...filters, subjectId: '', termId: '' }, ctx);
-  const subjectChips = [...subjects]
-    .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+  // Con un cuatrimestre elegido se ven sus materias aunque estén vacías; sin él, solo las que
+  // ya tienen trabajos, para no listar las 45 del plan.
+  const subjectChips = subjects
+    .filter((s) => (filters.period ? s.period === filters.period : true))
+    .sort(bySubject)
     .map((s) => ({ ...s, count: beforeSubject.filter((w) => w.subjectId === s.id).length }))
-    .filter((s) => s.count > 0 || s.id === filters.subjectId);
+    .filter((s) => filters.period || s.count > 0 || s.id === filters.subjectId);
   const inSubject = beforeSubject.filter((w) => w.subjectId === filters.subjectId);
   const termChips = filters.subjectId
     ? [
@@ -63,13 +136,22 @@ export function WorksPage() {
           .sort((a, b) => a.position - b.position)
           .map((t) => ({ id: t.id, name: t.name, count: inSubject.filter((w) => w.termId === t.id).length })),
         { id: NO_TERM, name: 'Sin parcial', count: inSubject.filter((w) => !w.termId).length },
-      ].filter((t) => t.count > 0 || t.id === filters.termId)
+      ].filter((t) => t.id !== NO_TERM || t.count > 0 || t.id === filters.termId)
     : [];
-  const filtering = Boolean(filters.query || filters.subjectId || filters.termId || filters.authorId);
+  const filtering = Boolean(
+    filters.query ||
+    filters.kindGroup ||
+    filters.period ||
+    filters.subjectId ||
+    filters.termId ||
+    filters.authorId,
+  );
   const authors = members.filter((m) => m.id !== me?.id && works.some((w) => w.authorIds.includes(m.id)));
 
-  // Publicar desde una materia o un parcial filtrado deja el formulario ya clasificado.
+  // Publicar desde un archivo filtrado deja el formulario ya clasificado.
   const publishParams = new URLSearchParams();
+  if (filters.kindGroup) publishParams.set('tipo', filters.kindGroup);
+  if (filters.period) publishParams.set('cuatri', String(filters.period));
   if (filters.subjectId) publishParams.set('materia', filters.subjectId);
   if (filters.termId && filters.termId !== NO_TERM) publishParams.set('parcial', filters.termId);
   const publishTo = `/m/tareas/nuevo${publishParams.size ? `?${publishParams}` : ''}`;
@@ -78,8 +160,10 @@ export function WorksPage() {
     <>
       <header className="page-header">
         <div>
-          <h1>Tareas y trabajos</h1>
-          <p className="muted">El archivo del grupo: cada trabajo con su consigna, su materia y sus autores.</p>
+          <h1>Tareas y Actividades</h1>
+          <p className="muted">
+            Tareas, actividades, exposiciones y exámenes del grupo, por materia y parcial.
+          </p>
         </div>
         <Link to={publishTo} className="button with-icon">
           <Icon name="plus" size={18} /> Publicar trabajo
@@ -96,7 +180,8 @@ export function WorksPage() {
             </Link>
           }
         >
-          Cuando alguien publique un trabajo aparecerá aquí, ordenado por materia y parcial.
+          Cuando alguien publique una tarea, actividad, exposición o examen aparecerá aquí, ordenado
+          por materia y parcial.
         </Empty>
       ) : (
         <>
@@ -111,6 +196,18 @@ export function WorksPage() {
                 onChange={(e) => update({ q: e.target.value })}
               />
             </label>
+            <select
+              aria-label="Cuatrimestre"
+              value={filters.period || ''}
+              onChange={(e) => update({ cuatri: e.target.value, materia: '', parcial: '' })}
+            >
+              <option value="">Todos los cuatrimestres</option>
+              {PERIODS.map((period) => (
+                <option key={period} value={period}>
+                  {periodLabel(period)}
+                </option>
+              ))}
+            </select>
             <select
               aria-label="Autor"
               value={filters.authorId}
@@ -138,14 +235,39 @@ export function WorksPage() {
             </div>
           </div>
 
-          <div className="chips chips--scroll" role="group" aria-label="Materia">
+          <div className="chips chips--scroll" role="group" aria-label="Tipo de trabajo">
+            <button
+              type="button"
+              className="chip"
+              aria-pressed={!filters.kindGroup}
+              onClick={() => update({ tipo: '' })}
+            >
+              Todo <span className="chip__count">{beforeKind.length}</span>
+            </button>
+            {WORK_KIND_GROUPS.map((group) => (
+              <button
+                key={group.id}
+                type="button"
+                className="chip"
+                aria-pressed={filters.kindGroup === group.id}
+                onClick={() => update({ tipo: group.id })}
+              >
+                {group.label}{' '}
+                <span className="chip__count">
+                  {beforeKind.filter((w) => workKindGroup(w.kind) === group.id).length}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className="chips chips--small chips--scroll" role="group" aria-label="Materia">
             <button
               type="button"
               className="chip"
               aria-pressed={!filters.subjectId}
               onClick={() => update({ materia: '', parcial: '' })}
             >
-              Todas <span className="chip__count">{beforeSubject.length}</span>
+              Todas las materias
             </button>
             {subjectChips.map((s) => (
               <button
@@ -160,8 +282,8 @@ export function WorksPage() {
             ))}
           </div>
 
-          {termChips.length > 1 && (
-            <div className="chips chips--small chips--scroll" role="group" aria-label="Parcial o unidad">
+          {termChips.length > 0 && (
+            <div className="chips chips--small chips--scroll" role="group" aria-label="Parcial">
               <button
                 type="button"
                 className="chip"
@@ -207,7 +329,15 @@ export function WorksPage() {
               view={view}
             />
           ) : (
-            <Empty icon="search" title="Sin resultados">
+            <Empty
+              icon="search"
+              title="Nada por aquí todavía"
+              action={
+                <Link to={publishTo} className="button secondary">
+                  Publicar aquí
+                </Link>
+              }
+            >
               Ningún trabajo coincide con la búsqueda y los filtros elegidos.
             </Empty>
           )}
@@ -222,11 +352,13 @@ function EditWorkForm({ work, onDone }: { work: Work; onDone: () => void }) {
   const { error, run } = useAction();
   const [title, setTitle] = useState(work.title);
   const [description, setDescription] = useState(work.description);
-  const changed = title.trim() !== work.title || description.trim() !== work.description;
+  const [kind, setKind] = useState(work.kind);
+  const changed =
+    title.trim() !== work.title || description.trim() !== work.description || kind !== work.kind;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (run(() => (source.updateWork(work.id, title, description), true))) onDone();
+    if (run(() => (source.updateWork(work.id, title, description, kind), true))) onDone();
   };
 
   return (
@@ -235,6 +367,7 @@ function EditWorkForm({ work, onDone }: { work: Work; onDone: () => void }) {
         <span className="field__label">Título</span>
         <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} required autoFocus />
       </label>
+      <KindPicker value={kind} onChange={setKind} />
       <label className="field">
         <span className="field__label">Descripción</span>
         <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={8} />
@@ -290,8 +423,9 @@ export function WorkPage() {
   const subject = subjects.find((s) => s.id === work.subjectId);
   const term = terms.find((t) => t.id === work.termId);
   const canEdit = Boolean(me && canEditWork(me.id, work.authorIds));
-  const subjectLink = `/m/tareas?${new URLSearchParams({ materia: work.subjectId })}`;
-  const termLink = `/m/tareas?${new URLSearchParams({ materia: work.subjectId, parcial: work.termId ?? NO_TERM })}`;
+  const inSubject = { ...(subject && { cuatri: String(subject.period) }), materia: work.subjectId };
+  const subjectLink = `/m/tareas?${new URLSearchParams(inSubject)}`;
+  const termLink = `/m/tareas?${new URLSearchParams({ ...inSubject, parcial: work.termId ?? NO_TERM })}`;
   const siblings = sortRecent(
     works.filter((w) => w.id !== work.id && w.subjectId === work.subjectId && w.termId === work.termId),
   ).slice(0, 4);
@@ -325,18 +459,24 @@ export function WorkPage() {
   return (
     <>
       <Link to="/m/tareas" className="back with-icon">
-        <Icon name="back" size={16} /> Tareas y trabajos
+        <Icon name="back" size={16} /> Tareas y Actividades
       </Link>
       <header className="page-header">
         <div>
           <p className="eyebrow">
+            {subject && (
+              <>
+                <Link to={`/m/tareas?cuatri=${subject.period}`}>{periodLabel(subject.period)}</Link>
+                {' · '}
+              </>
+            )}
             <Link to={subjectLink}>{subject?.name ?? 'Materia desconocida'}</Link>
             {' · '}
             <Link to={termLink}>{term?.name ?? 'Sin parcial'}</Link>
           </p>
           <h1>{work.title}</h1>
           <p className="muted">
-            {work.authorIds.length > 1 ? 'Trabajo en equipo' : 'Trabajo individual'} de{' '}
+            {WORK_KIND_LABEL[work.kind]} {work.authorIds.length > 1 ? 'en equipo' : 'individual'} de{' '}
             {authorsLabel(work.authorIds, members)}
           </p>
         </div>
@@ -423,6 +563,8 @@ export function WorkPage() {
           <section className="panel">
             <h2 className="label">Detalles</h2>
             <dl className="facts">
+              <dt>Tipo</dt>
+              <dd>{WORK_KIND_LABEL[work.kind]}</dd>
               <dt>Versión</dt>
               <dd>{work.version}</dd>
               <dt>Publicado</dt>
@@ -464,8 +606,16 @@ export function PublishWorkPage() {
   const { me, members, subjects, terms } = useSnapshot();
   const { error, run } = useAction();
 
-  const [subjectId, setSubjectId] = useState(
-    () => subjects.find((s) => s.id === params.get('materia'))?.id ?? subjects[0]?.id ?? NEW,
+  const firstIn = (period: number) =>
+    subjects.filter((s) => s.period === period).sort(bySubject)[0]?.id ?? NEW;
+  const asked = subjects.find((s) => s.id === params.get('materia'));
+  const [period, setPeriod] = useState(() => {
+    const fromFilter = Number(params.get('cuatri'));
+    return asked?.period ?? (isValidPeriod(fromFilter) ? fromFilter : lastPeriod());
+  });
+  const [subjectId, setSubjectId] = useState(() => asked?.id ?? firstIn(period));
+  const [kind, setKind] = useState<WorkKind>(
+    () => WORK_KIND_GROUPS.find((g) => g.id === params.get('tipo'))?.kinds[0] ?? DEFAULT_WORK_KIND,
   );
   const [termId, setTermId] = useState(
     () => terms.find((t) => t.id === params.get('parcial') && t.subjectId === subjectId)?.id ?? '',
@@ -486,6 +636,7 @@ export function PublishWorkPage() {
       ...list.filter((f) => !current.some((c) => fileKey(c) === fileKey(f))),
     ]);
 
+  const periodSubjects = subjects.filter((s) => s.period === period).sort(bySubject);
   const subjectTerms = terms
     .filter((t) => t.subjectId === subjectId)
     .sort((a, b) => a.position - b.position);
@@ -500,7 +651,7 @@ export function PublishWorkPage() {
       // que un segundo intento no los duplique.
       let sid = subjectId;
       if (sid === NEW) {
-        sid = source.createSubject(newSubject);
+        sid = source.createSubject(newSubject, period);
         setSubjectId(sid);
         setNewSubject('');
       }
@@ -513,6 +664,7 @@ export function PublishWorkPage() {
       return source.publishWork({
         subjectId: sid,
         termId: tid || undefined,
+        kind,
         title,
         assignment,
         description,
@@ -520,6 +672,7 @@ export function PublishWorkPage() {
       });
     });
     if (!id) return;
+    rememberPeriod(period);
     // El trabajo ya existe: lo que no se pueda subir se avisa en su página, sin repetir el alta.
     setBusy(true);
     const fileErrors: string[] = [];
@@ -536,19 +689,45 @@ export function PublishWorkPage() {
   return (
     <>
       <Link to="/m/tareas" className="back with-icon">
-        <Icon name="back" size={16} /> Tareas y trabajos
+        <Icon name="back" size={16} /> Tareas y Actividades
       </Link>
       <header className="page-header">
         <div>
           <h1>Publicar trabajo</h1>
-          <p className="muted">Quedará en el archivo del grupo y en el perfil de cada autor.</p>
+          <p className="muted">
+            Una tarea, actividad, exposición o examen. Quedará en el archivo del grupo y en el perfil de
+            cada autor.
+          </p>
         </div>
       </header>
 
       <form className="panel form form--wide" onSubmit={(e) => void submit(e)}>
         <section className="form__section">
+          <h2>Qué es</h2>
+          <KindPicker value={kind} onChange={setKind} />
+        </section>
+
+        <section className="form__section">
           <h2>Dónde va</h2>
           <div className="form__grid">
+            <label className="field">
+              <span className="field__label">Cuatrimestre</span>
+              <select
+                value={period}
+                onChange={(e) => {
+                  const next = Number(e.target.value);
+                  setPeriod(next);
+                  setSubjectId(firstIn(next));
+                  setTermId('');
+                }}
+              >
+                {PERIODS.map((n) => (
+                  <option key={n} value={n}>
+                    {periodLabel(n)}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="field">
               <span className="field__label">Materia</span>
               <select
@@ -558,7 +737,7 @@ export function PublishWorkPage() {
                   setTermId('');
                 }}
               >
-                {subjects.map((s) => (
+                {periodSubjects.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>
@@ -567,7 +746,7 @@ export function PublishWorkPage() {
               </select>
             </label>
             <label className="field">
-              <span className="field__label">Parcial o unidad</span>
+              <span className="field__label">Parcial</span>
               <select value={termId} onChange={(e) => setTermId(e.target.value)}>
                 <option value="">Sin parcial</option>
                 {subjectTerms.map((t) => (
@@ -575,7 +754,7 @@ export function PublishWorkPage() {
                     {t.name}
                   </option>
                 ))}
-                <option value={NEW}>Nuevo parcial o unidad…</option>
+                <option value={NEW}>Otro parcial o unidad…</option>
               </select>
             </label>
             {subjectId === NEW && (

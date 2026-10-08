@@ -11,8 +11,9 @@ const member = (id: string, displayName: string): Member => ({
 });
 const members = [member('ana', 'Ana López'), member('luis', 'Luis Pérez'), member('eva', 'Eva Ruiz')];
 const subjects: Subject[] = [
-  { id: 'red', name: 'Redes' },
-  { id: 'alg', name: 'Algoritmos' },
+  { id: 'red', name: 'Redes', period: 2 },
+  { id: 'alg', name: 'Algoritmos', period: 2 },
+  { id: 'log', name: 'Lógica', period: 1 },
 ];
 const terms: Term[] = [
   { id: 'p2', subjectId: 'alg', name: 'Parcial 2', position: 2 },
@@ -21,6 +22,7 @@ const terms: Term[] = [
 const work = (id: string, over: Partial<Work>): Work => ({
   id,
   subjectId: 'alg',
+  kind: 'tarea',
   title: id,
   assignment: '',
   description: '',
@@ -33,12 +35,13 @@ const work = (id: string, over: Partial<Work>): Work => ({
 const works = [
   work('a', { termId: 'p1', title: 'Árbol binario', updatedAt: new Date(2026, 9, 2) }),
   work('b', { termId: 'p1', authorIds: ['luis', 'eva'], updatedAt: new Date(2026, 9, 5) }),
-  work('c', { termId: 'p2' }),
+  work('c', { termId: 'p2', kind: 'examen' }),
   work('d', {}),
-  work('e', { subjectId: 'red', assignment: 'Configurar una subred' }),
+  work('e', { subjectId: 'red', assignment: 'Configurar una subred', kind: 'exposicion' }),
+  work('f', { subjectId: 'log', kind: 'actividad' }),
 ];
 const ctx = { subjects, terms, members };
-const all = { query: '', subjectId: '', termId: '', authorId: '' };
+const all = { query: '', kindGroup: '' as const, period: 0, subjectId: '', termId: '', authorId: '' };
 const ids = (list: Work[]) => list.map((w) => w.id);
 
 describe('filterWorks', () => {
@@ -46,6 +49,21 @@ describe('filterWorks', () => {
     expect(ids(filterWorks(works, { ...all, subjectId: 'alg', termId: 'p1' }, ctx))).toEqual(['a', 'b']);
     expect(ids(filterWorks(works, { ...all, subjectId: 'alg', termId: NO_TERM }, ctx))).toEqual(['d']);
     expect(ids(filterWorks(works, { ...all, authorId: 'eva' }, ctx))).toEqual(['b']);
+  });
+
+  it('separa tareas y actividades de exposiciones y exámenes', () => {
+    expect(ids(filterWorks(works, { ...all, kindGroup: 'tareas-actividades' }, ctx))).toEqual([
+      'a',
+      'b',
+      'd',
+      'f',
+    ]);
+    expect(ids(filterWorks(works, { ...all, kindGroup: 'exposiciones-examenes' }, ctx))).toEqual(['c', 'e']);
+  });
+
+  it('filtra por cuatrimestre de la materia', () => {
+    expect(ids(filterWorks(works, { ...all, period: 1 }, ctx))).toEqual(['f']);
+    expect(ids(filterWorks(works, { ...all, period: 2 }, ctx))).toEqual(['a', 'b', 'c', 'd', 'e']);
   });
 
   it('busca sin acentos en título, consigna, materia y autores', () => {
@@ -72,13 +90,14 @@ describe('filterWorks', () => {
 });
 
 describe('groupWorks', () => {
-  it('ordena materias por nombre, parciales por posición y trabajos por fecha', () => {
+  it('ordena materias por cuatrimestre y nombre, parciales por posición y trabajos por fecha', () => {
     const sections = groupWorks(works, subjects, terms);
     expect(sections.map((s) => [s.subject.name, s.count])).toEqual([
+      ['Lógica', 1],
       ['Algoritmos', 4],
       ['Redes', 1],
     ]);
-    expect(sections[0]?.groups.map((g) => [g.name, ids(g.works)])).toEqual([
+    expect(sections[1]?.groups.map((g) => [g.name, ids(g.works)])).toEqual([
       ['Parcial 1', ['b', 'a']],
       ['Parcial 2', ['c']],
       ['Sin parcial', ['d']],

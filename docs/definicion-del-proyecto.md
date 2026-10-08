@@ -74,12 +74,13 @@ Los mensajes y felicitaciones no generarán puntos por volumen. Las claves, toke
 
 **Criterios de aceptación:** un alumno puede escribir al salón y, por separado, conversar con otro compañero. Un tercero no puede leer ni descargar adjuntos de esa conversación directa. Al abrir una notificación se accede al chat correcto, sujeto a autenticación.
 
-### 3.2. Tareas, trabajos y proyectos compartidos
+### 3.2. Tareas y Actividades
 
 **Propósito:** recopilar todos los tipos de trabajos de los compañeros y permitir consultarlos tanto por materia como por autor.
 
 **Funciones**
 
+- Cada trabajo indica su tipo: **tarea, actividad, exposición o examen**. El archivo se puede filtrar por dos familias: «Tareas y actividades» y «Exposiciones y exámenes».
 - Consigna con título, materia, parcial o unidad, instrucciones, fechas y recursos.
 - Trabajos asociados con uno o varios autores, tema específico, descripción, archivos, código, enlaces y versiones.
 - Publicaciones individuales y de equipo, aunque los equipos desarrollen temas o proyectos diferentes.
@@ -357,7 +358,7 @@ La API tiene niveles gratuitos y de pago con condiciones y límites propios; no 
 
 | Área | Uso de Gemini |
 | --- | --- |
-| Tareas y trabajos | Explicar instrucciones, planear un enfoque, dar pistas, revisar razonamientos y ayudar a depurar código. |
+| Tareas y Actividades | Explicar instrucciones, planear un enfoque, dar pistas, revisar razonamientos y ayudar a depurar código. |
 | Archivo de trabajos | Resumir documentos y comparar enfoques relacionados, conservando sus fuentes. |
 | Guías de parciales | Sintetizar el conjunto de materiales seleccionado y el temario, indicar cobertura y producir ejercicios y respuestas revisables. |
 | Notas y actividades | Aclarar conceptos, generar ejemplos y apoyar reflexiones sobre evidencias. |
@@ -795,6 +796,8 @@ Todas las ideas están incluidas en el proyecto. La siguiente distribución orga
 | Motivación | Leaderboard incluido; reglas de puntos pendientes de validación. |
 | Perfil | Foto, nombre y archivo de trabajos por materia y parcial, con coautorías y versiones. |
 | Archivos | Máximo 50 MB por archivo subido a la app. |
+| Tipos de trabajo | Tarea, actividad, exposición o examen; se elige al publicar y se filtra por «Tareas y actividades» o «Exposiciones y exámenes». |
+| Plan de estudios | Nueve cuatrimestres de cinco materias; cada cuatrimestre se divide en tres parciales. La lista de materias está en `packages/core/src/curriculum.ts`. |
 | Resultado educativo | Ayudar a comprender y realizar tareas y construir guías integrales de los parciales a partir de los materiales del grupo. |
 
 ### Recomendaciones técnicas por validar

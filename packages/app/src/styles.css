@@ -1484,7 +1484,7 @@ a.button.secondary {
   font-size: 0.85rem;
 }
 
-/* ---- Tareas y trabajos (3.2) ---- */
+/* ---- Tareas y Actividades (3.2) ---- */
 
 .archive__subject {
   margin-top: 1.75rem;
@@ -1710,4 +1710,61 @@ a.file__name:hover {
   align-items: center;
   gap: 0.15rem;
   margin-right: 0.4rem;
+}
+
+/* ---- Tipos de trabajo y cuatrimestres ---- */
+
+.chip {
+  cursor: pointer;
+}
+
+/* Opción de un grupo de radios con forma de botón. */
+.chip--choice:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--selected);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.chip--choice:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 2rem;
+}
+
+.kinds .chips {
+  margin: 0.3rem 0 0;
+}
+
+fieldset.field > legend {
+  margin-bottom: 0.35rem;
+  padding: 0;
+}
+
+.work-card__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.5rem;
+}
+
+.badge--tareas-actividades {
+  color: var(--accent);
+  border-color: currentColor;
+}
+
+.badge--exposiciones-examenes {
+  color: #a35b00;
+  border-color: currentColor;
+}
+
+@media (prefers-color-scheme: dark) {
+  .badge--exposiciones-examenes {
+    color: #ffb74d;
+  }
 }

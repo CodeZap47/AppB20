@@ -3,6 +3,8 @@
  * (`packages/spacetime-module`), con identidades e ids como texto para simplificar la UI.
  */
 
+import type { WorkKind } from '@b20/core';
+
 export type Id = string;
 
 export interface Member {
@@ -17,6 +19,10 @@ export interface Member {
 export interface Subject {
   id: Id;
   name: string;
+  /** Clave oficial del plan de estudios; las materias agregadas a mano no tienen. */
+  code?: string;
+  /** Cuatrimestre en que se cursa, de 1 a 9. */
+  period: number;
 }
 
 /** Parcial o unidad. */
@@ -31,6 +37,8 @@ export interface Work {
   id: Id;
   subjectId: Id;
   termId?: Id;
+  /** Tarea, actividad, exposición o examen. */
+  kind: WorkKind;
   title: string;
   assignment: string;
   description: string;
@@ -180,6 +188,7 @@ export interface Snapshot {
 export interface PublishWorkInput {
   subjectId: Id;
   termId?: Id;
+  kind: WorkKind;
   title: string;
   assignment: string;
   description: string;
@@ -189,11 +198,12 @@ export interface PublishWorkInput {
 /** Acciones: corresponden uno a uno con los reducers del módulo. */
 export interface Actions {
   updateProfile(displayName: string, photoUrl?: string): void;
-  createSubject(name: string): Id;
+  /** Materia fuera del plan de estudios, dentro de un cuatrimestre (1 a 9). */
+  createSubject(name: string, period: number): Id;
   createTerm(subjectId: Id, name: string): Id;
   publishWork(input: PublishWorkInput): Id;
   /** Solo sus autores; cada edición guarda una versión nueva. */
-  updateWork(workId: Id, title: string, description: string): void;
+  updateWork(workId: Id, title: string, description: string, kind: WorkKind): void;
   /**
    * Sube un archivo y lo adjunta al trabajo; solo sus autores. Rechaza archivos vacíos o de
    * más de 50 MB (`MAX_FILE_BYTES`). Es la única acción asíncrona: subir toma tiempo.

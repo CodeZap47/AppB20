@@ -1,8 +1,13 @@
 import {
   canEditWork,
   canReadDirectConversation,
+  CURRICULUM,
   fileSizeError,
   isValidBirthday,
+  isValidPeriod,
+  isWorkKind,
+  termNames,
+  type WorkKind,
 } from '@b20/core';
 import type {
   Activity,
@@ -180,9 +185,10 @@ export class DemoDataSource implements DataSource {
     this.#emit();
   }
 
-  createSubject(name: string): Id {
+  createSubject(name: string, period: number): Id {
     this.#activeMember();
-    const subject = { id: this.#id(), name: requireText(name, 'El nombre de la materia', 120) };
+    if (!isValidPeriod(period)) throw new Error('El cuatrimestre no existe.');
+    const subject = { id: this.#id(), name: requireText(name, 'El nombre de la materia', 120), period };
     this.#state.subjects = [...this.#state.subjects, subject];
     this.#emit();
     return subject.id;
@@ -207,6 +213,7 @@ export class DemoDataSource implements DataSource {
       const term = this.#state.terms.find((t) => t.id === input.termId);
       if (term?.subjectId !== input.subjectId) throw new Error('El parcial no pertenece a esa materia.');
     }
+    if (!isWorkKind(input.kind)) throw new Error('El tipo de trabajo no existe.');
     for (const id of input.coauthorIds) {
       if (!this.#isActive(id)) throw new Error('Un coautor no es miembro activo.');
     }
@@ -215,6 +222,7 @@ export class DemoDataSource implements DataSource {
       id: this.#id(),
       subjectId: input.subjectId,
       termId: input.termId,
+      kind: input.kind,
       title: requireText(input.title, 'El título', 200),
       assignment: input.assignment.trim(),
       description: input.description.trim(),
@@ -228,19 +236,21 @@ export class DemoDataSource implements DataSource {
     return work.id;
   }
 
-  updateWork(workId: Id, title: string, description: string) {
+  updateWork(workId: Id, title: string, description: string, kind: WorkKind) {
     const me = this.#activeMember();
     const work = this.#state.works.find((w) => w.id === workId);
     if (!work) throw new Error('El trabajo no existe.');
     if (!canEditWork(me.id, work.authorIds)) {
       throw new Error('Solo el autor o los coautores editan este trabajo.');
     }
+    if (!isWorkKind(kind)) throw new Error('El tipo de trabajo no existe.');
     this.#state.works = this.#state.works.map((w) =>
       w.id === workId
         ? {
             ...w,
             title: requireText(title, 'El título', 200),
             description: description.trim(),
+            kind,
             version: w.version + 1,
             updatedAt: this.#now(),
           }
@@ -502,6 +512,8 @@ export class DemoDataSource implements DataSource {
 
 /** Estado inicial con datos de prueba claramente marcados. */
 export function createDemoState(now = new Date()): State {
+  const LOGICA = 'IDSE-05010103';
+  const FUNDAMENTOS = 'IDSE-05010104';
   const minutesAgo = (n: number) => new Date(now.getTime() - n * 60_000);
   const members: Member[] = [1, 2, 3, 4].map((n) => ({
     id: `demo-${n}`,
@@ -510,23 +522,28 @@ export function createDemoState(now = new Date()): State {
     isCreator: n === 1,
     joinedAt: minutesAgo(10_000),
   }));
+  // Materias reales del plan de estudios, cada una con sus tres parciales. Todo lo demás
+  // (alumnos, trabajos, mensajes) sigue siendo de prueba.
+  const subjects: Subject[] = CURRICULUM.map((s) => ({ id: s.code, ...s }));
+  const terms: Term[] = subjects.flatMap((subject) =>
+    termNames().map((name, i) => ({
+      id: `${subject.id}-p${i + 1}`,
+      subjectId: subject.id,
+      name,
+      position: i + 1,
+    })),
+  );
   return {
     members,
-    subjects: [
-      { id: 's1', name: 'Materia de prueba A' },
-      { id: 's2', name: 'Materia de prueba B' },
-    ],
-    terms: [
-      { id: 't1', subjectId: 's1', name: 'Parcial 1', position: 1 },
-      { id: 't2', subjectId: 's1', name: 'Parcial 2', position: 2 },
-      { id: 't3', subjectId: 's2', name: 'Unidad 1', position: 1 },
-    ],
+    subjects,
+    terms,
     works: [
       {
         id: 'w1',
-        subjectId: 's1',
-        termId: 't1',
-        title: 'Trabajo de prueba 1',
+        subjectId: LOGICA,
+        termId: `${LOGICA}-p1`,
+        kind: 'tarea',
+        title: 'Tarea de prueba 1',
         assignment: 'Consigna de ejemplo.',
         description: 'Descripción de ejemplo.',
         version: 1,
@@ -536,9 +553,10 @@ export function createDemoState(now = new Date()): State {
       },
       {
         id: 'w2',
-        subjectId: 's2',
-        termId: 't3',
-        title: 'Trabajo de prueba 2',
+        subjectId: FUNDAMENTOS,
+        termId: `${FUNDAMENTOS}-p1`,
+        kind: 'actividad',
+        title: 'Actividad de prueba',
         assignment: 'Otra consigna de ejemplo.',
         description: '',
         version: 1,
@@ -549,9 +567,10 @@ export function createDemoState(now = new Date()): State {
       // Más ejemplos para revisar el archivo: equipo de tres, código, versiones y sin parcial.
       {
         id: 'w3',
-        subjectId: 's1',
-        termId: 't1',
-        title: 'Trabajo de prueba 3 (en equipo, con código)',
+        subjectId: LOGICA,
+        termId: `${LOGICA}-p1`,
+        kind: 'exposicion',
+        title: 'Exposición de prueba (en equipo, con código)',
         assignment: 'Consigna de ejemplo: resolver un ejercicio en equipo y explicar la solución.',
         description:
           'Descripción de ejemplo con un fragmento de código:\n```js\nconst suma = (a, b) => a + b;\n```\n' +
@@ -563,9 +582,10 @@ export function createDemoState(now = new Date()): State {
       },
       {
         id: 'w4',
-        subjectId: 's1',
-        termId: 't2',
-        title: 'Trabajo de prueba 4 (con una versión nueva)',
+        subjectId: LOGICA,
+        termId: `${LOGICA}-p2`,
+        kind: 'tarea',
+        title: 'Tarea de prueba 2 (con una versión nueva)',
         assignment: 'Consigna de ejemplo del segundo parcial.',
         description: 'Descripción de ejemplo, ya corregida una vez.',
         version: 2,
@@ -575,8 +595,9 @@ export function createDemoState(now = new Date()): State {
       },
       {
         id: 'w5',
-        subjectId: 's2',
-        title: 'Trabajo de prueba 5 (sin parcial)',
+        subjectId: FUNDAMENTOS,
+        kind: 'examen',
+        title: 'Examen de prueba (sin parcial)',
         assignment: '',
         description: 'Ejemplo de un trabajo que no se clasificó en ningún parcial ni registró su consigna.',
         version: 1,
@@ -661,7 +682,7 @@ export function createDemoState(now = new Date()): State {
     activities: [
       {
         id: 'a1',
-        subjectId: 's1',
+        subjectId: LOGICA,
         topic: 'Tema de prueba',
         date: '2026-10-06',
         title: 'Actividad de prueba en clase',
@@ -684,7 +705,7 @@ export function createDemoState(now = new Date()): State {
     notes: [
       {
         id: 'n1',
-        subjectId: 's1',
+        subjectId: LOGICA,
         topic: 'Tema de prueba',
         title: 'Apunte de prueba del grupo',
         body: 'Contenido de ejemplo.\n\n```\nconsole.log("hola");\n```',
@@ -698,7 +719,7 @@ export function createDemoState(now = new Date()): State {
       },
       {
         id: 'n2',
-        subjectId: 's2',
+        subjectId: FUNDAMENTOS,
         topic: '',
         title: 'Apunte personal de prueba',
         body: 'Solo lo ve su autor.',
@@ -715,7 +736,7 @@ export function createDemoState(now = new Date()): State {
     questions: [
       {
         id: 'q1',
-        subjectId: 's1',
+        subjectId: LOGICA,
         topic: 'Tema de prueba',
         title: '¿Pregunta de prueba?',
         body: 'Descripción de ejemplo.',

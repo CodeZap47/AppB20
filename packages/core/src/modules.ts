@@ -39,9 +39,9 @@ export const MODULES: readonly ModuleInfo[] = [
   },
   {
     id: 'tareas',
-    title: 'Tareas y trabajos',
+    title: 'Tareas y Actividades',
     section: '3.2',
-    summary: 'Consignas, trabajos compartidos, coautorías y versiones.',
+    summary: 'Tareas, actividades, exposiciones y exámenes por materia y parcial.',
     stage: 1,
     worksWithoutAi: true,
   },

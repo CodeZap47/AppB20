@@ -1,6 +1,7 @@
 /**
  * Módulo SpacetimeDB de App B20, alcance de la Etapa 0 / MVP:
- * membresía por invitación, perfiles, materias y parciales, trabajos con coautores y
+ * membresía por invitación, perfiles, materias por cuatrimestre con sus parciales, trabajos
+ * por tipo (tarea, actividad, exposición o examen) con coautores y
  * archivos adjuntos (máximo 50 MB cada uno),
  * canal del grupo, mensajes 1 a 1 y cumpleaños voluntarios.
  *
@@ -53,7 +54,11 @@ const subject = table(
   { name: 'subject' },
   {
     id: t.u64().primaryKey().autoInc(),
+    /** Clave del plan de estudios; vacía en las materias agregadas a mano. */
+    code: t.string(),
     name: t.string(),
+    /** Cuatrimestre en que se cursa, de 1 a 9. */
+    period: t.u32(),
     createdBy: t.identity(),
     createdAt: t.timestamp(),
   },
@@ -77,6 +82,8 @@ const work = table(
     id: t.u64().primaryKey().autoInc(),
     subjectId: t.u64().index('btree'),
     termId: t.u64().optional(),
+    /** `tarea`, `actividad`, `exposicion` o `examen`. */
+    kind: t.string(),
     title: t.string(),
     assignment: t.string(),
     description: t.string(),
@@ -302,6 +309,22 @@ type Ctx = ReducerCtx<typeof spacetimedb.schemaType>;
 const MAX_MESSAGE_LENGTH = 4000;
 /** 50 MB por archivo. Debe coincidir con `MAX_FILE_BYTES` de `@b20/core`. */
 const MAX_FILE_BYTES = 50n * 1024n * 1024n;
+/** Deben coincidir con `WORK_KINDS`, `PERIOD_COUNT` y `TERMS_PER_PERIOD` de `@b20/core`. */
+const WORK_KINDS = ['tarea', 'actividad', 'exposicion', 'examen'];
+const PERIOD_COUNT = 9;
+const TERMS_PER_PERIOD = 3;
+
+function requireWorkKind(kind: string): string {
+  if (!WORK_KINDS.includes(kind)) throw new SenderError('El tipo de trabajo no existe.');
+  return kind;
+}
+
+function requirePeriod(period: number): number {
+  if (!Number.isInteger(period) || period < 1 || period > PERIOD_COUNT) {
+    throw new SenderError('El cuatrimestre no existe.');
+  }
+  return period;
+}
 const ALLOWED_ISSUERS = ['https://accounts.google.com', 'accounts.google.com'];
 
 function activeMember(ctx: Ctx) {
@@ -429,16 +452,54 @@ export const update_profile = spacetimedb.reducer(
 // Materias, parciales y trabajos
 // ---------------------------------------------------------------------------
 
-export const create_subject = spacetimedb.reducer({ name: t.string() }, (ctx, { name }) => {
-  activeMember(ctx);
-  const row = ctx.db.subject.insert({
-    id: 0n,
-    name: requireText(name, 'El nombre de la materia', 120),
-    createdBy: ctx.sender,
-    createdAt: ctx.timestamp,
-  });
-  log(ctx, 'create', 'subject', row.id);
-});
+export const create_subject = spacetimedb.reducer(
+  { name: t.string(), period: t.u32() },
+  (ctx, { name, period }) => {
+    activeMember(ctx);
+    const row = ctx.db.subject.insert({
+      id: 0n,
+      code: '',
+      name: requireText(name, 'El nombre de la materia', 120),
+      period: requirePeriod(period),
+      createdBy: ctx.sender,
+      createdAt: ctx.timestamp,
+    });
+    log(ctx, 'create', 'subject', row.id);
+  },
+);
+
+/**
+ * Carga el plan de estudios (`CURRICULUM` de `@b20/core`): las tres listas van en paralelo,
+ * una posición por materia. Cada materia nueva recibe sus tres parciales; las que ya existen
+ * (misma clave) se dejan como están, así que se puede ejecutar más de una vez.
+ */
+export const import_curriculum = spacetimedb.reducer(
+  { codes: t.array(t.string()), names: t.array(t.string()), periods: t.array(t.u32()) },
+  (ctx, { codes, names, periods }) => {
+    requireCreator(ctx);
+    if (codes.length !== names.length || codes.length !== periods.length) {
+      throw new SenderError('Las listas del plan de estudios no coinciden.');
+    }
+    const existing = new Set([...ctx.db.subject.iter()].map((s) => s.code));
+    codes.forEach((rawCode, i) => {
+      const code = requireText(rawCode, 'La clave de la materia', 40);
+      if (existing.has(code)) return;
+      existing.add(code);
+      const row = ctx.db.subject.insert({
+        id: 0n,
+        code,
+        name: requireText(names[i], 'El nombre de la materia', 120),
+        period: requirePeriod(periods[i]),
+        createdBy: ctx.sender,
+        createdAt: ctx.timestamp,
+      });
+      for (let position = 1; position <= TERMS_PER_PERIOD; position++) {
+        ctx.db.term.insert({ id: 0n, subjectId: row.id, name: `Parcial ${position}`, position });
+      }
+      log(ctx, 'create', 'subject', row.id);
+    });
+  },
+);
 
 export const create_term = spacetimedb.reducer(
   { subjectId: t.u64(), name: t.string(), position: t.u32() },
@@ -459,12 +520,13 @@ export const publish_work = spacetimedb.reducer(
   {
     subjectId: t.u64(),
     termId: t.u64().optional(),
+    kind: t.string(),
     title: t.string(),
     assignment: t.string(),
     description: t.string(),
     coauthors: t.array(t.identity()),
   },
-  (ctx, { subjectId, termId, title, assignment, description, coauthors }) => {
+  (ctx, { subjectId, termId, kind, title, assignment, description, coauthors }) => {
     activeMember(ctx);
     if (!ctx.db.subject.id.find(subjectId)) throw new SenderError('La materia no existe.');
     if (termId !== undefined) {
@@ -483,6 +545,7 @@ export const publish_work = spacetimedb.reducer(
       id: 0n,
       subjectId,
       termId,
+      kind: requireWorkKind(kind),
       title: requireText(title, 'El título', 200),
       assignment: assignment.trim(),
       description: description.trim(),
@@ -499,8 +562,8 @@ export const publish_work = spacetimedb.reducer(
 );
 
 export const update_work = spacetimedb.reducer(
-  { workId: t.u64(), title: t.string(), description: t.string() },
-  (ctx, { workId, title, description }) => {
+  { workId: t.u64(), title: t.string(), description: t.string(), kind: t.string() },
+  (ctx, { workId, title, description, kind }) => {
     activeMember(ctx);
     const row = ctx.db.work.id.find(workId);
     if (!row) throw new SenderError('El trabajo no existe.');
@@ -512,6 +575,7 @@ export const update_work = spacetimedb.reducer(
       ...row,
       title: requireText(title, 'El título', 200),
       description: description.trim(),
+      kind: requireWorkKind(kind),
       version: row.version + 1,
       updatedAt: ctx.timestamp,
     });

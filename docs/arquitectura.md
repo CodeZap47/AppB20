@@ -31,6 +31,17 @@ y las personales propias), `note_comments`, `questions`, `answers`, `my_last_see
 Faltan para el MVP: guías con fuentes, adjuntos fuera de los trabajos, instalaciones/suscripciones
 push y preferencias de avisos.
 
+### Plan de estudios y tipos de trabajo
+
+Las 45 materias (nueve cuatrimestres de cinco) viven en `CURRICULUM` de `@b20/core`. Cada
+materia guarda su cuatrimestre (`period`) y tiene tres parciales. En el servidor se cargan con
+el reducer `import_curriculum`, que solo ejecutan los creadores y no duplica materias; falta
+llamarlo desde la interfaz cuando se conecte SpacetimeDB. `create_subject` sigue disponible para
+materias fuera del plan y ahora pide el cuatrimestre.
+
+Cada trabajo lleva `kind`: `tarea`, `actividad`, `exposicion` o `examen` (`WORK_KINDS` en
+`@b20/core`, repetido en el módulo). `publish_work` y `update_work` lo validan.
+
 ### Archivos adjuntos y su límite
 
 Cada archivo pesa como máximo **50 MB**. El valor vive en `MAX_FILE_BYTES` de `@b20/core`

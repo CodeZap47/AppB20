@@ -1,3 +1,4 @@
+import { workKindGroup, type WorkKindGroup } from '@b20/core';
 import type { Id, Member, Subject, Term, Work, WorkFile } from '../data/types';
 import { matches } from './search';
 
@@ -6,6 +7,10 @@ export const NO_TERM = 'ninguno';
 
 export interface WorkFilters {
   query: string;
+  /** Familia de tipos: tareas y actividades, o exposiciones y exámenes. Vacío para todo. */
+  kindGroup: WorkKindGroup | '';
+  /** Cuatrimestre de la materia; 0 para todos. */
+  period: number;
   subjectId: Id;
   /** Id de un parcial, `NO_TERM` o vacío para todos. */
   termId: Id;
@@ -25,6 +30,9 @@ export interface WorkContext {
  */
 export function filterWorks(works: Work[], filters: WorkFilters, ctx: WorkContext): Work[] {
   return works.filter((w) => {
+    const subject = ctx.subjects.find((s) => s.id === w.subjectId);
+    if (filters.kindGroup && workKindGroup(w.kind) !== filters.kindGroup) return false;
+    if (filters.period && subject?.period !== filters.period) return false;
     if (filters.subjectId && w.subjectId !== filters.subjectId) return false;
     if (filters.termId === NO_TERM ? w.termId : filters.termId && w.termId !== filters.termId) return false;
     if (filters.authorId && !w.authorIds.includes(filters.authorId)) return false;
@@ -33,7 +41,7 @@ export function filterWorks(works: Work[], filters: WorkFilters, ctx: WorkContex
       w.title,
       w.assignment,
       w.description,
-      ctx.subjects.find((s) => s.id === w.subjectId)?.name ?? '',
+      subject?.name ?? '',
       ctx.terms.find((t) => t.id === w.termId)?.name ?? '',
       ...w.authorIds.map((id) => ctx.members.find((m) => m.id === id)?.displayName ?? ''),
       ...(ctx.files ?? []).filter((f) => f.workId === w.id).map((f) => f.name),
@@ -58,10 +66,15 @@ export interface ArchiveSection {
   groups: ArchiveGroup[];
 }
 
+/** Orden del plan de estudios: por cuatrimestre y, dentro de él, por nombre. */
+export function bySubject(a: Subject, b: Subject): number {
+  return a.period - b.period || a.name.localeCompare(b.name, 'es');
+}
+
 /** Archivo como materia → parcial → trabajos (sección 2); omite materias y parciales vacíos. */
 export function groupWorks(works: Work[], subjects: Subject[], terms: Term[]): ArchiveSection[] {
   return [...subjects]
-    .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+    .sort(bySubject)
     .map((subject) => {
       const own = sortRecent(works.filter((w) => w.subjectId === subject.id));
       const subjectTerms = terms

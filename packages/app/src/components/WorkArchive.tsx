@@ -1,3 +1,4 @@
+import { periodLabel, WORK_KIND_LABEL, workKindGroup } from '@b20/core';
 import { Link } from 'react-router';
 import type { Id, Member, Subject, Term, Work, WorkFile } from '../data/types';
 import { formatDate } from '../lib/format';
@@ -23,7 +24,10 @@ function WorkCard({
   const excerpt = previewText(work.assignment || work.description);
   return (
     <Link to={`/m/tareas/${work.id}`} className="work-card">
-      {context && <span className="work-card__context">{context}</span>}
+      <span className="work-card__top">
+        <span className={`badge badge--${workKindGroup(work.kind)}`}>{WORK_KIND_LABEL[work.kind]}</span>
+        {context && <span className="work-card__context">{context}</span>}
+      </span>
       <strong className="work-card__title">{work.title}</strong>
       {excerpt && <span className="work-card__excerpt">{excerpt}</span>}
       <span className="work-card__footer">
@@ -45,7 +49,7 @@ function WorkCard({
 
 /**
  * Archivo de trabajos. Agrupado es materia → parcial → trabajos (sección 2); `recent` es una
- * sola lista del más reciente al más antiguo. Se usa en «Tareas y trabajos» y en cada perfil.
+ * sola lista del más reciente al más antiguo. Se usa en «Tareas y Actividades» y en cada perfil.
  */
 export function WorkArchive({
   works,
@@ -99,7 +103,7 @@ export function WorkArchive({
           <header>
             <h2>{subject.name}</h2>
             <span className="muted">
-              {count} {count === 1 ? 'trabajo' : 'trabajos'}
+              {periodLabel(subject.period)} · {count} {count === 1 ? 'trabajo' : 'trabajos'}
             </span>
           </header>
           {groups.map((group) => (

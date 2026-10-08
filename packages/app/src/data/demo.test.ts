@@ -39,8 +39,9 @@ describe('DemoDataSource', () => {
   it('publica un trabajo con coautores y conserva la autoría', () => {
     const data = source('demo-1');
     const id = data.publishWork({
-      subjectId: 's1',
-      termId: 't2',
+      subjectId: 'IDSE-05010103',
+      termId: 'IDSE-05010103-p2',
+      kind: 'examen',
       title: 'Nuevo',
       assignment: '',
       description: '',
@@ -48,21 +49,33 @@ describe('DemoDataSource', () => {
     });
     const work = data.getSnapshot().works.find((w) => w.id === id);
     expect(work?.authorIds).toEqual(['demo-1', 'demo-4']);
+    expect(work?.kind).toBe('examen');
   });
 
   it('rechaza un parcial de otra materia', () => {
     const data = source('demo-1');
     expect(() =>
-      data.publishWork({ subjectId: 's2', termId: 't1', title: 'X', assignment: '', description: '', coauthorIds: [] }),
+      data.publishWork({
+        subjectId: 'IDSE-05010104',
+        termId: 'IDSE-05010103-p1',
+        kind: 'tarea',
+        title: 'X',
+        assignment: '',
+        description: '',
+        coauthorIds: [],
+      }),
     ).toThrow('no pertenece');
   });
 
   it('solo autores editan un trabajo', () => {
     const data = source('demo-4');
-    expect(() => data.updateWork('w1', 'Otro', '')).toThrow('Solo el autor');
+    expect(() => data.updateWork('w1', 'Otro', '', 'actividad')).toThrow('Solo el autor');
     data.setViewer('demo-2');
-    data.updateWork('w1', 'Otro', '');
-    expect(data.getSnapshot().works.find((w) => w.id === 'w1')?.version).toBe(2);
+    data.updateWork('w1', 'Otro', '', 'actividad');
+    expect(data.getSnapshot().works.find((w) => w.id === 'w1')).toMatchObject({
+      version: 2,
+      kind: 'actividad',
+    });
   });
 
   it('comparte y retira el cumpleaños propio', () => {
@@ -99,7 +112,7 @@ describe('notas, actividades y preguntas', () => {
     const data = source('demo-1');
     const input = {
       id: 'n1',
-      subjectId: 's1',
+      subjectId: 'IDSE-05010103',
       topic: '',
       title: 'Cambio',
       body: 'x',
@@ -131,6 +144,20 @@ describe('notas, actividades y preguntas', () => {
     expect(data.getSnapshot().questions[0]?.status).toBe('resolved');
     data.reopenQuestion('q1');
     expect(data.getSnapshot().questions[0]?.acceptedAnswerId).toBeUndefined();
+  });
+
+  it('trae el plan de estudios: 45 materias con tres parciales cada una', () => {
+    const { subjects, terms } = source('demo-1').getSnapshot();
+    expect(subjects).toHaveLength(45);
+    expect(subjects.filter((s) => s.period === 1).map((s) => s.name)).toContain('Lógica de Programación');
+    expect(subjects.every((s) => terms.filter((t) => t.subjectId === s.id).length === 3)).toBe(true);
+  });
+
+  it('una materia nueva necesita un cuatrimestre válido', () => {
+    const data = source('demo-1');
+    expect(() => data.createSubject('Optativa', 12)).toThrow('cuatrimestre');
+    const id = data.createSubject('Optativa', 3);
+    expect(data.getSnapshot().subjects.find((s) => s.id === id)?.period).toBe(3);
   });
 
   describe('archivos de un trabajo', () => {
