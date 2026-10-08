@@ -402,3 +402,89 @@ button:disabled {
 .profile-header h1 {
   margin: 0;
 }
+
+a.button {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+a.button.secondary {
+  background: transparent;
+  color: var(--accent);
+}
+
+.grow {
+  flex: 1 1 200px;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+}
+
+.prewrap {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0.25rem 0;
+}
+
+.code-block {
+  padding: 0.75rem;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--text) 7%, var(--surface));
+  overflow-x: auto;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 0.5rem;
+}
+
+.badge {
+  font-size: 0.75rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.badge--group,
+.badge--resolved {
+  color: #1b7f4b;
+  border-color: currentColor;
+}
+
+.badge--personal,
+.badge--open {
+  color: var(--accent);
+  border-color: currentColor;
+}
+
+.badge--ai {
+  color: #a35b00;
+  border-color: currentColor;
+}
+
+@media (prefers-color-scheme: dark) {
+  .badge--group,
+  .badge--resolved {
+    color: #6fd39b;
+  }
+  .badge--ai {
+    color: #ffb74d;
+  }
+}
+
+.news--pending {
+  border-left: 3px solid var(--accent);
+}
+
+.answer--accepted {
+  border-color: #1b7f4b;
+}

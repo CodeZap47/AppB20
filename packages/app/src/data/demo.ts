@@ -4,7 +4,16 @@ import {
   isValidBirthday,
 } from '@b20/core';
 import type {
+  Activity,
+  Answer,
+  AskQuestionInput,
   Birthday,
+  CreateActivityInput,
+  Evidence,
+  Note,
+  NoteComment,
+  Question,
+  SaveNoteInput,
   DataSource,
   DirectConversation,
   DirectMessage,
@@ -36,6 +45,13 @@ interface State {
   directConversations: DirectConversation[];
   directMessages: DirectMessage[];
   birthdays: Birthday[];
+  activities: Activity[];
+  evidences: Evidence[];
+  notes: Note[];
+  noteComments: NoteComment[];
+  questions: Question[];
+  answers: Answer[];
+  lastSeen: Record<Id, Date>;
 }
 
 const MAX_TEXT = 4000;
@@ -96,8 +112,17 @@ export class DemoDataSource implements DataSource {
         directConversations: [],
         directMessages: [],
         birthdays: [],
+        activities: [],
+        evidences: [],
+        notes: [],
+        noteComments: [],
+        questions: [],
+        answers: [],
+        lastSeenAt: undefined,
       };
     }
+    const notes = s.notes.filter((n) => n.visibility === 'group' || n.authorId === me.id);
+    const visibleNotes = new Set(notes.map((n) => n.id));
     const directConversations = s.directConversations.filter((c) =>
       canReadDirectConversation(me.id, c.participantIds),
     );
@@ -112,6 +137,13 @@ export class DemoDataSource implements DataSource {
       directConversations,
       directMessages: s.directMessages.filter((m) => visible.has(m.conversationId)),
       birthdays: s.birthdays,
+      activities: s.activities,
+      evidences: s.evidences,
+      notes,
+      noteComments: s.noteComments.filter((c) => visibleNotes.has(c.noteId)),
+      questions: s.questions,
+      answers: s.answers,
+      lastSeenAt: s.lastSeen[me.id],
     };
   }
 
@@ -263,6 +295,163 @@ export class DemoDataSource implements DataSource {
     this.#state.birthdays = this.#state.birthdays.filter((b) => b.memberId !== this.#viewerId);
     this.#emit();
   }
+
+  #requireSubject(subjectId: Id) {
+    if (!this.#state.subjects.some((s) => s.id === subjectId)) throw new Error('La materia no existe.');
+  }
+
+  createActivity(input: CreateActivityInput): Id {
+    const me = this.#activeMember();
+    this.#requireSubject(input.subjectId);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new Error('Fecha inválida.');
+    const activity: Activity = {
+      id: this.#id(),
+      subjectId: input.subjectId,
+      topic: input.topic.trim(),
+      date: input.date,
+      title: requireText(input.title, 'El título', 200),
+      objective: input.objective.trim(),
+      instructions: input.instructions.trim(),
+      createdBy: me.id,
+      createdAt: this.#now(),
+    };
+    this.#state.activities = [...this.#state.activities, activity];
+    this.#emit();
+    return activity.id;
+  }
+
+  addEvidence(activityId: Id, content: string, participantIds: Id[]): Id {
+    const me = this.#activeMember();
+    if (!this.#state.activities.some((a) => a.id === activityId)) throw new Error('La actividad no existe.');
+    for (const id of participantIds) {
+      if (!this.#isActive(id)) throw new Error('Un participante no es miembro activo.');
+    }
+    const evidence: Evidence = {
+      id: this.#id(),
+      activityId,
+      authorId: me.id,
+      participantIds: [...new Set([me.id, ...participantIds])],
+      content: requireText(content, 'La evidencia', 20_000),
+      createdAt: this.#now(),
+    };
+    this.#state.evidences = [...this.#state.evidences, evidence];
+    this.#emit();
+    return evidence.id;
+  }
+
+  saveNote(input: SaveNoteInput): Id {
+    const me = this.#activeMember();
+    this.#requireSubject(input.subjectId);
+    const now = this.#now();
+    const fields = {
+      subjectId: input.subjectId,
+      topic: input.topic.trim(),
+      title: requireText(input.title, 'El título', 200),
+      body: requireText(input.body, 'El contenido', 50_000),
+      tags: [...new Set(input.tags.map((t) => t.trim().toLowerCase()).filter(Boolean))],
+      visibility: input.visibility,
+      source: input.source,
+    };
+    if (input.id) {
+      const note = this.#state.notes.find((n) => n.id === input.id);
+      if (!note) throw new Error('La nota no existe.');
+      if (note.authorId !== me.id) {
+        throw new Error('Solo su autor edita esta nota; los demás pueden proponer cambios en comentarios.');
+      }
+      this.#state.notes = this.#state.notes.map((n) =>
+        n.id === note.id ? { ...n, ...fields, version: n.version + 1, updatedAt: now } : n,
+      );
+      this.#emit();
+      return note.id;
+    }
+    const note: Note = { id: this.#id(), ...fields, authorId: me.id, version: 1, createdAt: now, updatedAt: now };
+    this.#state.notes = [...this.#state.notes, note];
+    this.#emit();
+    return note.id;
+  }
+
+  commentNote(noteId: Id, text: string) {
+    const me = this.#activeMember();
+    const note = this.#state.notes.find((n) => n.id === noteId);
+    if (!note || (note.visibility === 'personal' && note.authorId !== me.id)) {
+      throw new Error('La nota no existe.');
+    }
+    const comment: NoteComment = {
+      id: this.#id(),
+      noteId,
+      authorId: me.id,
+      text: requireText(text, 'El comentario'),
+      createdAt: this.#now(),
+    };
+    this.#state.noteComments = [...this.#state.noteComments, comment];
+    this.#emit();
+  }
+
+  askQuestion(input: AskQuestionInput): Id {
+    const me = this.#activeMember();
+    this.#requireSubject(input.subjectId);
+    const question: Question = {
+      id: this.#id(),
+      subjectId: input.subjectId,
+      topic: input.topic.trim(),
+      title: requireText(input.title, 'La pregunta', 200),
+      body: input.body.trim(),
+      authorId: me.id,
+      status: 'open',
+      createdAt: this.#now(),
+    };
+    this.#state.questions = [...this.#state.questions, question];
+    this.#emit();
+    return question.id;
+  }
+
+  answerQuestion(questionId: Id, body: string): Id {
+    const me = this.#activeMember();
+    if (!this.#state.questions.some((q) => q.id === questionId)) throw new Error('La pregunta no existe.');
+    const answer: Answer = {
+      id: this.#id(),
+      questionId,
+      authorId: me.id,
+      body: requireText(body, 'La respuesta', 20_000),
+      createdAt: this.#now(),
+    };
+    this.#state.answers = [...this.#state.answers, answer];
+    this.#emit();
+    return answer.id;
+  }
+
+  #ownQuestion(questionId: Id): Question {
+    const me = this.#activeMember();
+    const question = this.#state.questions.find((q) => q.id === questionId);
+    if (!question) throw new Error('La pregunta no existe.');
+    if (question.authorId !== me.id) throw new Error('Solo quien preguntó puede hacer esto.');
+    return question;
+  }
+
+  acceptAnswer(questionId: Id, answerId: Id) {
+    this.#ownQuestion(questionId);
+    if (!this.#state.answers.some((a) => a.id === answerId && a.questionId === questionId)) {
+      throw new Error('La respuesta no es de esta pregunta.');
+    }
+    this.#state.questions = this.#state.questions.map((q) =>
+      q.id === questionId ? { ...q, status: 'resolved', acceptedAnswerId: answerId, resolvedAt: this.#now() } : q,
+    );
+    this.#emit();
+  }
+
+  reopenQuestion(questionId: Id) {
+    this.#ownQuestion(questionId);
+    this.#state.questions = this.#state.questions.map((q) =>
+      q.id === questionId ? { ...q, status: 'open', acceptedAnswerId: undefined, resolvedAt: undefined } : q,
+    );
+    this.#emit();
+  }
+
+  markSeen() {
+    const me = this.#activeMember();
+    this.#state.lastSeen = { ...this.#state.lastSeen, [me.id]: this.#now() };
+    this.#emit();
+  }
 }
 
 /** Estado inicial con datos de prueba claramente marcados. */
@@ -320,5 +509,75 @@ export function createDemoState(now = new Date()): State {
       { id: 'd1', conversationId: 'c1', senderId: 'demo-2', text: 'Mensaje privado de prueba.', sentAt: minutesAgo(20) },
     ],
     birthdays: [{ memberId: 'demo-3', day: 15, month: 11, remind: true }],
+    activities: [
+      {
+        id: 'a1',
+        subjectId: 's1',
+        topic: 'Tema de prueba',
+        date: '2026-10-06',
+        title: 'Actividad de prueba en clase',
+        objective: 'Objetivo de ejemplo.',
+        instructions: 'Instrucciones de ejemplo.',
+        createdBy: 'demo-2',
+        createdAt: minutesAgo(2900),
+      },
+    ],
+    evidences: [
+      {
+        id: 'e1',
+        activityId: 'a1',
+        authorId: 'demo-2',
+        participantIds: ['demo-2', 'demo-3'],
+        content: 'Evidencia de ejemplo del equipo.',
+        createdAt: minutesAgo(2800),
+      },
+    ],
+    notes: [
+      {
+        id: 'n1',
+        subjectId: 's1',
+        topic: 'Tema de prueba',
+        title: 'Apunte de prueba del grupo',
+        body: 'Contenido de ejemplo.\n\n```\nconsole.log("hola");\n```',
+        tags: ['ejemplo'],
+        visibility: 'group',
+        source: 'student',
+        authorId: 'demo-2',
+        version: 1,
+        createdAt: minutesAgo(120),
+        updatedAt: minutesAgo(120),
+      },
+      {
+        id: 'n2',
+        subjectId: 's2',
+        topic: '',
+        title: 'Apunte personal de prueba',
+        body: 'Solo lo ve su autor.',
+        tags: [],
+        visibility: 'personal',
+        source: 'student',
+        authorId: 'demo-3',
+        version: 1,
+        createdAt: minutesAgo(90),
+        updatedAt: minutesAgo(90),
+      },
+    ],
+    noteComments: [],
+    questions: [
+      {
+        id: 'q1',
+        subjectId: 's1',
+        topic: 'Tema de prueba',
+        title: '¿Pregunta de prueba?',
+        body: 'Descripción de ejemplo.',
+        authorId: 'demo-3',
+        status: 'open',
+        createdAt: minutesAgo(60),
+      },
+    ],
+    answers: [
+      { id: 'r1', questionId: 'q1', authorId: 'demo-2', body: 'Respuesta de ejemplo.', createdAt: minutesAgo(40) },
+    ],
+    lastSeen: { 'demo-1': minutesAgo(180) },
   };
 }

@@ -152,6 +152,103 @@ const changeLog = table(
   },
 );
 
+/** Actividad de clase (3.3). `date` es `AAAA-MM-DD`. */
+const activity = table(
+  { name: 'activity' },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    subjectId: t.u64().index('btree'),
+    topic: t.string(),
+    date: t.string(),
+    title: t.string(),
+    objective: t.string(),
+    instructions: t.string(),
+    createdBy: t.identity(),
+    createdAt: t.timestamp(),
+  },
+);
+
+/** Evidencia de un equipo; cada una es una fila nueva y nunca sobrescribe a otra. */
+const evidence = table(
+  { name: 'evidence' },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    activityId: t.u64().index('btree'),
+    author: t.identity(),
+    participants: t.array(t.identity()),
+    content: t.string(),
+    createdAt: t.timestamp(),
+  },
+);
+
+/** Nota de clase (3.4). visibility: 'personal' | 'group'; source: 'student' | 'teacher' | 'ai'. */
+const note = table(
+  { name: 'note' },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    subjectId: t.u64().index('btree'),
+    topic: t.string(),
+    title: t.string(),
+    body: t.string(),
+    tags: t.array(t.string()),
+    visibility: t.string(),
+    source: t.string(),
+    author: t.identity().index('btree'),
+    version: t.u32(),
+    createdAt: t.timestamp(),
+    updatedAt: t.timestamp(),
+  },
+);
+
+/** Comentario o propuesta de corrección: no modifica la nota. */
+const noteComment = table(
+  { name: 'note_comment' },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    noteId: t.u64().index('btree'),
+    author: t.identity(),
+    text: t.string(),
+    createdAt: t.timestamp(),
+  },
+);
+
+/** Pregunta (3.7). status: 'open' | 'resolved'. */
+const question = table(
+  { name: 'question' },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    subjectId: t.u64().index('btree'),
+    topic: t.string(),
+    title: t.string(),
+    body: t.string(),
+    author: t.identity(),
+    status: t.string(),
+    acceptedAnswerId: t.u64().optional(),
+    resolvedAt: t.timestamp().optional(),
+    createdAt: t.timestamp(),
+  },
+);
+
+const answer = table(
+  { name: 'answer' },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    questionId: t.u64().index('btree'),
+    author: t.identity(),
+    body: t.string(),
+    createdAt: t.timestamp(),
+  },
+);
+
+/** Última vez que cada miembro marcó las novedades como vistas (7.1). */
+const lastSeen = table(
+  { name: 'last_seen' },
+  {
+    identity: t.identity().primaryKey(),
+    at: t.timestamp(),
+  },
+);
+
 const spacetimedb = schema({
   appConfig,
   invitation,
@@ -165,6 +262,13 @@ const spacetimedb = schema({
   directMessage,
   birthday,
   changeLog,
+  activity,
+  evidence,
+  note,
+  noteComment,
+  question,
+  answer,
+  lastSeen,
 });
 export default spacetimedb;
 
@@ -476,6 +580,204 @@ export const withdraw_birthday = spacetimedb.reducer((ctx) => {
 });
 
 // ---------------------------------------------------------------------------
+// Actividades, notas y preguntas
+// ---------------------------------------------------------------------------
+
+function requireSubject(ctx: Ctx, subjectId: bigint) {
+  if (!ctx.db.subject.id.find(subjectId)) throw new SenderError('La materia no existe.');
+}
+
+const NOTE_VISIBILITY = ['personal', 'group'];
+const NOTE_SOURCE = ['student', 'teacher', 'ai'];
+
+export const create_activity = spacetimedb.reducer(
+  {
+    subjectId: t.u64(),
+    topic: t.string(),
+    date: t.string(),
+    title: t.string(),
+    objective: t.string(),
+    instructions: t.string(),
+  },
+  (ctx, { subjectId, topic, date, title, objective, instructions }) => {
+    activeMember(ctx);
+    requireSubject(ctx, subjectId);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new SenderError('Fecha inválida.');
+    const row = ctx.db.activity.insert({
+      id: 0n,
+      subjectId,
+      topic: topic.trim(),
+      date,
+      title: requireText(title, 'El título', 200),
+      objective: objective.trim(),
+      instructions: instructions.trim(),
+      createdBy: ctx.sender,
+      createdAt: ctx.timestamp,
+    });
+    log(ctx, 'create', 'activity', row.id);
+  },
+);
+
+export const add_evidence = spacetimedb.reducer(
+  { activityId: t.u64(), content: t.string(), participants: t.array(t.identity()) },
+  (ctx, { activityId, content, participants }) => {
+    activeMember(ctx);
+    if (!ctx.db.activity.id.find(activityId)) throw new SenderError('La actividad no existe.');
+    const team = new Map([[ctx.sender.toHexString(), ctx.sender]]);
+    for (const p of participants) {
+      const row = ctx.db.member.identity.find(p);
+      if (!row || row.status !== 'active') throw new SenderError('Un participante no es miembro activo.');
+      team.set(p.toHexString(), p);
+    }
+    ctx.db.evidence.insert({
+      id: 0n,
+      activityId,
+      author: ctx.sender,
+      participants: [...team.values()],
+      content: requireText(content, 'La evidencia', 20_000),
+      createdAt: ctx.timestamp,
+    });
+  },
+);
+
+export const save_note = spacetimedb.reducer(
+  {
+    noteId: t.u64().optional(),
+    subjectId: t.u64(),
+    topic: t.string(),
+    title: t.string(),
+    body: t.string(),
+    tags: t.array(t.string()),
+    visibility: t.string(),
+    source: t.string(),
+  },
+  (ctx, { noteId, subjectId, topic, title, body, tags, visibility, source }) => {
+    activeMember(ctx);
+    requireSubject(ctx, subjectId);
+    if (!NOTE_VISIBILITY.includes(visibility)) throw new SenderError('Visibilidad inválida.');
+    if (!NOTE_SOURCE.includes(source)) throw new SenderError('Origen inválido.');
+    const fields = {
+      subjectId,
+      topic: topic.trim(),
+      title: requireText(title, 'El título', 200),
+      body: requireText(body, 'El contenido', 50_000),
+      tags: [...new Set(tags.map((tag) => tag.trim().toLowerCase()).filter(Boolean))],
+      visibility,
+      source,
+    };
+    if (noteId === undefined) {
+      const row = ctx.db.note.insert({
+        id: 0n,
+        ...fields,
+        author: ctx.sender,
+        version: 1,
+        createdAt: ctx.timestamp,
+        updatedAt: ctx.timestamp,
+      });
+      log(ctx, 'create', 'note', row.id);
+      return;
+    }
+    const row = ctx.db.note.id.find(noteId);
+    if (!row) throw new SenderError('La nota no existe.');
+    if (!row.author.isEqual(ctx.sender)) {
+      throw new SenderError('Solo su autor edita esta nota; los demás pueden comentar.');
+    }
+    ctx.db.note.id.update({ ...row, ...fields, version: row.version + 1, updatedAt: ctx.timestamp });
+    log(ctx, 'update', 'note', noteId);
+  },
+);
+
+export const comment_note = spacetimedb.reducer(
+  { noteId: t.u64(), text: t.string() },
+  (ctx, { noteId, text }) => {
+    activeMember(ctx);
+    const row = ctx.db.note.id.find(noteId);
+    if (!row || (row.visibility !== 'group' && !row.author.isEqual(ctx.sender))) {
+      throw new SenderError('La nota no existe.');
+    }
+    ctx.db.noteComment.insert({
+      id: 0n,
+      noteId,
+      author: ctx.sender,
+      text: requireText(text, 'El comentario'),
+      createdAt: ctx.timestamp,
+    });
+  },
+);
+
+export const ask_question = spacetimedb.reducer(
+  { subjectId: t.u64(), topic: t.string(), title: t.string(), body: t.string() },
+  (ctx, { subjectId, topic, title, body }) => {
+    activeMember(ctx);
+    requireSubject(ctx, subjectId);
+    ctx.db.question.insert({
+      id: 0n,
+      subjectId,
+      topic: topic.trim(),
+      title: requireText(title, 'La pregunta', 200),
+      body: body.trim(),
+      author: ctx.sender,
+      status: 'open',
+      acceptedAnswerId: undefined,
+      resolvedAt: undefined,
+      createdAt: ctx.timestamp,
+    });
+  },
+);
+
+export const answer_question = spacetimedb.reducer(
+  { questionId: t.u64(), body: t.string() },
+  (ctx, { questionId, body }) => {
+    activeMember(ctx);
+    if (!ctx.db.question.id.find(questionId)) throw new SenderError('La pregunta no existe.');
+    ctx.db.answer.insert({
+      id: 0n,
+      questionId,
+      author: ctx.sender,
+      body: requireText(body, 'La respuesta', 20_000),
+      createdAt: ctx.timestamp,
+    });
+  },
+);
+
+function ownQuestion(ctx: Ctx, questionId: bigint) {
+  activeMember(ctx);
+  const row = ctx.db.question.id.find(questionId);
+  if (!row) throw new SenderError('La pregunta no existe.');
+  if (!row.author.isEqual(ctx.sender)) throw new SenderError('Solo quien preguntó puede hacer esto.');
+  return row;
+}
+
+export const accept_answer = spacetimedb.reducer(
+  { questionId: t.u64(), answerId: t.u64() },
+  (ctx, { questionId, answerId }) => {
+    const row = ctx.db.answer.id.find(answerId);
+    const q = ownQuestion(ctx, questionId);
+    if (!row || row.questionId !== questionId) {
+      throw new SenderError('La respuesta no es de esta pregunta.');
+    }
+    ctx.db.question.id.update({
+      ...q,
+      status: 'resolved',
+      acceptedAnswerId: answerId,
+      resolvedAt: ctx.timestamp,
+    });
+  },
+);
+
+export const reopen_question = spacetimedb.reducer({ questionId: t.u64() }, (ctx, { questionId }) => {
+  const q = ownQuestion(ctx, questionId);
+  ctx.db.question.id.update({ ...q, status: 'open', acceptedAnswerId: undefined, resolvedAt: undefined });
+});
+
+export const mark_seen = spacetimedb.reducer((ctx) => {
+  activeMember(ctx);
+  const row = { identity: ctx.sender, at: ctx.timestamp };
+  if (ctx.db.lastSeen.identity.find(ctx.sender)) ctx.db.lastSeen.identity.update(row);
+  else ctx.db.lastSeen.insert(row);
+});
+
+// ---------------------------------------------------------------------------
 // Vistas: lo único que leen los clientes
 // ---------------------------------------------------------------------------
 
@@ -567,5 +869,57 @@ export const my_direct_messages = spacetimedb.view(
       ...ctx.db.directConversation.userB.filter(ctx.sender),
     ];
     return conversations.flatMap((c) => [...ctx.db.directMessage.conversationId.filter(c.id)]);
+  },
+);
+
+export const activities = spacetimedb.view(
+  { name: 'activities', public: true },
+  t.array(activity.rowType),
+  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.activity.iter()] : []),
+);
+
+export const evidences = spacetimedb.view(
+  { name: 'evidences', public: true },
+  t.array(evidence.rowType),
+  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.evidence.iter()] : []),
+);
+
+/** Notas del grupo y las personales propias; nunca las personales de otros. */
+function visibleNotes(db: ViewDb, sender: Ctx['sender']) {
+  if (!isActive(db, sender)) return [];
+  return [...db.note.iter()].filter((n) => n.visibility === 'group' || n.author.isEqual(sender));
+}
+
+export const notes = spacetimedb.view(
+  { name: 'notes', public: true },
+  t.array(note.rowType),
+  (ctx) => visibleNotes(ctx.db, ctx.sender),
+);
+
+export const note_comments = spacetimedb.view(
+  { name: 'note_comments', public: true },
+  t.array(noteComment.rowType),
+  (ctx) =>
+    visibleNotes(ctx.db, ctx.sender).flatMap((n) => [...ctx.db.noteComment.noteId.filter(n.id)]),
+);
+
+export const questions = spacetimedb.view(
+  { name: 'questions', public: true },
+  t.array(question.rowType),
+  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.question.iter()] : []),
+);
+
+export const answers = spacetimedb.view(
+  { name: 'answers', public: true },
+  t.array(answer.rowType),
+  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.answer.iter()] : []),
+);
+
+export const my_last_seen = spacetimedb.view(
+  { name: 'my_last_seen', public: true },
+  t.array(lastSeen.rowType),
+  (ctx) => {
+    const row = ctx.db.lastSeen.identity.find(ctx.sender);
+    return row ? [row] : [];
   },
 );
