@@ -23,6 +23,7 @@ import { RichText } from '../components/RichText';
 import { WorkArchive } from '../components/WorkArchive';
 import { useAction } from '../components/useAction';
 import { formatDate, formatMediumDate, memberName } from '../lib/format';
+import { lastPeriod, rememberPeriod } from '../lib/period';
 import { authorsLabel, bySubject, filterWorks, NO_TERM, sortRecent, type WorkFilters } from '../lib/works';
 
 /** Opción de los selectores para crear una materia o un parcial al publicar. */
@@ -34,26 +35,6 @@ const uploadError = (error: unknown, file: File) =>
   error instanceof Error ? error.message : `No se pudo subir «${file.name}».`;
 
 const PERIODS = Array.from({ length: PERIOD_COUNT }, (_, i) => i + 1);
-
-/** El formulario abre en el cuatrimestre donde publicaste la última vez. */
-const LAST_PERIOD_KEY = 'b20:ultimo-cuatrimestre';
-
-function lastPeriod(): number {
-  try {
-    const period = Number(localStorage.getItem(LAST_PERIOD_KEY));
-    return isValidPeriod(period) ? period : 1;
-  } catch {
-    return 1;
-  }
-}
-
-function rememberPeriod(period: number) {
-  try {
-    localStorage.setItem(LAST_PERIOD_KEY, String(period));
-  } catch {
-    // Sin almacenamiento local (modo privado): el formulario abrirá en el cuatrimestre 1.
-  }
-}
 
 /** Tipo de trabajo: tarea o actividad, exposición o examen. */
 function KindPicker({ value, onChange }: { value: WorkKind; onChange: (kind: WorkKind) => void }) {

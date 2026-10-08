@@ -10,7 +10,7 @@ import { PublishWorkPage, WorkPage, WorksPage } from './pages/WorksPage';
 import { ProfilePage, ProfilesPage } from './pages/ProfilesPage';
 import { BirthdaysPage } from './pages/BirthdaysPage';
 import { WhatsNewPage } from './pages/WhatsNewPage';
-import { ActivitiesPage, ActivityPage } from './pages/ActivitiesPage';
+import { ActivitiesPage, ActivityPage, NewActivityPage } from './pages/ActivitiesPage';
 import { NoteFormPage, NotePage, NotesPage } from './pages/NotesPage';
 import { AskQuestionPage, QuestionPage, QuestionsPage } from './pages/QuestionsPage';
 import { SpacetimeProvider } from './lib/spacetime';
@@ -50,6 +50,7 @@ const router = createHashRouter([
       { path: 'perfil/:memberId', element: <ProfilePage /> },
       { path: 'm/cumpleanos', element: <BirthdaysPage /> },
       { path: 'm/actividades', element: <ActivitiesPage /> },
+      { path: 'm/actividades/nueva', element: <NewActivityPage /> },
       { path: 'm/actividades/:activityId', element: <ActivityPage /> },
       { path: 'm/notas', element: <NotesPage /> },
       { path: 'm/notas/nueva', element: <NoteFormPage /> },

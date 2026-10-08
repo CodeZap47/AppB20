@@ -57,6 +57,52 @@ export function formatDayMonth(day: number, month: number): string {
   return dayMonthFormat.format(new Date(2000, month - 1, day));
 }
 
+const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/** Convierte «AAAA-MM-DD» en una fecha local, sin el desfase de leerla como UTC. */
+export function parseDay(day: string): Date {
+  const [year = 1970, month = 1, date = 1] = day.split('-').map(Number);
+  return new Date(year, month - 1, date);
+}
+
+/** Fecha local como «AAAA-MM-DD», el formato de los campos de fecha. */
+export function toDay(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+const monthFormat = new Intl.DateTimeFormat('es-MX', { month: 'long', year: 'numeric' });
+const shortMonthFormat = new Intl.DateTimeFormat('es-MX', { month: 'short' });
+const longDayFormat = new Intl.DateTimeFormat('es-MX', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+});
+
+/** «Octubre de 2026». */
+export function formatMonth(date: Date): string {
+  return capitalize(monthFormat.format(date));
+}
+
+/** «oct», para el recuadro de fecha de una lista. */
+export function formatShortMonth(date: Date): string {
+  return shortMonthFormat.format(date).replace('.', '');
+}
+
+/** «Martes, 6 de octubre de 2026». */
+export function formatLongDay(date: Date): string {
+  return capitalize(longDayFormat.format(date));
+}
+
+const peopleFormat = new Intl.ListFormat('es', { style: 'long', type: 'conjunction' });
+
+/** Lista completa de nombres: «Tú, Ana López y Luis Pérez». Quien mira va primero. */
+export function peopleList(ids: Id[], members: Member[], meId?: Id): string {
+  const ordered = [...ids].sort((a, b) => Number(b === meId) - Number(a === meId));
+  return peopleFormat.format(ordered.map((id) => (id === meId ? 'Tú' : memberName(members, id))));
+}
+
 export function memberName(members: Member[], id: Id): string {
   return members.find((m) => m.id === id)?.displayName ?? 'Miembro desconocido';
 }

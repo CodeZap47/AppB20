@@ -33,6 +33,7 @@ import type {
   Work,
   WorkFile,
 } from './types';
+import { toDay } from '../lib/format';
 
 /**
  * Fuente de datos en memoria para desarrollar la interfaz antes de conectar SpacetimeDB.
@@ -515,6 +516,7 @@ export function createDemoState(now = new Date()): State {
   const LOGICA = 'IDSE-05010103';
   const FUNDAMENTOS = 'IDSE-05010104';
   const minutesAgo = (n: number) => new Date(now.getTime() - n * 60_000);
+  const daysAgo = (n: number) => toDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - n));
   const members: Member[] = [1, 2, 3, 4].map((n) => ({
     id: `demo-${n}`,
     displayName: `Alumno de prueba ${n}`,
@@ -679,17 +681,51 @@ export function createDemoState(now = new Date()): State {
       { id: 'd3', conversationId: 'c2', senderId: 'demo-3', text: 'Respuesta privada de prueba.', sentAt: minutesAgo(1590) },
     ],
     birthdays: [{ memberId: 'demo-3', day: 15, month: 11, remind: true }],
+    // Sesiones en fechas distintas: con una evidencia, con varios equipos y sin ninguna.
     activities: [
       {
         id: 'a1',
         subjectId: LOGICA,
         topic: 'Tema de prueba',
-        date: '2026-10-06',
+        date: daysAgo(2),
         title: 'Actividad de prueba en clase',
         objective: 'Objetivo de ejemplo.',
         instructions: 'Instrucciones de ejemplo.',
         createdBy: 'demo-2',
         createdAt: minutesAgo(2900),
+      },
+      {
+        id: 'a2',
+        subjectId: FUNDAMENTOS,
+        topic: 'Ciclos',
+        date: daysAgo(1),
+        title: 'Práctica de prueba en equipos',
+        objective: 'Objetivo de ejemplo: resolver el mismo ejercicio de dos maneras y compararlas.',
+        instructions: 'Instrucciones de ejemplo:\n1. Formen equipos.\n2. Resuelvan el ejercicio.\n3. Suban su evidencia.',
+        createdBy: 'demo-3',
+        createdAt: minutesAgo(1400),
+      },
+      {
+        id: 'a3',
+        subjectId: LOGICA,
+        topic: '',
+        date: daysAgo(9),
+        title: 'Dinámica de prueba sin evidencias',
+        objective: '',
+        instructions: '',
+        createdBy: 'demo-1',
+        createdAt: minutesAgo(12_900),
+      },
+      {
+        id: 'a4',
+        subjectId: FUNDAMENTOS,
+        topic: 'Tema de prueba',
+        date: daysAgo(36),
+        title: 'Laboratorio de prueba del mes pasado',
+        objective: 'Objetivo de ejemplo.',
+        instructions: 'Instrucciones de ejemplo.',
+        createdBy: 'demo-4',
+        createdAt: minutesAgo(51_800),
       },
     ],
     evidences: [
@@ -700,6 +736,32 @@ export function createDemoState(now = new Date()): State {
         participantIds: ['demo-2', 'demo-3'],
         content: 'Evidencia de ejemplo del equipo.',
         createdAt: minutesAgo(2800),
+      },
+      {
+        id: 'e2',
+        activityId: 'a2',
+        authorId: 'demo-1',
+        participantIds: ['demo-1', 'demo-4'],
+        content:
+          'Evidencia de ejemplo con código:\n```js\nfor (let i = 1; i <= 3; i++) {\n  console.log(i);\n}\n```\n' +
+          'Observación de ejemplo: funcionó a la primera.',
+        createdAt: minutesAgo(1300),
+      },
+      {
+        id: 'e3',
+        activityId: 'a2',
+        authorId: 'demo-3',
+        participantIds: ['demo-3'],
+        content: 'Otra evidencia de ejemplo, de un equipo distinto. No reemplaza a la anterior.',
+        createdAt: minutesAgo(1250),
+      },
+      {
+        id: 'e4',
+        activityId: 'a4',
+        authorId: 'demo-4',
+        participantIds: ['demo-4', 'demo-2'],
+        content: 'Evidencia de ejemplo del mes pasado.',
+        createdAt: minutesAgo(51_700),
       },
     ],
     notes: [
