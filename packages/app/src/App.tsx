@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useMemo } from 'react';
 import { createHashRouter, RouterProvider } from 'react-router';
+import { ErrorPage } from './components/ErrorPage';
 import { Layout } from './components/Layout';
 import { HomePage } from './pages/HomePage';
 import { ModulePage } from './pages/ModulePage';
@@ -33,50 +34,64 @@ import type { Platform } from './platform';
 const router = createHashRouter([
   {
     element: <Layout />,
+    // Si el propio armazón falla no queda menú: el aviso ocupa toda la pantalla.
+    errorElement: <ErrorPage />,
     children: [
-      { index: true, element: <WhatsNewPage /> },
-      { path: 'm/inicio', element: <WhatsNewPage /> },
-      { path: 'modulos', element: <HomePage /> },
       {
-        path: 'm/mensajes',
-        element: <MessagesLayout />,
-        // `fill`: la pantalla ocupa todo el alto y se desplaza por dentro (ver Layout).
-        handle: { fill: true },
+        // Un fallo en una pantalla se muestra dentro del armazón, con el menú a la mano.
+        errorElement: <ErrorPage />,
         children: [
-          { index: true, element: <GroupThread /> },
-          { path: 'directos', element: <ThreadPlaceholder /> },
-          { path: 'directos/:conversationId', element: <DirectThread /> },
+          { index: true, element: <WhatsNewPage /> },
+          { path: 'm/inicio', element: <WhatsNewPage /> },
+          { path: 'modulos', element: <HomePage /> },
+          {
+            path: 'm/mensajes',
+            element: <MessagesLayout />,
+            // `fill`: la pantalla ocupa todo el alto y se desplaza por dentro (ver Layout).
+            handle: { fill: true },
+            children: [
+              { index: true, element: <GroupThread /> },
+              { path: 'directos', element: <ThreadPlaceholder /> },
+              { path: 'directos/:conversationId', element: <DirectThread /> },
+            ],
+          },
+          { path: 'm/tareas', element: <AssignmentsPage /> },
+          { path: 'm/tareas/nueva', element: <AssignmentFormPage /> },
+          { path: 'm/tareas/:assignmentId', element: <AssignmentPage /> },
+          { path: 'm/tareas/:assignmentId/editar', element: <AssignmentFormPage /> },
+          { path: 'm/tareas/:assignmentId/subir', element: <SubmitWorkPage /> },
+          { path: 'm/perfiles', element: <ProfilesPage /> },
+          { path: 'perfil/:memberId', element: <ProfilePage /> },
+          { path: 'm/cumpleanos', element: <BirthdaysPage /> },
+          { path: 'm/actividades', element: <ActivitiesPage /> },
+          { path: 'm/actividades/nueva', element: <ActivityFormPage /> },
+          { path: 'm/actividades/:activityId', element: <ActivityPage /> },
+          { path: 'm/actividades/:activityId/editar', element: <ActivityFormPage /> },
+          { path: 'm/notas', element: <NotesPage /> },
+          { path: 'm/notas/nueva', element: <NoteFormPage /> },
+          { path: 'm/notas/:noteId', element: <NotePage /> },
+          { path: 'm/notas/:noteId/editar', element: <NoteFormPage /> },
+          { path: 'm/preguntas', element: <QuestionsPage /> },
+          { path: 'm/preguntas/nueva', element: <AskQuestionPage /> },
+          { path: 'm/preguntas/:questionId', element: <QuestionPage /> },
+          { path: 'm/:moduleId', element: <ModulePage /> },
+          { path: 'ajustes', element: <SettingsPage /> },
+          { path: 'instalar', element: <InstallPage /> },
         ],
       },
-      { path: 'm/tareas', element: <AssignmentsPage /> },
-      { path: 'm/tareas/nueva', element: <AssignmentFormPage /> },
-      { path: 'm/tareas/:assignmentId', element: <AssignmentPage /> },
-      { path: 'm/tareas/:assignmentId/editar', element: <AssignmentFormPage /> },
-      { path: 'm/tareas/:assignmentId/subir', element: <SubmitWorkPage /> },
-      { path: 'm/perfiles', element: <ProfilesPage /> },
-      { path: 'perfil/:memberId', element: <ProfilePage /> },
-      { path: 'm/cumpleanos', element: <BirthdaysPage /> },
-      { path: 'm/actividades', element: <ActivitiesPage /> },
-      { path: 'm/actividades/nueva', element: <ActivityFormPage /> },
-      { path: 'm/actividades/:activityId', element: <ActivityPage /> },
-      { path: 'm/actividades/:activityId/editar', element: <ActivityFormPage /> },
-      { path: 'm/notas', element: <NotesPage /> },
-      { path: 'm/notas/nueva', element: <NoteFormPage /> },
-      { path: 'm/notas/:noteId', element: <NotePage /> },
-      { path: 'm/notas/:noteId/editar', element: <NoteFormPage /> },
-      { path: 'm/preguntas', element: <QuestionsPage /> },
-      { path: 'm/preguntas/nueva', element: <AskQuestionPage /> },
-      { path: 'm/preguntas/:questionId', element: <QuestionPage /> },
-      { path: 'm/:moduleId', element: <ModulePage /> },
-      { path: 'ajustes', element: <SettingsPage /> },
-      { path: 'instalar', element: <InstallPage /> },
     ],
   },
 ]);
 
 export function App({ platform, source }: { platform: Platform; source?: DataSource }) {
-  // Hasta conectar SpacetimeDB, la app usa datos de prueba en memoria.
-  const [data] = useState(() => source ?? new DemoDataSource(createDemoState(), 'demo-1'));
+  // Hasta conectar SpacetimeDB, la app usa datos de prueba en memoria. Dependen de
+  // `createDemoState` a propósito: en desarrollo, cuando ese módulo se recarga en caliente
+  // (porque cambió la forma de los datos), se crean de nuevo. Si no, el estado en memoria
+  // conserva la forma anterior y las pantallas que esperan los campos nuevos fallan.
+  const data = useMemo(
+    () => source ?? new DemoDataSource(createDemoState(), 'demo-1'),
+    [source, createDemoState],
+  );
   return (
     <PlatformContext value={platform}>
       <SpacetimeProvider>

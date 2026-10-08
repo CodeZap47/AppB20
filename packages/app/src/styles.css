@@ -2077,3 +2077,16 @@ fieldset.field > legend {
   margin: 0.5rem 0 0;
   font-size: 0.85rem;
 }
+
+/* ---- Pantalla de error ---- */
+
+.error-page__actions {
+  justify-content: center;
+}
+
+.error-page__detail {
+  display: block;
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
