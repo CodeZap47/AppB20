@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">B20</string>
+    <string name="title_activity_main">B20</string>
+    <string name="package_name">mx.b20.app</string>
+    <string name="custom_url_scheme">mx.b20.app</string>
+</resources>

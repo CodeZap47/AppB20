@@ -1,0 +1,26 @@
+{
+  "name": "@b20/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Web y PWA instalable (iPhone con \u00abA\u00f1adir a pantalla de inicio\u00bb).",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.sw.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.sw.json"
+  },
+  "dependencies": {
+    "@b20/app": "*",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "vite": "^8.3.4",
+    "vite-plugin-pwa": "^2.0.0",
+    "workbox-precaching": "^7.4.1"
+  }
+}

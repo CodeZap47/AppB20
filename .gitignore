@@ -1,0 +1,30 @@
+# Dependencias y compilaciones
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+coverage/
+
+# Variables de entorno y secretos (nunca subir claves reales)
+.env
+.env.*
+!.env.example
+*.keystore
+*.jks
+google-services.json
+GoogleService-Info.plist
+service-account*.json
+
+# Android / Capacitor
+apps/android/android/app/build/
+apps/android/android/.gradle/
+apps/android/android/local.properties
+apps/android/android/app/src/main/assets/public/
+apps/android/android/capacitor-cordova-android-plugins/
+
+# Editor y sistema
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.log

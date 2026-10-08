@@ -1,0 +1,14 @@
+{
+  "name": "@b20/spacetime-module",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Módulo de servidor SpacetimeDB de App B20 (tablas, reducers y vistas con permisos).",
+  "main": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "spacetimedb": "^2.11.0"
+  }
+}

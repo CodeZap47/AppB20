@@ -1,0 +1,20 @@
+{
+  "name": "@b20/android",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "APK Android con Capacitor; usa la compilación de apps/web en modo capacitor.",
+  "scripts": {
+    "add": "cap add android",
+    "sync": "cap sync android",
+    "open": "cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/push-notifications": "^8.1.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.3"
+  }
+}

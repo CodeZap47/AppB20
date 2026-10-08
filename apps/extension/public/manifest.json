@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "App B20",
+  "short_name": "B20",
+  "description": "Plataforma colaborativa del grupo B20.",
+  "version": "0.0.1",
+  "minimum_chrome_version": "116",
+  "action": {
+    "default_title": "Abrir B20"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": ["sidePanel", "storage"],
+  "icons": {
+    "128": "icons/icon-128.png"
+  }
+}
