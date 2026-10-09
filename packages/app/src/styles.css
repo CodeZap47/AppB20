@@ -2550,3 +2550,328 @@ fieldset.field > legend {
     break-inside: auto;
   }
 }
+
+/* Contribuciones (3.6): leaderboard con podio, tu lugar y la lista del grupo. */
+.board__period {
+  font-size: 0.85rem;
+}
+
+.board__title {
+  margin: 0 0 0.9rem;
+  font-size: 1.1rem;
+  text-align: center;
+}
+
+.board__subtitle {
+  margin: 1.5rem 0 0.4rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.podium {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.podium__row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.medal,
+.podium__place {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.medal--1 {
+  color: #d4a72c;
+}
+
+.medal--2 {
+  color: #9aa3ad;
+}
+
+.medal--3 {
+  color: #c07a45;
+}
+
+.medal__rank {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.podium__place {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  /* Cada lugar un poco más corto que el anterior, como en el podio de la referencia. */
+  width: calc(var(--pill-scale, 1) * 26rem);
+  max-width: calc(var(--pill-scale, 1) * 100%);
+  min-width: 0;
+  padding: 0.4rem 0.4rem 0.4rem 1.1rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 5%, var(--surface));
+  color: var(--text);
+  transition: background 0.15s;
+}
+
+.pill:hover {
+  background: color-mix(in srgb, var(--text) 9%, var(--surface));
+}
+
+.pill--me {
+  background: var(--selected);
+}
+
+.pill--me:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.pill__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pill__name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pill__points {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.podium__gap {
+  margin: 0.6rem 0 0.4rem;
+  padding-left: 3rem;
+  max-width: 29rem;
+  text-align: center;
+  letter-spacing: 0.15em;
+  color: var(--muted);
+}
+
+.ranking {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ranking__row {
+  display: grid;
+  grid-template-columns: 1.75rem auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.4rem;
+  border-radius: var(--radius);
+  color: var(--text);
+}
+
+.ranking__row:hover {
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.ranking__row--me {
+  background: var(--selected);
+}
+
+.ranking__place {
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.ranking__who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ranking__name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.ranking__summary {
+  font-size: 0.85rem;
+}
+
+.ranking__points {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.recognitions {
+  margin: 0.3rem 0 0;
+}
+
+.badge--recognition {
+  color: #9a6b00;
+  border-color: currentColor;
+}
+
+@media (prefers-color-scheme: dark) {
+  .badge--recognition {
+    color: #e6bd55;
+  }
+}
+
+.my-points {
+  margin: 0 0 0.5rem;
+}
+
+.my-points strong {
+  font-size: 1.6rem;
+}
+
+.rules__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  list-style: none;
+  font-size: 0.88rem;
+}
+
+.rules__list li {
+  display: flex;
+  gap: 0.6rem;
+}
+
+/* En el contenido principal las reglas caben en dos columnas. */
+.detail__main .rules__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 0.6rem 1.25rem;
+}
+
+.rules__points {
+  flex: none;
+  min-width: 2.2rem;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.rules > p {
+  font-size: 0.85rem;
+}
+
+.contributor {
+  align-items: center;
+}
+
+.contributor > .avatar {
+  align-self: flex-start;
+}
+
+.ledger {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ledger__row {
+  display: grid;
+  grid-template-columns: 2.4rem minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: baseline;
+  padding: 0.6rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.ledger__row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.ledger__points {
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.ledger__row--skipped .ledger__points {
+  color: var(--muted);
+}
+
+.ledger__what {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ledger__kind {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.ledger__note {
+  font-size: 0.82rem;
+  color: #a35b00;
+}
+
+@media (prefers-color-scheme: dark) {
+  .ledger__note {
+    color: #f0b366;
+  }
+}
+
+.ledger__when {
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.tally {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.tally th {
+  font-weight: 400;
+  text-align: left;
+  padding: 0.3rem 0;
+}
+
+.tally td {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  vertical-align: top;
+  padding: 0.3rem 0 0.3rem 0.5rem;
+}
+
+.tally tfoot th,
+.tally tfoot td {
+  border-top: 1px solid var(--border);
+  font-weight: 700;
+}

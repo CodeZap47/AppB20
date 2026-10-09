@@ -878,7 +878,7 @@ export function createDemoState(now = new Date()): State {
   const FUNDAMENTOS = 'IDSE-05010104';
   const minutesAgo = (n: number) => new Date(now.getTime() - n * 60_000);
   const daysAgo = (n: number) => toDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - n));
-  const members: Member[] = [1, 2, 3, 4].map((n) => ({
+  const members: Member[] = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({
     id: `demo-${n}`,
     displayName: `Alumno de prueba ${n}`,
     status: 'active',
@@ -1133,6 +1133,16 @@ export function createDemoState(now = new Date()): State {
         updatedAt: minutesAgo(240),
       },
       {
+        id: 'w7',
+        assignmentId: 't4',
+        title: 'Solución de prueba en pareja',
+        description: 'Ejemplo de un trabajo de otra pareja en la misma tarea.',
+        version: 1,
+        authorIds: ['demo-6', 'demo-8'],
+        createdAt: minutesAgo(800),
+        updatedAt: minutesAgo(800),
+      },
+      {
         id: 'w5',
         assignmentId: 't5',
         title: '',
@@ -1246,6 +1256,14 @@ export function createDemoState(now = new Date()): State {
         createdAt: minutesAgo(1250),
       },
       {
+        id: 'e5',
+        activityId: 'a1',
+        authorId: 'demo-8',
+        participantIds: ['demo-8', 'demo-7'],
+        content: 'Evidencia de ejemplo de otro equipo.',
+        createdAt: minutesAgo(2700),
+      },
+      {
         id: 'e4',
         activityId: 'a4',
         authorId: 'demo-4',
@@ -1270,6 +1288,34 @@ export function createDemoState(now = new Date()): State {
         updatedAt: minutesAgo(120),
       },
       {
+        id: 'n3',
+        subjectId: FUNDAMENTOS,
+        topic: 'Ciclos',
+        title: 'Resumen de prueba de ciclos',
+        body: 'Contenido de ejemplo de otro compañero.',
+        tags: ['ejemplo'],
+        visibility: 'group',
+        source: 'student',
+        authorId: 'demo-6',
+        version: 1,
+        createdAt: minutesAgo(1700),
+        updatedAt: minutesAgo(1700),
+      },
+      {
+        id: 'n4',
+        subjectId: LOGICA,
+        topic: 'Tema de prueba',
+        title: 'Material de prueba del docente',
+        body: 'Ejemplo de material que compartió el docente.',
+        tags: [],
+        visibility: 'group',
+        source: 'teacher',
+        authorId: 'demo-7',
+        version: 1,
+        createdAt: minutesAgo(4300),
+        updatedAt: minutesAgo(4300),
+      },
+      {
         id: 'n2',
         subjectId: FUNDAMENTOS,
         topic: '',
@@ -1284,7 +1330,23 @@ export function createDemoState(now = new Date()): State {
         updatedAt: minutesAgo(90),
       },
     ],
-    noteComments: [],
+    // Propuestas de corrección: suman a quien comenta en el apunte de alguien más.
+    noteComments: [
+      {
+        id: 'nc1',
+        noteId: 'n3',
+        authorId: 'demo-5',
+        text: 'Comentario de prueba: falta un ejemplo con while.',
+        createdAt: minutesAgo(1650),
+      },
+      {
+        id: 'nc2',
+        noteId: 'n4',
+        authorId: 'demo-5',
+        text: 'Comentario de prueba: el segundo ejercicio tiene un error de dedo.',
+        createdAt: minutesAgo(4200),
+      },
+    ],
     questions: [
       {
         id: 'q1',
@@ -1296,9 +1358,39 @@ export function createDemoState(now = new Date()): State {
         status: 'open',
         createdAt: minutesAgo(60),
       },
+      // Resueltas, con respuesta aceptada: dan el reconocimiento de buenas explicaciones.
+      {
+        id: 'q2',
+        subjectId: FUNDAMENTOS,
+        topic: 'Ciclos',
+        title: '¿Pregunta de prueba sobre ciclos?',
+        body: 'Descripción de ejemplo.',
+        authorId: 'demo-4',
+        status: 'resolved',
+        acceptedAnswerId: 'an2',
+        resolvedAt: minutesAgo(2300),
+        createdAt: minutesAgo(2600),
+      },
+      {
+        id: 'q3',
+        subjectId: LOGICA,
+        topic: 'Tema de prueba',
+        title: '¿Otra pregunta de prueba?',
+        body: 'Descripción de ejemplo.',
+        authorId: 'demo-1',
+        status: 'resolved',
+        acceptedAnswerId: 'an4',
+        resolvedAt: minutesAgo(5000),
+        createdAt: minutesAgo(5200),
+      },
     ],
     answers: [
       { id: 'r1', questionId: 'q1', authorId: 'demo-2', body: 'Respuesta de ejemplo.', createdAt: minutesAgo(40) },
+      { id: 'an2', questionId: 'q2', authorId: 'demo-5', body: 'Respuesta de ejemplo, aceptada.', createdAt: minutesAgo(2500) },
+      { id: 'an3', questionId: 'q2', authorId: 'demo-6', body: 'Otra respuesta de ejemplo.', createdAt: minutesAgo(2450) },
+      // Segunda respuesta de la misma persona en la misma pregunta: se ve, pero no suma otra vez.
+      { id: 'an5', questionId: 'q2', authorId: 'demo-6', body: 'Complemento de ejemplo a mi respuesta.', createdAt: minutesAgo(2400) },
+      { id: 'an4', questionId: 'q3', authorId: 'demo-5', body: 'Respuesta de ejemplo, aceptada.', createdAt: minutesAgo(5100) },
     ],
     // Guía de prueba de Lógica, parcial 1: fuentes procesadas y pendientes, un tema sin
     // cobertura, una fuente que cambió después de agregarla y revisiones de compañeros.
