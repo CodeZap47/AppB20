@@ -2,12 +2,14 @@ import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useMatch, useNavigate, useParams } from 'react-router';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import { Avatar } from '../components/Avatar';
-import { Composer } from '../components/Composer';
+import { ChatToolsLinks, Composer, type ComposerMode } from '../components/Composer';
 import { Icon } from '../components/Icon';
-import { MessageList } from '../components/MessageList';
+import { MessageList, type MessageHandlers } from '../components/MessageList';
 import { useAction } from '../components/useAction';
+import type { MessageScope } from '../data/types';
 import { formatListTime, memberName } from '../lib/format';
-import { previewText, type ChatMessage } from '../lib/messages';
+import type { ChatMessage } from '../lib/messages';
+import { messagePreview } from '../lib/references';
 import { matches } from '../lib/search';
 
 const GROUP_NAME = 'Canal del salón';
@@ -101,7 +103,7 @@ function ConversationList() {
   const previewOf = (last: ChatMessage | undefined, inGroup: boolean) => {
     if (!last) return 'Sin mensajes todavía';
     const who = last.senderId === me?.id ? 'Tú' : inGroup ? memberName(members, last.senderId) : '';
-    return `${who ? `${who}: ` : ''}${previewText(last.text)}`;
+    return `${who ? `${who}: ` : ''}${messagePreview(last)}`;
   };
 
   const lastGroup = groupMessages.at(-1);
@@ -223,8 +225,11 @@ function ConversationList() {
         {picking && !query && !newPeople.length && (
           <p className="muted chat__list-note">Ya tienes una conversación con cada compañero.</p>
         )}
-        {nothing && query && <p className="muted chat__list-note">Sin resultados para «{query.trim()}».</p>}
+        {nothing && query && (
+          <p className="muted chat__list-note">Sin resultados para «{query.trim()}».</p>
+        )}
       </div>
+      <ChatToolsLinks />
     </aside>
   );
 }
@@ -242,7 +247,11 @@ function ThreadHeader({
 }) {
   return (
     <header className="thread__header">
-      <Link to="/m/mensajes/directos" className="icon-button thread__back" aria-label="Ver todas las conversaciones">
+      <Link
+        to="/m/mensajes/directos"
+        className="icon-button thread__back"
+        aria-label="Ver todas las conversaciones"
+      >
         <Icon name="back" />
       </Link>
       {avatar}
@@ -267,10 +276,49 @@ function ThreadNotice({ title, children }: { title: string; children: ReactNode 
   );
 }
 
+/**
+ * Estado de una conversación: a qué mensaje respondes o cuál editas, y las acciones de cada
+ * mensaje. Enviar respeta ese modo: responde, guarda la edición o manda un mensaje nuevo.
+ */
+function useThread(scope: MessageScope, sendNew: (text: string, replyToId?: string) => unknown) {
+  const source = useDataSource();
+  const { me, members } = useSnapshot();
+  const { error, run } = useAction();
+  const [mode, setMode] = useState<ComposerMode | undefined>();
+
+  const handlers: MessageHandlers = {
+    onReply: (message) =>
+      setMode({
+        kind: 'reply',
+        message,
+        name: message.senderId === me?.id ? 'ti' : memberName(members, message.senderId),
+      }),
+    onEdit: (message) => setMode({ kind: 'edit', message }),
+    onDelete: (message) => {
+      run(() => source.deleteMessage(scope, message.id));
+      if (mode?.message.id === message.id) setMode(undefined);
+    },
+    onReact: (message, emoji) => run(() => source.toggleReaction(scope, message.id, emoji)),
+  };
+
+  const onSend = (text: string) => {
+    const ok =
+      run(() => {
+        if (mode?.kind === 'edit') source.editMessage(scope, mode.message.id, text);
+        else sendNew(text, mode?.kind === 'reply' ? mode.message.id : undefined);
+        return true;
+      }) ?? false;
+    if (ok) setMode(undefined);
+    return ok;
+  };
+
+  return { error, handlers, mode, onSend, cancel: () => setMode(undefined) };
+}
+
 export function GroupThread() {
   const source = useDataSource();
   const { me, members, groupMessages } = useSnapshot();
-  const { error, run } = useAction();
+  const thread = useThread('group', (text, replyToId) => source.sendGroupMessage(text, replyToId));
   const count = members.filter((m) => m.status === 'active').length;
 
   return (
@@ -285,6 +333,8 @@ export function GroupThread() {
         members={members}
         meId={me?.id}
         showSenders
+        scope="group"
+        handlers={thread.handlers}
         empty={
           <ThreadNotice title="El canal está en silencio">
             Escribe el primer mensaje para todo el salón.
@@ -295,8 +345,10 @@ export function GroupThread() {
         key={me?.id}
         draftKey={`${me?.id}:grupo`}
         placeholder="Escribe al grupo"
-        error={error}
-        onSend={(text) => run(() => (source.sendGroupMessage(text), true)) ?? false}
+        error={thread.error}
+        onSend={thread.onSend}
+        mode={thread.mode}
+        onCancelMode={thread.cancel}
       />
     </>
   );
@@ -315,7 +367,9 @@ export function DirectThread() {
   const { conversationId = '' } = useParams();
   const source = useDataSource();
   const { me, members, directConversations, directMessages } = useSnapshot();
-  const { error, run } = useAction();
+  const thread = useThread('direct', (text, replyToId) =>
+    source.sendDirectMessage(conversationId, text, replyToId),
+  );
   const conversation = directConversations.find((c) => c.id === conversationId);
   const messages = useMemo(
     () => directMessages.filter((m) => m.conversationId === conversationId),
@@ -359,6 +413,8 @@ export function DirectThread() {
         members={members}
         meId={me?.id}
         showSenders={false}
+        scope="direct"
+        handlers={thread.handlers}
         empty={
           <ThreadNotice title={`Saluda a ${name}`}>
             Todavía no se han escrito. Lo que envíes aquí queda entre ustedes dos.
@@ -369,8 +425,10 @@ export function DirectThread() {
         key={draftKey}
         draftKey={draftKey}
         placeholder={`Escribe a ${name}`}
-        error={error}
-        onSend={(text) => run(() => (source.sendDirectMessage(conversation.id, text), true)) ?? false}
+        error={thread.error}
+        onSend={thread.onSend}
+        mode={thread.mode}
+        onCancelMode={thread.cancel}
       />
     </>
   );

@@ -21,12 +21,19 @@ Resumen técnico de la base inicial. La fuente de verdad del alcance es
 Tablas privadas: `app_config`, `invitation`, `member`, `subject`, `term`, `work`,
 `term_dates`, `assignment`, `page_revision`, `work_author`, `work_file`, `group_message`, `direct_conversation`, `direct_message`, `birthday`,
 `change_log`, `activity`, `evidence`, `note`, `note_comment`, `question`, `answer`,
-`last_seen`.
+`last_seen`, `message_reaction`, `sticker_pack`, `sticker`, `chat_command`.
 
 Vistas públicas con filtro por quien consulta: `my_member`, `members`, `subjects`, `terms`,
 `calendar`, `assignments`, `page_revisions`, `works`, `work_authors`, `work_files`, `group_messages`, `birthdays`, `change_history`,
 `my_direct_conversations`, `my_direct_messages`, `activities`, `evidences`, `notes` (del grupo
-y las personales propias), `note_comments`, `questions`, `answers`, `my_last_seen`.
+y las personales propias), `note_comments`, `questions`, `answers`, `my_last_seen`,
+`message_reactions` (del canal y de tus 1 a 1), `sticker_packs` (tuyos y compartidos), `stickers`
+(de esos paquetes y los ya enviados) y `my_chat_commands`.
+
+Los mensajes guardan referencias a otros módulos dentro del texto como `[[tarea:id]]`,
+`[[trabajo:id]]`, `[[clase:id]]`, `[[nota:id]]`, `[[pregunta:id]]` o `[[sticker:id]]`; cada cliente
+las resuelve con lo que su vista le deja ver. Eliminar un mensaje vacía el texto y deja
+`deleted_at`, para que las respuestas no pierdan el hilo.
 
 Faltan para el MVP: guías con fuentes, adjuntos fuera de los trabajos, instalaciones/suscripciones
 push y preferencias de avisos.

@@ -1,6 +1,15 @@
 import {
   buildPeriodCalendar,
+  canDeleteMessage,
+  canEditMessage,
   canEditWork,
+  commandNameError,
+  detectImageType,
+  isAnimatedWebp,
+  isReaction,
+  MAX_STICKERS_PER_PACK,
+  normalizeCommandName,
+  stickerFileError,
   canManageCalendar,
   canReadDirectConversation,
   CURRICULUM,
@@ -20,6 +29,13 @@ import type {
   Answer,
   AskQuestionInput,
   Birthday,
+  ChatCommand,
+  MessageFields,
+  MessageReaction,
+  MessageScope,
+  SaveChatCommandInput,
+  Sticker,
+  StickerPack,
   CreateActivityInput,
   Evidence,
   Note,
@@ -40,6 +56,7 @@ import type {
   WorkFile,
 } from './types';
 import { toDay } from '../lib/format';
+import { referencesIn } from '../lib/references';
 
 /**
  * Fuente de datos en memoria para desarrollar la interfaz antes de conectar SpacetimeDB.
@@ -62,6 +79,10 @@ interface State {
   groupMessages: GroupMessage[];
   directConversations: DirectConversation[];
   directMessages: DirectMessage[];
+  reactions: MessageReaction[];
+  stickerPacks: StickerPack[];
+  stickers: Sticker[];
+  chatCommands: ChatCommand[];
   birthdays: Birthday[];
   activities: Activity[];
   evidences: Evidence[];
@@ -79,6 +100,14 @@ function requireText(value: string, field: string, max = MAX_TEXT): string {
   if (!trimmed) throw new Error(`${field} no puede estar vacío.`);
   if (trimmed.length > max) throw new Error(`${field} excede ${max} caracteres.`);
   return trimmed;
+}
+
+function toBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
 }
 
 export class DemoDataSource implements DataSource {
@@ -133,6 +162,10 @@ export class DemoDataSource implements DataSource {
         groupMessages: [],
         directConversations: [],
         directMessages: [],
+        reactions: [],
+        stickerPacks: [],
+        stickers: [],
+        chatCommands: [],
         birthdays: [],
         activities: [],
         evidences: [],
@@ -149,6 +182,21 @@ export class DemoDataSource implements DataSource {
       canReadDirectConversation(me.id, c.participantIds),
     );
     const visible = new Set(directConversations.map((c) => c.id));
+    const directMessages = s.directMessages.filter((m) => visible.has(m.conversationId));
+    const readable = new Set([
+      ...s.groupMessages.map((m) => `group:${m.id}`),
+      ...directMessages.map((m) => `direct:${m.id}`),
+    ]);
+    const stickerPacks = s.stickerPacks.filter((p) => p.shared || p.ownerId === me.id);
+    const packIds = new Set(stickerPacks.map((p) => p.id));
+    // Los stickers que ya se enviaron se siguen viendo aunque su paquete se quite o deje de compartirse.
+    const sent = new Set(
+      [...s.groupMessages, ...directMessages].flatMap((m) =>
+        referencesIn(m.text)
+          .filter((r) => r.kind === 'sticker')
+          .map((r) => r.id),
+      ),
+    );
     return {
       me,
       members: s.members,
@@ -161,7 +209,11 @@ export class DemoDataSource implements DataSource {
       revisions: s.revisions,
       groupMessages: s.groupMessages,
       directConversations,
-      directMessages: s.directMessages.filter((m) => visible.has(m.conversationId)),
+      directMessages,
+      reactions: s.reactions.filter((r) => readable.has(`${r.scope}:${r.messageId}`)),
+      stickerPacks,
+      stickers: s.stickers.filter((x) => packIds.has(x.packId) || sent.has(x.id)),
+      chatCommands: s.chatCommands.filter((c) => c.ownerId === me.id),
       birthdays: s.birthdays,
       activities: s.activities,
       evidences: s.evidences,
@@ -397,11 +449,61 @@ export class DemoDataSource implements DataSource {
     this.#emit();
   }
 
-  sendGroupMessage(text: string) {
+  /** Texto de un mensaje nuevo o editado: no vacío y solo con stickers que puedes usar. */
+  #messageText(text: string, me: Member): string {
+    const clean = requireText(text, 'El mensaje');
+    for (const ref of referencesIn(clean)) {
+      if (ref.kind !== 'sticker') continue;
+      const sticker = this.#state.stickers.find((x) => x.id === ref.id);
+      const pack = this.#state.stickerPacks.find((p) => p.id === sticker?.packId);
+      if (!pack || (!pack.shared && pack.ownerId !== me.id)) throw new Error('Ese sticker no está disponible.');
+    }
+    return clean;
+  }
+
+  /** Mensajes de una conversación que el usuario actual puede leer. */
+  #thread(scope: MessageScope, me: Member, conversationId?: Id): MessageFields[] {
+    if (scope === 'group') return this.#state.groupMessages;
+    return this.#state.directMessages.filter((m) => {
+      if (conversationId && m.conversationId !== conversationId) return false;
+      const c = this.#state.directConversations.find((x) => x.id === m.conversationId);
+      return Boolean(c && canReadDirectConversation(me.id, c.participantIds));
+    });
+  }
+
+  #message(scope: MessageScope, messageId: Id, me: Member): MessageFields {
+    const message = this.#thread(scope, me).find((m) => m.id === messageId);
+    if (!message) throw new Error('El mensaje no existe o no participas en esa conversación.');
+    return message;
+  }
+
+  #replyTo(scope: MessageScope, me: Member, replyToId: Id | undefined, conversationId?: Id): Id | undefined {
+    if (!replyToId) return undefined;
+    const target = this.#thread(scope, me, conversationId).find((m) => m.id === replyToId);
+    if (!target || target.deletedAt) throw new Error('El mensaje al que respondes ya no está.');
+    return replyToId;
+  }
+
+  #updateMessage(scope: MessageScope, messageId: Id, change: Partial<MessageFields>) {
+    if (scope === 'group') {
+      this.#state.groupMessages = this.#state.groupMessages.map((m) => (m.id === messageId ? { ...m, ...change } : m));
+    } else {
+      this.#state.directMessages = this.#state.directMessages.map((m) => (m.id === messageId ? { ...m, ...change } : m));
+    }
+  }
+
+  sendGroupMessage(text: string, replyToId?: Id): Id {
     const me = this.#activeMember();
-    const message = { id: this.#id(), senderId: me.id, text: requireText(text, 'El mensaje'), sentAt: this.#now() };
+    const message: GroupMessage = {
+      id: this.#id(),
+      senderId: me.id,
+      text: this.#messageText(text, me),
+      sentAt: this.#now(),
+      replyToId: this.#replyTo('group', me, replyToId),
+    };
     this.#state.groupMessages = [...this.#state.groupMessages, message];
     this.#emit();
+    return message.id;
   }
 
   openDirectConversation(otherId: Id): Id {
@@ -418,7 +520,7 @@ export class DemoDataSource implements DataSource {
     return conversation.id;
   }
 
-  sendDirectMessage(conversationId: Id, text: string) {
+  sendDirectMessage(conversationId: Id, text: string, replyToId?: Id): Id {
     const me = this.#activeMember();
     const conversation = this.#state.directConversations.find((c) => c.id === conversationId);
     if (!conversation || !canReadDirectConversation(me.id, conversation.participantIds)) {
@@ -428,10 +530,137 @@ export class DemoDataSource implements DataSource {
       id: this.#id(),
       conversationId,
       senderId: me.id,
-      text: requireText(text, 'El mensaje'),
+      text: this.#messageText(text, me),
       sentAt: this.#now(),
+      replyToId: this.#replyTo('direct', me, replyToId, conversationId),
     };
     this.#state.directMessages = [...this.#state.directMessages, message];
+    this.#emit();
+    return message.id;
+  }
+
+  editMessage(scope: MessageScope, messageId: Id, text: string) {
+    const me = this.#activeMember();
+    const message = this.#message(scope, messageId, me);
+    if (message.senderId !== me.id) throw new Error('Solo puedes editar tus mensajes.');
+    if (!canEditMessage(me.id, message, this.#now())) {
+      throw new Error('Ya no se puede editar: pasaron más de 15 minutos o se eliminó.');
+    }
+    const clean = this.#messageText(text, me);
+    if (clean === message.text) return;
+    this.#updateMessage(scope, messageId, { text: clean, editedAt: this.#now() });
+    this.#emit();
+  }
+
+  deleteMessage(scope: MessageScope, messageId: Id) {
+    const me = this.#activeMember();
+    const message = this.#message(scope, messageId, me);
+    if (!canDeleteMessage(me.id, message, scope, me.isCreator)) {
+      throw new Error(
+        message.deletedAt
+          ? 'Ese mensaje ya se eliminó.'
+          : 'Solo quien lo envió puede eliminarlo (en el canal, también un administrador).',
+      );
+    }
+    this.#updateMessage(scope, messageId, { text: '', deletedAt: this.#now(), deletedBy: me.id });
+    this.#state.reactions = this.#state.reactions.filter((r) => !(r.scope === scope && r.messageId === messageId));
+    this.#emit();
+  }
+
+  toggleReaction(scope: MessageScope, messageId: Id, emoji: string) {
+    const me = this.#activeMember();
+    if (!isReaction(emoji)) throw new Error('Esa reacción no está disponible.');
+    const message = this.#message(scope, messageId, me);
+    if (message.deletedAt) throw new Error('No se puede reaccionar a un mensaje eliminado.');
+    const mine = (r: MessageReaction) => r.scope === scope && r.messageId === messageId && r.memberId === me.id;
+    const current = this.#state.reactions.find(mine);
+    const rest = this.#state.reactions.filter((r) => !mine(r));
+    this.#state.reactions =
+      current?.emoji === emoji ? rest : [...rest, { scope, messageId, memberId: me.id, emoji }];
+    this.#emit();
+  }
+
+  async importStickers(packName: string, files: File[]): Promise<Id> {
+    const me = this.#activeMember();
+    const name = requireText(packName, 'El nombre del paquete', 60);
+    if (!files.length) throw new Error('Elige al menos un sticker.');
+    if (files.length > MAX_STICKERS_PER_PACK) {
+      throw new Error(`Un paquete tiene como máximo ${MAX_STICKERS_PER_PACK} stickers.`);
+    }
+    const now = this.#now();
+    const pack: StickerPack = { id: this.#id(), name, ownerId: me.id, shared: false, createdAt: now };
+    const stickers: Sticker[] = [];
+    for (const file of files) {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const type = detectImageType(bytes);
+      const problem = stickerFileError(file.name, file.size, type);
+      if (problem || !type) throw new Error(problem);
+      stickers.push({
+        id: this.#id(),
+        packId: pack.id,
+        url: `data:${type};base64,${toBase64(bytes)}`,
+        contentType: type,
+        size: file.size,
+        animated: type === 'image/gif' || (type === 'image/webp' && isAnimatedWebp(bytes)),
+        createdAt: now,
+      });
+    }
+    this.#state.stickerPacks = [...this.#state.stickerPacks, pack];
+    this.#state.stickers = [...this.#state.stickers, ...stickers];
+    this.#emit();
+    return pack.id;
+  }
+
+  #ownPack(packId: Id, me: Member): StickerPack {
+    const pack = this.#state.stickerPacks.find((p) => p.id === packId);
+    if (!pack) throw new Error('El paquete no existe.');
+    if (pack.ownerId !== me.id) throw new Error('Solo quien importó el paquete puede cambiarlo.');
+    return pack;
+  }
+
+  setStickerPackShared(packId: Id, shared: boolean) {
+    const me = this.#activeMember();
+    this.#ownPack(packId, me);
+    this.#state.stickerPacks = this.#state.stickerPacks.map((p) => (p.id === packId ? { ...p, shared } : p));
+    this.#emit();
+  }
+
+  removeStickerPack(packId: Id) {
+    const me = this.#activeMember();
+    this.#ownPack(packId, me);
+    this.#state.stickerPacks = this.#state.stickerPacks.filter((p) => p.id !== packId);
+    this.#emit();
+  }
+
+  saveChatCommand(input: SaveChatCommandInput): Id {
+    const me = this.#activeMember();
+    const name = normalizeCommandName(input.name);
+    const own = this.#state.chatCommands.filter((c) => c.ownerId === me.id && c.id !== input.id);
+    const problem = commandNameError(name, own.map((c) => c.name));
+    if (problem) throw new Error(problem);
+    const text = requireText(input.text, 'El texto del comando', 2000);
+    const description = input.description.trim().slice(0, 80);
+    if (input.id) {
+      const existing = this.#state.chatCommands.find((c) => c.id === input.id && c.ownerId === me.id);
+      if (!existing) throw new Error('El comando no existe.');
+      this.#state.chatCommands = this.#state.chatCommands.map((c) =>
+        c.id === input.id ? { ...c, name, description, text } : c,
+      );
+      this.#emit();
+      return existing.id;
+    }
+    const command: ChatCommand = { id: this.#id(), ownerId: me.id, name, description, text, createdAt: this.#now() };
+    this.#state.chatCommands = [...this.#state.chatCommands, command];
+    this.#emit();
+    return command.id;
+  }
+
+  removeChatCommand(commandId: Id) {
+    const me = this.#activeMember();
+    if (!this.#state.chatCommands.some((c) => c.id === commandId && c.ownerId === me.id)) {
+      throw new Error('El comando no existe.');
+    }
+    this.#state.chatCommands = this.#state.chatCommands.filter((c) => c.id !== commandId);
     this.#emit();
   }
 
@@ -645,6 +874,23 @@ export class DemoDataSource implements DataSource {
     this.#state.lastSeen = { ...this.#state.lastSeen, [me.id]: this.#now() };
     this.#emit();
   }
+}
+
+/** Stickers de prueba dibujados aquí mismo: solo texto sobre un fondo de color. */
+const DEMO_STICKERS: [Id, string, number][] = [
+  ['s1', '¡Listo!', 145],
+  ['s2', 'Gracias', 210],
+  ['s3', '¿Ya?', 35],
+  ['s4', 'Ánimo', 290],
+];
+
+function demoSticker(label: string, hue: number): string {
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160">` +
+    `<rect x="8" y="8" width="144" height="144" rx="40" fill="hsl(${hue} 70% 55%)" stroke="#fff" stroke-width="8"/>` +
+    `<text x="80" y="92" font-family="system-ui,sans-serif" font-size="30" font-weight="800" fill="#fff" text-anchor="middle">${label}</text>` +
+    `</svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
 /** Estado inicial con datos de prueba claramente marcados. */
@@ -979,8 +1225,23 @@ export function createDemoState(now = new Date()): State {
         text: 'También se reconocen enlaces como https://example.com/apuntes y código en línea como `npm run dev`.',
         sentAt: minutesAgo(1480),
       },
-      { id: 'g9', senderId: 'demo-4', text: 'Mensaje de prueba de hoy.', sentAt: minutesAgo(95) },
-      { id: 'g1', senderId: 'demo-2', text: 'Mensaje de prueba en el canal del grupo.', sentAt: minutesAgo(30) },
+      { id: 'g9', senderId: 'demo-4', text: '¿Alguien tiene la tarea de prueba a la mano?', sentAt: minutesAgo(95) },
+      {
+        id: 'g10',
+        senderId: 'demo-3',
+        text: 'Aquí está, con la página donde cada quien sube lo suyo.\n[[tarea:t1]]',
+        sentAt: minutesAgo(80),
+        replyToId: 'g9',
+      },
+      { id: 'g11', senderId: 'demo-4', text: '[[sticker:s2]]', sentAt: minutesAgo(78) },
+      { id: 'g12', senderId: 'demo-4', text: '', sentAt: minutesAgo(60), deletedAt: minutesAgo(59), deletedBy: 'demo-4' },
+      {
+        id: 'g1',
+        senderId: 'demo-2',
+        text: 'Mensaje de prueba en el canal del grupo (corregido).',
+        sentAt: minutesAgo(30),
+        editedAt: minutesAgo(28),
+      },
     ],
     directConversations: [
       { id: 'c1', participantIds: ['demo-2', 'demo-3'] },
@@ -990,6 +1251,33 @@ export function createDemoState(now = new Date()): State {
       { id: 'd1', conversationId: 'c1', senderId: 'demo-2', text: 'Mensaje privado de prueba.', sentAt: minutesAgo(20) },
       { id: 'd2', conversationId: 'c2', senderId: 'demo-4', text: 'Otro mensaje privado de prueba.', sentAt: minutesAgo(1600) },
       { id: 'd3', conversationId: 'c2', senderId: 'demo-3', text: 'Respuesta privada de prueba.', sentAt: minutesAgo(1590) },
+    ],
+    reactions: [
+      { scope: 'group', messageId: 'g10', memberId: 'demo-4', emoji: '🙏' },
+      { scope: 'group', messageId: 'g10', memberId: 'demo-2', emoji: '👍' },
+      { scope: 'group', messageId: 'g7', memberId: 'demo-4', emoji: '😂' },
+    ],
+    stickerPacks: [
+      { id: 'p1', name: 'Stickers de prueba', ownerId: 'demo-2', shared: true, createdAt: minutesAgo(5000) },
+    ],
+    stickers: DEMO_STICKERS.map(([id, label, hue]) => ({
+      id,
+      packId: 'p1',
+      url: demoSticker(label, hue),
+      contentType: 'image/svg+xml',
+      size: 0,
+      animated: false,
+      createdAt: minutesAgo(5000),
+    })),
+    chatCommands: [
+      {
+        id: 'k1',
+        ownerId: 'demo-1',
+        name: 'repo',
+        description: 'Enlace al repositorio de prueba',
+        text: 'Repositorio de prueba del equipo: https://example.com/repo',
+        createdAt: minutesAgo(3000),
+      },
     ],
     birthdays: [{ memberId: 'demo-3', day: 15, month: 11, remind: true }],
     activities,

@@ -1,11 +1,7 @@
-import type { Id } from '../data/types';
+import type { Id, MessageFields } from '../data/types';
 
-export interface ChatMessage {
-  id: Id;
-  senderId: Id;
-  text: string;
-  sentAt: Date;
-}
+/** Un mensaje del canal o de un 1 a 1, tal como lo dibuja la conversación. */
+export type ChatMessage = MessageFields;
 
 /** Mensajes seguidos del mismo autor, que se dibujan juntos bajo un solo nombre. */
 export interface MessageRun {
@@ -108,5 +104,8 @@ export function parseMessageText(text: string): TextBlock[] {
 
 /** Vista previa de una línea para la lista de conversaciones. */
 export function previewText(text: string): string {
-  return text.replace(/```[^\n]*/g, ' ').replace(/\s+/g, ' ').trim();
+  return text
+    .replace(/```[^\n]*/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
