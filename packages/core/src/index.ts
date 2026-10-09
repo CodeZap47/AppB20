@@ -5,3 +5,5 @@ export * from './files';
 export * from './curriculum';
 export * from './workKinds';
 export * from './calendar';
+export * from './guides';
+export * from './contributions';

@@ -3,8 +3,17 @@ import {
   canEditWork,
   canManageCalendar,
   canReadDirectConversation,
+  canReviewGuide,
   CURRICULUM,
   fileSizeError,
+  GUIDE_SECTIONS,
+  isGuideReviewVerdict,
+  isGuideSourceKind,
+  MAX_GUIDE_SECTION_LENGTH,
+  MAX_REVIEW_COMMENT_LENGTH,
+  parseTopics,
+  sourceStatusError,
+  type GuideReviewVerdict,
   isValidBirthday,
   isValidPeriod,
   isWorkKind,
@@ -22,6 +31,12 @@ import type {
   Birthday,
   CreateActivityInput,
   Evidence,
+  GuideInput,
+  GuideReview,
+  GuideSource,
+  GuideSourceRef,
+  GuideSourceUpdate,
+  StudyGuide,
   Note,
   NoteComment,
   Question,
@@ -69,6 +84,9 @@ interface State {
   noteComments: NoteComment[];
   questions: Question[];
   answers: Answer[];
+  guides: StudyGuide[];
+  guideSources: GuideSource[];
+  guideReviews: GuideReview[];
   lastSeen: Record<Id, Date>;
 }
 
@@ -140,6 +158,9 @@ export class DemoDataSource implements DataSource {
         noteComments: [],
         questions: [],
         answers: [],
+        guides: [],
+        guideSources: [],
+        guideReviews: [],
         lastSeenAt: undefined,
       };
     }
@@ -169,6 +190,9 @@ export class DemoDataSource implements DataSource {
       noteComments: s.noteComments.filter((c) => visibleNotes.has(c.noteId)),
       questions: s.questions,
       answers: s.answers,
+      guides: s.guides,
+      guideSources: s.guideSources,
+      guideReviews: s.guideReviews,
       lastSeenAt: s.lastSeen[me.id],
     };
   }
@@ -645,6 +669,207 @@ export class DemoDataSource implements DataSource {
     this.#state.lastSeen = { ...this.#state.lastSeen, [me.id]: this.#now() };
     this.#emit();
   }
+
+  #checkGuide(input: GuideInput) {
+    this.#requireSubject(input.subjectId);
+    if (input.termId) {
+      const term = this.#state.terms.find((t) => t.id === input.termId);
+      if (term?.subjectId !== input.subjectId) throw new Error('El parcial no pertenece a esa materia.');
+    }
+    const parsed = parseTopics(input.topicsText);
+    if ('problem' in parsed) throw new Error(parsed.problem);
+    if (input.sections.length > GUIDE_SECTIONS.length) throw new Error('La guía tiene secciones de más.');
+    const sections = GUIDE_SECTIONS.map((_, i) => (input.sections[i] ?? '').trim());
+    if (sections.some((text) => text.length > MAX_GUIDE_SECTION_LENGTH)) {
+      throw new Error(`Cada sección admite hasta ${MAX_GUIDE_SECTION_LENGTH} caracteres.`);
+    }
+    return {
+      subjectId: input.subjectId,
+      termId: input.termId,
+      title: requireText(input.title, 'El título', 200),
+      topics: parsed.topics,
+      sections,
+    };
+  }
+
+  #guide(guideId: Id): StudyGuide {
+    const guide = this.#state.guides.find((g) => g.id === guideId);
+    if (!guide) throw new Error('La guía no existe.');
+    return guide;
+  }
+
+  /** Versión actual del material citado; también comprueba que exista y sea de la materia. */
+  #sourceVersion(ref: GuideSourceRef, subjectId: Id): number {
+    if (!isGuideSourceKind(ref.kind)) throw new Error('Tipo de fuente inválido.');
+    const s = this.#state;
+    const found = (() => {
+      switch (ref.kind) {
+        case 'trabajo': {
+          const work = s.works.find((w) => w.id === ref.refId);
+          const assignment = work && s.assignments.find((a) => a.id === work.assignmentId);
+          return work && assignment && { subjectId: assignment.subjectId, version: work.version };
+        }
+        case 'tarea':
+          return s.assignments.find((a) => a.id === ref.refId);
+        case 'actividad':
+          return s.activities.find((a) => a.id === ref.refId);
+        case 'nota': {
+          // Las notas personales no se comparten, así que tampoco sirven de fuente.
+          const note = s.notes.find((n) => n.id === ref.refId);
+          return note?.visibility === 'group' ? note : undefined;
+        }
+        case 'pregunta': {
+          const question = s.questions.find((q) => q.id === ref.refId);
+          return question && { subjectId: question.subjectId, version: 1 };
+        }
+      }
+    })();
+    if (!found) throw new Error('Una de las fuentes ya no existe o no es del grupo.');
+    if (found.subjectId !== subjectId) throw new Error('Las fuentes deben ser de la misma materia.');
+    return found.version;
+  }
+
+  #addSources(guide: StudyGuide, refs: GuideSourceRef[], addedBy: Id) {
+    const now = this.#now();
+    const existing = this.#state.guideSources.filter((src) => src.guideId === guide.id);
+    const added: GuideSource[] = [];
+    for (const ref of refs) {
+      const version = this.#sourceVersion(ref, guide.subjectId);
+      const duplicate = [...existing, ...added].some((src) => src.kind === ref.kind && src.refId === ref.refId);
+      if (duplicate) continue;
+      added.push({
+        id: this.#id(),
+        guideId: guide.id,
+        kind: ref.kind,
+        refId: ref.refId,
+        sourceVersion: version,
+        status: 'pending',
+        reason: 'Falta revisarla.',
+        topics: [],
+        addedBy,
+        addedAt: now,
+      });
+    }
+    this.#state.guideSources = [...this.#state.guideSources, ...added];
+  }
+
+  createGuide(input: GuideInput, sources: GuideSourceRef[]): Id {
+    const me = this.#activeMember();
+    const now = this.#now();
+    const guide: StudyGuide = {
+      id: this.#id(),
+      ...this.#checkGuide(input),
+      version: 1,
+      createdBy: me.id,
+      createdAt: now,
+      updatedBy: me.id,
+      updatedAt: now,
+    };
+    this.#state.guides = [...this.#state.guides, guide];
+    this.#addSources(guide, sources, me.id);
+    this.#emit();
+    return guide.id;
+  }
+
+  updateGuide(guideId: Id, input: GuideInput) {
+    const me = this.#activeMember();
+    const current = this.#guide(guideId);
+    const checked = this.#checkGuide(input);
+    if (checked.subjectId !== current.subjectId) throw new Error('La materia de una guía no cambia.');
+    const next: StudyGuide = {
+      ...current,
+      ...checked,
+      version: current.version + 1,
+      updatedBy: me.id,
+      updatedAt: this.#now(),
+    };
+    this.#state.guides = this.#state.guides.map((g) => (g.id === guideId ? next : g));
+    // Un tema que se quitó del temario deja de contar en las fuentes.
+    this.#state.guideSources = this.#state.guideSources.map((src) =>
+      src.guideId === guideId ? { ...src, topics: src.topics.filter((t) => next.topics.includes(t)) } : src,
+    );
+    this.#emit();
+  }
+
+  addGuideSources(guideId: Id, sources: GuideSourceRef[]) {
+    const me = this.#activeMember();
+    this.#addSources(this.#guide(guideId), sources, me.id);
+    this.#emit();
+  }
+
+  #guideSource(sourceId: Id): GuideSource {
+    const source = this.#state.guideSources.find((src) => src.id === sourceId);
+    if (!source) throw new Error('La fuente no existe.');
+    return source;
+  }
+
+  updateGuideSource(sourceId: Id, update: GuideSourceUpdate) {
+    this.#activeMember();
+    const source = this.#guideSource(sourceId);
+    const guide = this.#guide(source.guideId);
+    const problem = sourceStatusError(update.status, update.reason);
+    if (problem) throw new Error(problem);
+    if (update.topics.some((t) => !guide.topics.includes(t))) {
+      throw new Error('Un tema no está en el temario de la guía.');
+    }
+    const next: GuideSource = {
+      ...source,
+      status: update.status,
+      reason: update.status === 'pending' ? update.reason.trim() : '',
+      topics: guide.topics.filter((t) => update.topics.includes(t)),
+    };
+    this.#state.guideSources = this.#state.guideSources.map((src) => (src.id === sourceId ? next : src));
+    this.#emit();
+  }
+
+  refreshGuideSource(sourceId: Id) {
+    this.#activeMember();
+    const source = this.#guideSource(sourceId);
+    const guide = this.#guide(source.guideId);
+    const version = this.#sourceVersion(source, guide.subjectId);
+    this.#state.guideSources = this.#state.guideSources.map((src) =>
+      src.id === sourceId ? { ...src, sourceVersion: version } : src,
+    );
+    this.#emit();
+  }
+
+  removeGuideSource(sourceId: Id) {
+    this.#activeMember();
+    this.#guideSource(sourceId);
+    this.#state.guideSources = this.#state.guideSources.filter((src) => src.id !== sourceId);
+    this.#emit();
+  }
+
+  reviewGuide(guideId: Id, verdict: GuideReviewVerdict, comment: string) {
+    const me = this.#activeMember();
+    const guide = this.#guide(guideId);
+    if (!canReviewGuide(me.id, guide.updatedBy)) {
+      throw new Error('Guardaste esta versión; la revisa otro compañero.');
+    }
+    if (!isGuideReviewVerdict(verdict)) throw new Error('Resultado de revisión inválido.');
+    const text = comment.trim();
+    if (text.length > MAX_REVIEW_COMMENT_LENGTH) {
+      throw new Error(`El comentario excede ${MAX_REVIEW_COMMENT_LENGTH} caracteres.`);
+    }
+    if (verdict === 'changes' && !text) throw new Error('Di qué cambios propones.');
+    const review: GuideReview = {
+      id: this.#id(),
+      guideId,
+      guideVersion: guide.version,
+      reviewerId: me.id,
+      verdict,
+      comment: text,
+      createdAt: this.#now(),
+    };
+    // Una revisión por persona y versión: volver a revisar reemplaza la anterior.
+    this.#state.guideReviews = [
+      ...this.#state.guideReviews.filter(
+        (r) => !(r.guideId === guideId && r.guideVersion === guide.version && r.reviewerId === me.id),
+      ),
+      review,
+    ];
+    this.#emit();
+  }
 }
 
 /** Estado inicial con datos de prueba claramente marcados. */
@@ -653,7 +878,7 @@ export function createDemoState(now = new Date()): State {
   const FUNDAMENTOS = 'IDSE-05010104';
   const minutesAgo = (n: number) => new Date(now.getTime() - n * 60_000);
   const daysAgo = (n: number) => toDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - n));
-  const members: Member[] = [1, 2, 3, 4].map((n) => ({
+  const members: Member[] = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({
     id: `demo-${n}`,
     displayName: `Alumno de prueba ${n}`,
     status: 'active',
@@ -908,6 +1133,16 @@ export function createDemoState(now = new Date()): State {
         updatedAt: minutesAgo(240),
       },
       {
+        id: 'w7',
+        assignmentId: 't4',
+        title: 'Solución de prueba en pareja',
+        description: 'Ejemplo de un trabajo de otra pareja en la misma tarea.',
+        version: 1,
+        authorIds: ['demo-6', 'demo-8'],
+        createdAt: minutesAgo(800),
+        updatedAt: minutesAgo(800),
+      },
+      {
         id: 'w5',
         assignmentId: 't5',
         title: '',
@@ -1021,6 +1256,14 @@ export function createDemoState(now = new Date()): State {
         createdAt: minutesAgo(1250),
       },
       {
+        id: 'e5',
+        activityId: 'a1',
+        authorId: 'demo-8',
+        participantIds: ['demo-8', 'demo-7'],
+        content: 'Evidencia de ejemplo de otro equipo.',
+        createdAt: minutesAgo(2700),
+      },
+      {
         id: 'e4',
         activityId: 'a4',
         authorId: 'demo-4',
@@ -1045,6 +1288,34 @@ export function createDemoState(now = new Date()): State {
         updatedAt: minutesAgo(120),
       },
       {
+        id: 'n3',
+        subjectId: FUNDAMENTOS,
+        topic: 'Ciclos',
+        title: 'Resumen de prueba de ciclos',
+        body: 'Contenido de ejemplo de otro compañero.',
+        tags: ['ejemplo'],
+        visibility: 'group',
+        source: 'student',
+        authorId: 'demo-6',
+        version: 1,
+        createdAt: minutesAgo(1700),
+        updatedAt: minutesAgo(1700),
+      },
+      {
+        id: 'n4',
+        subjectId: LOGICA,
+        topic: 'Tema de prueba',
+        title: 'Material de prueba del docente',
+        body: 'Ejemplo de material que compartió el docente.',
+        tags: [],
+        visibility: 'group',
+        source: 'teacher',
+        authorId: 'demo-7',
+        version: 1,
+        createdAt: minutesAgo(4300),
+        updatedAt: minutesAgo(4300),
+      },
+      {
         id: 'n2',
         subjectId: FUNDAMENTOS,
         topic: '',
@@ -1059,7 +1330,23 @@ export function createDemoState(now = new Date()): State {
         updatedAt: minutesAgo(90),
       },
     ],
-    noteComments: [],
+    // Propuestas de corrección: suman a quien comenta en el apunte de alguien más.
+    noteComments: [
+      {
+        id: 'nc1',
+        noteId: 'n3',
+        authorId: 'demo-5',
+        text: 'Comentario de prueba: falta un ejemplo con while.',
+        createdAt: minutesAgo(1650),
+      },
+      {
+        id: 'nc2',
+        noteId: 'n4',
+        authorId: 'demo-5',
+        text: 'Comentario de prueba: el segundo ejercicio tiene un error de dedo.',
+        createdAt: minutesAgo(4200),
+      },
+    ],
     questions: [
       {
         id: 'q1',
@@ -1071,9 +1358,92 @@ export function createDemoState(now = new Date()): State {
         status: 'open',
         createdAt: minutesAgo(60),
       },
+      // Resueltas, con respuesta aceptada: dan el reconocimiento de buenas explicaciones.
+      {
+        id: 'q2',
+        subjectId: FUNDAMENTOS,
+        topic: 'Ciclos',
+        title: '¿Pregunta de prueba sobre ciclos?',
+        body: 'Descripción de ejemplo.',
+        authorId: 'demo-4',
+        status: 'resolved',
+        acceptedAnswerId: 'an2',
+        resolvedAt: minutesAgo(2300),
+        createdAt: minutesAgo(2600),
+      },
+      {
+        id: 'q3',
+        subjectId: LOGICA,
+        topic: 'Tema de prueba',
+        title: '¿Otra pregunta de prueba?',
+        body: 'Descripción de ejemplo.',
+        authorId: 'demo-1',
+        status: 'resolved',
+        acceptedAnswerId: 'an4',
+        resolvedAt: minutesAgo(5000),
+        createdAt: minutesAgo(5200),
+      },
     ],
     answers: [
       { id: 'r1', questionId: 'q1', authorId: 'demo-2', body: 'Respuesta de ejemplo.', createdAt: minutesAgo(40) },
+      { id: 'an2', questionId: 'q2', authorId: 'demo-5', body: 'Respuesta de ejemplo, aceptada.', createdAt: minutesAgo(2500) },
+      { id: 'an3', questionId: 'q2', authorId: 'demo-6', body: 'Otra respuesta de ejemplo.', createdAt: minutesAgo(2450) },
+      // Segunda respuesta de la misma persona en la misma pregunta: se ve, pero no suma otra vez.
+      { id: 'an5', questionId: 'q2', authorId: 'demo-6', body: 'Complemento de ejemplo a mi respuesta.', createdAt: minutesAgo(2400) },
+      { id: 'an4', questionId: 'q3', authorId: 'demo-5', body: 'Respuesta de ejemplo, aceptada.', createdAt: minutesAgo(5100) },
+    ],
+    // Guía de prueba de Lógica, parcial 1: fuentes procesadas y pendientes, un tema sin
+    // cobertura, una fuente que cambió después de agregarla y revisiones de compañeros.
+    guides: [
+      {
+        id: 'gd1',
+        subjectId: LOGICA,
+        termId: `${LOGICA}-p1`,
+        title: 'Guía de prueba del parcial 1',
+        topics: ['Tema de prueba 1', 'Tema de prueba 2', 'Tema de prueba 3'],
+        sections: [
+          'Objetivo de ejemplo: resolver los ejercicios de los temas de prueba.',
+          'Concepto de prueba: definición de ejemplo escrita por el grupo.',
+          'Explicación de prueba, paso a paso.',
+          'Ejemplo resuelto tomado de la tarea de prueba 1.',
+          '```\n// Código de prueba comentado\nconsole.log("hola");\n```',
+          '',
+          'Ejercicio de prueba: repite el ejemplo con otros datos.',
+          '¿Pregunta de práctica de prueba?\nRespuesta razonada de ejemplo.',
+        ],
+        version: 2,
+        createdBy: 'demo-2',
+        createdAt: minutesAgo(2500),
+        updatedBy: 'demo-2',
+        updatedAt: minutesAgo(1300),
+      },
+    ],
+    guideSources: [
+      { id: 'gs1', refId: 't1', kind: 'tarea', sourceVersion: 2, status: 'processed', reason: '', topics: ['Tema de prueba 1'] },
+      { id: 'gs2', refId: 'w1', kind: 'trabajo', sourceVersion: 1, status: 'processed', reason: '', topics: ['Tema de prueba 1', 'Tema de prueba 2'] },
+      { id: 'gs3', refId: 'n1', kind: 'nota', sourceVersion: 1, status: 'processed', reason: '', topics: ['Tema de prueba 2'] },
+      { id: 'gs4', refId: 'a3', kind: 'actividad', sourceVersion: 1, status: 'pending', reason: 'Todavía no tiene evidencias.', topics: ['Tema de prueba 3'] },
+      { id: 'gs5', refId: 'q1', kind: 'pregunta', sourceVersion: 1, status: 'pending', reason: 'Falta revisarla.', topics: [] },
+    ].map((src) => ({ ...src, guideId: 'gd1', addedBy: 'demo-2', addedAt: minutesAgo(2500) }) as GuideSource),
+    guideReviews: [
+      {
+        id: 'gr1',
+        guideId: 'gd1',
+        guideVersion: 1,
+        reviewerId: 'demo-4',
+        verdict: 'changes',
+        comment: 'Comentario de prueba: falta un ejemplo del tema 1.',
+        createdAt: minutesAgo(2000),
+      },
+      {
+        id: 'gr2',
+        guideId: 'gd1',
+        guideVersion: 2,
+        reviewerId: 'demo-3',
+        verdict: 'approved',
+        comment: '',
+        createdAt: minutesAgo(1200),
+      },
     ],
     lastSeen: { 'demo-1': minutesAgo(180) },
   };
