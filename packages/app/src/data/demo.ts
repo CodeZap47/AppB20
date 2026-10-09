@@ -652,6 +652,10 @@ export function createDemoState(now = new Date()): State {
   const LOGICA = 'IDSE-05010103';
   const FUNDAMENTOS = 'IDSE-05010104';
   const minutesAgo = (n: number) => new Date(now.getTime() - n * 60_000);
+  const dayMonthIn = (n: number) => {
+    const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() + n);
+    return { day: date.getDate(), month: date.getMonth() + 1 };
+  };
   const daysAgo = (n: number) => toDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - n));
   const members: Member[] = [1, 2, 3, 4].map((n) => ({
     id: `demo-${n}`,
@@ -991,7 +995,12 @@ export function createDemoState(now = new Date()): State {
       { id: 'd2', conversationId: 'c2', senderId: 'demo-4', text: 'Otro mensaje privado de prueba.', sentAt: minutesAgo(1600) },
       { id: 'd3', conversationId: 'c2', senderId: 'demo-3', text: 'Respuesta privada de prueba.', sentAt: minutesAgo(1590) },
     ],
-    birthdays: [{ memberId: 'demo-3', day: 15, month: 11, remind: true }],
+    // Relativos a hoy, para que el calendario del mes en curso siempre tenga algo que mostrar.
+    birthdays: [
+      { memberId: 'demo-4', ...dayMonthIn(0), remind: true },
+      { memberId: 'demo-2', ...dayMonthIn(12), remind: false },
+      { memberId: 'demo-3', day: 15, month: 11, remind: true },
+    ],
     activities,
     evidences: [
       {

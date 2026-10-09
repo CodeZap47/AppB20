@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import { periodLabel, WORK_KIND_LABEL, workKindGroup } from '@b20/core';
+import { nextCelebration, periodLabel, WORK_KIND_LABEL, workKindGroup } from '@b20/core';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import type { Id, Member, Snapshot, Subject } from '../data/types';
 import { Avatar } from '../components/Avatar';
 import { AvatarStack } from '../components/AvatarStack';
+import { BirthdayForm } from '../components/BirthdayForm';
 import { Empty } from '../components/Empty';
 import { Icon } from '../components/Icon';
 import { useAction } from '../components/useAction';
@@ -35,6 +36,13 @@ function coauthorsLabel(others: Id[], members: Member[], meId?: Id): string {
   if (!meId || !others.includes(meId)) return `Con ${authorsLabel(others, members)}`;
   const rest = others.filter((id) => id !== meId);
   return rest.length ? `Contigo y ${authorsLabel(rest, members)}` : 'Contigo';
+}
+
+/** El calendario de cumpleaños abierto en el mes y el día de la próxima celebración. */
+function birthdayLink(birthday: { day: number; month: number }): string {
+  const next = nextCelebration(birthday, new Date());
+  const month = String(next.getMonth() + 1).padStart(2, '0');
+  return `/m/cumpleanos?mes=${next.getFullYear()}-${month}&dia=${next.getDate()}`;
 }
 
 function roleOf(member: Member): string {
@@ -513,6 +521,18 @@ export function ProfilePage() {
   const subjectId = params.get('materia') ?? '';
   const setTab = (next: Tab) => setParams(next ? { pestana: next } : {}, { replace: true });
   const isMe = member.id === me?.id;
+  // `?cumple=editar` abre la captura directo, para llegar desde el calendario de cumpleaños.
+  const editingBirthday = isMe && params.get('cumple') === 'editar';
+  const setEditingBirthday = (open: boolean) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (open) next.set('cumple', 'editar');
+        else next.delete('cumple');
+        return next;
+      },
+      { replace: true },
+    );
   const birthday = birthdays.find((b) => b.memberId === member.id);
   const c = contributionsOf(member.id, data);
   const memberSubjects = subjects.filter((s) => c.subjectIds.has(s.id)).sort(bySubject);
@@ -630,14 +650,27 @@ export function ProfilePage() {
               <dt>Cumpleaños</dt>
               <dd>
                 {birthday ? (
-                  <Link to="/m/cumpleanos">{formatDayMonth(birthday.day, birthday.month)}</Link>
-                ) : isMe ? (
-                  <Link to="/m/cumpleanos">Compartir</Link>
+                  <Link to={birthdayLink(birthday)}>
+                    {formatDayMonth(birthday.day, birthday.month)}
+                  </Link>
                 ) : (
-                  <span className="muted">No lo compartió</span>
+                  <span className="muted">{isMe ? 'Sin agregar' : 'No lo compartió'}</span>
                 )}
               </dd>
             </dl>
+            {isMe &&
+              (editingBirthday ? (
+                <BirthdayForm onDone={() => setEditingBirthday(false)} />
+              ) : (
+                <button
+                  type="button"
+                  className="secondary with-icon bday-edit"
+                  onClick={() => setEditingBirthday(true)}
+                >
+                  <Icon name={birthday ? 'edit' : 'cake'} size={16} />{' '}
+                  {birthday ? 'Cambiar cumpleaños' : 'Agregar cumpleaños'}
+                </button>
+              ))}
           </section>
           {memberSubjects.length > 0 && (
             <section className="panel">
