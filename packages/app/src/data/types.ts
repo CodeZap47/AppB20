@@ -96,11 +96,63 @@ export interface WorkFile {
   url?: string;
 }
 
-export interface GroupMessage {
+/** Campos comunes de un mensaje del grupo o de un 1 a 1. */
+export interface MessageFields {
   id: Id;
   senderId: Id;
+  /** Texto con referencias `[[tipo:id]]` a otros módulos; vacío si se eliminó. */
   text: string;
   sentAt: Date;
+  /** Mensaje al que responde, de la misma conversación. */
+  replyToId?: Id;
+  editedAt?: Date;
+  /** Eliminado para todos: se conserva el hueco para que las respuestas no pierdan contexto. */
+  deletedAt?: Date;
+  deletedBy?: Id;
+}
+
+export type GroupMessage = MessageFields;
+
+/** Dónde vive un mensaje: el canal del salón o una conversación 1 a 1. */
+export type MessageScope = 'group' | 'direct';
+
+/** Una persona, una reacción por mensaje; reaccionar con otra la cambia. */
+export interface MessageReaction {
+  scope: MessageScope;
+  messageId: Id;
+  memberId: Id;
+  emoji: string;
+}
+
+/** Paquete de stickers importado (por ejemplo, de WhatsApp). Es de su dueño hasta que lo comparte. */
+export interface StickerPack {
+  id: Id;
+  name: string;
+  ownerId: Id;
+  /** Compartido: todo el grupo lo ve en su selector. */
+  shared: boolean;
+  createdAt: Date;
+}
+
+export interface Sticker {
+  id: Id;
+  packId: Id;
+  /** Imagen lista para mostrar: URL firmada del almacenamiento o, en prueba, data URL. */
+  url: string;
+  contentType: string;
+  size: number;
+  animated: boolean;
+  createdAt: Date;
+}
+
+/** Atajo propio: escribir `/nombre` en el chat inserta su texto. Solo lo ve su dueño. */
+export interface ChatCommand {
+  id: Id;
+  ownerId: Id;
+  name: string;
+  description: string;
+  text: string;
+  createdAt: Date;
 }
 
 export interface DirectConversation {
@@ -108,12 +160,8 @@ export interface DirectConversation {
   participantIds: [Id, Id];
 }
 
-export interface DirectMessage {
-  id: Id;
+export interface DirectMessage extends MessageFields {
   conversationId: Id;
-  senderId: Id;
-  text: string;
-  sentAt: Date;
 }
 
 export interface Birthday {
@@ -218,6 +266,14 @@ export interface Snapshot {
   groupMessages: GroupMessage[];
   directConversations: DirectConversation[];
   directMessages: DirectMessage[];
+  /** Reacciones de los mensajes que puedes leer. */
+  reactions: MessageReaction[];
+  /** Tus paquetes y los que el grupo compartió. */
+  stickerPacks: StickerPack[];
+  /** Stickers de esos paquetes y los que aparecen en mensajes que puedes leer. */
+  stickers: Sticker[];
+  /** Solo tus comandos propios. */
+  chatCommands: ChatCommand[];
   birthdays: Birthday[];
   activities: Activity[];
   evidences: Evidence[];
@@ -270,10 +326,27 @@ export interface Actions {
    */
   attachWorkFile(workId: Id, file: File): Promise<Id>;
   removeWorkFile(fileId: Id): void;
-  sendGroupMessage(text: string): void;
+  sendGroupMessage(text: string, replyToId?: Id): Id;
   /** Devuelve la conversación existente o la nueva. */
   openDirectConversation(otherId: Id): Id;
-  sendDirectMessage(conversationId: Id, text: string): void;
+  sendDirectMessage(conversationId: Id, text: string, replyToId?: Id): Id;
+  /** Solo quien lo envió, durante `EDIT_WINDOW_MS`. */
+  editMessage(scope: MessageScope, messageId: Id, text: string): void;
+  /** Para todos. Quien lo envió o, en el canal del salón, un administrador. */
+  deleteMessage(scope: MessageScope, messageId: Id): void;
+  /** Pone, cambia o quita (si es la misma) tu reacción. */
+  toggleReaction(scope: MessageScope, messageId: Id, emoji: string): void;
+  /**
+   * Crea un paquete con las imágenes (WebP, PNG, GIF o JPEG de hasta 1 MB, máximo 30).
+   * Asíncrona como `attachWorkFile`: sube cada imagen.
+   */
+  importStickers(packName: string, files: File[]): Promise<Id>;
+  /** Solo su dueño. */
+  setStickerPackShared(packId: Id, shared: boolean): void;
+  /** Solo su dueño. Los mensajes que ya lo usan siguen mostrando el sticker. */
+  removeStickerPack(packId: Id): void;
+  saveChatCommand(input: SaveChatCommandInput): Id;
+  removeChatCommand(commandId: Id): void;
   shareBirthday(day: number, month: number, remind: boolean): void;
   withdrawBirthday(): void;
   createActivity(input: CreateActivityInput): Id;
@@ -288,6 +361,14 @@ export interface Actions {
   acceptAnswer(questionId: Id, answerId: Id): void;
   reopenQuestion(questionId: Id): void;
   markSeen(): void;
+}
+
+export interface SaveChatCommandInput {
+  /** Vacío para crear uno nuevo. */
+  id?: Id;
+  name: string;
+  description: string;
+  text: string;
 }
 
 export interface CreateActivityInput {

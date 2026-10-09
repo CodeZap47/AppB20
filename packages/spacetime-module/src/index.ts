@@ -181,6 +181,10 @@ const workFile = table(
   },
 );
 
+/**
+ * Mensaje del canal. `text` puede llevar referencias `[[tipo:id]]` a otros módulos o ser solo
+ * un sticker; al eliminarlo queda vacío con `deletedAt` para conservar el hilo.
+ */
 const groupMessage = table(
   { name: 'group_message' },
   {
@@ -188,6 +192,10 @@ const groupMessage = table(
     sender: t.identity(),
     text: t.string(),
     sentAt: t.timestamp(),
+    replyToId: t.u64().optional(),
+    editedAt: t.timestamp().optional(),
+    deletedAt: t.timestamp().optional(),
+    deletedBy: t.identity().optional(),
   },
 );
 
@@ -210,6 +218,65 @@ const directMessage = table(
     sender: t.identity(),
     text: t.string(),
     sentAt: t.timestamp(),
+    replyToId: t.u64().optional(),
+    editedAt: t.timestamp().optional(),
+    deletedAt: t.timestamp().optional(),
+    deletedBy: t.identity().optional(),
+  },
+);
+
+/** Reacción de una persona a un mensaje; `scope` es 'group' o 'direct'. Una por persona y mensaje. */
+const messageReaction = table(
+  { name: 'message_reaction' },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    scope: t.string(),
+    messageId: t.u64().index('btree'),
+    member: t.identity(),
+    emoji: t.string(),
+  },
+);
+
+/** Paquete de stickers importado; privado de su dueño hasta que lo comparte. */
+const stickerPack = table(
+  { name: 'sticker_pack' },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    owner: t.identity().index('btree'),
+    name: t.string(),
+    shared: t.bool(),
+    createdAt: t.timestamp(),
+  },
+);
+
+/**
+ * Imagen de un sticker en el almacenamiento (igual que `work_file`). `used` se marca al enviarlo:
+ * desde entonces se sigue viendo aunque el paquete se quite o deje de compartirse.
+ */
+const sticker = table(
+  { name: 'sticker' },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    packId: t.u64().index('btree'),
+    storageKey: t.string(),
+    contentType: t.string(),
+    size: t.u64(),
+    animated: t.bool(),
+    used: t.bool(),
+    createdAt: t.timestamp(),
+  },
+);
+
+/** Atajo propio para el chat: `/nombre` inserta `text`. Solo lo ve su dueño. */
+const chatCommand = table(
+  { name: 'chat_command' },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    owner: t.identity().index('btree'),
+    name: t.string(),
+    description: t.string(),
+    text: t.string(),
+    createdAt: t.timestamp(),
   },
 );
 
@@ -356,6 +423,10 @@ const spacetimedb = schema({
   groupMessage,
   directConversation,
   directMessage,
+  messageReaction,
+  stickerPack,
+  sticker,
+  chatCommand,
   birthday,
   changeLog,
   activity,
@@ -842,15 +913,272 @@ export const remove_work_file = spacetimedb.reducer({ fileId: t.u64() }, (ctx, {
 // Mensajería
 // ---------------------------------------------------------------------------
 
-export const send_group_message = spacetimedb.reducer({ text: t.string() }, (ctx, { text }) => {
+/** Deben coincidir con `REACTIONS`, `EDIT_WINDOW_MS` y los límites de stickers de `@b20/core`. */
+const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+const EDIT_WINDOW_MICROS = 15n * 60n * 1_000_000n;
+const MAX_STICKERS_PER_PACK = 30;
+const MAX_STICKER_BYTES = 1024n * 1024n;
+const STICKER_TYPES = ['image/webp', 'image/png', 'image/gif', 'image/jpeg'];
+const BUILT_IN_COMMANDS = [
+  'tarea',
+  'trabajo',
+  'clase',
+  'nota',
+  'pregunta',
+  'sticker',
+  'codigo',
+  'comandos',
+];
+const STICKER_TOKEN = /\[\[sticker:(\d{1,20})\]\]/g;
+
+/**
+ * Texto de un mensaje nuevo o editado. Cada sticker citado debe ser del paquete propio o de
+ * uno compartido; al usarlo queda marcado para que siga viéndose en la conversación.
+ */
+function messageText(ctx: Ctx, text: string): string {
+  const clean = requireText(text, 'El mensaje');
+  for (const match of clean.matchAll(STICKER_TOKEN)) {
+    const row = ctx.db.sticker.id.find(BigInt(match[1] ?? '0'));
+    const pack = row ? ctx.db.stickerPack.id.find(row.packId) : null;
+    if (!row || !pack || (!pack.shared && !pack.owner.isEqual(ctx.sender))) {
+      throw new SenderError('Ese sticker no está disponible.');
+    }
+    if (!row.used) ctx.db.sticker.id.update({ ...row, used: true });
+  }
+  return clean;
+}
+
+function requireConversation(ctx: Ctx, conversationId: bigint) {
+  const conversation = ctx.db.directConversation.id.find(conversationId);
+  if (
+    !conversation ||
+    (!conversation.userA.isEqual(ctx.sender) && !conversation.userB.isEqual(ctx.sender))
+  ) {
+    throw new SenderError('No participas en esa conversación.');
+  }
+  return conversation;
+}
+
+export const send_group_message = spacetimedb.reducer(
+  { text: t.string(), replyToId: t.u64().optional() },
+  (ctx, { text, replyToId }) => {
+    activeMember(ctx);
+    if (replyToId !== undefined) {
+      const target = ctx.db.groupMessage.id.find(replyToId);
+      if (!target || target.deletedAt)
+        throw new SenderError('El mensaje al que respondes ya no está.');
+    }
+    ctx.db.groupMessage.insert({
+      id: 0n,
+      sender: ctx.sender,
+      text: messageText(ctx, text),
+      sentAt: ctx.timestamp,
+      replyToId,
+      editedAt: undefined,
+      deletedAt: undefined,
+      deletedBy: undefined,
+    });
+  },
+);
+
+/** Un mensaje que el remitente puede leer, del canal o de uno de sus 1 a 1. */
+function readableMessage(ctx: Ctx, scope: string, messageId: bigint) {
+  if (scope === 'group') {
+    const row = ctx.db.groupMessage.id.find(messageId);
+    if (row) return { scope, row } as const;
+  } else if (scope === 'direct') {
+    const row = ctx.db.directMessage.id.find(messageId);
+    if (row) {
+      requireConversation(ctx, row.conversationId);
+      return { scope, row } as const;
+    }
+  }
+  throw new SenderError('El mensaje no existe o no participas en esa conversación.');
+}
+
+export const edit_message = spacetimedb.reducer(
+  { scope: t.string(), messageId: t.u64(), text: t.string() },
+  (ctx, { scope, messageId, text }) => {
+    activeMember(ctx);
+    const found = readableMessage(ctx, scope, messageId);
+    const { row } = found;
+    if (!row.sender.isEqual(ctx.sender)) throw new SenderError('Solo puedes editar tus mensajes.');
+    if (
+      row.deletedAt ||
+      ctx.timestamp.microsSinceUnixEpoch - row.sentAt.microsSinceUnixEpoch > EDIT_WINDOW_MICROS
+    ) {
+      throw new SenderError('Ya no se puede editar: pasaron más de 15 minutos o se eliminó.');
+    }
+    const clean = messageText(ctx, text);
+    if (found.scope === 'group') {
+      ctx.db.groupMessage.id.update({ ...found.row, text: clean, editedAt: ctx.timestamp });
+    } else {
+      ctx.db.directMessage.id.update({ ...found.row, text: clean, editedAt: ctx.timestamp });
+    }
+  },
+);
+
+/**
+ * Elimina para todos: queda el hueco sin texto. Quien lo envió puede siempre; en el canal
+ * también un creador, y eso queda en el historial. En un 1 a 1 nadie más.
+ */
+export const delete_message = spacetimedb.reducer(
+  { scope: t.string(), messageId: t.u64() },
+  (ctx, { scope, messageId }) => {
+    const me = activeMember(ctx);
+    const found = readableMessage(ctx, scope, messageId);
+    const { row } = found;
+    if (row.deletedAt) throw new SenderError('Ese mensaje ya se eliminó.');
+    const own = row.sender.isEqual(ctx.sender);
+    if (!own && !(found.scope === 'group' && me.isCreator)) {
+      throw new SenderError(
+        'Solo quien lo envió puede eliminarlo (en el canal, también un administrador).',
+      );
+    }
+    const change = { text: '', deletedAt: ctx.timestamp, deletedBy: ctx.sender };
+    if (found.scope === 'group') ctx.db.groupMessage.id.update({ ...found.row, ...change });
+    else ctx.db.directMessage.id.update({ ...found.row, ...change });
+    for (const reaction of [...ctx.db.messageReaction.messageId.filter(messageId)]) {
+      if (reaction.scope === scope) ctx.db.messageReaction.id.delete(reaction.id);
+    }
+    if (!own) log(ctx, 'moderate', 'group_message', messageId);
+  },
+);
+
+/** Pone, cambia o quita (si es la misma) la reacción de quien llama. */
+export const toggle_reaction = spacetimedb.reducer(
+  { scope: t.string(), messageId: t.u64(), emoji: t.string() },
+  (ctx, { scope, messageId, emoji }) => {
+    activeMember(ctx);
+    if (!REACTIONS.includes(emoji)) throw new SenderError('Esa reacción no está disponible.');
+    const { row } = readableMessage(ctx, scope, messageId);
+    if (row.deletedAt) throw new SenderError('No se puede reaccionar a un mensaje eliminado.');
+    const current = [...ctx.db.messageReaction.messageId.filter(messageId)].find(
+      (r) => r.scope === scope && r.member.isEqual(ctx.sender),
+    );
+    if (current) ctx.db.messageReaction.id.delete(current.id);
+    if (current?.emoji !== emoji) {
+      ctx.db.messageReaction.insert({ id: 0n, scope, messageId, member: ctx.sender, emoji });
+    }
+  },
+);
+
+export const create_sticker_pack = spacetimedb.reducer({ name: t.string() }, (ctx, { name }) => {
   activeMember(ctx);
-  ctx.db.groupMessage.insert({
+  ctx.db.stickerPack.insert({
     id: 0n,
-    sender: ctx.sender,
-    text: requireText(text, 'El mensaje'),
-    sentAt: ctx.timestamp,
+    owner: ctx.sender,
+    name: requireText(name, 'El nombre del paquete', 60),
+    shared: false,
+    createdAt: ctx.timestamp,
   });
 });
+
+function requireOwnPack(ctx: Ctx, packId: bigint) {
+  const pack = ctx.db.stickerPack.id.find(packId);
+  if (!pack) throw new SenderError('El paquete no existe.');
+  if (!pack.owner.isEqual(ctx.sender))
+    throw new SenderError('Solo quien importó el paquete puede cambiarlo.');
+  return pack;
+}
+
+/** Registra una imagen ya subida al almacenamiento (el backend firma la subida con el tope de 1 MB). */
+export const add_sticker = spacetimedb.reducer(
+  {
+    packId: t.u64(),
+    storageKey: t.string(),
+    contentType: t.string(),
+    size: t.u64(),
+    animated: t.bool(),
+  },
+  (ctx, { packId, storageKey, contentType, size, animated }) => {
+    activeMember(ctx);
+    requireOwnPack(ctx, packId);
+    if ([...ctx.db.sticker.packId.filter(packId)].length >= MAX_STICKERS_PER_PACK) {
+      throw new SenderError(`Un paquete tiene como máximo ${MAX_STICKERS_PER_PACK} stickers.`);
+    }
+    if (!STICKER_TYPES.includes(contentType))
+      throw new SenderError('Solo imágenes WebP, PNG, GIF o JPEG.');
+    if (size === 0n || size > MAX_STICKER_BYTES)
+      throw new SenderError('Un sticker pesa como máximo 1 MB.');
+    ctx.db.sticker.insert({
+      id: 0n,
+      packId,
+      storageKey: requireText(storageKey, 'La ubicación del sticker', 500),
+      contentType,
+      size,
+      animated,
+      used: false,
+      createdAt: ctx.timestamp,
+    });
+  },
+);
+
+export const set_sticker_pack_shared = spacetimedb.reducer(
+  { packId: t.u64(), shared: t.bool() },
+  (ctx, { packId, shared }) => {
+    activeMember(ctx);
+    const pack = requireOwnPack(ctx, packId);
+    ctx.db.stickerPack.id.update({ ...pack, shared });
+  },
+);
+
+/** Quita el paquete y sus stickers sin usar; los que ya se enviaron se quedan en sus mensajes. */
+export const remove_sticker_pack = spacetimedb.reducer({ packId: t.u64() }, (ctx, { packId }) => {
+  activeMember(ctx);
+  requireOwnPack(ctx, packId);
+  for (const row of [...ctx.db.sticker.packId.filter(packId)]) {
+    if (!row.used) ctx.db.sticker.id.delete(row.id);
+  }
+  ctx.db.stickerPack.id.delete(packId);
+});
+
+function commandName(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .trim()
+    .replace(/^\/+/, '');
+}
+
+export const save_chat_command = spacetimedb.reducer(
+  { id: t.u64().optional(), name: t.string(), description: t.string(), text: t.string() },
+  (ctx, { id, name, description, text }) => {
+    activeMember(ctx);
+    const clean = commandName(name);
+    if (!/^[a-z0-9][a-z0-9-]{0,23}$/.test(clean)) {
+      throw new SenderError('Usa de 1 a 24 letras sin acentos, números o guiones, sin espacios.');
+    }
+    if (BUILT_IN_COMMANDS.includes(clean))
+      throw new SenderError(`«/${clean}» ya es un comando de la app.`);
+    const own = [...ctx.db.chatCommand.owner.filter(ctx.sender)];
+    if (own.some((c) => c.name === clean && c.id !== id))
+      throw new SenderError(`Ya tienes un comando «/${clean}».`);
+    const fields = {
+      name: clean,
+      description: description.trim().slice(0, 80),
+      text: requireText(text, 'El texto del comando', 2000),
+    };
+    if (id !== undefined) {
+      const existing = own.find((c) => c.id === id);
+      if (!existing) throw new SenderError('El comando no existe.');
+      ctx.db.chatCommand.id.update({ ...existing, ...fields });
+    } else {
+      ctx.db.chatCommand.insert({ id: 0n, owner: ctx.sender, ...fields, createdAt: ctx.timestamp });
+    }
+  },
+);
+
+export const remove_chat_command = spacetimedb.reducer(
+  { commandId: t.u64() },
+  (ctx, { commandId }) => {
+    activeMember(ctx);
+    const row = ctx.db.chatCommand.id.find(commandId);
+    if (!row || !row.owner.isEqual(ctx.sender)) throw new SenderError('El comando no existe.');
+    ctx.db.chatCommand.id.delete(commandId);
+  },
+);
 
 function orderedPair(a: Ctx['sender'], b: Ctx['sender']) {
   return a.toHexString() < b.toHexString() ? [a, b] : [b, a];
@@ -878,22 +1206,26 @@ export const open_direct_conversation = spacetimedb.reducer(
 );
 
 export const send_direct_message = spacetimedb.reducer(
-  { conversationId: t.u64(), text: t.string() },
-  (ctx, { conversationId, text }) => {
+  { conversationId: t.u64(), text: t.string(), replyToId: t.u64().optional() },
+  (ctx, { conversationId, text, replyToId }) => {
     activeMember(ctx);
-    const conversation = ctx.db.directConversation.id.find(conversationId);
-    if (
-      !conversation ||
-      (!conversation.userA.isEqual(ctx.sender) && !conversation.userB.isEqual(ctx.sender))
-    ) {
-      throw new SenderError('No participas en esa conversación.');
+    requireConversation(ctx, conversationId);
+    if (replyToId !== undefined) {
+      const target = ctx.db.directMessage.id.find(replyToId);
+      if (!target || target.conversationId !== conversationId || target.deletedAt) {
+        throw new SenderError('El mensaje al que respondes ya no está.');
+      }
     }
     ctx.db.directMessage.insert({
       id: 0n,
       conversationId,
       sender: ctx.sender,
-      text: requireText(text, 'El mensaje'),
+      text: messageText(ctx, text),
       sentAt: ctx.timestamp,
+      replyToId,
+      editedAt: undefined,
+      deletedAt: undefined,
+      deletedBy: undefined,
     });
   },
 );
@@ -1292,6 +1624,56 @@ export const my_direct_messages = spacetimedb.view(
     ];
     return conversations.flatMap((c) => [...ctx.db.directMessage.conversationId.filter(c.id)]);
   },
+);
+
+/** Reacciones del canal y de tus 1 a 1; nunca las de conversaciones ajenas. */
+export const message_reactions = spacetimedb.view(
+  { name: 'message_reactions', public: true },
+  t.array(messageReaction.rowType),
+  (ctx) => {
+    if (!isActive(ctx.db, ctx.sender)) return [];
+    const mine = new Set(
+      [
+        ...ctx.db.directConversation.userA.filter(ctx.sender),
+        ...ctx.db.directConversation.userB.filter(ctx.sender),
+      ].map((c) => c.id),
+    );
+    return [...ctx.db.messageReaction.iter()].filter((r) => {
+      if (r.scope === 'group') return true;
+      const message = ctx.db.directMessage.id.find(r.messageId);
+      return message != null && mine.has(message.conversationId);
+    });
+  },
+);
+
+/** Tus paquetes y los que el grupo compartió. */
+export const sticker_packs = spacetimedb.view(
+  { name: 'sticker_packs', public: true },
+  t.array(stickerPack.rowType),
+  (ctx) =>
+    isActive(ctx.db, ctx.sender)
+      ? [...ctx.db.stickerPack.iter()].filter((p) => p.shared || p.owner.isEqual(ctx.sender))
+      : [],
+);
+
+/** Stickers de esos paquetes y los que ya se enviaron en algún mensaje. */
+export const stickers = spacetimedb.view(
+  { name: 'stickers', public: true },
+  t.array(sticker.rowType),
+  (ctx) => {
+    if (!isActive(ctx.db, ctx.sender)) return [];
+    return [...ctx.db.sticker.iter()].filter((row) => {
+      if (row.used) return true;
+      const pack = ctx.db.stickerPack.id.find(row.packId);
+      return pack != null && (pack.shared || pack.owner.isEqual(ctx.sender));
+    });
+  },
+);
+
+export const my_chat_commands = spacetimedb.view(
+  { name: 'my_chat_commands', public: true },
+  t.array(chatCommand.rowType),
+  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.chatCommand.owner.filter(ctx.sender)] : []),
 );
 
 export const activities = spacetimedb.view(
