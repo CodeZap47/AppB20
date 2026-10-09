@@ -2,6 +2,13 @@ import type { ReactNode } from 'react';
 
 const ICONS = {
   back: <path d="M15 5l-7 7 7 7" />,
+  cake: (
+    <>
+      <path d="M4 20h16v-7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2z" />
+      <path d="M4 15.5c1.3 1 2.7 1 4 0s2.7-1 4 0 2.7 1 4 0 2.7-1 4 0M12 11V8" />
+      <path d="M12 3.5c.9 1 1.2 2 0 3-1.2-1-.9-2 0-3z" />
+    </>
+  ),
   chat: <path d="M4 5h16v11H9.5L4 20z" />,
   check: <path d="M5 12.5l4.5 4.5L19 7.5" />,
   clip: <path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9.8 17.1a1.7 1.7 0 0 1-2.4-2.4L15 7" />,
@@ -20,6 +27,7 @@ const ICONS = {
     </>
   ),
   folder: <path d="M3 7.5a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
+  forward: <path d="M9 5l7 7-7 7" />,
   lock: (
     <>
       <rect x="5" y="11" width="14" height="10" rx="2" />
