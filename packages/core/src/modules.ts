@@ -19,6 +19,8 @@ export interface ModuleInfo {
   stage: Stage;
   /** Si se puede usar sin configurar Gemini. */
   worksWithoutAi: boolean;
+  /** Ya tiene pantalla propia aunque su etapa no haya llegado: aparece en la navegación. */
+  ready?: boolean;
 }
 
 export const MODULES: readonly ModuleInfo[] = [
@@ -93,6 +95,7 @@ export const MODULES: readonly ModuleInfo[] = [
     summary: 'Encuestas y votaciones nominales transparentes.',
     stage: 2,
     worksWithoutAi: true,
+    ready: true,
   },
   {
     id: 'salas',
@@ -194,6 +197,11 @@ export const MODULES: readonly ModuleInfo[] = [
 
 export function modulesForStage(stage: Stage): ModuleInfo[] {
   return MODULES.filter((m) => m.stage <= stage);
+}
+
+/** Lo que va en la navegación: el MVP y los módulos que ya tienen pantalla. */
+export function navigableModules(): ModuleInfo[] {
+  return MODULES.filter((m) => m.stage <= 1 || m.ready);
 }
 
 export function findModule(id: string): ModuleInfo | undefined {

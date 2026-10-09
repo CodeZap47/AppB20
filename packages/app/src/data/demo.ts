@@ -3,8 +3,15 @@ import {
   canEditWork,
   canManageCalendar,
   canReadDirectConversation,
+  cleanPollOptions,
+  closingError,
   CURRICULUM,
   fileSizeError,
+  MAX_POLL_DESCRIPTION_LENGTH,
+  MAX_POLL_NOTE_LENGTH,
+  MAX_POLL_TITLE_LENGTH,
+  pollStatus,
+  voteError,
   isValidBirthday,
   isValidPeriod,
   isWorkKind,
@@ -24,6 +31,9 @@ import type {
   Evidence,
   Note,
   NoteComment,
+  Poll,
+  PollInput,
+  PollVote,
   Question,
   SaveNoteInput,
   DataSource,
@@ -69,6 +79,8 @@ interface State {
   noteComments: NoteComment[];
   questions: Question[];
   answers: Answer[];
+  polls: Poll[];
+  pollVotes: PollVote[];
   lastSeen: Record<Id, Date>;
 }
 
@@ -140,6 +152,8 @@ export class DemoDataSource implements DataSource {
         noteComments: [],
         questions: [],
         answers: [],
+        polls: [],
+        pollVotes: [],
         lastSeenAt: undefined,
       };
     }
@@ -169,6 +183,8 @@ export class DemoDataSource implements DataSource {
       noteComments: s.noteComments.filter((c) => visibleNotes.has(c.noteId)),
       questions: s.questions,
       answers: s.answers,
+      polls: s.polls,
+      pollVotes: s.pollVotes,
       lastSeenAt: s.lastSeen[me.id],
     };
   }
@@ -645,6 +661,121 @@ export class DemoDataSource implements DataSource {
     this.#state.lastSeen = { ...this.#state.lastSeen, [me.id]: this.#now() };
     this.#emit();
   }
+
+  /** Valida lo que se captura al crear o editar una votación. */
+  #pollContent(input: PollInput) {
+    const options = cleanPollOptions(input.options);
+    if ('problem' in options) throw new Error(options.problem);
+    const problem = closingError(input.closesAt, this.#now());
+    if (problem) throw new Error(problem);
+    const eligibleIds = [...new Set(input.eligibleIds)].filter((id) => this.#isActive(id));
+    if (!eligibleIds.length) throw new Error('Elige al menos a un participante.');
+    return {
+      title: requireText(input.title, 'La pregunta', MAX_POLL_TITLE_LENGTH),
+      description: input.description.trim().slice(0, MAX_POLL_DESCRIPTION_LENGTH),
+      options: options.options,
+      multiple: input.multiple,
+      allowChange: input.allowChange,
+      eligibleIds,
+      closesAt: input.closesAt,
+    };
+  }
+
+  #poll(pollId: Id): Poll {
+    this.#activeMember();
+    const poll = this.#state.polls.find((p) => p.id === pollId);
+    if (!poll) throw new Error('La votación no existe.');
+    return poll;
+  }
+
+  createPoll(input: PollInput): Id {
+    const me = this.#activeMember();
+    const content = this.#pollContent(input);
+    if (input.restartOf) {
+      const previous = this.#poll(input.restartOf);
+      if (pollStatus(previous, this.#now()) !== 'cancelled') {
+        throw new Error('Solo se reinicia una votación cancelada.');
+      }
+    }
+    const now = this.#now();
+    const poll: Poll = {
+      id: this.#id(),
+      ...content,
+      createdBy: me.id,
+      createdAt: now,
+      updatedAt: now,
+      cancelReason: '',
+      restartOf: input.restartOf,
+      decision: '',
+    };
+    this.#state.polls = [...this.#state.polls, poll];
+    this.#emit();
+    return poll.id;
+  }
+
+  updatePoll(pollId: Id, input: PollInput) {
+    const me = this.#activeMember();
+    const poll = this.#poll(pollId);
+    if (poll.createdBy !== me.id) throw new Error('Solo quien creó la votación puede editarla.');
+    if (pollStatus(poll, this.#now()) !== 'open') throw new Error('La votación ya no está abierta.');
+    if (this.#state.pollVotes.some((v) => v.pollId === pollId)) {
+      throw new Error('Ya tiene votos: para cambiarla, cancélala y reiníciala.');
+    }
+    const content = this.#pollContent(input);
+    this.#state.polls = this.#state.polls.map((p) =>
+      p.id === pollId ? { ...p, ...content, updatedAt: this.#now() } : p,
+    );
+    this.#emit();
+  }
+
+  castVote(pollId: Id, choices: number[]) {
+    const me = this.#activeMember();
+    const poll = this.#poll(pollId);
+    const previous = this.#state.pollVotes.find((v) => v.pollId === pollId && v.voterId === me.id);
+    const now = this.#now();
+    const problem = voteError(
+      {
+        status: pollStatus(poll, now),
+        multiple: poll.multiple,
+        allowChange: poll.allowChange,
+        optionCount: poll.options.length,
+        eligible: poll.eligibleIds.includes(me.id),
+        alreadyVoted: Boolean(previous),
+      },
+      choices,
+    );
+    if (problem) throw new Error(problem);
+    const sorted = [...choices].sort((a, b) => a - b);
+    this.#state.pollVotes = previous
+      ? this.#state.pollVotes.map((v) => (v === previous ? { ...v, choices: sorted, changedAt: now } : v))
+      : [...this.#state.pollVotes, { pollId, voterId: me.id, choices: sorted, votedAt: now }];
+    this.#emit();
+  }
+
+  cancelPoll(pollId: Id, reason: string) {
+    const me = this.#activeMember();
+    const poll = this.#poll(pollId);
+    if (poll.createdBy !== me.id) throw new Error('Solo quien creó la votación puede cancelarla.');
+    if (pollStatus(poll, this.#now()) !== 'open') throw new Error('La votación ya no está abierta.');
+    const cancelReason = requireText(reason, 'La razón', MAX_POLL_NOTE_LENGTH);
+    this.#state.polls = this.#state.polls.map((p) =>
+      p.id === pollId ? { ...p, cancelledAt: this.#now(), cancelReason } : p,
+    );
+    this.#emit();
+  }
+
+  recordPollDecision(pollId: Id, decision: string) {
+    const me = this.#activeMember();
+    const poll = this.#poll(pollId);
+    if (pollStatus(poll, this.#now()) !== 'closed') {
+      throw new Error('El acuerdo se registra cuando la votación cierra.');
+    }
+    const text = requireText(decision, 'El acuerdo', MAX_POLL_NOTE_LENGTH);
+    this.#state.polls = this.#state.polls.map((p) =>
+      p.id === pollId ? { ...p, decision: text, decidedBy: me.id, decidedAt: this.#now() } : p,
+    );
+    this.#emit();
+  }
 }
 
 /** Estado inicial con datos de prueba claramente marcados. */
@@ -1074,6 +1205,102 @@ export function createDemoState(now = new Date()): State {
     ],
     answers: [
       { id: 'r1', questionId: 'q1', authorId: 'demo-2', body: 'Respuesta de ejemplo.', createdAt: minutesAgo(40) },
+    ],
+    // Votaciones de prueba: abierta sin tu voto, múltiple, cerrada con y sin acuerdo, y una
+    // cancelada que se reinició con otra opción.
+    polls: [
+      {
+        id: 'p1',
+        title: '¿Qué día hacemos la sesión de repaso de prueba?',
+        description: 'Votación de ejemplo. Se puede cambiar el voto hasta el cierre.',
+        options: ['Martes', 'Miércoles', 'Jueves'],
+        multiple: false,
+        allowChange: true,
+        eligibleIds: ['demo-1', 'demo-2', 'demo-3', 'demo-4'],
+        closesAt: minutesAgo(-2 * 24 * 60),
+        createdBy: 'demo-2',
+        createdAt: minutesAgo(400),
+        updatedAt: minutesAgo(400),
+        cancelReason: '',
+        restartOf: 'p4',
+        decision: '',
+      },
+      {
+        id: 'p2',
+        title: '¿Qué temas repasamos antes del examen de prueba?',
+        description: 'Elige todos los que quieras.',
+        options: ['Tema de prueba 1', 'Tema de prueba 2', 'Tema de prueba 3', 'Tema de prueba 4'],
+        multiple: true,
+        allowChange: false,
+        eligibleIds: ['demo-1', 'demo-2', 'demo-3', 'demo-4'],
+        closesAt: minutesAgo(-300),
+        createdBy: 'demo-1',
+        createdAt: minutesAgo(200),
+        updatedAt: minutesAgo(200),
+        cancelReason: '',
+        decision: '',
+      },
+      {
+        id: 'p3',
+        title: '¿Cómo presentamos la exposición de prueba?',
+        description: 'Solo votan quienes forman parte del equipo de prueba.',
+        options: ['Diapositivas', 'Demostración en vivo'],
+        multiple: false,
+        allowChange: false,
+        eligibleIds: ['demo-1', 'demo-2', 'demo-3'],
+        closesAt: minutesAgo(1500),
+        createdBy: 'demo-3',
+        createdAt: minutesAgo(4000),
+        updatedAt: minutesAgo(4000),
+        cancelReason: '',
+        decision: 'Acuerdo de prueba: diapositivas con una demostración corta al final.',
+        decidedBy: 'demo-2',
+        decidedAt: minutesAgo(1400),
+      },
+      {
+        id: 'p4',
+        title: '¿Qué día hacemos la sesión de repaso de prueba?',
+        description: 'Votación de ejemplo.',
+        options: ['Martes', 'Jueves'],
+        multiple: false,
+        allowChange: true,
+        eligibleIds: ['demo-1', 'demo-2', 'demo-3', 'demo-4'],
+        closesAt: minutesAgo(-1000),
+        createdBy: 'demo-2',
+        createdAt: minutesAgo(600),
+        updatedAt: minutesAgo(600),
+        cancelledAt: minutesAgo(420),
+        cancelReason: 'Faltaba el miércoles como opción; se reinició con las tres.',
+        decision: '',
+      },
+      {
+        id: 'p5',
+        title: '¿Pedimos prórroga para la tarea de prueba 2?',
+        description: '',
+        options: ['Sí', 'No'],
+        multiple: false,
+        allowChange: false,
+        eligibleIds: ['demo-1', 'demo-2', 'demo-3', 'demo-4'],
+        closesAt: minutesAgo(90),
+        createdBy: 'demo-4',
+        createdAt: minutesAgo(2000),
+        updatedAt: minutesAgo(2000),
+        cancelReason: '',
+        decision: '',
+      },
+    ],
+    pollVotes: [
+      { pollId: 'p1', voterId: 'demo-2', choices: [1], votedAt: minutesAgo(390) },
+      { pollId: 'p1', voterId: 'demo-3', choices: [1], votedAt: minutesAgo(350), changedAt: minutesAgo(150) },
+      { pollId: 'p1', voterId: 'demo-4', choices: [0], votedAt: minutesAgo(300) },
+      { pollId: 'p2', voterId: 'demo-3', choices: [0, 2], votedAt: minutesAgo(120) },
+      { pollId: 'p3', voterId: 'demo-1', choices: [0], votedAt: minutesAgo(3500) },
+      { pollId: 'p3', voterId: 'demo-2', choices: [0], votedAt: minutesAgo(3000) },
+      { pollId: 'p3', voterId: 'demo-3', choices: [1], votedAt: minutesAgo(2000) },
+      { pollId: 'p4', voterId: 'demo-4', choices: [1], votedAt: minutesAgo(500) },
+      { pollId: 'p5', voterId: 'demo-2', choices: [0], votedAt: minutesAgo(1800) },
+      { pollId: 'p5', voterId: 'demo-4', choices: [0], votedAt: minutesAgo(1700) },
+      { pollId: 'p5', voterId: 'demo-1', choices: [1], votedAt: minutesAgo(1000) },
     ],
     lastSeen: { 'demo-1': minutesAgo(180) },
   };

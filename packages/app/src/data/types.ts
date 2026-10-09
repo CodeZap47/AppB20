@@ -202,6 +202,46 @@ export interface Answer {
   createdAt: Date;
 }
 
+/**
+ * Votación o encuesta nominal (3.8): todo el grupo ve quién votó y qué eligió. Las opciones no
+ * cambian después del primer voto; para cambiarlas se cancela y se reinicia la consulta.
+ */
+export interface Poll {
+  id: Id;
+  title: string;
+  description: string;
+  options: string[];
+  /** Opción única o varias. */
+  multiple: boolean;
+  /** Se anuncia al crearla: si se puede cambiar el voto antes del cierre. */
+  allowChange: boolean;
+  /** Quiénes pueden votar; se fija al crearla. */
+  eligibleIds: Id[];
+  closesAt: Date;
+  createdBy: Id;
+  createdAt: Date;
+  updatedAt: Date;
+  cancelledAt?: Date;
+  cancelReason: string;
+  /** Consulta cancelada que esta reinicia, si la hay. */
+  restartOf?: Id;
+  /** Acuerdo adoptado tras el cierre; la consulta no es la decisión final. */
+  decision: string;
+  decidedBy?: Id;
+  decidedAt?: Date;
+}
+
+/** Un voto por persona y votación; si se permite, se cambia antes del cierre. */
+export interface PollVote {
+  pollId: Id;
+  voterId: Id;
+  /** Índices de las opciones elegidas. */
+  choices: number[];
+  votedAt: Date;
+  /** Si cambió su voto, cuándo fue la última vez. */
+  changedAt?: Date;
+}
+
 /** Lo que el usuario actual puede ver, igual que las vistas del servidor. */
 export interface Snapshot {
   me: Member | undefined;
@@ -226,6 +266,8 @@ export interface Snapshot {
   noteComments: NoteComment[];
   questions: Question[];
   answers: Answer[];
+  polls: Poll[];
+  pollVotes: PollVote[];
   /** Última vez que marcaste las novedades como vistas. */
   lastSeenAt: Date | undefined;
 }
@@ -288,6 +330,26 @@ export interface Actions {
   acceptAnswer(questionId: Id, answerId: Id): void;
   reopenQuestion(questionId: Id): void;
   markSeen(): void;
+  createPoll(input: PollInput): Id;
+  /** Solo quien la creó y mientras nadie haya votado. */
+  updatePoll(pollId: Id, input: PollInput): void;
+  /** Vota o, si la votación lo permite, cambia tu voto antes del cierre. */
+  castVote(pollId: Id, choices: number[]): void;
+  /** Solo quien la creó y antes del cierre; los votos se conservan como registro. */
+  cancelPoll(pollId: Id, reason: string): void;
+  /** Después del cierre, cualquier integrante registra el acuerdo; queda su nombre y fecha. */
+  recordPollDecision(pollId: Id, decision: string): void;
+}
+
+export interface PollInput {
+  title: string;
+  description: string;
+  options: string[];
+  multiple: boolean;
+  allowChange: boolean;
+  eligibleIds: Id[];
+  closesAt: Date;
+  restartOf?: Id;
 }
 
 export interface CreateActivityInput {

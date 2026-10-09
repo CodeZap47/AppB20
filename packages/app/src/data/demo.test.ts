@@ -316,3 +316,87 @@ describe('notas, actividades y preguntas', () => {
     });
   });
 });
+
+describe('votaciones', () => {
+  const now = new Date(2026, 9, 8, 12);
+  const at = (viewer: string, clock = now) => new DemoDataSource(createDemoState(now), viewer, () => clock);
+  const input = {
+    title: '¿Votación de prueba?',
+    description: '',
+    options: ['Sí', 'No'],
+    multiple: false,
+    allowChange: false,
+    eligibleIds: ['demo-1', 'demo-2'],
+    closesAt: new Date(now.getTime() + 60 * 60_000),
+  };
+
+  it('es nominal: cualquiera ve quién votó y qué eligió', () => {
+    const data = at('demo-1');
+    data.castVote('p1', [2]);
+    data.setViewer('demo-4');
+    const vote = data.getSnapshot().pollVotes.find((v) => v.pollId === 'p1' && v.voterId === 'demo-1');
+    expect(vote?.choices).toEqual([2]);
+  });
+
+  it('impide votos duplicados y solo cambia el voto si se anunció', () => {
+    const data = at('demo-1');
+    const id = data.createPoll(input);
+    data.castVote(id, [0]);
+    expect(() => data.castVote(id, [1])).toThrow('no permite cambiar');
+    data.castVote('p1', [0]);
+    data.castVote('p1', [1]);
+    const mine = data.getSnapshot().pollVotes.filter((v) => v.pollId === 'p1' && v.voterId === 'demo-1');
+    expect(mine).toHaveLength(1);
+    expect(mine[0]?.choices).toEqual([1]);
+    expect(mine[0]?.changedAt).toBeDefined();
+  });
+
+  it('solo votan los elegibles y se respeta el cierre', () => {
+    // La votación de prueba p3 es solo para tres personas y ya cerró.
+    expect(() => at('demo-4').castVote('p3', [0])).toThrow('cerró');
+    const data = at('demo-1');
+    const id = data.createPoll(input);
+    data.setViewer('demo-4');
+    expect(() => data.castVote(id, [0])).toThrow('participantes');
+    // p2 cierra en cinco horas: antes se puede votar, después ya no.
+    expect(() => at('demo-2').castVote('p2', [1])).not.toThrow();
+    const sixHoursLater = new Date(now.getTime() + 6 * 60 * 60_000);
+    expect(() => at('demo-2', sixHoursLater).castVote('p2', [1])).toThrow('cerró');
+  });
+
+  it('no cambia las opciones después del primer voto', () => {
+    const data = at('demo-1');
+    expect(() => data.updatePoll('p2', { ...input, options: ['A', 'B'] })).toThrow('cancélala y reiníciala');
+    const id = data.createPoll(input);
+    data.updatePoll(id, { ...input, options: ['Sí', 'No', 'Tal vez'] });
+    expect(data.getSnapshot().polls.find((p) => p.id === id)?.options).toHaveLength(3);
+    data.setViewer('demo-2');
+    expect(() => data.updatePoll(id, input)).toThrow('Solo quien creó');
+  });
+
+  it('cancela con razón y reinicia en una consulta nueva', () => {
+    const data = at('demo-1');
+    expect(() => data.cancelPoll('p1', 'x')).toThrow('Solo quien creó');
+    data.cancelPoll('p2', 'Faltaba una opción.');
+    expect(() => data.castVote('p2', [0])).toThrow('cancelada');
+    const restarted = data.createPoll({ ...input, restartOf: 'p2' });
+    expect(data.getSnapshot().polls.find((p) => p.id === restarted)?.restartOf).toBe('p2');
+    expect(() => data.createPoll({ ...input, restartOf: 'p1' })).toThrow('cancelada');
+  });
+
+  it('registra el acuerdo solo después del cierre, con responsable', () => {
+    const data = at('demo-3');
+    expect(() => data.recordPollDecision('p1', 'Acuerdo')).toThrow('cuando la votación cierra');
+    data.recordPollDecision('p5', 'Acuerdo de prueba: no pedimos prórroga.');
+    const poll = data.getSnapshot().polls.find((p) => p.id === 'p5');
+    expect(poll?.decidedBy).toBe('demo-3');
+    expect(poll?.decision).toMatch(/no pedimos/);
+  });
+
+  it('pide un cierre con margen y opciones válidas', () => {
+    const data = at('demo-1');
+    expect(() => data.createPoll({ ...input, closesAt: now })).toThrow('10 minutos');
+    expect(() => data.createPoll({ ...input, options: ['Sí'] })).toThrow('dos opciones');
+    expect(() => data.createPoll({ ...input, eligibleIds: ['externo'] })).toThrow('participante');
+  });
+});
