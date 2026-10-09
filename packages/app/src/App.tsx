@@ -7,6 +7,7 @@ import { ModulePage } from './pages/ModulePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { InstallPage } from './pages/InstallPage';
 import { DirectThread, GroupThread, MessagesLayout, ThreadPlaceholder } from './pages/MessagesPage';
+import { CommandsPage, StickersPage } from './pages/ChatToolsPage';
 import {
   AssignmentFormPage,
   AssignmentPage,
@@ -53,6 +54,8 @@ const router = createHashRouter([
               { index: true, element: <GroupThread /> },
               { path: 'directos', element: <ThreadPlaceholder /> },
               { path: 'directos/:conversationId', element: <DirectThread /> },
+              { path: 'stickers', element: <StickersPage /> },
+              { path: 'comandos', element: <CommandsPage /> },
             ],
           },
           { path: 'm/tareas', element: <AssignmentsPage /> },

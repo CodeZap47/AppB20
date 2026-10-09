@@ -315,4 +315,121 @@ describe('notas, actividades y preguntas', () => {
       expect(data.getSnapshot().workFiles.some((f) => f.id === id)).toBe(false);
     });
   });
+
+  describe('mensajes: responder, editar, eliminar y reaccionar', () => {
+    const at = (minutes: number) => new Date(2026, 9, 8, 12, minutes);
+    function clocked() {
+      let now = at(0);
+      const data = new DemoDataSource(createDemoState(at(0)), 'demo-2', () => now);
+      return { data, tick: (minutes: number) => (now = at(minutes)) };
+    }
+
+    it('responde a un mensaje del mismo canal y no a uno de otra conversación', () => {
+      const { data } = clocked();
+      const id = data.sendGroupMessage('Va', 'g9');
+      expect(data.getSnapshot().groupMessages.find((m) => m.id === id)?.replyToId).toBe('g9');
+      expect(() => data.sendGroupMessage('x', 'd1')).toThrow('ya no está');
+      expect(() => data.sendDirectMessage('c1', 'x', 'g9')).toThrow('ya no está');
+    });
+
+    it('edita solo lo propio y durante 15 minutos', () => {
+      const { data, tick } = clocked();
+      const id = data.sendGroupMessage('Hola');
+      data.editMessage('group', id, 'Hola a todos');
+      expect(data.getSnapshot().groupMessages.find((m) => m.id === id)).toMatchObject({
+        text: 'Hola a todos',
+      });
+      expect(() => data.editMessage('group', 'g9', 'x')).toThrow('Solo puedes editar');
+      tick(16);
+      expect(() => data.editMessage('group', id, 'Tarde')).toThrow('15 minutos');
+    });
+
+    it('elimina para todos; en un 1 a 1 nadie más puede, en el canal un administrador sí', () => {
+      const { data } = clocked();
+      data.setViewer('demo-3');
+      expect(() => data.deleteMessage('direct', 'd1')).toThrow('Solo quien lo envió');
+      expect(() => data.deleteMessage('group', 'g9')).toThrow('Solo quien lo envió');
+      data.setViewer('demo-1');
+      expect(() => data.deleteMessage('direct', 'd1')).toThrow('no participas');
+      data.deleteMessage('group', 'g10');
+      const g10 = data.getSnapshot().groupMessages.find((m) => m.id === 'g10');
+      expect(g10).toMatchObject({ text: '', deletedBy: 'demo-1' });
+      expect(data.getSnapshot().reactions.some((r) => r.messageId === 'g10')).toBe(false);
+      expect(() => data.toggleReaction('group', 'g10', '👍')).toThrow('eliminado');
+    });
+
+    it('una reacción por persona: la misma la quita y otra la cambia', () => {
+      const { data } = clocked();
+      const mine = () =>
+        data.getSnapshot().reactions.filter((r) => r.messageId === 'g9' && r.memberId === 'demo-2');
+      data.toggleReaction('group', 'g9', '👍');
+      data.toggleReaction('group', 'g9', '😂');
+      expect(mine().map((r) => r.emoji)).toEqual(['😂']);
+      data.toggleReaction('group', 'g9', '😂');
+      expect(mine()).toHaveLength(0);
+      expect(() => data.toggleReaction('group', 'g9', '🍕')).toThrow('no está disponible');
+    });
+
+    it('las reacciones de un 1 a 1 solo las ven sus participantes', () => {
+      const { data } = clocked();
+      data.toggleReaction('direct', 'd1', '❤️');
+      expect(data.getSnapshot().reactions.some((r) => r.messageId === 'd1')).toBe(true);
+      data.setViewer('demo-1');
+      expect(data.getSnapshot().reactions.some((r) => r.messageId === 'd1')).toBe(false);
+    });
+  });
+
+  describe('stickers y comandos', () => {
+    const png = () =>
+      new File(
+        [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])],
+        'a.png',
+      );
+
+    it('un paquete importado es privado hasta compartirlo', async () => {
+      const data = source('demo-1');
+      const packId = await data.importStickers('Mío', [png()]);
+      const sticker = data.getSnapshot().stickers.find((s) => s.packId === packId);
+      expect(sticker).toMatchObject({ contentType: 'image/png' });
+      data.setViewer('demo-3');
+      expect(data.getSnapshot().stickerPacks.some((p) => p.id === packId)).toBe(false);
+      expect(() => data.sendGroupMessage(`[[sticker:${sticker?.id}]]`)).toThrow(
+        'no está disponible',
+      );
+      expect(() => data.setStickerPackShared(packId, true)).toThrow('Solo quien importó');
+      data.setViewer('demo-1');
+      data.setStickerPackShared(packId, true);
+      data.setViewer('demo-3');
+      data.sendGroupMessage(`[[sticker:${sticker?.id}]]`);
+      // Quitado el paquete, el sticker enviado se sigue viendo en el canal.
+      data.setViewer('demo-1');
+      data.removeStickerPack(packId);
+      expect(data.getSnapshot().stickerPacks.some((p) => p.id === packId)).toBe(false);
+      expect(data.getSnapshot().stickers.some((s) => s.id === sticker?.id)).toBe(true);
+    });
+
+    it('rechaza archivos que no son imágenes', async () => {
+      const data = source('demo-1');
+      await expect(data.importStickers('X', [new File(['<svg/>'], 'a.svg')])).rejects.toThrow(
+        'no es una imagen',
+      );
+      await expect(data.importStickers('X', [])).rejects.toThrow('al menos un sticker');
+    });
+
+    it('los comandos propios son privados y no repiten nombre', () => {
+      const data = source('demo-1');
+      expect(data.getSnapshot().chatCommands.map((c) => c.name)).toEqual(['repo']);
+      expect(() => data.saveChatCommand({ name: 'Repo', description: '', text: 'x' })).toThrow(
+        'Ya tienes',
+      );
+      expect(() => data.saveChatCommand({ name: 'tarea', description: '', text: 'x' })).toThrow(
+        'ya es un comando',
+      );
+      const id = data.saveChatCommand({ name: '/Saludo', description: 'Hola', text: '¡Hola!' });
+      expect(data.getSnapshot().chatCommands.find((c) => c.id === id)?.name).toBe('saludo');
+      data.setViewer('demo-2');
+      expect(data.getSnapshot().chatCommands).toHaveLength(0);
+      expect(() => data.removeChatCommand(id)).toThrow('no existe');
+    });
+  });
 });
