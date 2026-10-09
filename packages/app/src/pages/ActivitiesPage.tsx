@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router';
 import { isValidPeriod, PERIOD_COUNT, periodLabel, WORK_KIND_LABEL } from '@b20/core';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import type { Activity, Evidence, Member, Revision } from '../data/types';
@@ -10,12 +10,10 @@ import { Icon } from '../components/Icon';
 import { RevisionHistory } from '../components/RevisionHistory';
 import { RichText } from '../components/RichText';
 import { useAction } from '../components/useAction';
-import { filterActivities, groupByMonth, participantsOf, type ActivityFilters } from '../lib/activities';
+import { participantsOf } from '../lib/activities';
 import {
   formatLongDay,
   formatMediumDate,
-  formatMonth,
-  formatShortMonth,
   formatTime,
   memberName,
   parseDay,
@@ -27,53 +25,6 @@ import { normalize } from '../lib/search';
 import { bySubject, NO_TERM, revisionsOf } from '../lib/works';
 
 const PERIODS = Array.from({ length: PERIOD_COUNT }, (_, i) => i + 1);
-
-const evidenceCount = (n: number) => `${n} ${n === 1 ? 'evidencia' : 'evidencias'}`;
-
-function ActivityRow({
-  activity,
-  subjectName,
-  count,
-  participants,
-  mine,
-}: {
-  activity: Activity;
-  subjectName: string;
-  /** Evidencias subidas. */
-  count: number;
-  participants: (Member | undefined)[];
-  /** Quien mira aparece en alguna evidencia. */
-  mine: boolean;
-}) {
-  const date = parseDay(activity.date);
-  return (
-    <Link to={`/m/actividades/${activity.id}`} className="row-card">
-      <span className="datebox" aria-hidden="true">
-        <strong>{date.getDate()}</strong>
-        {formatShortMonth(date)}
-      </span>
-      <span className="row-card__main">
-        <span className="sr-only">{formatLongDay(date)}. </span>
-        <strong className="row-card__title">{activity.title}</strong>
-        <span className="row-card__meta">
-          {subjectName}
-          {activity.topic && ` · ${activity.topic}`}
-        </span>
-      </span>
-      <span className="row-card__side">
-        {count > 0 ? (
-          <>
-            <AvatarStack members={participants} />
-            {evidenceCount(count)}
-          </>
-        ) : (
-          'Sin evidencias'
-        )}
-        {mine && <span className="badge badge--resolved">Participaste</span>}
-      </span>
-    </Link>
-  );
-}
 
 function EvidenceCard({
   evidence,
@@ -106,228 +57,16 @@ function EvidenceCard({
   );
 }
 
-/** Sesiones de clase en orden cronológico. Los filtros viven en la URL. */
+/** Lista unida con «Tareas y Actividades»: aquí solo queda la vista por fecha de ese módulo. */
+const LIST = '/m/tareas?vista=fechas';
+
+/** La dirección antigua de la lista lleva a la lista unida, conservando los filtros. */
 export function ActivitiesPage() {
-  const { me, activities, subjects, terms, evidences, members } = useSnapshot();
-  const [params, setParams] = useSearchParams();
-  const periodParam = Number(params.get('cuatri'));
-  const filters: ActivityFilters = {
-    query: params.get('q') ?? '',
-    period: isValidPeriod(periodParam) ? periodParam : 0,
-    subjectId: params.get('materia') ?? '',
-    termId: params.get('parcial') ?? '',
-    mine: params.get('mias') === '1',
-  };
-
-  const update = (changes: Record<string, string>) =>
-    setParams(
-      (previous) => {
-        const next = new URLSearchParams(previous);
-        for (const [key, value] of Object.entries(changes)) {
-          if (value) next.set(key, value);
-          else next.delete(key);
-        }
-        return next;
-      },
-      { replace: true },
-    );
-
-  const ctx = { subjects, evidences, meId: me?.id };
-  const shown = filterActivities(activities, filters, ctx);
-  const beforeSubject = filterActivities(activities, { ...filters, subjectId: '', termId: '' }, ctx);
-  // Con un cuatrimestre elegido se ven sus materias aunque estén vacías; sin él, solo las que
-  // ya tienen actividades.
-  const subjectChips = subjects
-    .filter((s) => (filters.period ? s.period === filters.period : true))
-    .sort(bySubject)
-    .map((s) => ({ ...s, count: beforeSubject.filter((a) => a.subjectId === s.id).length }))
-    .filter((s) => filters.period || s.count > 0 || s.id === filters.subjectId);
-  const inSubject = beforeSubject.filter((a) => a.subjectId === filters.subjectId);
-  const termChips = filters.subjectId
-    ? [
-        ...terms
-          .filter((t) => t.subjectId === filters.subjectId)
-          .sort((a, b) => a.position - b.position)
-          .map((t) => ({ id: t.id, name: t.name, count: inSubject.filter((a) => a.termId === t.id).length })),
-        { id: NO_TERM, name: 'Sin parcial', count: inSubject.filter((a) => !a.termId).length },
-      ].filter((t) => t.id !== NO_TERM || t.count > 0 || t.id === filters.termId)
-    : [];
-  const filtering = Boolean(
-    filters.query || filters.period || filters.subjectId || filters.termId || filters.mine,
-  );
-
-  const newParams = new URLSearchParams();
-  if (filters.period) newParams.set('cuatri', String(filters.period));
-  if (filters.subjectId) newParams.set('materia', filters.subjectId);
-  if (filters.termId && filters.termId !== NO_TERM) newParams.set('parcial', filters.termId);
-  const newTo = `/m/actividades/nueva${newParams.size ? `?${newParams}` : ''}`;
-
-  return (
-    <>
-      <header className="page-header">
-        <div>
-          <h1>Actividades de clase</h1>
-          <p className="muted">
-            Lo que se hizo en cada sesión y las evidencias de cada equipo. Lo que se entrega va en{' '}
-            <Link to="/m/tareas">Tareas y Actividades</Link>.
-          </p>
-        </div>
-        <Link to={newTo} className="button with-icon">
-          <Icon name="plus" size={18} /> Registrar actividad
-        </Link>
-      </header>
-
-      {activities.length === 0 ? (
-        <Empty
-          icon="folder"
-          title="Todavía no hay actividades"
-          action={
-            <Link to={newTo} className="button">
-              Registrar la primera
-            </Link>
-          }
-        >
-          Registra lo que hicieron en clase para que cada equipo suba su evidencia.
-        </Empty>
-      ) : (
-        <>
-          <div className="toolbar" role="search">
-            <label className="search toolbar__search">
-              <Icon name="search" size={18} />
-              <input
-                type="search"
-                placeholder="Buscar por título, tema o materia"
-                aria-label="Buscar actividades"
-                value={filters.query}
-                onChange={(e) => update({ q: e.target.value })}
-              />
-            </label>
-            <select
-              aria-label="Cuatrimestre"
-              value={filters.period || ''}
-              onChange={(e) => update({ cuatri: e.target.value, materia: '', parcial: '' })}
-            >
-              <option value="">Todos los cuatrimestres</option>
-              {PERIODS.map((period) => (
-                <option key={period} value={period}>
-                  {periodLabel(period)}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="chip"
-              aria-pressed={filters.mine}
-              onClick={() => update({ mias: filters.mine ? '' : '1' })}
-            >
-              {filters.mine && <Icon name="check" size={16} />}
-              Donde participé
-            </button>
-          </div>
-
-          <div className="chips chips--small chips--scroll" role="group" aria-label="Materia">
-            <button
-              type="button"
-              className="chip"
-              aria-pressed={!filters.subjectId}
-              onClick={() => update({ materia: '', parcial: '' })}
-            >
-              Todas las materias
-            </button>
-            {subjectChips.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                className="chip"
-                aria-pressed={filters.subjectId === s.id}
-                onClick={() => update({ materia: s.id, parcial: '' })}
-              >
-                {s.name} <span className="chip__count">{s.count}</span>
-              </button>
-            ))}
-          </div>
-
-          {termChips.length > 0 && (
-            <div className="chips chips--small chips--scroll" role="group" aria-label="Parcial">
-              <button
-                type="button"
-                className="chip"
-                aria-pressed={!filters.termId}
-                onClick={() => update({ parcial: '' })}
-              >
-                Todos los parciales
-              </button>
-              {termChips.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  className="chip"
-                  aria-pressed={filters.termId === t.id}
-                  onClick={() => update({ parcial: t.id })}
-                >
-                  {t.name} <span className="chip__count">{t.count}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          <p className="results muted" aria-live="polite">
-            {shown.length} {shown.length === 1 ? 'actividad' : 'actividades'}
-            {filtering && ' con estos filtros'}
-            {filtering && (
-              <>
-                {' · '}
-                <button type="button" className="link-button" onClick={() => setParams({}, { replace: true })}>
-                  Limpiar filtros
-                </button>
-              </>
-            )}
-          </p>
-
-          {shown.length ? (
-            groupByMonth(shown).map((month) => (
-              <section key={month.key}>
-                <h2 className="label">{formatMonth(month.date)}</h2>
-                <ul className="rows">
-                  {month.activities.map((activity) => {
-                    const participantIds = participantsOf(activity.id, evidences);
-                    return (
-                      <li key={activity.id}>
-                        <ActivityRow
-                          activity={activity}
-                          subjectName={[
-                            subjects.find((s) => s.id === activity.subjectId)?.name ?? 'Materia desconocida',
-                            terms.find((t) => t.id === activity.termId)?.name,
-                          ]
-                            .filter(Boolean)
-                            .join(' · ')}
-                          count={evidences.filter((e) => e.activityId === activity.id).length}
-                          participants={participantIds.map((id) => members.find((m) => m.id === id))}
-                          mine={Boolean(me && participantIds.includes(me.id))}
-                        />
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            ))
-          ) : (
-            <Empty
-              icon="search"
-              title="Nada por aquí todavía"
-              action={
-                <Link to={newTo} className="button secondary">
-                  Registrar aquí
-                </Link>
-              }
-            >
-              Ninguna actividad coincide con la búsqueda y los filtros elegidos.
-            </Empty>
-          )}
-        </>
-      )}
-    </>
-  );
+  const [params] = useSearchParams();
+  const next = new URLSearchParams(params);
+  next.delete('mias');
+  next.set('vista', 'fechas');
+  return <Navigate to={`/m/tareas?${next}`} replace />;
 }
 
 function EvidenceForm({ activityId, onDone }: { activityId: string; onDone: () => void }) {
@@ -419,7 +158,7 @@ export function ActivityPage() {
         icon="folder"
         title="Actividad no encontrada"
         action={
-          <Link to="/m/actividades" className="button">
+          <Link to={LIST} className="button">
             Ver las actividades
           </Link>
         }
@@ -464,24 +203,24 @@ export function ActivityPage() {
 
   return (
     <>
-      <Link to="/m/actividades" className="back with-icon">
-        <Icon name="back" size={16} /> Actividades de clase
+      <Link to={LIST} className="back with-icon">
+        <Icon name="back" size={16} /> Tareas y Actividades
       </Link>
       <header className="page-header">
         <div>
           <p className="eyebrow">
             {subject && (
               <>
-                <Link to={`/m/actividades?cuatri=${subject.period}`}>{periodLabel(subject.period)}</Link>
+                <Link to={`/m/tareas?vista=fechas&cuatri=${subject.period}`}>{periodLabel(subject.period)}</Link>
                 {' · '}
               </>
             )}
-            <Link to={`/m/actividades?${new URLSearchParams(inSubject)}`}>
+            <Link to={`/m/tareas?${new URLSearchParams({ ...inSubject, vista: 'fechas' })}`}>
               {subject?.name ?? 'Materia desconocida'}
             </Link>
             {' · '}
             <Link
-              to={`/m/actividades?${new URLSearchParams({ ...inSubject, parcial: activity.termId ?? NO_TERM })}`}
+              to={`/m/tareas?${new URLSearchParams({ ...inSubject, parcial: activity.termId ?? NO_TERM, vista: 'fechas' })}`}
             >
               {term?.name ?? 'Sin parcial'}
             </Link>
@@ -663,7 +402,7 @@ export function ActivityFormPage() {
         icon="folder"
         title="Actividad no encontrada"
         action={
-          <Link to="/m/actividades" className="button">
+          <Link to={LIST} className="button">
             Ver las actividades
           </Link>
         }
@@ -681,7 +420,7 @@ function ActivityForm({ activity }: { activity: Activity | undefined }) {
   const [params] = useSearchParams();
   const { subjects, terms, members, calendar } = useSnapshot();
   const { error, run } = useAction();
-  const backTo = activity ? `/m/actividades/${activity.id}` : '/m/actividades';
+  const backTo = activity ? `/m/actividades/${activity.id}` : LIST;
   // Al registrar, el formulario abre en el cuatrimestre y parcial vigentes según Ajustes.
   const current = currentPlacement(calendar);
 
@@ -734,11 +473,11 @@ function ActivityForm({ activity }: { activity: Activity | undefined }) {
   return (
     <>
       <Link to={backTo} className="back with-icon">
-        <Icon name="back" size={16} /> {activity ? activity.title : 'Actividades de clase'}
+        <Icon name="back" size={16} /> {activity ? activity.title : 'Tareas y Actividades'}
       </Link>
       <header className="page-header">
         <div>
-          <h1>{activity ? 'Editar página' : 'Registrar actividad'}</h1>
+          <h1>{activity ? 'Editar página' : 'Registrar actividad de clase'}</h1>
           <p className="muted">
             {activity
               ? `Es la página de todo el grupo. Tu cambio se guardará como versión ${activity.version + 1} a tu nombre y las anteriores quedan en el historial.`

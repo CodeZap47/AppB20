@@ -2015,8 +2015,10 @@ fieldset.field > legend {
   }
 }
 
+/* Los botones del encabezado se acomodan en varias líneas si no caben. */
 .page-header > .row {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 /* ---- Ajustes: calendario de parciales ---- */
@@ -2089,4 +2091,21 @@ fieldset.field > legend {
   margin-top: 0.75rem;
   font-size: 0.8rem;
   overflow-wrap: anywhere;
+}
+
+/* ---- Módulo unido: actividades de clase dentro de «Tareas y Actividades» ---- */
+
+.badge--clase {
+  color: #1b7f4b;
+  border-color: currentColor;
+}
+
+@media (prefers-color-scheme: dark) {
+  .badge--clase {
+    color: #6fd39b;
+  }
+}
+
+.page-header > .row {
+  justify-content: flex-end;
 }

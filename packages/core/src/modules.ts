@@ -3,6 +3,7 @@
  * La interfaz lo usa para la navegación y para mostrar en qué etapa entra cada módulo.
  *
  * El módulo 3.11 (lenguaje de señales y respuestas preparadas) no forma parte de este proyecto.
+ * Las actividades de clase (3.3) no tienen entrada propia: viven dentro de «Tareas y Actividades».
  */
 
 export type Stage = 0 | 1 | 2 | 3;
@@ -41,15 +42,7 @@ export const MODULES: readonly ModuleInfo[] = [
     id: 'tareas',
     title: 'Tareas y Actividades',
     section: '3.2',
-    summary: 'Tareas, actividades, exposiciones y exámenes por materia y parcial.',
-    stage: 1,
-    worksWithoutAi: true,
-  },
-  {
-    id: 'actividades',
-    title: 'Actividades de clase',
-    section: '3.3',
-    summary: 'Actividades, evidencias y seguimiento personal.',
+    summary: 'Tareas, exámenes y actividades de clase, con lo que subió cada quien.',
     stage: 1,
     worksWithoutAi: true,
   },

@@ -59,13 +59,20 @@ que inicia el siguiente y, entre dos parciales, sigue valiendo el anterior. Los 
 salvo que se llegue desde una lista ya filtrada. Si no hay fechas, abren en el último
 cuatrimestre que la persona usó.
 
-### Cómo se relacionan «Tareas y Actividades» y «Actividades de clase»
+### Un solo módulo con dos vistas
 
-Son módulos distintos: uno guarda lo que se entrega (página principal y trabajos de cada
-alumno) y el otro lo que se hizo en una sesión (página y evidencias por equipo). No se enlazan
-registro a registro; comparten la clasificación cuatrimestre → materia → parcial. Por eso cada
-página lista lo del otro módulo en su misma materia y parcial. Las actividades de clase guardan
-ahora su parcial (`termId`).
+«Actividades de clase» ya no es un módulo aparte: vive dentro de «Tareas y Actividades». Los
+datos siguen siendo dos (`Assignment` con sus `Work`, y `Activity` con sus `Evidence`), pero la
+lista los junta como publicaciones (`buildPosts` en `packages/app/src/lib/posts.ts`) y los
+mismos filtros aplican a los dos. Hay dos vistas, elegibles con `?vista=`:
+
+- **Por materia** (por omisión): tarjetas agrupadas en materia → parcial.
+- **Por fecha** (`vista=fechas`): filas por mes con el día a la izquierda. Una actividad de clase
+  va en el día de su sesión; una tarea, en su fecha de entrega o, si no tiene, en el día que se
+  creó.
+
+Las páginas de una actividad de clase conservan sus direcciones (`/m/actividades/:id`); la
+dirección de la lista antigua redirige a la vista por fecha.
 
 ### Plan de estudios y tipos de trabajo
 

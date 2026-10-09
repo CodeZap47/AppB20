@@ -14,13 +14,13 @@ import {
 } from '@b20/core';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import type { Assignment, Member, Revision, Work, WorkFile } from '../data/types';
-import { AssignmentArchive } from '../components/AssignmentArchive';
 import { Avatar } from '../components/Avatar';
 import { AvatarStack } from '../components/AvatarStack';
 import { Empty } from '../components/Empty';
 import { FileList } from '../components/FileList';
 import { FilePicker } from '../components/FilePicker';
 import { Icon } from '../components/Icon';
+import { PostArchive, PostTimeline } from '../components/PostViews';
 import { RevisionHistory } from '../components/RevisionHistory';
 import { RichText } from '../components/RichText';
 import { useAction } from '../components/useAction';
@@ -34,15 +34,8 @@ import {
   peopleList,
 } from '../lib/format';
 import { currentPlacement, lastPeriod, rememberPeriod, termAt } from '../lib/period';
-import {
-  bySubject,
-  filterAssignments,
-  NO_TERM,
-  revisionsOf,
-  submittersOf,
-  worksOf,
-  type AssignmentFilters,
-} from '../lib/works';
+import { buildPosts, filterPosts, type PostFilters } from '../lib/posts';
+import { bySubject, NO_TERM, revisionsOf, submittersOf, worksOf } from '../lib/works';
 
 /** Opción de los selectores para crear una materia o un parcial al clasificar. */
 const NEW = '__nuevo__';
@@ -85,23 +78,25 @@ function KindPicker({ value, onChange }: { value: WorkKind; onChange: (kind: Wor
 }
 
 /**
- * Archivo del grupo: las páginas principales de tareas, actividades, exposiciones y exámenes.
- * Los filtros viven en la URL para conservarlos al volver de una página.
+ * El módulo completo: páginas de tareas, actividades, exposiciones y exámenes, y actividades de
+ * clase, en una sola lista con dos vistas (por materia o por fecha). Los filtros viven en la
+ * URL para conservarlos al volver de una página.
  */
 export function AssignmentsPage() {
-  const { me, assignments, works, workFiles, subjects, terms, members } = useSnapshot();
+  const { me, assignments, activities, evidences, works, workFiles, subjects, terms, members } =
+    useSnapshot();
   const [params, setParams] = useSearchParams();
   const kindParam = params.get('tipo');
   const periodParam = Number(params.get('cuatri'));
-  const filters: AssignmentFilters = {
+  const filters: PostFilters = {
     query: params.get('q') ?? '',
     kindGroup: isWorkKindGroup(kindParam) ? kindParam : '',
     period: isValidPeriod(periodParam) ? periodParam : 0,
     subjectId: params.get('materia') ?? '',
     termId: params.get('parcial') ?? '',
-    authorId: params.get('autor') ?? '',
+    personId: params.get('autor') ?? '',
   };
-  const view = params.get('vista') === 'recientes' ? 'recent' : 'grouped';
+  const view = params.get('vista') === 'fechas' ? 'dates' : 'subjects';
 
   const update = (changes: Record<string, string>) =>
     setParams(
@@ -116,26 +111,27 @@ export function AssignmentsPage() {
       { replace: true },
     );
 
-  const ctx = { subjects, terms, members, works, files: workFiles };
-  const shown = filterAssignments(assignments, filters, ctx);
+  const posts = buildPosts({ assignments, works, workFiles, activities, evidences, members });
+  const ctx = { subjects, terms };
+  const shown = filterPosts(posts, filters, ctx);
   // Cada conteo respeta los demás filtros: así se ve cuánto hay antes de elegir.
-  const beforeKind = filterAssignments(assignments, { ...filters, kindGroup: '' }, ctx);
-  const beforeSubject = filterAssignments(assignments, { ...filters, subjectId: '', termId: '' }, ctx);
+  const beforeKind = filterPosts(posts, { ...filters, kindGroup: '' }, ctx);
+  const beforeSubject = filterPosts(posts, { ...filters, subjectId: '', termId: '' }, ctx);
   // Con un cuatrimestre elegido se ven sus materias aunque estén vacías; sin él, solo las que
   // ya tienen algo, para no listar las 45 del plan.
   const subjectChips = subjects
     .filter((s) => (filters.period ? s.period === filters.period : true))
     .sort(bySubject)
-    .map((s) => ({ ...s, count: beforeSubject.filter((a) => a.subjectId === s.id).length }))
+    .map((s) => ({ ...s, count: beforeSubject.filter((p) => p.subjectId === s.id).length }))
     .filter((s) => filters.period || s.count > 0 || s.id === filters.subjectId);
-  const inSubject = beforeSubject.filter((a) => a.subjectId === filters.subjectId);
+  const inSubject = beforeSubject.filter((p) => p.subjectId === filters.subjectId);
   const termChips = filters.subjectId
     ? [
         ...terms
           .filter((t) => t.subjectId === filters.subjectId)
           .sort((a, b) => a.position - b.position)
-          .map((t) => ({ id: t.id, name: t.name, count: inSubject.filter((a) => a.termId === t.id).length })),
-        { id: NO_TERM, name: 'Sin parcial', count: inSubject.filter((a) => !a.termId).length },
+          .map((t) => ({ id: t.id, name: t.name, count: inSubject.filter((p) => p.termId === t.id).length })),
+        { id: NO_TERM, name: 'Sin parcial', count: inSubject.filter((p) => !p.termId).length },
       ].filter((t) => t.id !== NO_TERM || t.count > 0 || t.id === filters.termId)
     : [];
   const filtering = Boolean(
@@ -144,16 +140,17 @@ export function AssignmentsPage() {
     filters.period ||
     filters.subjectId ||
     filters.termId ||
-    filters.authorId,
+    filters.personId,
   );
-  const authors = members.filter((m) => m.id !== me?.id && works.some((w) => w.authorIds.includes(m.id)));
+  const people = members.filter((m) => m.id !== me?.id && posts.some((p) => p.people.includes(m.id)));
 
-  // Crear desde un archivo filtrado deja el formulario ya clasificado.
+  // Crear desde una lista filtrada deja el formulario ya clasificado.
   const newParams = new URLSearchParams();
-  if (filters.kindGroup) newParams.set('tipo', filters.kindGroup);
   if (filters.period) newParams.set('cuatri', String(filters.period));
   if (filters.subjectId) newParams.set('materia', filters.subjectId);
   if (filters.termId && filters.termId !== NO_TERM) newParams.set('parcial', filters.termId);
+  const classTo = `/m/actividades/nueva${newParams.size ? `?${newParams}` : ''}`;
+  if (filters.kindGroup) newParams.set('tipo', filters.kindGroup);
   const newTo = `/m/tareas/nueva${newParams.size ? `?${newParams}` : ''}`;
 
   return (
@@ -162,27 +159,32 @@ export function AssignmentsPage() {
         <div>
           <h1>Tareas y Actividades</h1>
           <p className="muted">
-            Cada tarea, actividad, exposición o examen tiene su página, que todos pueden editar, y ahí
-            mismo los trabajos que subió cada quien.
+            Lo que se entrega y lo que se hizo en clase, en un solo lugar. Cada publicación tiene su
+            página, que todos pueden editar, y ahí mismo lo que subió cada quien.
           </p>
         </div>
-        <Link to={newTo} className="button with-icon">
-          <Icon name="plus" size={18} /> Nueva tarea o actividad
-        </Link>
+        <div className="row">
+          <Link to={classTo} className="button secondary with-icon">
+            <Icon name="plus" size={18} /> Registrar actividad de clase
+          </Link>
+          <Link to={newTo} className="button with-icon">
+            <Icon name="plus" size={18} /> Nueva tarea o actividad
+          </Link>
+        </div>
       </header>
 
-      {assignments.length === 0 ? (
+      {posts.length === 0 ? (
         <Empty
           icon="folder"
-          title="El archivo está vacío"
+          title="Todavía no hay nada publicado"
           action={
             <Link to={newTo} className="button">
               Crear la primera
             </Link>
           }
         >
-          Crea la página de una tarea, actividad, exposición o examen para que cada quien suba su
-          trabajo.
+          Crea la página de una tarea, actividad, exposición o examen, o registra lo que hicieron en
+          clase.
         </Empty>
       ) : (
         <>
@@ -191,7 +193,7 @@ export function AssignmentsPage() {
               <Icon name="search" size={18} />
               <input
                 type="search"
-                placeholder="Buscar por título, instrucciones o autor"
+                placeholder="Buscar por título, tema o autor"
                 aria-label="Buscar tareas y actividades"
                 value={filters.query}
                 onChange={(e) => update({ q: e.target.value })}
@@ -210,28 +212,24 @@ export function AssignmentsPage() {
               ))}
             </select>
             <select
-              aria-label="Con trabajos de"
-              value={filters.authorId}
+              aria-label="Con participación de"
+              value={filters.personId}
               onChange={(e) => update({ autor: e.target.value })}
             >
-              <option value="">Trabajos de todos</option>
-              {me && <option value={me.id}>Donde ya subí</option>}
-              {authors.map((m) => (
+              <option value="">De todos</option>
+              {me && <option value={me.id}>Donde participé</option>}
+              {people.map((m) => (
                 <option key={m.id} value={m.id}>
-                  Con trabajos de {m.displayName}
+                  Donde participó {m.displayName}
                 </option>
               ))}
             </select>
-            <div className="segmented" role="group" aria-label="Orden del archivo">
-              <button type="button" aria-pressed={view === 'grouped'} onClick={() => update({ vista: '' })}>
+            <div className="segmented" role="group" aria-label="Vista">
+              <button type="button" aria-pressed={view === 'subjects'} onClick={() => update({ vista: '' })}>
                 Por materia
               </button>
-              <button
-                type="button"
-                aria-pressed={view === 'recent'}
-                onClick={() => update({ vista: 'recientes' })}
-              >
-                Recientes
+              <button type="button" aria-pressed={view === 'dates'} onClick={() => update({ vista: 'fechas' })}>
+                Por fecha
               </button>
             </div>
           </div>
@@ -254,9 +252,7 @@ export function AssignmentsPage() {
                 onClick={() => update({ tipo: group.id })}
               >
                 {group.label}{' '}
-                <span className="chip__count">
-                  {beforeKind.filter((a) => workKindGroup(a.kind) === group.id).length}
-                </span>
+                <span className="chip__count">{beforeKind.filter((p) => p.group === group.id).length}</span>
               </button>
             ))}
           </div>
@@ -308,28 +304,22 @@ export function AssignmentsPage() {
           )}
 
           <p className="results muted" aria-live="polite">
-            {shown.length} {filtering ? 'con estos filtros' : 'en el archivo'}
+            {shown.length} {filtering ? 'con estos filtros' : 'en total'}
             {filtering && (
               <>
                 {' · '}
-                <button type="button" className="link-button" onClick={() => setParams({}, { replace: true })}>
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => setParams(view === 'dates' ? { vista: 'fechas' } : {}, { replace: true })}
+                >
                   Limpiar filtros
                 </button>
               </>
             )}
           </p>
 
-          {shown.length ? (
-            <AssignmentArchive
-              assignments={shown}
-              works={works}
-              subjects={subjects}
-              terms={terms}
-              members={members}
-              meId={me?.id}
-              view={view}
-            />
-          ) : (
+          {shown.length === 0 ? (
             <Empty
               icon="search"
               title="Nada por aquí todavía"
@@ -339,8 +329,12 @@ export function AssignmentsPage() {
                 </Link>
               }
             >
-              Ninguna tarea o actividad coincide con la búsqueda y los filtros elegidos.
+              Ninguna publicación coincide con la búsqueda y los filtros elegidos.
             </Empty>
+          ) : view === 'dates' ? (
+            <PostTimeline posts={shown} subjects={subjects} terms={terms} members={members} meId={me?.id} />
+          ) : (
+            <PostArchive posts={shown} subjects={subjects} terms={terms} members={members} meId={me?.id} />
           )}
         </>
       )}
@@ -552,7 +546,7 @@ export function AssignmentPage() {
   const sessions = activities
     .filter((a) => a.subjectId === assignment.subjectId && a.termId === assignment.termId)
     .sort((a, b) => b.date.localeCompare(a.date));
-  const sessionsLink = `/m/actividades?${new URLSearchParams({ ...inSubject, parcial: assignment.termId ?? NO_TERM })}`;
+  const sessionsLink = `/m/tareas?${new URLSearchParams({ ...inSubject, parcial: assignment.termId ?? NO_TERM, vista: 'fechas' })}`;
 
   // Restaurar es editar con el texto de antes: crea una versión nueva y no borra ninguna.
   const restore = (revision: Revision) =>
