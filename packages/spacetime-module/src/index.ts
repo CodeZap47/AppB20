@@ -341,6 +341,64 @@ const lastSeen = table(
   },
 );
 
+/**
+ * Guía de estudio de una materia y parcial (3.5). Es del grupo: cualquier miembro activo la
+ * edita y la versión sube; quién guardó cada versión queda en `change_log`.
+ */
+const studyGuide = table(
+  { name: 'study_guide' },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    subjectId: t.u64().index('btree'),
+    termId: t.u64().optional(),
+    title: t.string(),
+    /** Temario, un tema por elemento. */
+    topics: t.array(t.string()),
+    /** Una entrada por sección, en el orden de `GUIDE_SECTIONS` de `@b20/core`. */
+    sections: t.array(t.string()),
+    version: t.u32(),
+    createdBy: t.identity(),
+    createdAt: t.timestamp(),
+    updatedBy: t.identity(),
+    updatedAt: t.timestamp(),
+  },
+);
+
+/**
+ * Material del grupo citado en una guía. `status`: 'processed' | 'pending'; una pendiente
+ * siempre lleva la razón. `sourceVersion` es la versión del material cuando se procesó.
+ */
+const guideSource = table(
+  { name: 'guide_source' },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    guideId: t.u64().index('btree'),
+    /** 'trabajo' | 'tarea' | 'actividad' | 'nota' | 'pregunta'. */
+    kind: t.string(),
+    refId: t.u64(),
+    sourceVersion: t.u32(),
+    status: t.string(),
+    reason: t.string(),
+    topics: t.array(t.string()),
+    addedBy: t.identity(),
+    addedAt: t.timestamp(),
+  },
+);
+
+/** Revisión de un compañero sobre una versión. `verdict`: 'approved' | 'changes'. */
+const guideReview = table(
+  { name: 'guide_review' },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    guideId: t.u64().index('btree'),
+    guideVersion: t.u32(),
+    reviewer: t.identity(),
+    verdict: t.string(),
+    comment: t.string(),
+    createdAt: t.timestamp(),
+  },
+);
+
 const spacetimedb = schema({
   appConfig,
   invitation,
@@ -365,6 +423,9 @@ const spacetimedb = schema({
   question,
   answer,
   lastSeen,
+  studyGuide,
+  guideSource,
+  guideReview,
 });
 export default spacetimedb;
 
@@ -1176,6 +1237,264 @@ export const mark_seen = spacetimedb.reducer((ctx) => {
 });
 
 // ---------------------------------------------------------------------------
+// Guías de estudio (3.5), primera versión manual
+// ---------------------------------------------------------------------------
+
+// Mismos límites que `packages/core/src/guides.ts`.
+const GUIDE_SECTION_COUNT = 8;
+const MAX_GUIDE_TOPICS = 40;
+const MAX_GUIDE_TOPIC_LENGTH = 120;
+const MAX_GUIDE_SECTION_LENGTH = 20_000;
+const GUIDE_SOURCE_KINDS = ['trabajo', 'tarea', 'actividad', 'nota', 'pregunta'];
+
+const GUIDE_ARGS = {
+  subjectId: t.u64(),
+  termId: t.u64().optional(),
+  title: t.string(),
+  topics: t.array(t.string()),
+  sections: t.array(t.string()),
+};
+
+const GUIDE_SOURCE_REF = t.object('GuideSourceRef', { kind: t.string(), refId: t.u64() });
+
+function checkGuide(
+  ctx: Ctx,
+  input: { subjectId: bigint; termId?: bigint; title: string; topics: string[]; sections: string[] },
+) {
+  requireSubject(ctx, input.subjectId);
+  if (input.termId !== undefined) {
+    const row = ctx.db.term.id.find(input.termId);
+    if (row?.subjectId !== input.subjectId) {
+      throw new SenderError('El parcial no pertenece a esa materia.');
+    }
+  }
+  const seen = new Set<string>();
+  const topics = input.topics
+    .map((topic) => topic.trim())
+    .filter((topic) => topic && !seen.has(topic.toLowerCase()) && seen.add(topic.toLowerCase()));
+  if (!topics.length) throw new SenderError('Escribe al menos un tema del temario.');
+  if (topics.length > MAX_GUIDE_TOPICS) throw new SenderError('El temario tiene demasiados temas.');
+  if (topics.some((topic) => topic.length > MAX_GUIDE_TOPIC_LENGTH)) {
+    throw new SenderError('Un tema del temario es demasiado largo.');
+  }
+  if (input.sections.length > GUIDE_SECTION_COUNT) {
+    throw new SenderError('La guía tiene secciones de más.');
+  }
+  const sections = Array.from({ length: GUIDE_SECTION_COUNT }, (_, i) =>
+    (input.sections[i] ?? '').trim(),
+  );
+  if (sections.some((text) => text.length > MAX_GUIDE_SECTION_LENGTH)) {
+    throw new SenderError('Una sección es demasiado larga.');
+  }
+  return {
+    subjectId: input.subjectId,
+    termId: input.termId,
+    title: requireText(input.title, 'El título', 200),
+    topics,
+    sections,
+  };
+}
+
+function requireGuide(ctx: Ctx, guideId: bigint) {
+  const row = ctx.db.studyGuide.id.find(guideId);
+  if (!row) throw new SenderError('La guía no existe.');
+  return row;
+}
+
+/** Versión actual del material citado; comprueba que exista, sea del grupo y de la materia. */
+function sourceVersion(ctx: Ctx, kind: string, refId: bigint, subjectId: bigint): number {
+  if (!GUIDE_SOURCE_KINDS.includes(kind)) throw new SenderError('Tipo de fuente inválido.');
+  let found: { subjectId: bigint; version: number } | undefined;
+  if (kind === 'trabajo') {
+    const row = ctx.db.work.id.find(refId);
+    const parent = row && ctx.db.assignment.id.find(row.assignmentId);
+    if (row && parent) found = { subjectId: parent.subjectId, version: row.version };
+  } else if (kind === 'tarea') {
+    found = ctx.db.assignment.id.find(refId) ?? undefined;
+  } else if (kind === 'actividad') {
+    found = ctx.db.activity.id.find(refId) ?? undefined;
+  } else if (kind === 'nota') {
+    // Las notas personales no se comparten, así que tampoco sirven de fuente.
+    const row = ctx.db.note.id.find(refId);
+    if (row?.visibility === 'group') found = row;
+  } else {
+    const row = ctx.db.question.id.find(refId);
+    if (row) found = { subjectId: row.subjectId, version: 1 };
+  }
+  if (!found) throw new SenderError('Una de las fuentes ya no existe o no es del grupo.');
+  if (found.subjectId !== subjectId) {
+    throw new SenderError('Las fuentes deben ser de la misma materia.');
+  }
+  return found.version;
+}
+
+function addGuideSources(
+  ctx: Ctx,
+  guide: { id: bigint; subjectId: bigint },
+  refs: { kind: string; refId: bigint }[],
+) {
+  for (const ref of refs) {
+    const version = sourceVersion(ctx, ref.kind, ref.refId, guide.subjectId);
+    const duplicate = [...ctx.db.guideSource.guideId.filter(guide.id)].some(
+      (row) => row.kind === ref.kind && row.refId === ref.refId,
+    );
+    if (duplicate) continue;
+    ctx.db.guideSource.insert({
+      id: 0n,
+      guideId: guide.id,
+      kind: ref.kind,
+      refId: ref.refId,
+      sourceVersion: version,
+      status: 'pending',
+      reason: 'Falta revisarla.',
+      topics: [],
+      addedBy: ctx.sender,
+      addedAt: ctx.timestamp,
+    });
+  }
+}
+
+export const create_guide = spacetimedb.reducer(
+  { ...GUIDE_ARGS, sources: t.array(GUIDE_SOURCE_REF) },
+  (ctx, { sources, ...input }) => {
+    activeMember(ctx);
+    const row = ctx.db.studyGuide.insert({
+      id: 0n,
+      ...checkGuide(ctx, input),
+      version: 1,
+      createdBy: ctx.sender,
+      createdAt: ctx.timestamp,
+      updatedBy: ctx.sender,
+      updatedAt: ctx.timestamp,
+    });
+    addGuideSources(ctx, row, sources);
+    log(ctx, 'create', 'study_guide', row.id);
+  },
+);
+
+/** Como en un wiki: cualquier miembro activo edita; la materia no cambia. */
+export const update_guide = spacetimedb.reducer(
+  { guideId: t.u64(), ...GUIDE_ARGS },
+  (ctx, { guideId, ...input }) => {
+    activeMember(ctx);
+    const row = requireGuide(ctx, guideId);
+    const checked = checkGuide(ctx, input);
+    if (checked.subjectId !== row.subjectId) {
+      throw new SenderError('La materia de una guía no cambia.');
+    }
+    ctx.db.studyGuide.id.update({
+      ...row,
+      ...checked,
+      version: row.version + 1,
+      updatedBy: ctx.sender,
+      updatedAt: ctx.timestamp,
+    });
+    // Un tema que se quitó del temario deja de contar en las fuentes.
+    for (const source of [...ctx.db.guideSource.guideId.filter(guideId)]) {
+      const topics = source.topics.filter((topic) => checked.topics.includes(topic));
+      if (topics.length !== source.topics.length) ctx.db.guideSource.id.update({ ...source, topics });
+    }
+    log(ctx, 'update', 'study_guide', guideId);
+  },
+);
+
+export const add_guide_sources = spacetimedb.reducer(
+  { guideId: t.u64(), sources: t.array(GUIDE_SOURCE_REF) },
+  (ctx, { guideId, sources }) => {
+    activeMember(ctx);
+    addGuideSources(ctx, requireGuide(ctx, guideId), sources);
+    log(ctx, 'update', 'study_guide', guideId);
+  },
+);
+
+function requireGuideSource(ctx: Ctx, sourceId: bigint) {
+  const row = ctx.db.guideSource.id.find(sourceId);
+  if (!row) throw new SenderError('La fuente no existe.');
+  return row;
+}
+
+export const update_guide_source = spacetimedb.reducer(
+  { sourceId: t.u64(), status: t.string(), reason: t.string(), topics: t.array(t.string()) },
+  (ctx, { sourceId, status, reason, topics }) => {
+    activeMember(ctx);
+    const row = requireGuideSource(ctx, sourceId);
+    const guide = requireGuide(ctx, row.guideId);
+    if (status !== 'processed' && status !== 'pending') {
+      throw new SenderError('Estado de fuente inválido.');
+    }
+    const why = reason.trim();
+    if (why.length > 200) throw new SenderError('La razón es demasiado larga.');
+    if (status === 'pending' && !why) throw new SenderError('Di por qué la fuente sigue pendiente.');
+    if (topics.some((topic) => !guide.topics.includes(topic))) {
+      throw new SenderError('Un tema no está en el temario de la guía.');
+    }
+    ctx.db.guideSource.id.update({
+      ...row,
+      status,
+      reason: status === 'pending' ? why : '',
+      topics: guide.topics.filter((topic) => topics.includes(topic)),
+    });
+    log(ctx, 'update', 'guide_source', sourceId);
+  },
+);
+
+/** Toma la versión actual del material, después de revisar lo que cambió. */
+export const refresh_guide_source = spacetimedb.reducer(
+  { sourceId: t.u64() },
+  (ctx, { sourceId }) => {
+    activeMember(ctx);
+    const row = requireGuideSource(ctx, sourceId);
+    const guide = requireGuide(ctx, row.guideId);
+    const version = sourceVersion(ctx, row.kind, row.refId, guide.subjectId);
+    ctx.db.guideSource.id.update({ ...row, sourceVersion: version });
+    log(ctx, 'update', 'guide_source', sourceId);
+  },
+);
+
+export const remove_guide_source = spacetimedb.reducer(
+  { sourceId: t.u64() },
+  (ctx, { sourceId }) => {
+    activeMember(ctx);
+    requireGuideSource(ctx, sourceId);
+    ctx.db.guideSource.id.delete(sourceId);
+    log(ctx, 'delete', 'guide_source', sourceId);
+  },
+);
+
+/** Un compañero revisa la versión actual; quien la guardó no puede. Una por persona y versión. */
+export const review_guide = spacetimedb.reducer(
+  { guideId: t.u64(), verdict: t.string(), comment: t.string() },
+  (ctx, { guideId, verdict, comment }) => {
+    activeMember(ctx);
+    const guide = requireGuide(ctx, guideId);
+    if (guide.updatedBy.isEqual(ctx.sender)) {
+      throw new SenderError('Guardaste esta versión; la revisa otro compañero.');
+    }
+    if (verdict !== 'approved' && verdict !== 'changes') {
+      throw new SenderError('Resultado de revisión inválido.');
+    }
+    const text = comment.trim();
+    if (text.length > 2000) throw new SenderError('El comentario es demasiado largo.');
+    if (verdict === 'changes' && !text) throw new SenderError('Di qué cambios propones.');
+    for (const row of [...ctx.db.guideReview.guideId.filter(guideId)]) {
+      if (row.guideVersion === guide.version && row.reviewer.isEqual(ctx.sender)) {
+        ctx.db.guideReview.id.delete(row.id);
+      }
+    }
+    ctx.db.guideReview.insert({
+      id: 0n,
+      guideId,
+      guideVersion: guide.version,
+      reviewer: ctx.sender,
+      verdict,
+      comment: text,
+      createdAt: ctx.timestamp,
+    });
+    log(ctx, 'review', 'study_guide', guideId);
+  },
+);
+
+// ---------------------------------------------------------------------------
 // Vistas: lo único que leen los clientes
 // ---------------------------------------------------------------------------
 
@@ -1344,4 +1663,22 @@ export const my_last_seen = spacetimedb.view(
     const row = ctx.db.lastSeen.identity.find(ctx.sender);
     return row ? [row] : [];
   },
+);
+
+export const study_guides = spacetimedb.view(
+  { name: 'study_guides', public: true },
+  t.array(studyGuide.rowType),
+  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.studyGuide.iter()] : []),
+);
+
+export const guide_sources = spacetimedb.view(
+  { name: 'guide_sources', public: true },
+  t.array(guideSource.rowType),
+  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.guideSource.iter()] : []),
+);
+
+export const guide_reviews = spacetimedb.view(
+  { name: 'guide_reviews', public: true },
+  t.array(guideReview.rowType),
+  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.guideReview.iter()] : []),
 );
