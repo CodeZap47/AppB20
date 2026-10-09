@@ -134,6 +134,8 @@ const pageRevision = table(
     /** Solo actividades de clase: el objetivo. */
     summary: t.string(),
     body: t.string(),
+    /** Solo tareas: la fecha de entrega de esa versión, para avisar cuando cambia. */
+    dueDate: t.string().optional(),
   },
 );
 
@@ -716,7 +718,7 @@ function saveRevision(
   page: 'assignment' | 'activity',
   pageId: bigint,
   version: number,
-  content: { title: string; summary: string; body: string },
+  content: { title: string; summary: string; body: string; dueDate?: string },
 ) {
   ctx.db.pageRevision.insert({
     id: 0n,
@@ -726,6 +728,7 @@ function saveRevision(
     editedBy: ctx.sender,
     editedAt: ctx.timestamp,
     ...content,
+    dueDate: content.dueDate,
   });
 }
 
@@ -773,7 +776,12 @@ export const create_assignment = spacetimedb.reducer(ASSIGNMENT_ARGS, (ctx, inpu
     updatedBy: ctx.sender,
     updatedAt: ctx.timestamp,
   });
-  saveRevision(ctx, 'assignment', row.id, 1, { title: row.title, summary: '', body: row.instructions });
+  saveRevision(ctx, 'assignment', row.id, 1, {
+    title: row.title,
+    summary: '',
+    body: row.instructions,
+    dueDate: row.dueDate,
+  });
   log(ctx, 'create', 'assignment', row.id);
 });
 
@@ -799,6 +807,7 @@ export const update_assignment = spacetimedb.reducer(
       title: next.title,
       summary: '',
       body: next.instructions,
+      dueDate: next.dueDate,
     });
     log(ctx, 'update', 'assignment', assignmentId);
   },
