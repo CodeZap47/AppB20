@@ -316,3 +316,89 @@ describe('notas, actividades y preguntas', () => {
     });
   });
 });
+
+describe('guías de estudio', () => {
+  const LOGICA = 'IDSE-05010103';
+  const input = {
+    subjectId: LOGICA,
+    termId: `${LOGICA}-p1`,
+    title: 'Guía nueva de prueba',
+    topicsText: 'Tema A\nTema B',
+    sections: ['Objetivo de prueba'],
+  };
+
+  it('crea la guía con sus fuentes pendientes y sin repetirlas', () => {
+    const data = source('demo-1');
+    const id = data.createGuide(input, [
+      { kind: 'tarea', refId: 't1' },
+      { kind: 'trabajo', refId: 'w1' },
+      { kind: 'tarea', refId: 't1' },
+    ]);
+    const snap = data.getSnapshot();
+    const guide = snap.guides.find((g) => g.id === id)!;
+    expect(guide.topics).toEqual(['Tema A', 'Tema B']);
+    expect(guide.sections).toHaveLength(8);
+    const sources = snap.guideSources.filter((s) => s.guideId === id);
+    expect(sources).toHaveLength(2);
+    expect(sources.every((s) => s.status === 'pending' && s.reason)).toBe(true);
+    expect(sources.find((s) => s.refId === 't1')?.sourceVersion).toBe(3);
+  });
+
+  it('rechaza fuentes de otra materia y notas personales', () => {
+    const data = source('demo-1');
+    expect(() => data.createGuide(input, [{ kind: 'tarea', refId: 't2' }])).toThrow('misma materia');
+    expect(() => data.createGuide(input, [{ kind: 'nota', refId: 'n2' }])).toThrow('no es del grupo');
+  });
+
+  it('una fuente pendiente dice por qué y solo cubre temas del temario', () => {
+    const data = source('demo-1');
+    expect(() =>
+      data.updateGuideSource('gs5', { status: 'pending', reason: ' ', topics: [] }),
+    ).toThrow('Di por qué');
+    expect(() =>
+      data.updateGuideSource('gs5', { status: 'processed', reason: '', topics: ['Otro tema'] }),
+    ).toThrow('temario');
+    data.updateGuideSource('gs5', {
+      status: 'processed',
+      reason: 'queda vacía',
+      topics: ['Tema de prueba 3'],
+    });
+    const updated = data.getSnapshot().guideSources.find((s) => s.id === 'gs5')!;
+    expect(updated).toMatchObject({ status: 'processed', reason: '', topics: ['Tema de prueba 3'] });
+  });
+
+  it('toma la versión nueva de una fuente que cambió', () => {
+    const data = source('demo-1');
+    data.refreshGuideSource('gs1');
+    expect(data.getSnapshot().guideSources.find((s) => s.id === 'gs1')?.sourceVersion).toBe(3);
+  });
+
+  it('al quitar un tema del temario deja de contar en las fuentes', () => {
+    const data = source('demo-3');
+    const guide = data.getSnapshot().guides.find((g) => g.id === 'gd1')!;
+    data.updateGuide('gd1', {
+      subjectId: guide.subjectId,
+      termId: guide.termId,
+      title: guide.title,
+      topicsText: 'Tema de prueba 1',
+      sections: guide.sections,
+    });
+    const snap = data.getSnapshot();
+    expect(snap.guides.find((g) => g.id === 'gd1')).toMatchObject({ version: 3, updatedBy: 'demo-3' });
+    expect(snap.guideSources.find((s) => s.id === 'gs2')?.topics).toEqual(['Tema de prueba 1']);
+  });
+
+  it('la revisa un compañero, no quien guardó la versión', () => {
+    const data = source('demo-2');
+    expect(() => data.reviewGuide('gd1', 'approved', '')).toThrow('otro compañero');
+    data.setViewer('demo-4');
+    expect(() => data.reviewGuide('gd1', 'changes', '')).toThrow('Di qué cambios');
+    data.reviewGuide('gd1', 'approved', '');
+    data.reviewGuide('gd1', 'changes', 'Falta un ejemplo.');
+    const mine = data
+      .getSnapshot()
+      .guideReviews.filter((r) => r.reviewerId === 'demo-4' && r.guideVersion === 2);
+    expect(mine).toHaveLength(1);
+    expect(mine[0]?.verdict).toBe('changes');
+  });
+});
