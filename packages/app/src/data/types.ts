@@ -80,6 +80,8 @@ export interface Revision {
   summary: string;
   /** Las instrucciones. */
   body: string;
+  /** Solo tareas: la fecha de entrega de esa versión, para avisar cuando cambia. */
+  dueDate?: string;
 }
 
 /** Archivo adjunto a un trabajo. El contenido vive en el almacenamiento; aquí van sus datos. */
