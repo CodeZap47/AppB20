@@ -251,7 +251,12 @@ export class DemoDataSource implements DataSource {
   }
 
   /** Guarda en el historial cómo quedó una página editable después de crearla o editarla. */
-  #saveRevision(page: Revision['page'], pageId: Id, version: number, content: Pick<Revision, 'title' | 'summary' | 'body'>) {
+  #saveRevision(
+    page: Revision['page'],
+    pageId: Id,
+    version: number,
+    content: Pick<Revision, 'title' | 'summary' | 'body' | 'dueDate'>,
+  ) {
     const revision: Revision = {
       id: this.#id(),
       page,
@@ -281,6 +286,7 @@ export class DemoDataSource implements DataSource {
       title: assignment.title,
       summary: '',
       body: assignment.instructions,
+      dueDate: assignment.dueDate,
     });
     this.#emit();
     return assignment.id;
@@ -303,6 +309,7 @@ export class DemoDataSource implements DataSource {
       title: next.title,
       summary: '',
       body: next.instructions,
+      dueDate: next.dueDate,
     });
     this.#emit();
   }
@@ -692,8 +699,9 @@ export function createDemoState(now = new Date()): State {
       version: 3,
       createdBy: 'demo-2',
       createdAt: minutesAgo(3100),
+      // La última edición movió la entrega dos días; aparece como cambio de fecha en «¿Qué me perdí?».
       updatedBy: 'demo-3',
-      updatedAt: minutesAgo(700),
+      updatedAt: minutesAgo(95),
     },
     {
       id: 't2',
@@ -812,6 +820,7 @@ export function createDemoState(now = new Date()): State {
       title: 'Tarea de prueba 1',
       summary: '',
       body: 'Primera versión de las instrucciones de ejemplo.',
+      dueDate: daysAgo(-3),
     },
     {
       id: 'r2',
@@ -823,6 +832,7 @@ export function createDemoState(now = new Date()): State {
       title: 'Tarea de prueba 1',
       summary: '',
       body: 'Segunda versión de ejemplo:\n1. Resolver el ejercicio.\n2. Explicar la solución.',
+      dueDate: daysAgo(-3),
     },
     ...assignments.map((a): Revision => ({
       id: `r-${a.id}`,
@@ -834,6 +844,7 @@ export function createDemoState(now = new Date()): State {
       title: a.title,
       summary: '',
       body: a.instructions,
+      dueDate: a.dueDate,
     })),
     ...activities.map((a): Revision => ({
       id: `r-${a.id}`,
