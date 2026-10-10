@@ -22,6 +22,7 @@ Tablas privadas: `app_config`, `invitation`, `member`, `subject`, `term`, `work`
 `term_dates`, `assignment`, `page_revision`, `work_author`, `work_file`, `group_message`, `direct_conversation`, `direct_message`, `birthday`,
 `change_log`, `activity`, `evidence`, `note`, `note_comment`, `question`, `answer`,
 `last_seen`, `message_reaction`, `sticker_pack`, `sticker`, `chat_command`.
+`last_seen`, `study_guide`, `guide_source`, `guide_review`.
 
 Vistas públicas con filtro por quien consulta: `my_member`, `members`, `subjects`, `terms`,
 `calendar`, `assignments`, `page_revisions`, `works`, `work_authors`, `work_files`, `group_messages`, `birthdays`, `change_history`,
@@ -34,9 +35,10 @@ Los mensajes guardan referencias a otros módulos dentro del texto como `[[tarea
 `[[trabajo:id]]`, `[[clase:id]]`, `[[nota:id]]`, `[[pregunta:id]]` o `[[sticker:id]]`; cada cliente
 las resuelve con lo que su vista le deja ver. Eliminar un mensaje vacía el texto y deja
 `deleted_at`, para que las respuestas no pierdan el hilo.
+`study_guides`, `guide_sources`, `guide_reviews`.
 
-Faltan para el MVP: guías con fuentes, adjuntos fuera de los trabajos, instalaciones/suscripciones
-push y preferencias de avisos.
+Faltan para el MVP: el borrador de guías con Gemini, adjuntos fuera de los trabajos,
+instalaciones/suscripciones push y preferencias de avisos.
 
 ### Páginas que edita todo el grupo
 
@@ -105,6 +107,25 @@ Cada archivo pesa como máximo **50 MB**. El valor vive en `MAX_FILE_BYTES` de `
 
 Por ahora solo los trabajos aceptan adjuntos (`attachWorkFile` y `removeWorkFile` en
 `DataSource`). En modo de prueba el archivo no sale del navegador.
+
+### Guías de estudio (3.5)
+
+Primera versión manual. Una guía (`study_guide`) es de una materia y, si se elige, de un parcial;
+guarda el temario y una entrada por sección en el orden de `GUIDE_SECTIONS`
+(`packages/core/src/guides.ts`). Como las páginas de tareas, cualquier miembro activo la edita y la
+versión sube; quién guardó cada una queda en `change_log`.
+
+- **Fuentes** (`guide_source`): cada una apunta a un trabajo, tarea, actividad de clase, apunte del
+  grupo o pregunta de la misma materia, con la versión que tenía al agregarse. Entran como
+  pendientes; una pendiente siempre lleva su razón. Las notas personales no pueden ser fuente.
+- **Cobertura**: un tema del temario cuenta como cubierto cuando al menos una fuente procesada lo
+  trata (`guideCoverage`). Nada se da por cubierto sin fuente.
+- **Material que cambió**: si la versión actual de una fuente es mayor que la guardada, la guía lo
+  señala hasta que alguien la revisa (`refresh_guide_source`).
+- **Revisión entre compañeros** (`guide_review`): aprobada o con cambios propuestos (con
+  comentario), una por persona y versión; quien guardó la versión no puede revisarla.
+- **Compendio**: `/m/guias/compendio?cuatri=N` junta las guías de un cuatrimestre, cada materia por
+  separado, y se puede imprimir o guardar como PDF.
 
 ## Capa de datos de la interfaz
 

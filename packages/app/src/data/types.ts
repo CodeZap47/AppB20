@@ -3,7 +3,14 @@
  * (`packages/spacetime-module`), con identidades e ids como texto para simplificar la UI.
  */
 
-import type { TermDates, TermDatesInput, WorkKind } from '@b20/core';
+import type {
+  GuideReviewVerdict,
+  GuideSourceKind,
+  GuideSourceStatus,
+  TermDates,
+  TermDatesInput,
+  WorkKind,
+} from '@b20/core';
 
 export type Id = string;
 
@@ -244,6 +251,53 @@ export interface Question {
   createdAt: Date;
 }
 
+/**
+ * Guía de estudio de una materia y parcial (3.5). Es del grupo: cualquier integrante la
+ * edita y cada edición sube la versión.
+ */
+export interface StudyGuide {
+  id: Id;
+  subjectId: Id;
+  termId?: Id;
+  title: string;
+  /** Temario, un tema por elemento. */
+  topics: string[];
+  /** Texto de cada sección, en el orden de `GUIDE_SECTIONS`; vacío si no se ha escrito. */
+  sections: string[];
+  version: number;
+  createdBy: Id;
+  createdAt: Date;
+  updatedBy: Id;
+  updatedAt: Date;
+}
+
+/** Material del grupo citado en una guía, con la versión que tenía cuando se agregó. */
+export interface GuideSource {
+  id: Id;
+  guideId: Id;
+  kind: GuideSourceKind;
+  refId: Id;
+  sourceVersion: number;
+  status: GuideSourceStatus;
+  /** Por qué sigue pendiente (ilegible, formato no admitido, falta leerla…). */
+  reason: string;
+  /** Temas del temario que cubre. */
+  topics: string[];
+  addedBy: Id;
+  addedAt: Date;
+}
+
+/** Revisión de un compañero sobre una versión de la guía. */
+export interface GuideReview {
+  id: Id;
+  guideId: Id;
+  guideVersion: number;
+  reviewerId: Id;
+  verdict: GuideReviewVerdict;
+  comment: string;
+  createdAt: Date;
+}
+
 export interface Answer {
   id: Id;
   questionId: Id;
@@ -284,6 +338,9 @@ export interface Snapshot {
   noteComments: NoteComment[];
   questions: Question[];
   answers: Answer[];
+  guides: StudyGuide[];
+  guideSources: GuideSource[];
+  guideReviews: GuideReview[];
   /** Última vez que marcaste las novedades como vistas. */
   lastSeenAt: Date | undefined;
 }
@@ -363,6 +420,38 @@ export interface Actions {
   acceptAnswer(questionId: Id, answerId: Id): void;
   reopenQuestion(questionId: Id): void;
   markSeen(): void;
+  /** Crea la guía con sus fuentes iniciales, todas pendientes hasta que alguien las procese. */
+  createGuide(input: GuideInput, sources: GuideSourceRef[]): Id;
+  /** Como en un wiki: cualquier miembro activo edita y la versión sube. */
+  updateGuide(guideId: Id, input: GuideInput): void;
+  addGuideSources(guideId: Id, sources: GuideSourceRef[]): void;
+  /** Marca una fuente como procesada o pendiente (con razón) y qué temas cubre. */
+  updateGuideSource(sourceId: Id, update: GuideSourceUpdate): void;
+  /** Toma la versión actual del material, por ejemplo después de revisar sus cambios. */
+  refreshGuideSource(sourceId: Id): void;
+  removeGuideSource(sourceId: Id): void;
+  /** Un compañero revisa la versión actual; quien la guardó no puede. */
+  reviewGuide(guideId: Id, verdict: GuideReviewVerdict, comment: string): void;
+}
+
+export interface GuideInput {
+  subjectId: Id;
+  termId?: Id;
+  title: string;
+  /** El temario como lo escribió el usuario, un tema por renglón. */
+  topicsText: string;
+  sections: string[];
+}
+
+export interface GuideSourceRef {
+  kind: GuideSourceKind;
+  refId: Id;
+}
+
+export interface GuideSourceUpdate {
+  status: GuideSourceStatus;
+  reason: string;
+  topics: string[];
 }
 
 export interface SaveChatCommandInput {
