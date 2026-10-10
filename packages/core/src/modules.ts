@@ -95,6 +95,7 @@ export const MODULES: readonly ModuleInfo[] = [
     summary: 'Encuestas y votaciones nominales transparentes.',
     stage: 2,
     worksWithoutAi: true,
+    ready: true,
   },
   {
     id: 'salas',

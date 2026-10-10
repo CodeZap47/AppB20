@@ -401,6 +401,51 @@ const answer = table(
   },
 );
 
+/**
+ * Votación o encuesta nominal (3.8): quién votó y qué eligió es visible para el grupo.
+ * Las opciones no cambian después del primer voto; para eso se cancela y se reinicia.
+ */
+const poll = table(
+  { name: 'poll' },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    title: t.string(),
+    description: t.string(),
+    options: t.array(t.string()),
+    multiple: t.bool(),
+    /** Se anuncia al crearla: si se puede cambiar el voto antes del cierre. */
+    allowChange: t.bool(),
+    /** Participantes elegibles, fijados al crearla. */
+    eligible: t.array(t.identity()),
+    closesAt: t.timestamp(),
+    createdBy: t.identity(),
+    createdAt: t.timestamp(),
+    updatedAt: t.timestamp(),
+    cancelledAt: t.timestamp().optional(),
+    cancelReason: t.string(),
+    /** Consulta cancelada que esta reinicia. */
+    restartOf: t.u64().optional(),
+    /** Acuerdo adoptado tras el cierre, distinto del resultado de la consulta. */
+    decision: t.string(),
+    decidedBy: t.identity().optional(),
+    decidedAt: t.timestamp().optional(),
+  },
+);
+
+/** Un voto por persona y votación (la llave lo impide dos veces). */
+const pollVote = table(
+  { name: 'poll_vote' },
+  {
+    /** `${pollId}:${identidad}`: evita votos duplicados. */
+    key: t.string().primaryKey(),
+    pollId: t.u64().index('btree'),
+    voter: t.identity(),
+    choices: t.array(t.u32()),
+    votedAt: t.timestamp(),
+    changedAt: t.timestamp().optional(),
+  },
+);
+
 /** Última vez que cada miembro marcó las novedades como vistas (7.1). */
 const lastSeen = table(
   { name: 'last_seen' },
@@ -495,6 +540,8 @@ const spacetimedb = schema({
   noteComment,
   question,
   answer,
+  poll,
+  pollVote,
   lastSeen,
   studyGuide,
   guideSource,
@@ -1570,6 +1617,197 @@ export const reopen_question = spacetimedb.reducer({ questionId: t.u64() }, (ctx
   ctx.db.question.id.update({ ...q, status: 'open', acceptedAnswerId: undefined, resolvedAt: undefined });
 });
 
+// ---------------------------------------------------------------------------
+// Votaciones (3.8). Deben coincidir con las reglas de `packages/core/src/polls.ts`.
+// ---------------------------------------------------------------------------
+
+const MAX_POLL_OPTIONS = 10;
+const MAX_POLL_OPTION_LENGTH = 120;
+const MAX_POLL_NOTE_LENGTH = 2000;
+const MIN_POLL_DURATION_MICROS = 10n * 60n * 1_000_000n;
+
+const pollInput = {
+  title: t.string(),
+  description: t.string(),
+  options: t.array(t.string()),
+  multiple: t.bool(),
+  allowChange: t.bool(),
+  eligible: t.array(t.identity()),
+  closesAt: t.timestamp(),
+};
+
+function pollContent(
+  ctx: Ctx,
+  input: {
+    title: string;
+    description: string;
+    options: string[];
+    multiple: boolean;
+    allowChange: boolean;
+    eligible: Ctx['sender'][];
+    closesAt: Ctx['timestamp'];
+  },
+) {
+  const options: string[] = [];
+  for (const raw of input.options) {
+    const option = raw.trim();
+    if (!option) continue;
+    if (option.length > MAX_POLL_OPTION_LENGTH) {
+      throw new SenderError(`Cada opción debe tener a lo más ${MAX_POLL_OPTION_LENGTH} caracteres.`);
+    }
+    if (options.some((o) => o.toLocaleLowerCase('es') === option.toLocaleLowerCase('es'))) {
+      throw new SenderError(`La opción «${option}» está repetida.`);
+    }
+    options.push(option);
+  }
+  if (options.length < 2) throw new SenderError('Escribe al menos dos opciones.');
+  if (options.length > MAX_POLL_OPTIONS) {
+    throw new SenderError(`Una votación admite hasta ${MAX_POLL_OPTIONS} opciones.`);
+  }
+  if (input.closesAt.microsSinceUnixEpoch - ctx.timestamp.microsSinceUnixEpoch < MIN_POLL_DURATION_MICROS) {
+    throw new SenderError('El cierre debe ser al menos 10 minutos después de ahora.');
+  }
+  const eligible = input.eligible.filter(
+    (id, i, all) =>
+      all.findIndex((other) => other.isEqual(id)) === i &&
+      ctx.db.member.identity.find(id)?.status === 'active',
+  );
+  if (!eligible.length) throw new SenderError('Elige al menos a un participante.');
+  return {
+    title: requireText(input.title, 'La pregunta', 200),
+    description: input.description.trim().slice(0, 2000),
+    options,
+    multiple: input.multiple,
+    allowChange: input.allowChange,
+    eligible,
+    closesAt: input.closesAt,
+  };
+}
+
+function findPoll(ctx: Ctx, pollId: bigint) {
+  activeMember(ctx);
+  const row = ctx.db.poll.id.find(pollId);
+  if (!row) throw new SenderError('La votación no existe.');
+  return row;
+}
+
+/** Abierta hasta su cierre; la cancelación manda. */
+function pollStatusOf(ctx: Ctx, row: { closesAt: Ctx['timestamp']; cancelledAt?: Ctx['timestamp'] }) {
+  if (row.cancelledAt) return 'cancelled';
+  return ctx.timestamp.microsSinceUnixEpoch < row.closesAt.microsSinceUnixEpoch ? 'open' : 'closed';
+}
+
+function ownOpenPoll(ctx: Ctx, pollId: bigint, action: string) {
+  const row = findPoll(ctx, pollId);
+  if (!row.createdBy.isEqual(ctx.sender)) {
+    throw new SenderError(`Solo quien creó la votación puede ${action}.`);
+  }
+  if (pollStatusOf(ctx, row) !== 'open') throw new SenderError('La votación ya no está abierta.');
+  return row;
+}
+
+export const create_poll = spacetimedb.reducer(
+  { ...pollInput, restartOf: t.u64().optional() },
+  (ctx, input) => {
+    activeMember(ctx);
+    const content = pollContent(ctx, input);
+    if (input.restartOf !== undefined) {
+      const previous = findPoll(ctx, input.restartOf);
+      if (pollStatusOf(ctx, previous) !== 'cancelled') {
+        throw new SenderError('Solo se reinicia una votación cancelada.');
+      }
+    }
+    const row = ctx.db.poll.insert({
+      id: 0n,
+      ...content,
+      createdBy: ctx.sender,
+      createdAt: ctx.timestamp,
+      updatedAt: ctx.timestamp,
+      cancelledAt: undefined,
+      cancelReason: '',
+      restartOf: input.restartOf,
+      decision: '',
+      decidedBy: undefined,
+      decidedAt: undefined,
+    });
+    log(ctx, 'crear', 'poll', row.id);
+  },
+);
+
+export const update_poll = spacetimedb.reducer({ pollId: t.u64(), ...pollInput }, (ctx, input) => {
+  const row = ownOpenPoll(ctx, input.pollId, 'editarla');
+  if ([...ctx.db.pollVote.pollId.filter(row.id)].length) {
+    throw new SenderError('Ya tiene votos: para cambiarla, cancélala y reiníciala.');
+  }
+  ctx.db.poll.id.update({ ...row, ...pollContent(ctx, input), updatedAt: ctx.timestamp });
+  log(ctx, 'editar', 'poll', row.id);
+});
+
+export const cast_vote = spacetimedb.reducer(
+  { pollId: t.u64(), choices: t.array(t.u32()) },
+  (ctx, { pollId, choices }) => {
+    const row = findPoll(ctx, pollId);
+    const status = pollStatusOf(ctx, row);
+    if (status === 'cancelled') throw new SenderError('La votación fue cancelada.');
+    if (status === 'closed') throw new SenderError('La votación ya cerró.');
+    if (!row.eligible.some((id) => id.isEqual(ctx.sender))) {
+      throw new SenderError('No estás entre los participantes de esta votación.');
+    }
+    const key = `${pollId}:${ctx.sender.toHexString()}`;
+    const previous = ctx.db.pollVote.key.find(key);
+    if (previous && !row.allowChange) {
+      throw new SenderError('Ya votaste y esta votación no permite cambiar el voto.');
+    }
+    if (!choices.length) throw new SenderError('Elige una opción.');
+    if (!row.multiple && choices.length > 1) throw new SenderError('Solo puedes elegir una opción.');
+    if (new Set(choices).size !== choices.length) throw new SenderError('Elegiste la misma opción dos veces.');
+    if (choices.some((c) => c >= row.options.length)) throw new SenderError('La opción no existe.');
+    const sorted = [...choices].sort((a, b) => a - b);
+    if (previous) {
+      ctx.db.pollVote.key.update({ ...previous, choices: sorted, changedAt: ctx.timestamp });
+    } else {
+      ctx.db.pollVote.insert({
+        key,
+        pollId,
+        voter: ctx.sender,
+        choices: sorted,
+        votedAt: ctx.timestamp,
+        changedAt: undefined,
+      });
+    }
+  },
+);
+
+export const cancel_poll = spacetimedb.reducer(
+  { pollId: t.u64(), reason: t.string() },
+  (ctx, { pollId, reason }) => {
+    const row = ownOpenPoll(ctx, pollId, 'cancelarla');
+    ctx.db.poll.id.update({
+      ...row,
+      cancelledAt: ctx.timestamp,
+      cancelReason: requireText(reason, 'La razón', MAX_POLL_NOTE_LENGTH),
+    });
+    log(ctx, 'cancelar', 'poll', pollId);
+  },
+);
+
+export const record_poll_decision = spacetimedb.reducer(
+  { pollId: t.u64(), decision: t.string() },
+  (ctx, { pollId, decision }) => {
+    const row = findPoll(ctx, pollId);
+    if (pollStatusOf(ctx, row) !== 'closed') {
+      throw new SenderError('El acuerdo se registra cuando la votación cierra.');
+    }
+    ctx.db.poll.id.update({
+      ...row,
+      decision: requireText(decision, 'El acuerdo', MAX_POLL_NOTE_LENGTH),
+      decidedBy: ctx.sender,
+      decidedAt: ctx.timestamp,
+    });
+    log(ctx, 'registrar acuerdo', 'poll', pollId);
+  },
+);
+
 export const mark_seen = spacetimedb.reducer((ctx) => {
   activeMember(ctx);
   const row = { identity: ctx.sender, at: ctx.timestamp };
@@ -2072,4 +2310,17 @@ export const guide_reviews = spacetimedb.view(
   { name: 'guide_reviews', public: true },
   t.array(guideReview.rowType),
   (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.guideReview.iter()] : []),
+);
+
+/** Votaciones nominales: todo el grupo ve las votaciones y los votos, nadie de fuera. */
+export const polls = spacetimedb.view(
+  { name: 'polls', public: true },
+  t.array(poll.rowType),
+  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.poll.iter()] : []),
+);
+
+export const poll_votes = spacetimedb.view(
+  { name: 'poll_votes', public: true },
+  t.array(pollVote.rowType),
+  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.pollVote.iter()] : []),
 );

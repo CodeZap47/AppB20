@@ -8,3 +8,4 @@ export * from './calendar';
 export * from './messages';
 export * from './guides';
 export * from './contributions';
+export * from './polls';

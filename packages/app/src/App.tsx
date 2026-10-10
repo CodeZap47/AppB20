@@ -19,6 +19,7 @@ import { BirthdaysPage } from './pages/BirthdaysPage';
 import { GuideCompendiumPage, GuideFormPage, GuidePage, GuidesPage } from './pages/GuidesPage';
 import { WhatsNewPage } from './pages/WhatsNewPage';
 import { ContributorPage, LeaderboardPage } from './pages/LeaderboardPage';
+import { PollFormPage, PollPage, PollsPage } from './pages/PollsPage';
 import { ActivitiesPage, ActivityFormPage, ActivityPage } from './pages/ActivitiesPage';
 import { NoteFormPage, NotePage, NotesPage } from './pages/NotesPage';
 import { AskQuestionPage, QuestionPage, QuestionsPage } from './pages/QuestionsPage';
@@ -86,6 +87,10 @@ const router = createHashRouter([
           { path: 'm/guias/:guideId/editar', element: <GuideFormPage /> },
           { path: 'm/leaderboard', element: <LeaderboardPage /> },
           { path: 'm/leaderboard/:memberId', element: <ContributorPage /> },
+          { path: 'm/votaciones', element: <PollsPage /> },
+          { path: 'm/votaciones/nueva', element: <PollFormPage /> },
+          { path: 'm/votaciones/:pollId', element: <PollPage /> },
+          { path: 'm/votaciones/:pollId/editar', element: <PollFormPage /> },
           { path: 'm/:moduleId', element: <ModulePage /> },
           { path: 'ajustes', element: <SettingsPage /> },
           { path: 'instalar', element: <InstallPage /> },

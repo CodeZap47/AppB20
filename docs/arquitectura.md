@@ -143,6 +143,21 @@ módulo pueda usar exactamente las mismas si algún día se guardan los totales.
 - **Periodos**: parcial y cuatrimestre vigentes según el calendario de Ajustes, o los últimos 30
   días si no hay fechas; «Todo» siempre está.
 - **Pendiente**: los valores son una propuesta; la definición pide ajustarlos con el grupo.
+### Votaciones (3.8)
+
+Nominales: las vistas `polls` y `poll_votes` muestran a todo el grupo quién votó y qué eligió, y a
+nadie de fuera. No hay votaciones anónimas en esta versión. Las reglas están en
+`packages/core/src/polls.ts` y el módulo las repite al validar.
+
+- **Un voto por persona**: la llave de `poll_vote` es votación + identidad, así que un segundo voto
+  solo puede ser un cambio, y solo si se anunció al crearla (`allowChange`) y antes del cierre.
+- **Elegibles**: se fijan al crearla; solo ellos votan, aunque todos ven el resultado.
+- **Opciones fijas**: con al menos un voto ya no se edita; se cancela con una razón visible y se
+  reinicia en una consulta nueva (`restartOf`). Los votos de la cancelada se conservan como registro.
+- **Resultado y acuerdo**: tras el cierre, cualquier integrante registra el acuerdo adoptado, con su
+  nombre y fecha, separado del resultado de la consulta.
+- **Navegación**: `ready` en `MODULES` muestra en el menú un módulo de una etapa posterior que ya
+  tiene pantalla.
 
 ## Capa de datos de la interfaz
 
