@@ -127,6 +127,23 @@ versión sube; quién guardó cada una queda en `change_log`.
 - **Compendio**: `/m/guias/compendio?cuatri=N` junta las guías de un cuatrimestre, cada materia por
   separado, y se puede imprimir o guardar como PDF.
 
+### Contribuciones y leaderboard (3.6)
+
+Los puntos no tienen tabla propia: se calculan de los registros que ya valida el servidor
+(trabajos, apuntes, respuestas, páginas, versiones, evidencias, guías, fuentes y revisiones). Así
+cada punto se puede verificar abriendo su registro, y lo que se borra deja de contar. Las reglas,
+los límites y los reconocimientos están en `packages/core/src/contributions.ts`, para que el
+módulo pueda usar exactamente las mismas si algún día se guardan los totales.
+
+- **Reglas visibles**: la pantalla muestra cuántos puntos da cada aporte y qué nunca suma
+  (mensajes, preguntas, calificaciones, apuntes personales, préstamos o disponibilidad).
+- **Límites**: una respuesta por pregunta, una corrección por página y un comentario por apunte;
+  responder tu propia pregunta o comentar tu propio apunte no cuenta. Lo que no sumó aparece en el
+  desglose con la razón.
+- **Periodos**: parcial y cuatrimestre vigentes según el calendario de Ajustes, o los últimos 30
+  días si no hay fechas; «Todo» siempre está.
+- **Pendiente**: los valores son una propuesta; la definición pide ajustarlos con el grupo.
+
 ## Capa de datos de la interfaz
 
 Las pantallas leen y escriben a través de `DataSource` (`packages/app/src/data/types.ts`),

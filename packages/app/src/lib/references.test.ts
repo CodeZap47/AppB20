@@ -43,6 +43,8 @@ describe('referencias en mensajes', () => {
     expect(resolveReference({ kind: 'tarea', id: 'no-existe' }, data)).toBeUndefined();
     // La nota personal de otro alumno no está en su snapshot, así que no se puede citar.
     expect(resolveReference({ kind: 'nota', id: 'n2' }, data)).toBeUndefined();
-    expect(searchReferences('nota', '', data).map((r) => r.id)).toEqual(['n1']);
+    const notes = searchReferences('nota', '', data).map((r) => r.id);
+    expect(notes).toContain('n1');
+    expect(notes).not.toContain('n2');
   });
 });

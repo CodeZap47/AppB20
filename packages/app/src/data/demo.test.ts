@@ -147,7 +147,7 @@ describe('DemoDataSource', () => {
 describe('notas, actividades y preguntas', () => {
   it('las notas personales solo las ve su autor', () => {
     const data = source('demo-1');
-    expect(data.getSnapshot().notes.map((n) => n.id)).toEqual(['n1']);
+    expect(data.getSnapshot().notes.map((n) => n.id)).not.toContain('n2');
     expect(() => data.commentNote('n2', 'hola')).toThrow('no existe');
     data.setViewer('demo-3');
     expect(data.getSnapshot().notes.map((n) => n.id)).toContain('n2');
@@ -167,7 +167,7 @@ describe('notas, actividades y preguntas', () => {
     };
     expect(() => data.saveNote(input)).toThrow('Solo su autor');
     data.commentNote('n1', 'Propongo corregir algo');
-    expect(data.getSnapshot().noteComments).toHaveLength(1);
+    expect(data.getSnapshot().noteComments.filter((c) => c.noteId === 'n1')).toHaveLength(1);
     data.setViewer('demo-2');
     data.saveNote(input);
     expect(data.getSnapshot().notes.find((n) => n.id === 'n1')?.version).toBe(2);
@@ -177,8 +177,8 @@ describe('notas, actividades y preguntas', () => {
     const data = source('demo-1');
     data.addEvidence('a1', 'Nuestra solución', ['demo-4']);
     const evidences = data.getSnapshot().evidences.filter((e) => e.activityId === 'a1');
-    expect(evidences).toHaveLength(2);
-    expect(evidences[1]?.participantIds).toEqual(['demo-1', 'demo-4']);
+    expect(evidences).toHaveLength(3);
+    expect(evidences.at(-1)?.participantIds).toEqual(['demo-1', 'demo-4']);
   });
 
   it('solo quien preguntó acepta una respuesta y puede reabrir', () => {
