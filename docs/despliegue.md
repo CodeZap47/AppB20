@@ -79,22 +79,31 @@ Quien publica la primera vez queda como creador (`init`). Del lado del cliente:
 ```sh
 # Repositorio de imágenes (una sola vez)
 gcloud artifacts repositories create b20 --repository-format=docker --location=us-central1
+gcloud services enable secretmanager.googleapis.com run.googleapis.com cloudbuild.googleapis.com
 
-# Clave para cifrar BYOK, guardada en Secret Manager (nunca en el repo)
-node -e "console.log(require('crypto').randomBytes(32).toString('base64'))" \
-  | gcloud secrets create byok-encryption-key --data-file=-
+# Cuenta de servicio del backend: solo puede manejar secretos que empiecen con `byok-`
+gcloud iam service-accounts create b20-api
+gcloud projects add-iam-policy-binding <proyecto> \
+  --member serviceAccount:b20-api@<proyecto>.iam.gserviceaccount.com \
+  --role roles/secretmanager.admin \
+  --condition 'title=solo-byok,expression=resource.name.extract("secrets/{name}/").startsWith("byok-") || resource.type == "cloudresourcemanager.googleapis.com/Project"'
 
 # Construir la imagen con apps/api/Dockerfile y desplegarla
 gcloud builds submit --config apps/api/cloudbuild.yaml .
 gcloud run deploy b20-api \
   --image us-central1-docker.pkg.dev/<proyecto>/b20/api \
+  --service-account b20-api@<proyecto>.iam.gserviceaccount.com \
   --region us-central1 --allow-unauthenticated \
-  --set-env-vars "^;^OIDC_AUDIENCE=<client-id>;GEMINI_MODEL=<modelo>;CORS_ORIGINS=https://<web>,capacitor://localhost,https://localhost" \
-  --set-secrets BYOK_ENCRYPTION_KEY=byok-encryption-key:latest
+  --set-env-vars "^;^SECRET_STORE=gcp;GCP_PROJECT_ID=<proyecto>;OIDC_AUDIENCE=<client-id>;GEMINI_MODEL=<modelo>;CORS_ORIGINS=https://<web>,capacitor://localhost,https://localhost"
 ```
 
-La cuenta de servicio de Cloud Run necesita el rol *Secret Manager Secret Accessor* sobre ese
-secreto. `--allow-unauthenticated` solo abre la puerta de Cloud Run; cada ruta de `/ai` sigue exigiendo el
+Cada alumno queda con un secreto `byok-<hash>` (sin su correo ni su id en el nombre). Al cambiar
+su clave se destruye la versión anterior y al quitarla se borra el secreto. La condición del rol
+deja crear secretos en el proyecto pero solo leer, cambiar o borrar los `byok-*`. Costo
+aproximado: 0.06 USD al mes por secreto activo y 0.03 USD por cada 10 000 lecturas; el backend
+recuerda cada clave 5 minutos para no leerla en cada generación.
+
+`--allow-unauthenticated` solo abre la puerta de Cloud Run; cada ruta de `/ai` sigue exigiendo el
 token de Google. `/health` responde `{"ok":true}` para comprobar que quedó arriba.
 
 ### 4. Web en Cloudflare Pages
