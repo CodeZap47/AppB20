@@ -53,7 +53,11 @@ function InvitationsSection() {
           />
         </label>
         <label className="row">
-          <input type="checkbox" checked={isCreator} onChange={(e) => setIsCreator(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={isCreator}
+            onChange={(e) => setIsCreator(e.target.checked)}
+          />
           Como creador (podrá invitar, dar de baja y cambiar el calendario)
         </label>
         {error && (
@@ -160,7 +164,11 @@ function CurriculumSection() {
         </p>
       )}
       {missing > 0 && (
-        <button type="button" disabled={pending} onClick={() => run(() => source.importCurriculum())}>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => run(() => source.importCurriculum())}
+        >
           Cargar plan de estudios
         </button>
       )}

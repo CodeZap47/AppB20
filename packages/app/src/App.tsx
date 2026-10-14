@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { createHashRouter, RouterProvider } from 'react-router';
 import { ErrorPage } from './components/ErrorPage';
 import { Layout } from './components/Layout';
@@ -23,8 +23,8 @@ import { PollFormPage, PollPage, PollsPage } from './pages/PollsPage';
 import { ActivitiesPage, ActivityFormPage, ActivityPage } from './pages/ActivitiesPage';
 import { NoteFormPage, NotePage, NotesPage } from './pages/NotesPage';
 import { AskQuestionPage, QuestionPage, QuestionsPage } from './pages/QuestionsPage';
-import { SpacetimeProvider } from './lib/spacetime';
-import { AuthProvider, useSession } from './auth/AuthContext';
+import { useSpacetimeSource } from './lib/spacetime';
+import { AuthProvider, useSession, useSessionStore } from './auth/AuthContext';
 import { SignInPage } from './auth/SignInPage';
 import { JoinPage } from './auth/JoinPage';
 import { useSnapshot } from './data/DataContext';
@@ -134,8 +134,31 @@ export function App({ platform, source }: { platform: Platform; source?: DataSou
 function SignedInGate() {
   const session = useSession();
   if (session?.status !== 'signedIn') return <SignInPage />;
-  // TODO(Etapa 0): usar la fuente de SpacetimeDB con el token de la sesión.
-  return <DemoApp gated />;
+  return <ConnectedApp />;
+}
+
+/** Con sesión: la app sobre SpacetimeDB con el token de Google vigente. */
+function ConnectedApp() {
+  const store = useSessionStore();
+  const getToken = useCallback(() => store?.token, [store]);
+  const state = useSpacetimeSource(getToken);
+  if (state.status !== 'connected') {
+    return (
+      <main className="signin">
+        <h1>B20</h1>
+        {state.status === 'error' ? (
+          <p className="error">{state.message}</p>
+        ) : (
+          <p className="muted">Conectando con el grupo…</p>
+        )}
+      </main>
+    );
+  }
+  return (
+    <DataProvider source={state.source}>
+      <MembershipGate />
+    </DataProvider>
+  );
 }
 
 /**
@@ -156,7 +179,7 @@ function MembershipGate() {
   return <RouterProvider router={router} />;
 }
 
-function DemoApp({ source, gated = false }: { source?: DataSource; gated?: boolean }) {
+function DemoApp({ source }: { source?: DataSource }) {
   // Dependen de `createDemoState` a propósito: en desarrollo, cuando ese módulo se recarga en
   // caliente (porque cambió la forma de los datos), se crean de nuevo. Si no, el estado en
   // memoria conserva la forma anterior y las pantallas que esperan los campos nuevos fallan.
@@ -165,10 +188,8 @@ function DemoApp({ source, gated = false }: { source?: DataSource; gated?: boole
     [source, createDemoState],
   );
   return (
-    <SpacetimeProvider>
-      <DataProvider source={data}>
-        {gated ? <MembershipGate /> : <RouterProvider router={router} />}
-      </DataProvider>
-    </SpacetimeProvider>
+    <DataProvider source={data}>
+      <RouterProvider router={router} />
+    </DataProvider>
   );
 }
