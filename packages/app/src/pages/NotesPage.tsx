@@ -111,9 +111,9 @@ export function NoteFormPage() {
     return <p className="placeholder">Primero crea una materia publicando un trabajo.</p>;
   }
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const id = run(() =>
+    const id = await run(() =>
       source.saveNote({
         id: existing?.id,
         subjectId,
@@ -191,9 +191,9 @@ export function NotePage() {
   if (!note) return <h1>Nota no encontrada</h1>;
   const comments = noteComments.filter((c) => c.noteId === note.id);
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (run(() => (source.commentNote(note.id, comment), true))) setComment('');
+    if (await run(async () => (await source.commentNote(note.id, comment), true))) setComment('');
   };
 
   return (

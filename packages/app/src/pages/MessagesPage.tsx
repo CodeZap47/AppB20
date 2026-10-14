@@ -119,8 +119,8 @@ function ConversationList() {
   const showPeople = (picking || query.trim() !== '') && newPeople.length > 0;
   const nothing = !showGroup && !shownDirects.length && !showPeople;
 
-  const start = (memberId: string) => {
-    const id = run(() => source.openDirectConversation(memberId));
+  const start = async (memberId: string) => {
+    const id = await run(() => source.openDirectConversation(memberId));
     if (!id) return;
     setPicking(false);
     setQuery('');
@@ -301,13 +301,13 @@ function useThread(scope: MessageScope, sendNew: (text: string, replyToId?: stri
     onReact: (message, emoji) => run(() => source.toggleReaction(scope, message.id, emoji)),
   };
 
-  const onSend = (text: string) => {
+  const onSend = async (text: string) => {
     const ok =
-      run(() => {
-        if (mode?.kind === 'edit') source.editMessage(scope, mode.message.id, text);
-        else sendNew(text, mode?.kind === 'reply' ? mode.message.id : undefined);
+      (await run(async () => {
+        if (mode?.kind === 'edit') await source.editMessage(scope, mode.message.id, text);
+        else await sendNew(text, mode?.kind === 'reply' ? mode.message.id : undefined);
         return true;
-      }) ?? false;
+      })) ?? false;
     if (ok) setMode(undefined);
     return ok;
   };

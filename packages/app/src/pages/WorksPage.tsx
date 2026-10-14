@@ -349,9 +349,9 @@ function EditWorkForm({ work, onDone }: { work: Work; onDone: () => void }) {
   const [description, setDescription] = useState(work.description);
   const changed = title.trim() !== work.title || description.trim() !== work.description;
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (run(() => (source.updateWork(work.id, title, description), true))) onDone();
+    if (await run(async () => (await source.updateWork(work.id, title, description), true))) onDone();
   };
 
   return (
@@ -422,11 +422,11 @@ function SubmissionCard({
     setUploading(false);
   };
 
-  const removeFile = (fileId: string) => {
+  const removeFile = async (fileId: string) => {
     const file = files.find((f) => f.id === fileId);
     if (!file || !window.confirm(`¿Quitar «${file.name}» de tu trabajo?`)) return;
     try {
-      source.removeWorkFile(fileId);
+      await source.removeWorkFile(fileId);
       setErrors([]);
     } catch (error) {
       setErrors([error instanceof Error ? error.message : 'No se pudo quitar el archivo.']);
@@ -824,20 +824,20 @@ function AssignmentForm({ assignment }: { assignment: Assignment | undefined }) 
     subjectId !== assignment.subjectId ||
     termId !== (assignment.termId ?? '');
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const id = run(() => {
+    const id = await run(async () => {
       // Si la materia o el parcial nuevos se crean pero guardar falla, quedan elegidos para
       // que un segundo intento no los duplique.
       let sid = subjectId;
       if (sid === NEW) {
-        sid = source.createSubject(newSubject, period);
+        sid = await source.createSubject(newSubject, period);
         setSubjectId(sid);
         setNewSubject('');
       }
       let tid = termId;
       if (tid === NEW) {
-        tid = source.createTerm(sid, newTerm);
+        tid = await source.createTerm(sid, newTerm);
         setTermId(tid);
         setNewTerm('');
       }
@@ -850,7 +850,7 @@ function AssignmentForm({ assignment }: { assignment: Assignment | undefined }) 
         dueDate: dueDate || undefined,
       };
       if (!assignment) return source.createAssignment(input);
-      source.updateAssignment(assignment.id, input);
+      await source.updateAssignment(assignment.id, input);
       return assignment.id;
     });
     if (!id) return;
@@ -1056,7 +1056,7 @@ export function SubmitWorkPage() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const id = run(() =>
+    const id = await run(() =>
       source.publishWork({ assignmentId: assignment.id, title, description, coauthorIds }),
     );
     if (!id) return;

@@ -150,9 +150,9 @@ function EditName({ current, onDone }: { current: string; onDone: () => void }) 
   const source = useDataSource();
   const [name, setName] = useState(current);
   const { error, run } = useAction();
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (run(() => (source.updateProfile(name.trim()), true))) onDone();
+    if (await run(async () => (await source.updateProfile(name.trim()), true))) onDone();
   };
   return (
     <form className="profile-edit" onSubmit={submit}>
@@ -545,8 +545,8 @@ export function ProfilePage() {
       new Set(c.evidences.map((e) => e.activityId)).size,
   };
 
-  const message = () => {
-    const id = run(() => source.openDirectConversation(member.id));
+  const message = async () => {
+    const id = await run(() => source.openDirectConversation(member.id));
     if (id) void navigate(`/m/mensajes/directos/${id}`);
   };
 

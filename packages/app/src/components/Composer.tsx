@@ -83,7 +83,8 @@ export function Composer({
 }: {
   placeholder: string;
   /** Devuelve false si no se envió, para conservar el texto. */
-  onSend: (text: string) => boolean;
+  /** Resuelve `true` si se envió; si no, el texto se queda en el campo. */
+  onSend: (text: string) => Promise<boolean>;
   /** Identifica la conversación (y a quien escribe) para guardar su borrador. */
   draftKey: string;
   error?: string | null;
@@ -137,9 +138,9 @@ export function Composer({
       .filter(Boolean)
       .join('\n');
 
-  const send = () => {
+  const send = async () => {
     const message = compose(text, refs);
-    if (message && onSend(message)) {
+    if (message && (await onSend(message))) {
       update('');
       setRefs([]);
     }
@@ -148,7 +149,7 @@ export function Composer({
 
   const sendSticker = (id: Id) => {
     setStickers(false);
-    onSend(formatReference('sticker', id));
+    void onSend(formatReference('sticker', id));
     inputRef.current?.focus();
   };
 

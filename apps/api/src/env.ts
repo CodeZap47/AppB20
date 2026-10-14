@@ -10,6 +10,9 @@ export const env = {
   corsOrigins: (process.env.CORS_ORIGINS ?? '').split(',').filter(Boolean),
   oidcIssuer: process.env.OIDC_ISSUER ?? 'https://accounts.google.com',
   oidcAudience: () => required('OIDC_AUDIENCE'),
+  /** `gcp` guarda las claves BYOK en Secret Manager; `memory` (local) las cifra en memoria. */
+  secretStore: (process.env.SECRET_STORE ?? 'memory') as 'gcp' | 'memory',
+  gcpProjectId: () => required('GCP_PROJECT_ID'),
   byokEncryptionKey: () => required('BYOK_ENCRYPTION_KEY'),
   geminiModel: () => required('GEMINI_MODEL'),
 };

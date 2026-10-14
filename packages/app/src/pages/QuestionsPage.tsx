@@ -348,9 +348,9 @@ export function AskQuestionPage() {
 
   const similar = similarQuestions(title, subjectId, questions);
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const id = run(() =>
+    const id = await run(() =>
       source.askQuestion({
         subjectId,
         topic: topic.trim(),
@@ -609,9 +609,9 @@ export function QuestionPage() {
     .slice(0, 4);
   const inSubject = `/m/preguntas?materia=${encodeURIComponent(question.subjectId)}`;
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (run(() => source.answerQuestion(question.id, answer.trim()))) setAnswer('');
+    if (await run(() => source.answerQuestion(question.id, answer.trim()))) setAnswer('');
   };
 
   return (

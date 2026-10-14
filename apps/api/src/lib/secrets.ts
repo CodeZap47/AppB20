@@ -1,8 +1,8 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
 /**
- * Almacén de claves BYOK. En producción se sustituye por Google Cloud Secret Manager
- * (sección 4 y 5). La interfaz nunca devuelve la clave al cliente.
+ * Almacén de claves BYOK. En producción es `SecretManagerStore` (Google Cloud Secret Manager,
+ * secciones 4 y 5). La interfaz nunca devuelve la clave al cliente.
  */
 export interface SecretStore {
   put(userId: string, secret: string): Promise<void>;

@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import { Avatar } from '../components/Avatar';
 import { Empty } from '../components/Empty';
+import { fire } from '../components/useAction';
 import { Icon } from '../components/Icon';
 import { formatClock, formatDayLabel, memberName, peopleList } from '../lib/format';
 import {
@@ -107,7 +108,7 @@ export function WhatsNewPage() {
             type="button"
             className="secondary with-icon"
             onClick={() => {
-              source.markSeen();
+              fire(source.markSeen());
               update({ ver: '' });
             }}
             disabled={!pending.length}

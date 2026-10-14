@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { createHashRouter, RouterProvider } from 'react-router';
 import { ErrorPage } from './components/ErrorPage';
 import { Layout } from './components/Layout';
@@ -23,7 +23,12 @@ import { PollFormPage, PollPage, PollsPage } from './pages/PollsPage';
 import { ActivitiesPage, ActivityFormPage, ActivityPage } from './pages/ActivitiesPage';
 import { NoteFormPage, NotePage, NotesPage } from './pages/NotesPage';
 import { AskQuestionPage, QuestionPage, QuestionsPage } from './pages/QuestionsPage';
-import { SpacetimeProvider } from './lib/spacetime';
+import { useSpacetimeSource } from './lib/spacetime';
+import { AuthProvider, useSession, useSessionStore } from './auth/AuthContext';
+import { SignInPage } from './auth/SignInPage';
+import { JoinPage } from './auth/JoinPage';
+import { useSnapshot } from './data/DataContext';
+import { config } from './config';
 import { PlatformContext } from './components/PlatformContext';
 import { DataProvider } from './data/DataContext';
 import { createDemoState, DemoDataSource } from './data/demo';
@@ -100,22 +105,91 @@ const router = createHashRouter([
   },
 ]);
 
+/**
+ * Modo de prueba: datos en memoria, sin cuenta. Se usa con `?demo` en la dirección, cuando no
+ * hay *client ID* de Google configurado y, por ahora, en la extensión y en Android, que todavía
+ * no tienen su propio inicio de sesión.
+ */
+function isDemoMode(platform: Platform): boolean {
+  if (platform !== 'web' || !config.googleClientId) return true;
+  return new URLSearchParams(window.location.search).has('demo');
+}
+
 export function App({ platform, source }: { platform: Platform; source?: DataSource }) {
-  // Hasta conectar SpacetimeDB, la app usa datos de prueba en memoria. Dependen de
-  // `createDemoState` a propósito: en desarrollo, cuando ese módulo se recarga en caliente
-  // (porque cambió la forma de los datos), se crean de nuevo. Si no, el estado en memoria
-  // conserva la forma anterior y las pantallas que esperan los campos nuevos fallan.
+  const demo = source !== undefined || isDemoMode(platform);
+  return (
+    <PlatformContext value={platform}>
+      {demo ? (
+        <DemoApp source={source} />
+      ) : (
+        <AuthProvider clientId={config.googleClientId}>
+          <SignedInGate />
+        </AuthProvider>
+      )}
+    </PlatformContext>
+  );
+}
+
+/** Sin sesión muestra la entrada con Google; con sesión, la app. */
+function SignedInGate() {
+  const session = useSession();
+  if (session?.status !== 'signedIn') return <SignInPage />;
+  return <ConnectedApp />;
+}
+
+/** Con sesión: la app sobre SpacetimeDB con el token de Google vigente. */
+function ConnectedApp() {
+  const store = useSessionStore();
+  const getToken = useCallback(() => store?.token, [store]);
+  const state = useSpacetimeSource(getToken);
+  if (state.status !== 'connected') {
+    return (
+      <main className="signin">
+        <h1>B20</h1>
+        {state.status === 'error' ? (
+          <p className="error">{state.message}</p>
+        ) : (
+          <p className="muted">Conectando con el grupo…</p>
+        )}
+      </main>
+    );
+  }
+  return (
+    <DataProvider source={state.source}>
+      <MembershipGate />
+    </DataProvider>
+  );
+}
+
+/**
+ * Con sesión: mientras llegan los datos dice que está conectando; sin membresía activa pide
+ * unirse. Solo después muestra la app.
+ */
+function MembershipGate() {
+  const { connection, me } = useSnapshot();
+  if (connection === 'connecting') {
+    return (
+      <main className="signin">
+        <h1>B20</h1>
+        <p className="muted">Conectando con el grupo…</p>
+      </main>
+    );
+  }
+  if (me?.status !== 'active') return <JoinPage />;
+  return <RouterProvider router={router} />;
+}
+
+function DemoApp({ source }: { source?: DataSource }) {
+  // Dependen de `createDemoState` a propósito: en desarrollo, cuando ese módulo se recarga en
+  // caliente (porque cambió la forma de los datos), se crean de nuevo. Si no, el estado en
+  // memoria conserva la forma anterior y las pantallas que esperan los campos nuevos fallan.
   const data = useMemo(
     () => source ?? new DemoDataSource(createDemoState(), 'demo-1'),
     [source, createDemoState],
   );
   return (
-    <PlatformContext value={platform}>
-      <SpacetimeProvider>
-        <DataProvider source={data}>
-          <RouterProvider router={router} />
-        </DataProvider>
-      </SpacetimeProvider>
-    </PlatformContext>
+    <DataProvider source={data}>
+      <RouterProvider router={router} />
+    </DataProvider>
   );
 }

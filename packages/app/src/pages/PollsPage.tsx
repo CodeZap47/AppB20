@@ -418,9 +418,9 @@ function VotePanel({ poll, view }: { poll: Poll; view: ReturnType<typeof pollVie
         : [index],
     );
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (run(() => (source.castVote(poll.id, choices), true))) setEditing(false);
+    if (await run(async () => (await source.castVote(poll.id, choices), true))) setEditing(false);
   };
 
   return (
@@ -495,8 +495,8 @@ function CancelPanel({ poll, hasVotes }: { poll: Poll; hasVotes: boolean }) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState('');
 
-  const cancel = (restart: boolean) => {
-    if (!run(() => (source.cancelPoll(poll.id, reason), true))) return;
+  const cancel = async (restart: boolean) => {
+    if (!(await run(async () => (await source.cancelPoll(poll.id, reason), true)))) return;
     setOpen(false);
     if (restart) void navigate(`/m/votaciones/nueva?desde=${poll.id}`);
   };
@@ -580,9 +580,9 @@ function DecisionPanel({ poll, data }: { poll: Poll; data: Snapshot }) {
     );
   }
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (run(() => (source.recordPollDecision(poll.id, text), true))) setEditing(false);
+    if (await run(async () => (await source.recordPollDecision(poll.id, text), true))) setEditing(false);
   };
 
   return (
@@ -664,7 +664,7 @@ export function PollFormPage() {
   const toggleMember = (id: string) =>
     setEligibleIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     const input: PollInput = {
       title,
@@ -677,10 +677,10 @@ export function PollFormPage() {
       restartOf: from && !editingPoll ? from.id : undefined,
     };
     if (editingPoll) {
-      if (run(() => (source.updatePoll(editingPoll.id, input), true))) void navigate(backTo);
+      if (await run(async () => (await source.updatePoll(editingPoll.id, input), true))) void navigate(backTo);
       return;
     }
-    const id = run(() => source.createPoll(input));
+    const id = await run(() => source.createPoll(input));
     if (id) void navigate(`/m/votaciones/${id}`);
   };
 

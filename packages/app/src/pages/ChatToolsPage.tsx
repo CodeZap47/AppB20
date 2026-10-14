@@ -356,9 +356,9 @@ export function CommandsPage() {
     setForm(EMPTY);
   };
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (run(() => source.saveChatCommand({ id: editing?.id, ...form }))) reset();
+    if (await run(() => source.saveChatCommand({ id: editing?.id, ...form }))) reset();
   };
 
   return (

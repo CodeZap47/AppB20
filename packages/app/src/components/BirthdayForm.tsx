@@ -23,13 +23,13 @@ export function BirthdayForm({ onDone }: { onDone: () => void }) {
   const [remind, setRemind] = useState(mine?.remind ?? true);
   const { error, run } = useAction();
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (run(() => (source.shareBirthday(day, month, remind), true))) onDone();
+    if (await run(async () => (await source.shareBirthday(day, month, remind), true))) onDone();
   };
 
-  const withdraw = () => {
-    if (run(() => (source.withdrawBirthday(), true))) onDone();
+  const withdraw = async () => {
+    if (await run(async () => (await source.withdrawBirthday(), true))) onDone();
   };
 
   return (

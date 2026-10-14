@@ -41,9 +41,9 @@ function PeriodForm({ period, calendar }: { period: number; calendar: TermDates[
     setRows((current) => current.map((row, i) => (i === index ? { ...row, ...change } : row)));
   };
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    setDone(Boolean(run(() => (source.saveCalendar(period, rows), true))));
+    setDone(Boolean(await run(async () => (await source.saveCalendar(period, rows), true))));
   };
 
   return (
