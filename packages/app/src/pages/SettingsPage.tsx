@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { requestNotificationPermission, webPushSupport } from '../lib/notifications';
 import { CalendarSettings } from '../components/CalendarSettings';
 import { usePlatform } from '../components/PlatformContext';
+import { useSession, useSessionStore } from '../auth/AuthContext';
 
 export function SettingsPage() {
   const platform = usePlatform();
@@ -10,10 +11,24 @@ export function SettingsPage() {
     'Notification' in window ? Notification.permission : 'no disponible',
   );
   const support = platform === 'web' ? webPushSupport() : null;
+  const session = useSession();
+  const sessionStore = useSessionStore();
 
   return (
     <>
       <h1>Ajustes</h1>
+
+      {session?.status === 'signedIn' && (
+        <section>
+          <h2>Cuenta</h2>
+          <p>
+            Entraste como <strong>{session.profile.email}</strong>.
+          </p>
+          <button type="button" onClick={() => sessionStore?.signOut()}>
+            Cerrar sesión
+          </button>
+        </section>
+      )}
 
       <CalendarSettings />
 

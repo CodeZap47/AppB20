@@ -576,6 +576,24 @@ function requirePeriod(period: number): number {
 }
 const ALLOWED_ISSUERS = ['https://accounts.google.com', 'accounts.google.com'];
 
+/**
+ * *Client IDs* de Google Cloud de la app (web, extensión y Android). No son secretos: llenar
+ * antes de publicar. Sin ellos nadie puede entrar con Google.
+ *
+ * Hace falta porque SpacetimeDB acepta cualquier token de Google: sin revisar la audiencia, un
+ * sitio ajeno que use «Iniciar sesión con Google» recibiría tokens con los que se haría pasar
+ * por sus visitantes que son miembros del grupo.
+ */
+const GOOGLE_CLIENT_IDS: readonly string[] = [];
+
+function isGoogleIssuer(issuer: string): boolean {
+  return ALLOWED_ISSUERS.includes(issuer);
+}
+
+function hasAllowedAudience(audience: readonly string[]): boolean {
+  return audience.some((aud) => GOOGLE_CLIENT_IDS.includes(aud));
+}
+
 function activeMember(ctx: Ctx) {
   const row = ctx.db.member.identity.find(ctx.sender);
   if (!row || row.status !== 'active') throw new SenderError('No eres miembro activo del grupo.');
@@ -615,8 +633,10 @@ function log(ctx: Ctx, action: string, entity: string, entityId: string | bigint
 function verifiedEmail(ctx: Ctx): string {
   const jwt = ctx.senderAuth.jwt;
   if (!jwt) throw new SenderError('Inicia sesión con Google para unirte al grupo.');
-  if (!ALLOWED_ISSUERS.includes(jwt.issuer)) throw new SenderError('Emisor de sesión no permitido.');
-  // TODO(Etapa 0): validar también la audiencia (client ID) cuando esté definida.
+  if (!isGoogleIssuer(jwt.issuer)) throw new SenderError('Emisor de sesión no permitido.');
+  if (!hasAllowedAudience(jwt.audience)) {
+    throw new SenderError('Sesión emitida para otra aplicación.');
+  }
   const { email, email_verified: emailVerified } = jwt.fullPayload;
   if (typeof email !== 'string' || emailVerified !== true) {
     throw new SenderError('Tu cuenta de Google no tiene un correo verificado.');
@@ -631,6 +651,19 @@ function verifiedEmail(ctx: Ctx): string {
 /** Al publicar por primera vez, quien publica queda como creador inicial. */
 export const init = spacetimedb.init((ctx) => {
   ctx.db.appConfig.insert({ id: 0, owner: ctx.sender });
+});
+
+/**
+ * Rechaza la conexión con un token de Google emitido para otra app. La identidad de SpacetimeDB
+ * sale solo del emisor y el `sub`, así que sin esto bastaría cualquier token de Google de la
+ * persona. Las demás conexiones (como la CLI de quien publicó) no pueden hacerse pasar por un
+ * miembro porque su emisor es otro.
+ */
+export const on_connect = spacetimedb.clientConnected((ctx) => {
+  const jwt = ctx.senderAuth.jwt;
+  if (jwt && isGoogleIssuer(jwt.issuer) && !hasAllowedAudience(jwt.audience)) {
+    throw new SenderError('Sesión emitida para otra aplicación.');
+  }
 });
 
 // ---------------------------------------------------------------------------

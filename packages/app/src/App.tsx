@@ -24,6 +24,9 @@ import { ActivitiesPage, ActivityFormPage, ActivityPage } from './pages/Activiti
 import { NoteFormPage, NotePage, NotesPage } from './pages/NotesPage';
 import { AskQuestionPage, QuestionPage, QuestionsPage } from './pages/QuestionsPage';
 import { SpacetimeProvider } from './lib/spacetime';
+import { AuthProvider, useSession } from './auth/AuthContext';
+import { SignInPage } from './auth/SignInPage';
+import { config } from './config';
 import { PlatformContext } from './components/PlatformContext';
 import { DataProvider } from './data/DataContext';
 import { createDemoState, DemoDataSource } from './data/demo';
@@ -100,22 +103,52 @@ const router = createHashRouter([
   },
 ]);
 
+/**
+ * Modo de prueba: datos en memoria, sin cuenta. Se usa con `?demo` en la dirección, cuando no
+ * hay *client ID* de Google configurado y, por ahora, en la extensión y en Android, que todavía
+ * no tienen su propio inicio de sesión.
+ */
+function isDemoMode(platform: Platform): boolean {
+  if (platform !== 'web' || !config.googleClientId) return true;
+  return new URLSearchParams(window.location.search).has('demo');
+}
+
 export function App({ platform, source }: { platform: Platform; source?: DataSource }) {
-  // Hasta conectar SpacetimeDB, la app usa datos de prueba en memoria. Dependen de
-  // `createDemoState` a propósito: en desarrollo, cuando ese módulo se recarga en caliente
-  // (porque cambió la forma de los datos), se crean de nuevo. Si no, el estado en memoria
-  // conserva la forma anterior y las pantallas que esperan los campos nuevos fallan.
+  const demo = source !== undefined || isDemoMode(platform);
+  return (
+    <PlatformContext value={platform}>
+      {demo ? (
+        <DemoApp source={source} />
+      ) : (
+        <AuthProvider clientId={config.googleClientId}>
+          <SignedInGate />
+        </AuthProvider>
+      )}
+    </PlatformContext>
+  );
+}
+
+/** Sin sesión muestra la entrada con Google; con sesión, la app. */
+function SignedInGate() {
+  const session = useSession();
+  if (session?.status !== 'signedIn') return <SignInPage />;
+  // TODO(Etapa 0): usar la fuente de SpacetimeDB con el token de la sesión.
+  return <DemoApp />;
+}
+
+function DemoApp({ source }: { source?: DataSource }) {
+  // Dependen de `createDemoState` a propósito: en desarrollo, cuando ese módulo se recarga en
+  // caliente (porque cambió la forma de los datos), se crean de nuevo. Si no, el estado en
+  // memoria conserva la forma anterior y las pantallas que esperan los campos nuevos fallan.
   const data = useMemo(
     () => source ?? new DemoDataSource(createDemoState(), 'demo-1'),
     [source, createDemoState],
   );
   return (
-    <PlatformContext value={platform}>
-      <SpacetimeProvider>
-        <DataProvider source={data}>
-          <RouterProvider router={router} />
-        </DataProvider>
-      </SpacetimeProvider>
-    </PlatformContext>
+    <SpacetimeProvider>
+      <DataProvider source={data}>
+        <RouterProvider router={router} />
+      </DataProvider>
+    </SpacetimeProvider>
   );
 }
