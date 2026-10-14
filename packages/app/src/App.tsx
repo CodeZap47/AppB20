@@ -26,6 +26,8 @@ import { AskQuestionPage, QuestionPage, QuestionsPage } from './pages/QuestionsP
 import { SpacetimeProvider } from './lib/spacetime';
 import { AuthProvider, useSession } from './auth/AuthContext';
 import { SignInPage } from './auth/SignInPage';
+import { JoinPage } from './auth/JoinPage';
+import { useSnapshot } from './data/DataContext';
 import { config } from './config';
 import { PlatformContext } from './components/PlatformContext';
 import { DataProvider } from './data/DataContext';
@@ -133,10 +135,28 @@ function SignedInGate() {
   const session = useSession();
   if (session?.status !== 'signedIn') return <SignInPage />;
   // TODO(Etapa 0): usar la fuente de SpacetimeDB con el token de la sesión.
-  return <DemoApp />;
+  return <DemoApp gated />;
 }
 
-function DemoApp({ source }: { source?: DataSource }) {
+/**
+ * Con sesión: mientras llegan los datos dice que está conectando; sin membresía activa pide
+ * unirse. Solo después muestra la app.
+ */
+function MembershipGate() {
+  const { connection, me } = useSnapshot();
+  if (connection === 'connecting') {
+    return (
+      <main className="signin">
+        <h1>B20</h1>
+        <p className="muted">Conectando con el grupo…</p>
+      </main>
+    );
+  }
+  if (me?.status !== 'active') return <JoinPage />;
+  return <RouterProvider router={router} />;
+}
+
+function DemoApp({ source, gated = false }: { source?: DataSource; gated?: boolean }) {
   // Dependen de `createDemoState` a propósito: en desarrollo, cuando ese módulo se recarga en
   // caliente (porque cambió la forma de los datos), se crean de nuevo. Si no, el estado en
   // memoria conserva la forma anterior y las pantallas que esperan los campos nuevos fallan.
@@ -147,7 +167,7 @@ function DemoApp({ source }: { source?: DataSource }) {
   return (
     <SpacetimeProvider>
       <DataProvider source={data}>
-        <RouterProvider router={router} />
+        {gated ? <MembershipGate /> : <RouterProvider router={router} />}
       </DataProvider>
     </SpacetimeProvider>
   );

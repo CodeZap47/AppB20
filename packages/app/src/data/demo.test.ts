@@ -603,3 +603,51 @@ describe('votaciones', () => {
     expect(() => data.createPoll({ ...input, eligibleIds: ['externo'] })).toThrow('participante');
   });
 });
+
+describe('Membresía en la demo', () => {
+  it('un creador invita, ve la lista y retira la invitación', () => {
+    const data = source('demo-1');
+    data.inviteMember(' Nuevo@Ejemplo.MX ', false);
+    data.inviteMember('nuevo@ejemplo.mx', true); // repetida: no hace nada
+    const emails = data.getSnapshot().invitations.map((i) => i.email);
+    expect(emails.filter((e) => e === 'nuevo@ejemplo.mx')).toHaveLength(1);
+    data.revokeInvitation('nuevo@ejemplo.mx');
+    expect(data.getSnapshot().invitations.map((i) => i.email)).not.toContain('nuevo@ejemplo.mx');
+  });
+
+  it('quien no es creador no ve las invitaciones ni puede invitar o dar de baja', () => {
+    const data = source('demo-2');
+    expect(data.getSnapshot().invitations).toHaveLength(0);
+    expect(() => data.inviteMember('x@ejemplo.mx', false)).toThrow('Solo los creadores');
+    expect(() => data.removeMember('demo-3')).toThrow('Solo los creadores');
+  });
+
+  it('rechaza correos mal escritos', () => {
+    expect(() => source('demo-1').inviteMember('sin-arroba', false)).toThrow('no es válido');
+  });
+
+  it('dar de baja quita el acceso pero nadie se da de baja a sí mismo', () => {
+    const data = source('demo-1');
+    expect(() => data.removeMember('demo-1')).toThrow('a ti mismo');
+    data.removeMember('demo-3');
+    data.setViewer('demo-3');
+    expect(data.getSnapshot().me?.status).toBe('removed');
+    expect(data.getSnapshot().groupMessages).toHaveLength(0);
+    expect(() => data.joinGroup('Otra vez')).toThrow('dado de baja');
+  });
+
+  it('unirse sin estar en la lista falla y siendo miembro no cambia nada', () => {
+    expect(() => source('externo').joinGroup('Alguien')).toThrow('lista autorizada');
+    const data = source('demo-2');
+    const before = data.getSnapshot().members;
+    data.joinGroup('Otro nombre');
+    expect(data.getSnapshot().members).toEqual(before);
+  });
+
+  it('cargar el plan de estudios no duplica materias', () => {
+    const data = source('demo-1');
+    const count = data.getSnapshot().subjects.length;
+    data.importCurriculum();
+    expect(data.getSnapshot().subjects).toHaveLength(count);
+  });
+});

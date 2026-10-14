@@ -66,13 +66,22 @@ JavaScript autorizados* agrega `http://localhost:5173` y la dirección pública 
 
 ### 2. SpacetimeDB en Maincloud
 
+Antes de publicar, pon el *client ID* en `GOOGLE_CLIENT_IDS` de
+`packages/spacetime-module/src/index.ts`. El módulo rechaza cualquier token de Google emitido para
+otra app, así que sin ese valor nadie puede entrar.
+
 ```sh
 spacetime publish -s maincloud --project-path packages/spacetime-module app-b20
 npm run spacetime:generate
+
+# Quien publica queda como dueño con la identidad de la CLI, no con su cuenta de Google.
+# Por eso la primera invitación (la tuya, como creador) se hace una vez desde la terminal:
+spacetime call -s maincloud app-b20 invite_member '"tu-correo@gmail.com"' true
 ```
 
-Quien publica la primera vez queda como creador (`init`). Del lado del cliente:
-`VITE_SPACETIME_URI=wss://maincloud.spacetimedb.com` y `VITE_SPACETIME_DB=app-b20`.
+Después entras a la web con ese correo, te unes al grupo y las demás invitaciones se hacen desde
+Ajustes. Del lado del cliente: `VITE_SPACETIME_URI=wss://maincloud.spacetimedb.com` y
+`VITE_SPACETIME_DB=app-b20`.
 
 ### 3. Backend en Cloud Run
 

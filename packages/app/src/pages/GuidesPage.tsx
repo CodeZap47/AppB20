@@ -443,8 +443,13 @@ function SourcesTab({ guide }: { guide: StudyGuide }) {
       {adding && (
         <AddSources
           guide={guide}
-          onDone={(refs) => {
-            if (refs.length && !run(() => (source.addGuideSources(guide.id, refs), true))) return;
+          onDone={async (refs) => {
+            if (
+              refs.length &&
+              !(await run(async () => (await source.addGuideSources(guide.id, refs), true)))
+            ) {
+              return;
+            }
             setAdding(false);
           }}
         />
@@ -481,9 +486,9 @@ function SourceRow({
   const [topics, setTopics] = useState(s.topics);
   const outdated = isOutdated(s, info);
 
-  const save = (e: FormEvent) => {
+  const save = async (e: FormEvent) => {
     e.preventDefault();
-    if (run(() => (data.updateGuideSource(s.id, { status, reason, topics }), true))) {
+    if (await run(async () => (await data.updateGuideSource(s.id, { status, reason, topics }), true))) {
       setEditing(false);
     }
   };
@@ -727,9 +732,9 @@ function ReviewsTab({ guide }: { guide: StudyGuide }) {
   const { reviews } = guideStatus(guide, data);
   const canReview = Boolean(data.me && canReviewGuide(data.me.id, guide.updatedBy));
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (run(() => (source.reviewGuide(guide.id, verdict, comment), true))) setComment('');
+    if (await run(async () => (await source.reviewGuide(guide.id, verdict, comment), true))) setComment('');
   };
 
   return (
@@ -875,12 +880,12 @@ function GuideForm({ guide }: { guide: StudyGuide | undefined }) {
   const termName = subjectTerms.find((t) => t.id === termId)?.name;
   const subjectName = subjects.find((s) => s.id === subjectId)?.name;
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     const input = { subjectId, termId: termId || undefined, title, topicsText, sections };
-    const id = run(() => {
+    const id = await run(async () => {
       if (guide) {
-        source.updateGuide(guide.id, input);
+        await source.updateGuide(guide.id, input);
         return guide.id;
       }
       const refs = [...candidates.matched, ...candidates.unplaced]

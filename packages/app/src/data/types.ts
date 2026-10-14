@@ -23,6 +23,15 @@ export interface Member {
   joinedAt: Date;
 }
 
+/** Correo autorizado para unirse al grupo. Solo los creadores ven la lista. */
+export interface Invitation {
+  email: string;
+  /** Al unirse queda como creador (administrador) de la app. */
+  isCreator: boolean;
+  invitedBy: Id;
+  createdAt: Date;
+}
+
 export interface Subject {
   id: Id;
   name: string;
@@ -348,8 +357,15 @@ export interface PollVote {
 
 /** Lo que el usuario actual puede ver, igual que las vistas del servidor. */
 export interface Snapshot {
+  /**
+   * `connecting` mientras llegan los datos del servidor (en la demo nunca). Sin esto, la app no
+   * sabría distinguir «todavía no llega tu membresía» de «no eres miembro».
+   */
+  connection: 'connecting' | 'ready' | 'offline';
   me: Member | undefined;
   members: Member[];
+  /** Solo para creadores: correos autorizados, ya unidos o no. */
+  invitations: Invitation[];
   subjects: Subject[];
   terms: Term[];
   /** Fechas de los parciales ya configurados; de aquí sale el cuatrimestre y parcial vigente. */
@@ -403,86 +419,103 @@ export interface PublishWorkInput {
   coauthorIds: Id[];
 }
 
+/**
+ * Lo que devuelve una acción: el valor directo en la demo (que corre en memoria) o una promesa
+ * en SpacetimeDB, donde cada acción espera la respuesta del servidor. Las pantallas siempre
+ * usan `await`, así funcionan con las dos fuentes.
+ */
+export type MaybePromise<T> = T | Promise<T>;
+
 /** Acciones: corresponden uno a uno con los reducers del módulo. */
 export interface Actions {
-  updateProfile(displayName: string, photoUrl?: string): void;
+  /** Primera entrada: si tu correo está invitado, te vuelves miembro con ese nombre. */
+  joinGroup(displayName: string): MaybePromise<void>;
+  /** Solo creadores. Invitar un correo ya invitado no hace nada. */
+  inviteMember(email: string, isCreator: boolean): MaybePromise<void>;
+  /** Solo creadores: retira una invitación de alguien que todavía no se une. */
+  revokeInvitation(email: string): MaybePromise<void>;
+  /** Solo creadores: da de baja a un miembro; su historial se conserva. */
+  removeMember(memberId: Id): MaybePromise<void>;
+  /** Solo creadores: carga las materias de `CURRICULUM` que falten, con sus tres parciales. */
+  importCurriculum(): MaybePromise<void>;
+  updateProfile(displayName: string, photoUrl?: string): MaybePromise<void>;
   /** Materia fuera del plan de estudios, dentro de un cuatrimestre (1 a 9). */
-  createSubject(name: string, period: number): Id;
-  createTerm(subjectId: Id, name: string): Id;
+  createSubject(name: string, period: number): MaybePromise<Id>;
+  createTerm(subjectId: Id, name: string): MaybePromise<Id>;
   /**
    * Solo administradores (creadores de la app): fija las fechas de los parciales de un
    * cuatrimestre, una posición por parcial; las dos fechas vacías lo dejan sin configurar.
    */
-  saveCalendar(period: number, terms: TermDatesInput[]): void;
-  createAssignment(input: AssignmentInput): Id;
+  saveCalendar(period: number, terms: TermDatesInput[]): MaybePromise<void>;
+  createAssignment(input: AssignmentInput): MaybePromise<Id>;
   /** Como en un wiki: cualquier miembro activo edita y se guarda una versión a su nombre. */
-  updateAssignment(assignmentId: Id, input: AssignmentInput): void;
+  updateAssignment(assignmentId: Id, input: AssignmentInput): MaybePromise<void>;
   /** Sube el trabajo propio o del equipo a una página principal. */
-  publishWork(input: PublishWorkInput): Id;
+  publishWork(input: PublishWorkInput): MaybePromise<Id>;
   /** Solo sus autores; cada edición guarda una versión nueva. */
-  updateWork(workId: Id, title: string, description: string): void;
+  updateWork(workId: Id, title: string, description: string): MaybePromise<void>;
   /**
    * Sube un archivo y lo adjunta al trabajo; solo sus autores. Rechaza archivos vacíos o de
    * más de 50 MB (`MAX_FILE_BYTES`). Es la única acción asíncrona: subir toma tiempo.
    */
   attachWorkFile(workId: Id, file: File): Promise<Id>;
-  removeWorkFile(fileId: Id): void;
-  sendGroupMessage(text: string, replyToId?: Id): Id;
+  removeWorkFile(fileId: Id): MaybePromise<void>;
+  sendGroupMessage(text: string, replyToId?: Id): MaybePromise<Id>;
   /** Devuelve la conversación existente o la nueva. */
-  openDirectConversation(otherId: Id): Id;
-  sendDirectMessage(conversationId: Id, text: string, replyToId?: Id): Id;
+  openDirectConversation(otherId: Id): MaybePromise<Id>;
+  sendDirectMessage(conversationId: Id, text: string, replyToId?: Id): MaybePromise<Id>;
   /** Solo quien lo envió, durante `EDIT_WINDOW_MS`. */
-  editMessage(scope: MessageScope, messageId: Id, text: string): void;
+  editMessage(scope: MessageScope, messageId: Id, text: string): MaybePromise<void>;
   /** Para todos. Quien lo envió o, en el canal del salón, un administrador. */
-  deleteMessage(scope: MessageScope, messageId: Id): void;
+  deleteMessage(scope: MessageScope, messageId: Id): MaybePromise<void>;
   /** Pone, cambia o quita (si es la misma) tu reacción. */
-  toggleReaction(scope: MessageScope, messageId: Id, emoji: string): void;
+  toggleReaction(scope: MessageScope, messageId: Id, emoji: string): MaybePromise<void>;
   /**
    * Crea un paquete con las imágenes (WebP, PNG, GIF o JPEG de hasta 1 MB, máximo 30).
    * Asíncrona como `attachWorkFile`: sube cada imagen.
    */
   importStickers(packName: string, files: File[]): Promise<Id>;
   /** Solo su dueño. */
-  setStickerPackShared(packId: Id, shared: boolean): void;
+  setStickerPackShared(packId: Id, shared: boolean): MaybePromise<void>;
   /** Solo su dueño. Los mensajes que ya lo usan siguen mostrando el sticker. */
-  removeStickerPack(packId: Id): void;
-  saveChatCommand(input: SaveChatCommandInput): Id;
-  removeChatCommand(commandId: Id): void;
-  shareBirthday(day: number, month: number, remind: boolean): void;
-  withdrawBirthday(): void;
-  createActivity(input: CreateActivityInput): Id;
+  removeStickerPack(packId: Id): MaybePromise<void>;
+  saveChatCommand(input: SaveChatCommandInput): MaybePromise<Id>;
+  removeChatCommand(commandId: Id): MaybePromise<void>;
+  shareBirthday(day: number, month: number, remind: boolean): MaybePromise<void>;
+  withdrawBirthday(): MaybePromise<void>;
+  createActivity(input: CreateActivityInput): MaybePromise<Id>;
   /** Como en un wiki: cualquier miembro activo edita y se guarda una versión a su nombre. */
-  updateActivity(activityId: Id, input: CreateActivityInput): void;
-  addEvidence(activityId: Id, content: string, participantIds: Id[]): Id;
-  saveNote(input: SaveNoteInput): Id;
-  commentNote(noteId: Id, text: string): void;
-  askQuestion(input: AskQuestionInput): Id;
-  answerQuestion(questionId: Id, body: string): Id;
+  updateActivity(activityId: Id, input: CreateActivityInput): MaybePromise<void>;
+  addEvidence(activityId: Id, content: string, participantIds: Id[]): MaybePromise<Id>;
+  saveNote(input: SaveNoteInput): MaybePromise<Id>;
+  commentNote(noteId: Id, text: string): MaybePromise<void>;
+  askQuestion(input: AskQuestionInput): MaybePromise<Id>;
+  answerQuestion(questionId: Id, body: string): MaybePromise<Id>;
   /** Solo quien preguntó acepta una respuesta; marca la pregunta como resuelta. */
-  acceptAnswer(questionId: Id, answerId: Id): void;
-  reopenQuestion(questionId: Id): void;
-  markSeen(): void;
+  acceptAnswer(questionId: Id, answerId: Id): MaybePromise<void>;
+  reopenQuestion(questionId: Id): MaybePromise<void>;
+  markSeen(): MaybePromise<void>;
   /** Crea la guía con sus fuentes iniciales, todas pendientes hasta que alguien las procese. */
-  createGuide(input: GuideInput, sources: GuideSourceRef[]): Id;
+  createGuide(input: GuideInput, sources: GuideSourceRef[]): MaybePromise<Id>;
   /** Como en un wiki: cualquier miembro activo edita y la versión sube. */
-  updateGuide(guideId: Id, input: GuideInput): void;
-  addGuideSources(guideId: Id, sources: GuideSourceRef[]): void;
+  updateGuide(guideId: Id, input: GuideInput): MaybePromise<void>;
+  addGuideSources(guideId: Id, sources: GuideSourceRef[]): MaybePromise<void>;
   /** Marca una fuente como procesada o pendiente (con razón) y qué temas cubre. */
-  updateGuideSource(sourceId: Id, update: GuideSourceUpdate): void;
+  updateGuideSource(sourceId: Id, update: GuideSourceUpdate): MaybePromise<void>;
   /** Toma la versión actual del material, por ejemplo después de revisar sus cambios. */
-  refreshGuideSource(sourceId: Id): void;
-  removeGuideSource(sourceId: Id): void;
+  refreshGuideSource(sourceId: Id): MaybePromise<void>;
+  removeGuideSource(sourceId: Id): MaybePromise<void>;
   /** Un compañero revisa la versión actual; quien la guardó no puede. */
-  reviewGuide(guideId: Id, verdict: GuideReviewVerdict, comment: string): void;
-  createPoll(input: PollInput): Id;
+  reviewGuide(guideId: Id, verdict: GuideReviewVerdict, comment: string): MaybePromise<void>;
+  createPoll(input: PollInput): MaybePromise<Id>;
   /** Solo quien la creó y mientras nadie haya votado. */
-  updatePoll(pollId: Id, input: PollInput): void;
+  updatePoll(pollId: Id, input: PollInput): MaybePromise<void>;
   /** Vota o, si la votación lo permite, cambia tu voto antes del cierre. */
-  castVote(pollId: Id, choices: number[]): void;
+  castVote(pollId: Id, choices: number[]): MaybePromise<void>;
   /** Solo quien la creó y antes del cierre; los votos se conservan como registro. */
-  cancelPoll(pollId: Id, reason: string): void;
+  cancelPoll(pollId: Id, reason: string): MaybePromise<void>;
   /** Después del cierre, cualquier integrante registra el acuerdo; queda su nombre y fecha. */
-  recordPollDecision(pollId: Id, decision: string): void;
+  recordPollDecision(pollId: Id, decision: string): MaybePromise<void>;
 }
 
 export interface GuideInput {

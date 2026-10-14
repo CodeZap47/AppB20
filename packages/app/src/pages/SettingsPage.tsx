@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { requestNotificationPermission, webPushSupport } from '../lib/notifications';
 import { CalendarSettings } from '../components/CalendarSettings';
+import { MembershipSettings } from '../components/MembershipSettings';
 import { usePlatform } from '../components/PlatformContext';
 import { useSession, useSessionStore } from '../auth/AuthContext';
 
@@ -31,6 +32,8 @@ export function SettingsPage() {
       )}
 
       <CalendarSettings />
+
+      <MembershipSettings />
 
       <section>
         <h2>Gemini (BYOK)</h2>

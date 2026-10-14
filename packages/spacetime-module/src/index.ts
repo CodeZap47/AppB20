@@ -707,10 +707,20 @@ export const join_group = spacetimedb.reducer(
   },
 );
 
+/** Retira la invitación de alguien que todavía no se une; quien ya es miembro se da de baja aparte. */
+export const revoke_invitation = spacetimedb.reducer({ email: t.string() }, (ctx, { email }) => {
+  requireCreator(ctx);
+  const normalized = email.trim().toLowerCase();
+  if (!ctx.db.invitation.email.find(normalized)) return;
+  ctx.db.invitation.email.delete(normalized);
+  log(ctx, 'revoke', 'invitation', normalized);
+});
+
 export const remove_member = spacetimedb.reducer(
   { identity: t.identity() },
   (ctx, { identity }) => {
     requireCreator(ctx);
+    if (identity.isEqual(ctx.sender)) throw new SenderError('No puedes darte de baja a ti mismo.');
     const row = ctx.db.member.identity.find(identity);
     if (!row) throw new SenderError('Ese miembro no existe.');
     ctx.db.member.identity.update({ ...row, status: 'removed' });
@@ -2123,6 +2133,16 @@ export const my_member = spacetimedb.view(
   (ctx) => {
     const row = ctx.db.member.identity.find(ctx.sender);
     return row ? [row] : [];
+  },
+);
+
+/** Lista autorizada: solo la ven los creadores, que son quienes invitan. */
+export const invitations = spacetimedb.view(
+  { name: 'invitations', public: true },
+  t.array(invitation.rowType),
+  (ctx) => {
+    const me = ctx.db.member.identity.find(ctx.sender);
+    return me?.status === 'active' && me.isCreator ? [...ctx.db.invitation.iter()] : [];
   },
 );
 

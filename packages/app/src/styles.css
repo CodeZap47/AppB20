@@ -4724,3 +4724,16 @@ a.ref-card:hover {
 .google-button {
   min-height: 44px;
 }
+
+.plain-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.plain-list > li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}

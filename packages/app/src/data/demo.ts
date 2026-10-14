@@ -38,6 +38,7 @@ import {
   type TermDatesInput,
 } from '@b20/core';
 import type {
+  Invitation,
   Activity,
   Assignment,
   AssignmentInput,
@@ -93,6 +94,7 @@ import { referencesIn } from '../lib/references';
  */
 
 interface State {
+  invitations: Invitation[];
   members: Member[];
   subjects: Subject[];
   terms: Term[];
@@ -124,6 +126,11 @@ interface State {
 }
 
 const MAX_TEXT = 4000;
+
+/** Altas, bajas e invitaciones: solo creadores activos (`canManageMembership` en `@b20/core`). */
+function isCreator(m: Member | undefined): boolean {
+  return m?.status === 'active' && m.isCreator;
+}
 
 function requireText(value: string, field: string, max = MAX_TEXT): string {
   const trimmed = value.trim();
@@ -180,8 +187,10 @@ export class DemoDataSource implements DataSource {
     const me = s.members.find((m) => m.id === this.#viewerId);
     if (me?.status !== 'active') {
       return {
+        connection: 'ready',
         me,
         members: [],
+        invitations: [],
         subjects: [],
         terms: [],
         calendar: [],
@@ -233,8 +242,10 @@ export class DemoDataSource implements DataSource {
       ),
     );
     return {
+      connection: 'ready',
       me,
       members: s.members,
+      invitations: isCreator(me) ? s.invitations : [],
       subjects: s.subjects,
       terms: s.terms,
       calendar: s.calendar,
@@ -282,6 +293,68 @@ export class DemoDataSource implements DataSource {
 
   #isActive(id: Id): boolean {
     return this.#state.members.some((m) => m.id === id && m.status === 'active');
+  }
+
+  joinGroup(displayName: string) {
+    const me = this.#state.members.find((m) => m.id === this.#viewerId);
+    if (me?.status === 'removed') throw new Error('Tu acceso fue dado de baja.');
+    if (me) return;
+    requireText(displayName, 'El nombre', 80);
+    // La demo no tiene correos: quien no es miembro nunca está en la lista.
+    throw new Error('Tu correo no está en la lista autorizada del grupo.');
+  }
+
+  inviteMember(email: string, isCreator: boolean) {
+    this.#requireCreator();
+    const normalized = requireText(email, 'El correo', 320).toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(normalized)) throw new Error('Ese correo no es válido.');
+    if (this.#state.invitations.some((i) => i.email === normalized)) return;
+    this.#state.invitations = [
+      ...this.#state.invitations,
+      { email: normalized, isCreator, invitedBy: this.#viewerId, createdAt: this.#now() },
+    ];
+    this.#emit();
+  }
+
+  revokeInvitation(email: string) {
+    this.#requireCreator();
+    this.#state.invitations = this.#state.invitations.filter((i) => i.email !== email);
+    this.#emit();
+  }
+
+  removeMember(memberId: Id) {
+    const me = this.#requireCreator();
+    if (memberId === me.id) throw new Error('No puedes darte de baja a ti mismo.');
+    if (!this.#state.members.some((m) => m.id === memberId)) throw new Error('Ese miembro no existe.');
+    this.#state.members = this.#state.members.map((m) =>
+      m.id === memberId ? { ...m, status: 'removed' as const } : m,
+    );
+    this.#emit();
+  }
+
+  importCurriculum() {
+    this.#requireCreator();
+    const codes = new Set(this.#state.subjects.map((x) => x.code));
+    const missing = CURRICULUM.filter((c) => !codes.has(c.code));
+    if (!missing.length) return;
+    for (const c of missing) {
+      const subject = { id: this.#id(), ...c };
+      const terms = termNames().map((name, i) => ({
+        id: this.#id(),
+        subjectId: subject.id,
+        name,
+        position: i + 1,
+      }));
+      this.#state.subjects = [...this.#state.subjects, subject];
+      this.#state.terms = [...this.#state.terms, ...terms];
+    }
+    this.#emit();
+  }
+
+  #requireCreator(): Member {
+    const me = this.#activeMember();
+    if (!isCreator(me)) throw new Error('Solo los creadores de la app pueden hacer esto.');
+    return me;
   }
 
   updateProfile(displayName: string, photoUrl?: string) {
@@ -1465,6 +1538,14 @@ export function createDemoState(now = new Date()): State {
     })),
   ];
   return {
+    invitations: [
+      {
+        email: 'pendiente@ejemplo.mx',
+        isCreator: false,
+        invitedBy: 'demo-1',
+        createdAt: minutesAgo(600),
+      },
+    ],
     members,
     subjects,
     terms,

@@ -79,9 +79,9 @@ function EvidenceForm({ activityId, onDone }: { activityId: string; onDone: () =
   const toggle = (id: string) =>
     setParticipantIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (run(() => source.addEvidence(activityId, content, participantIds))) onDone();
+    if (await run(() => source.addEvidence(activityId, content, participantIds))) onDone();
   };
 
   return (
@@ -457,12 +457,12 @@ function ActivityForm({ activity }: { activity: Activity | undefined }) {
     objective.trim() !== activity.objective ||
     instructions.trim() !== activity.instructions;
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     const input = { subjectId, termId: termId || undefined, topic, date, title, objective, instructions };
-    const id = run(() => {
+    const id = await run(async () => {
       if (!activity) return source.createActivity(input);
-      source.updateActivity(activity.id, input);
+      await source.updateActivity(activity.id, input);
       return activity.id;
     });
     if (!id) return;
