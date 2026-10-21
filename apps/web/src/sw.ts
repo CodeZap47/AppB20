@@ -3,6 +3,15 @@ import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching';
 
 declare const self: ServiceWorkerGlobalScope;
 
+// El registro usa autoUpdate: una versión nueva debe sustituir la caché anterior
+// incluso cuando siguen abiertas otras pestañas de B20.
+self.addEventListener('install', (event) => {
+  event.waitUntil(self.skipWaiting());
+});
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
 

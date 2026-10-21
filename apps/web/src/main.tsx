@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App, type Platform } from '@b20/app';
 import '@b20/app/styles.css';
-import { canonicalPagesUrl } from './canonicalOrigin';
+import { canonicalPagesUrl, containsOAuthResponse } from './canonicalOrigin';
 
 const platform: Platform = import.meta.env.MODE === 'capacitor' ? 'android' : 'web';
 const canonicalUrl = import.meta.env.MODE === 'pages'
@@ -14,7 +14,13 @@ if (canonicalUrl) {
   window.location.replace(canonicalUrl);
 } else {
   if (platform === 'web') {
-    void import('virtual:pwa-register').then(({ registerSW }) => registerSW({ immediate: true }));
+    void import('virtual:pwa-register').then(({ registerSW }) => registerSW({
+      immediate: true,
+      onNeedReload: () => {
+        // Una actualización nunca debe interrumpir el canje de un código de un solo uso.
+        if (!containsOAuthResponse(new URL(window.location.href))) window.location.reload();
+      },
+    }));
   }
 
   createRoot(document.getElementById('root')!).render(

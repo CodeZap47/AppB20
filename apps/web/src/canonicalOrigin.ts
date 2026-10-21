@@ -16,7 +16,7 @@ export function parsePagesOrigin(value: string | undefined): URL | undefined {
   } catch { return undefined; }
 }
 
-function containsOAuthResponse(url: URL): boolean {
+export function containsOAuthResponse(url: URL): boolean {
   let pathname: string;
   try { pathname = decodeURIComponent(url.pathname); } catch { pathname = url.pathname; }
   if (/^\/auth(?:\/|$)/i.test(pathname)) return true;

@@ -94,6 +94,11 @@ global `/* /index.html 200`: Wrangler la rechaza como un bucle.
 [Fallback de Pages](https://developers.cloudflare.com/pages/configuration/serving-pages/).
 
 La compilación en modo `pages` rechaza URLs de producción que apunten a localhost.
+El service worker propio completa el comportamiento `autoUpdate`: activa la nueva versión
+y toma el control de las pestañas abiertas para que no se siga mostrando el acceso anterior
+desde su caché. La recarga de actualización reinicia los cambios simulados en memoria, como
+cualquier otra recarga de la app. Se omite la recarga mientras se procesa un retorno OAuth
+para no interrumpir el canje del código de acceso o el cierre de sesión.
 SpacetimeAuth debe estar configurado en ambos modos; en `spacetime` también se necesita URI y
 nombre de base. `VITE_DATA_MODE` admite `demo` o `spacetime`, con `demo` como predeterminado.
 `.env.pages` sirve para probar o compilar localmente, pero está ignorado por Git y no llega a
