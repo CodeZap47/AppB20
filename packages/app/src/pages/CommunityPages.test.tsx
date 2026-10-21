@@ -53,6 +53,32 @@ describe('perfiles y cumpleaños', () => {
     expect(container.textContent).toContain('Ver cada aporte y las reglas de puntuación');
   });
 
+  it('abre en Todo con lo publicado del más reciente al más antiguo y lo filtra con el buscador', async () => {
+    const note = (id: string, title: string, createdAt: Date) => ({ id, authorId: 'me', subjectId: 'subject', topic: 'Vectores', title, body: '', visibility: 'group' as const, source: 'student' as const, tags: [], version: 1, createdAt, updatedAt: createdAt });
+    snapshot.notes = [
+      note('old', 'Apunte de septiembre', new Date('2026-09-02T12:00:00Z')),
+      note('new', 'Apunte de octubre', new Date('2026-10-20T12:00:00Z')),
+    ];
+    await mount('/perfil/me');
+    const pressed = container.querySelector('.profile-tabs button[aria-pressed="true"]');
+    expect(pressed?.textContent).toContain('Todo');
+    expect(pressed?.textContent).toContain('2');
+    const titles = [...container.querySelectorAll('.feed .work-card__title')].map((el) => el.textContent);
+    expect(titles).toEqual(['Apunte de octubre', 'Apunte de septiembre']);
+    for (const label of ['Editar nombre', 'Editar presentación y foto', 'Agregar cumpleaños']) {
+      expect(container.textContent).toContain(label);
+    }
+
+    await act(async () => root.unmount()); root = createRoot(container);
+    await mount('/perfil/me?q=septiembre');
+    expect([...container.querySelectorAll('.feed .work-card__title')].map((el) => el.textContent)).toEqual(['Apunte de septiembre']);
+  });
+
+  it('los enlaces con solo ?materia= abren la pestaña de Trabajos', async () => {
+    await mount('/perfil/me?materia=subject');
+    expect(container.querySelector('.profile-tabs button[aria-pressed="true"]')?.textContent).toContain('Trabajos');
+  });
+
   it('guarda campos opcionales y la versión sin solicitar datos de nacimiento o calificaciones', async () => {
     await mount('/perfil/me'); await click('Editar presentación y foto');
     const form = container.querySelector('form')!;

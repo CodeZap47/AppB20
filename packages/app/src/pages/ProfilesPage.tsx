@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   HELP_KIND_LABEL,
@@ -39,6 +39,127 @@ function contributionsOf(memberId: Id, data: Snapshot) {
       .filter((id): id is Id => Boolean(id)),
   );
   return { works, notes, answers, helpful, questions, evidences, helpPosts, subjectIds };
+}
+
+/** Guías que creó, editó, a las que agregó fuentes o que revisó. */
+function guidesOf(memberId: Id, data: Snapshot) {
+  return data.guides.filter(
+    (guide) =>
+      !guide.withdrawnAt &&
+      (guide.createdBy === memberId ||
+        guide.updatedBy === memberId ||
+        data.guideSources.some((source) => source.guideId === guide.id && source.addedBy === memberId) ||
+        data.guideReviews.some((review) => review.guideId === guide.id && review.reviewerId === memberId)),
+  );
+}
+
+const isTeamWork = (work: { authorIds: Id[] }) => new Set(work.authorIds).size > 1;
+
+type FeedKind = 'trabajo' | 'nota' | 'guia' | 'pregunta' | 'respuesta' | 'ayuda' | 'actividad';
+const FEED_LABEL: Record<FeedKind, string> = {
+  trabajo: 'Trabajo',
+  nota: 'Nota',
+  guia: 'Guía',
+  pregunta: 'Pregunta',
+  respuesta: 'Respuesta',
+  ayuda: 'Ayuda',
+  actividad: 'Actividad de clase',
+};
+
+interface FeedEntry {
+  key: string;
+  kind: FeedKind;
+  at: Date;
+  title: string;
+  context: string;
+  href: string;
+}
+
+/** Todo lo que la persona ha publicado o aportado, del más reciente al más antiguo. */
+function profileFeed(memberId: Id, data: Snapshot): FeedEntry[] {
+  const c = contributionsOf(memberId, data);
+  const subjectName = (id?: Id) => data.subjects.find((s) => s.id === id)?.name;
+  const context = (...parts: (string | false | undefined)[]) => parts.filter(Boolean).join(' · ');
+  const entries: FeedEntry[] = [
+    ...c.works.map((work): FeedEntry => {
+      const assignment = data.assignments.find((a) => a.id === work.assignmentId);
+      return {
+        key: `trabajo-${work.id}`,
+        kind: 'trabajo',
+        at: work.createdAt,
+        title: work.title || assignment?.title || 'Trabajo',
+        context: context(
+          assignment && WORK_KIND_LABEL[assignment.kind],
+          subjectName(assignment?.subjectId),
+          work.topic || assignment?.topic,
+          isTeamWork(work) && 'En equipo',
+        ),
+        href: `/m/tareas/${work.assignmentId}?trabajo=${work.id}`,
+      };
+    }),
+    ...c.notes.map((note): FeedEntry => ({
+      key: `nota-${note.id}`,
+      kind: 'nota',
+      at: note.createdAt,
+      title: note.title,
+      context: context(subjectName(note.subjectId), note.topic),
+      href: `/m/notas/${note.id}`,
+    })),
+    ...guidesOf(memberId, data).map((guide): FeedEntry => ({
+      key: `guia-${guide.id}`,
+      kind: 'guia',
+      at: guide.createdAt,
+      title: guide.title,
+      context: context(subjectName(guide.subjectId), guide.createdBy === memberId ? 'La creó' : 'Colaboró'),
+      href: `/m/guias/${guide.id}`,
+    })),
+    ...c.questions.map((question): FeedEntry => ({
+      key: `pregunta-${question.id}`,
+      kind: 'pregunta',
+      at: question.createdAt,
+      title: question.title,
+      context: context(subjectName(question.subjectId), question.topic, question.status === 'resolved' ? 'Resuelta' : 'Abierta'),
+      href: `/m/preguntas/${question.id}`,
+    })),
+    ...c.answers.map((answer): FeedEntry => {
+      const question = data.questions.find((q) => q.id === answer.questionId);
+      return {
+        key: `respuesta-${answer.id}`,
+        kind: 'respuesta',
+        at: answer.createdAt,
+        title: question?.title ?? 'Pregunta',
+        context: context(
+          subjectName(question?.subjectId),
+          c.helpful.some((a) => a.id === answer.id) && 'Le sirvió a quien preguntó',
+        ),
+        href: `/m/preguntas/${answer.questionId}`,
+      };
+    }),
+    ...c.helpPosts.map((post): FeedEntry => ({
+      key: `ayuda-${post.id}`,
+      kind: 'ayuda',
+      at: post.createdAt,
+      title: post.title,
+      context: context(HELP_KIND_LABEL[post.kind], subjectName(post.subjectId), post.topic),
+      href: `/m/ayuda/${post.id}`,
+    })),
+    ...c.evidences.map((evidence): FeedEntry => {
+      const activity = data.activities.find((a) => a.id === evidence.activityId);
+      return {
+        key: `actividad-${evidence.id}`,
+        kind: 'actividad',
+        at: evidence.createdAt,
+        title: activity?.title ?? 'Actividad de clase',
+        context: context(subjectName(activity?.subjectId), activity?.topic),
+        href: `/m/actividades/${evidence.activityId}`,
+      };
+    }),
+  ];
+  return entries.sort((a, b) => b.at.getTime() - a.at.getTime());
+}
+
+function NoMatches({ query }: { query: string }) {
+  return <p className="muted">Nada coincide con «{query}».</p>;
 }
 
 /** «Contigo y Ana», «Con Ana y Luis» o «Individual», visto por quien mira el perfil. */
@@ -204,7 +325,8 @@ function EditName({ current, onDone }: { current: string; onDone: () => void }) 
 }
 
 const TABS = [
-  { id: '', label: 'Trabajos' },
+  { id: '', label: 'Todo' },
+  { id: 'trabajos', label: 'Trabajos' },
   { id: 'notas', label: 'Notas y guías' },
   { id: 'proyectos', label: 'Proyectos' },
   { id: 'colaboracion', label: 'Colaboración' },
@@ -213,14 +335,81 @@ const TABS = [
 type Tab = (typeof TABS)[number]['id'];
 const isTab = (value: string | null): value is Tab => TABS.some((t) => t.id === value);
 
+/** Línea de tiempo con todo lo que ha publicado o aportado, agrupada por mes. */
+function AllTab({ member, query }: { member: Member; query: string }) {
+  const data = useSnapshot();
+  const isMe = member.id === data.me?.id;
+  const feed = profileFeed(member.id, data);
+  const shown = feed.filter((entry) => matches(query, entry.title, entry.context, FEED_LABEL[entry.kind]));
+
+  if (feed.length === 0) {
+    return (
+      <Empty
+        icon="folder"
+        title={isMe ? 'Todavía no publicas nada' : 'Todavía no publica nada'}
+        action={
+          isMe && (
+            <Link to="/m/tareas" className="button">
+              Ir a Tareas y Actividades
+            </Link>
+          )
+        }
+      >
+        {isMe
+          ? 'Tus trabajos, notas, guías, preguntas, respuestas y publicaciones de ayuda aparecerán aquí en el orden en que los subas.'
+          : 'Aquí aparecerá todo lo que comparta con el grupo, en el orden en que lo suba.'}
+      </Empty>
+    );
+  }
+  if (shown.length === 0) return <NoMatches query={query} />;
+
+  const months: { label: string; entries: FeedEntry[] }[] = [];
+  for (const entry of shown) {
+    const label = formatMonth(entry.at);
+    const last = months[months.length - 1];
+    if (last?.label === label) last.entries.push(entry);
+    else months.push({ label, entries: [entry] });
+  }
+
+  return (
+    <div className="feed">
+      {months.map((month) => (
+        <section key={month.label} className="feed__month">
+          <h2 className="label">{month.label}</h2>
+          <ul className="feed__list">
+            {month.entries.map((entry) => (
+              <li key={entry.key} className="feed__item">
+                <Link to={entry.href} className="work-card">
+                  <span className="work-card__top">
+                    <span className={`badge feed__kind feed__kind--${entry.kind}`}>
+                      {FEED_LABEL[entry.kind]}
+                    </span>
+                    {entry.context && <span className="work-card__context">{entry.context}</span>}
+                  </span>
+                  <strong className="work-card__title">{entry.title}</strong>
+                  <span className="work-card__footer">
+                    <span className="work-card__date">{formatDate(entry.at)}</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  );
+}
+
 /** Trabajos del alumno con la organización del archivo: materia → parcial → trabajo. */
 function WorksTab({
   member,
   subjectId,
+  query,
   onSubject,
 }: {
   member: Member;
   subjectId: string;
+  query: string;
   onSubject: (id: string) => void;
 }) {
   const data = useSnapshot();
@@ -236,6 +425,7 @@ function WorksTab({
     .filter(({ work, assignment }) => (!termFilter || assignment?.termId === termFilter)
       && (!typeFilter || assignment?.kind === typeFilter)
       && matches(topicFilter, work.topic ?? '', assignment?.topic ?? '', work.title)
+      && matches(query, work.title, work.topic ?? '', assignment?.title ?? '', assignment?.topic ?? '')
       && (!fromDate || work.createdAt >= parseDay(fromDate)))
     .sort((a, b) => b.work.updatedAt.getTime() - a.work.updatedAt.getTime());
   const bySubjectId = (id: string) => rows.filter((r) => r.assignment?.subjectId === id);
@@ -377,15 +567,19 @@ function WorksTab({
   );
 }
 
-function NotesTab({ member }: { member: Member }) {
+function NotesTab({ member, query }: { member: Member; query: string }) {
   const data = useSnapshot();
   const { me, subjects } = data;
   const { notes } = contributionsOf(member.id, data);
   const isMe = member.id === me?.id;
-  const sorted = [...notes].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  const subjectName = (id: Id) => subjects.find((s) => s.id === id)?.name ?? '';
+  const allGuides = guidesOf(member.id, data);
+  const sorted = notes
+    .filter((n) => matches(query, n.title, n.topic, subjectName(n.subjectId)))
+    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  const guides = allGuides.filter((guide) => matches(query, guide.title, subjectName(guide.subjectId), ...guide.topics));
 
-  const guides = data.guides.filter((guide) => !guide.withdrawnAt && (guide.createdBy === member.id || guide.updatedBy === member.id || data.guideSources.some((source) => source.guideId === guide.id && source.addedBy === member.id) || data.guideReviews.some((review) => review.guideId === guide.id && review.reviewerId === member.id)));
-  if (sorted.length === 0 && guides.length === 0) {
+  if (notes.length === 0 && allGuides.length === 0) {
     return (
       <Empty
         icon="file"
@@ -404,9 +598,10 @@ function NotesTab({ member }: { member: Member }) {
       </Empty>
     );
   }
+  if (sorted.length === 0 && guides.length === 0) return <NoMatches query={query} />;
 
   return (
-    <><h2>Notas compartidas</h2><ul className="work-grid">
+    <><h2>Notas compartidas</h2>{sorted.length === 0 && <p className="muted">{query ? 'Ninguna nota coincide.' : 'Sin notas compartidas todavía.'}</p>}<ul className="work-grid">
       {sorted.map((n) => {
         const excerpt = previewText(n.body);
         return (
@@ -439,27 +634,29 @@ function NotesTab({ member }: { member: Member }) {
 }
 
 /** Respuestas, preguntas, publicaciones de ayuda y actividades de clase en las que participó. */
-function CollaborationTab({ member }: { member: Member }) {
+function CollaborationTab({ member, query }: { member: Member; query: string }) {
   const data = useSnapshot();
   const { me, questions, activities, subjects } = data;
   const { answers, helpful, evidences, helpPosts } = contributionsOf(member.id, data);
-  const asked = contributionsOf(member.id, data).questions;
+  const allAsked = contributionsOf(member.id, data).questions;
   const isMe = member.id === me?.id;
   const subjectName = (id: Id) =>
     subjects.find((s: Subject) => s.id === id)?.name ?? 'Materia desconocida';
-  const answered = [...new Set(answers.map((a) => a.questionId))]
+  const allAnswered = [...new Set(answers.map((a) => a.questionId))]
     .map((id) => questions.find((q) => q.id === id))
     .filter((q) => q !== undefined);
-  const sessions = [...new Set(evidences.map((e) => e.activityId))]
+  const allSessions = [...new Set(evidences.map((e) => e.activityId))]
     .map((id) => activities.find((a) => a.id === id))
     .filter((a) => a !== undefined)
     .sort((a, b) => b.date.localeCompare(a.date));
+  const answered = allAnswered.filter((q) => matches(query, q.title, q.topic, subjectName(q.subjectId)));
+  const asked = allAsked.filter((q) => matches(query, q.title, q.topic, subjectName(q.subjectId)));
+  const sessions = allSessions.filter((a) => matches(query, a.title, a.topic, subjectName(a.subjectId)));
+  const sortedHelpPosts = helpPosts
+    .filter((post) => matches(query, post.title, post.topic, subjectName(post.subjectId)))
+    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 
-  const sortedHelpPosts = [...helpPosts].sort(
-    (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
-  );
-
-  if (!answered.length && !asked.length && !sessions.length && !helpPosts.length) {
+  if (!allAnswered.length && !allAsked.length && !allSessions.length && !helpPosts.length) {
     return (
       <Empty icon="chat" title="Sin colaboraciones todavía">
         {isMe
@@ -467,6 +664,9 @@ function CollaborationTab({ member }: { member: Member }) {
           : 'Aquí aparecerán sus publicaciones de ayuda, sus respuestas, sus preguntas y las actividades de clase en las que participó.'}
       </Empty>
     );
+  }
+  if (!answered.length && !asked.length && !sessions.length && !sortedHelpPosts.length) {
+    return <NoMatches query={query} />;
   }
 
   return (
@@ -549,11 +749,12 @@ function CollaborationTab({ member }: { member: Member }) {
   );
 }
 
-function ProjectsTab({ member }: { member: Member }) {
+function ProjectsTab({ member, query }: { member: Member; query: string }) {
   const data = useSnapshot();
-  const projects = contributionsOf(member.id, data).works.filter((work) => new Set(work.authorIds).size > 1);
+  const all = contributionsOf(member.id, data).works.filter(isTeamWork);
+  const projects = all.filter((work) => matches(query, work.title, work.topic ?? '', data.assignments.find((assignment) => assignment.id === work.assignmentId)?.title ?? '', authorsLabel(work.authorIds, data.members)));
   return <section><h2>Trabajos de equipo</h2><p className="muted">Referencias al mismo trabajo compartido con sus autores. Las versiones y los archivos se consultan en el registro original.</p>
-    {projects.length ? <ul className="work-grid">{projects.map((work) => <li key={work.id}><Link className="work-card" to={`/m/tareas/${work.assignmentId}?trabajo=${work.id}`}><strong>{work.title || data.assignments.find((assignment) => assignment.id === work.assignmentId)?.title}</strong><span>{authorsLabel(work.authorIds, data.members)}</span><span className="muted">Versión {work.version} · {formatDate(work.updatedAt)}</span></Link></li>)}</ul> : <p className="muted">Todavía no ha compartido trabajos de equipo.</p>}
+    {projects.length ? <ul className="work-grid">{projects.map((work) => <li key={work.id}><Link className="work-card" to={`/m/tareas/${work.assignmentId}?trabajo=${work.id}`}><strong>{work.title || data.assignments.find((assignment) => assignment.id === work.assignmentId)?.title}</strong><span>{authorsLabel(work.authorIds, data.members)}</span><span className="muted">Versión {work.version} · {formatDate(work.updatedAt)}</span></Link></li>)}</ul> : all.length ? <NoMatches query={query} /> : <p className="muted">Todavía no ha compartido trabajos de equipo.</p>}
   </section>;
 }
 
@@ -576,6 +777,19 @@ export function ProfilePage() {
   const [params, setParams] = useSearchParams();
   const member = members.find((m) => m.id === memberId);
   const profile = data.memberProfiles.find((entry) => entry.memberId === memberId);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // ⌘K / Ctrl+K lleva al buscador del perfil, como indica el atajo junto al campo.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   if (!member) {
     return (
@@ -593,30 +807,37 @@ export function ProfilePage() {
     );
   }
 
-  const tabParam = params.get('pestana');
-  const tab: Tab = isTab(tabParam) ? tabParam : '';
-  const subjectId = params.get('materia') ?? '';
-  const setTab = (next: Tab) => setParams(next ? { pestana: next } : {}, { replace: true });
-  const isMe = member.id === me?.id;
-  // `?cumple=editar` abre la captura directo, para llegar desde el calendario de cumpleaños.
-  const editingBirthday = isMe && params.get('cumple') === 'editar';
-  const setEditingBirthday = (open: boolean) =>
+  /** Cambia solo los parámetros indicados; un valor vacío quita el parámetro. */
+  const patchParams = (changes: Record<string, string>) =>
     setParams(
       (prev) => {
         const next = new URLSearchParams(prev);
-        if (open) next.set('cumple', 'editar');
-        else next.delete('cumple');
+        for (const [key, value] of Object.entries(changes)) {
+          if (value) next.set(key, value);
+          else next.delete(key);
+        }
         return next;
       },
       { replace: true },
     );
+  const tabParam = params.get('pestana');
+  const subjectId = params.get('materia') ?? '';
+  // Los enlaces antiguos con solo `?materia=` siguen abriendo los trabajos de esa materia.
+  const tab: Tab = isTab(tabParam) ? tabParam : subjectId ? 'trabajos' : '';
+  const query = params.get('q') ?? '';
+  const setTab = (next: Tab) => patchParams({ pestana: next, materia: '' });
+  const isMe = member.id === me?.id;
+  // `?cumple=editar` abre la captura directo, para llegar desde el calendario de cumpleaños.
+  const editingBirthday = isMe && params.get('cumple') === 'editar';
+  const setEditingBirthday = (open: boolean) => patchParams({ cumple: open ? 'editar' : '' });
   const birthday = birthdays.find((b) => b.memberId === member.id);
   const c = contributionsOf(member.id, data);
   const memberSubjects = subjects.filter((s) => c.subjectIds.has(s.id)).sort(bySubject);
   const counts: Record<Tab, number> = {
-    '': c.works.length,
-    notas: c.notes.length + data.guides.filter((guide) => !guide.withdrawnAt && (guide.createdBy === member.id || guide.updatedBy === member.id || data.guideSources.some((source) => source.guideId === guide.id && source.addedBy === member.id) || data.guideReviews.some((review) => review.guideId === guide.id && review.reviewerId === member.id))).length,
-    proyectos: c.works.filter((work) => new Set(work.authorIds).size > 1).length,
+    '': profileFeed(member.id, data).length,
+    trabajos: c.works.length,
+    notas: c.notes.length + guidesOf(member.id, data).length,
+    proyectos: c.works.filter(isTeamWork).length,
     contribuciones: buildLeaderboard(data, {}).find((entry) => entry.memberId === member.id)?.points ?? 0,
     colaboracion:
       new Set(c.answers.map((a) => a.questionId)).size +
@@ -632,12 +853,31 @@ export function ProfilePage() {
 
   return (
     <>
-      <Link to="/m/perfiles" className="back with-icon">
-        <Icon name="back" size={16} /> Perfiles
-      </Link>
-
       <header className="profile-hero">
-        <ProfilePhoto member={member} profile={profile} />
+        <nav className="profile-crumbs" aria-label="Ruta">
+          <Link to="/" className="profile-crumbs__home" aria-label="Inicio">
+            <Icon name="home" size={20} />
+          </Link>
+          <Icon name="forward" size={14} />
+          <Link to="/m/perfiles">Perfiles</Link>
+          <Icon name="forward" size={14} />
+          <span aria-current="page">{profile?.preferredName || member.displayName}</span>
+        </nav>
+        <div className="profile-cover" aria-hidden="true" />
+        <div className="profile-hero__photo">
+          <ProfilePhoto member={member} profile={profile} size={120} />
+          {member.isCreator && (
+            <span className="profile-verified" role="img" aria-label="Administra la app">
+              <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true" focusable="false">
+                <path
+                  fill="currentColor"
+                  d="M12 1.5l2.6 1.9 3.2-.1 1 3 2.6 1.9-1 3.1 1 3.1-2.6 1.9-1 3-3.2-.1L12 22.5l-2.6-1.9-3.2.1-1-3-2.6-1.9 1-3.1-1-3.1 2.6-1.9 1-3 3.2.1z"
+                />
+                <path d="M7.8 12.3l2.8 2.8 5.6-5.8" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+          )}
+        </div>
         <div className="profile-hero__body">
           {editing ? (
             <EditName current={member.displayName} onDone={() => setEditing(false)} />
@@ -647,50 +887,72 @@ export function ProfilePage() {
                 {profile?.preferredName || member.displayName}
                 {isMe && <span className="muted"> (tú)</span>}
               </h1>
-              {profile?.preferredName && <p>{member.displayName}</p>}
-              <p className="muted">
+              {profile?.preferredName && <p className="profile-hero__alias">{member.displayName}</p>}
+              <p className="muted profile-hero__meta">
                 {member.isCreator && <span className="badge badge--admin">Administra la app</span>}{' '}
                 En el grupo desde {formatMonth(member.joinedAt).toLowerCase()}
               </p>
             </>
           )}
+          <dl className="profile-stats">
+            <div>
+              <dt>Trabajos</dt>
+              <dd>{c.works.length}</dd>
+            </div>
+            <div>
+              <dt>Materias</dt>
+              <dd>{c.subjectIds.size}</dd>
+            </div>
+            <div>
+              <dt>Notas</dt>
+              <dd>{c.notes.length}</dd>
+            </div>
+            <div>
+              <dt>Respuestas útiles</dt>
+              <dd>{c.helpful.length}</dd>
+            </div>
+          </dl>
+          {!editing && (
+            <div className="row profile-hero__actions">
+              {isMe ? (
+                <>
+                  <button
+                    type="button"
+                    className="secondary with-icon"
+                    onClick={() => setEditing(true)}
+                  >
+                    <Icon name="edit" size={16} /> Editar nombre
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => setEditingPresentation((current) => !current)}
+                  >
+                    Editar presentación y foto
+                  </button>
+                </>
+              ) : (
+                <button type="button" className="with-icon" onClick={message}>
+                  <Icon name="send" size={16} /> Enviar mensaje
+                </button>
+              )}
+            </div>
+          )}
+          <label className="search profile-search" role="search">
+            <Icon name="search" size={18} />
+            <input
+              ref={searchRef}
+              type="search"
+              placeholder={isMe ? 'Buscar en tus publicaciones' : 'Buscar en sus publicaciones'}
+              aria-label="Buscar en el perfil"
+              value={query}
+              onChange={(e) => patchParams({ q: e.target.value })}
+            />
+            <kbd aria-hidden="true">⌘K</kbd>
+          </label>
         </div>
-        <dl className="profile-stats">
-          <div>
-            <dt>Trabajos</dt>
-            <dd>{c.works.length}</dd>
-          </div>
-          <div>
-            <dt>Materias</dt>
-            <dd>{c.subjectIds.size}</dd>
-          </div>
-          <div>
-            <dt>Notas</dt>
-            <dd>{c.notes.length}</dd>
-          </div>
-          <div>
-            <dt>Respuestas útiles</dt>
-            <dd>{c.helpful.length}</dd>
-          </div>
-        </dl>
-        {!editing && (
-          <div className="row profile-hero__actions">
-            {isMe ? (
-              <><button
-                type="button"
-                className="secondary with-icon"
-                onClick={() => setEditing(true)}
-              >
-                <Icon name="edit" size={16} /> Editar nombre
-              </button><button type="button" className="secondary" onClick={() => setEditingPresentation((current) => !current)}>Editar presentación y foto</button></>
-            ) : (
-              <button type="button" className="with-icon" onClick={message}>
-                <Icon name="send" size={16} /> Enviar mensaje
-              </button>
-            )}
-          </div>
-        )}
       </header>
+      <hr className="profile-divider" />
       {error && (
         <p className="error" role="alert">
           {error}
@@ -724,16 +986,18 @@ export function ProfilePage() {
               </button>
             ))}
           </div>
-          {tab === '' && (
+          {tab === '' && <AllTab member={member} query={query} />}
+          {tab === 'trabajos' && (
             <WorksTab
               member={member}
               subjectId={subjectId}
-              onSubject={(id) => setParams(id ? { materia: id } : {}, { replace: true })}
+              query={query}
+              onSubject={(id) => patchParams({ pestana: 'trabajos', materia: id })}
             />
           )}
-          {tab === 'notas' && <NotesTab member={member} />}
-          {tab === 'proyectos' && <ProjectsTab member={member} />}
-          {tab === 'colaboracion' && <CollaborationTab member={member} />}
+          {tab === 'notas' && <NotesTab member={member} query={query} />}
+          {tab === 'proyectos' && <ProjectsTab member={member} query={query} />}
+          {tab === 'colaboracion' && <CollaborationTab member={member} query={query} />}
           {tab === 'contribuciones' && <ContributionsTab member={member} />}
         </div>
 
@@ -774,7 +1038,7 @@ export function ProfilePage() {
               <ul className="links">
                 {memberSubjects.map((s) => (
                   <li key={s.id}>
-                    <Link to={{ search: `?materia=${encodeURIComponent(s.id)}` }} replace>
+                    <Link to={{ search: `?pestana=trabajos&materia=${encodeURIComponent(s.id)}` }} replace>
                       <strong>{s.name}</strong>
                       <span className="muted">{periodLabel(s.period)}</span>
                     </Link>

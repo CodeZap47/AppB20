@@ -7,7 +7,7 @@ import { Avatar } from './Avatar';
 import { useAction } from './useAction';
 
 /** La foto no es una URL pública ni se descarga al recibir los metadatos del perfil. */
-export function ProfilePhoto({ member, profile }: { member: Member; profile?: MemberProfile }) {
+export function ProfilePhoto({ member, profile, size = 88 }: { member: Member; profile?: MemberProfile; size?: number }) {
   const source = useDataSource();
   const { me } = useSnapshot();
   const [loaded, setLoaded] = useState<{ key: string; url: string }>();
@@ -23,8 +23,8 @@ export function ProfilePhoto({ member, profile }: { member: Member; profile?: Me
   };
   return <div>
     {loaded?.key === key
-      ? <img className="avatar" src={loaded.url} alt={`Foto de ${member.displayName}`} width={88} height={88} />
-      : <Avatar member={{ ...member, photoUrl: undefined }} size={88} />}
+      ? <img className="avatar" src={loaded.url} alt={`Foto de ${member.displayName}`} width={size} height={size} />
+      : <Avatar member={{ ...member, photoUrl: undefined }} size={size} />}
     {profile?.photoFileId && loaded?.key !== key && <button className="link-button" type="button" disabled={pending} onClick={load}>{pending ? 'Cargando foto…' : 'Ver foto'}</button>}
     {error && <p className="error" role="alert">{error}</p>}
   </div>;

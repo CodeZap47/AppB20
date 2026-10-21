@@ -26,6 +26,12 @@ const ICONS = {
       <path d="M14 3v4h4" />
     </>
   ),
+  home: (
+    <>
+      <path d="M4 10.5L12 4l8 6.5V19a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" />
+      <path d="M9.5 20v-4.5h5V20" />
+    </>
+  ),
   folder: <path d="M3 7.5a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
   forward: <path d="M9 5l7 7-7 7" />,
   lock: (
