@@ -2,6 +2,11 @@
 
 Fecha: 21 de octubre de 2026. Se conserva el módulo manual y su compendio.
 
+**Estado actual:** Guías está publicada e incluida en la
+[sincronización conjunta](sincronizacion-2026-10-21.md), junto con Exámenes EX-2 y cuarta
+entrega. El recorrido de PDF/DOCX de Guías es independiente del extractor de Exámenes.
+Siguen pendientes la prueba real de Gemini y la aceptación con compañeros.
+
 ## Recorrido implementado
 
 1. Seleccionar hasta 30 fuentes compartidas de la misma materia y parcial: consignas, trabajos, actividades, evidencias elegidas, notas y preguntas con respuestas públicas. El material sin parcial requiere selección expresa. Las notas personales quedan excluidas de Guías.
@@ -59,4 +64,4 @@ Despliegue del módulo: `--delete-data=never`, base `app-b20-34245`. Se comparar
 
 Web publicada en https://app-b20.pages.dev, con preparación de Guías y configuración BYOK comprobadas tras recargar e iniciar sesión con la cuenta titular. La consulta autenticada muestra el modelo configurado y el estado de la clave sin entregar su contenido. Se conserva la aceptación con compañeros como comprobación pendiente independiente. Los recibos de publicación, la comparación de registros y las huellas de la web quedan en `artifacts/guias/` como evidencias locales excluidas de Git.
 
-Para activar el servicio del grupo adulto confirmado se publica con `wrangler deploy --config apps/api/wrangler.ai.jsonc --var AI_ENABLED:true`; el archivo conserva el valor predeterminado desactivado para instalaciones nuevas. El servicio de archivos anterior continúa separado.
+El servicio del grupo adulto confirmado está publicado con `AI_ENABLED=true`; su configuración vigente se conserva en `apps/api/wrangler.ai.jsonc`. Una instalación ajena al grupo requiere configurar y autorizar expresamente su habilitación; reutilizar ese archivo no equivale a partir de un servicio desactivado. El servicio de archivos anterior continúa separado.

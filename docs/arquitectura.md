@@ -3,6 +3,12 @@
 Arquitectura elegida para completar el proyecto con SpacetimeDB y Cloudflare. La fuente de verdad del alcance es
 [`definicion-del-proyecto.md`](definicion-del-proyecto.md) (secciones 5, 6 y 9).
 
+**Estado publicado, 21 de octubre de 2026:** Maincloud, el Worker compartido y la web/PWA
+incluyen cuarta entrega, Guías, Exámenes EX-2, Exposiciones y mensajería. La
+[matriz de estado](estado-del-proyecto.md) distingue los tres módulos pendientes,
+las ampliaciones y la aceptación real; los [recibos de sincronización](sincronizacion-2026-10-21.md)
+documentan el código publicado y la conservación de datos.
+
 ## Piezas
 
 | Pieza | Tecnología | Rol |
@@ -11,7 +17,7 @@ Arquitectura elegida para completar el proyecto con SpacetimeDB y Cloudflare. La
 | Datos y backend principal | SpacetimeDB, SDK `spacetimedb` (cliente y módulo en TypeScript) | Datos, archivos binarios privados, permisos, reducers, vistas, procedures y trabajos programados. |
 | Autenticación | SpacetimeAuth OIDC (Google) + invitaciones (`invitation`) | Emisor y audiencias configurables en `auth_config`; alta con correo verificado, vistas/acciones y backend con membresía activa. |
 | Integraciones complementarias | Cloudflare Workers + Hono | Cifrado BYOK, solicitudes autorizadas a Gemini, planificación y entrega Web Push, y mantenimiento de respaldo. Conserva compatibilidad opcional con R2 anterior; los archivos nuevos no requieren Worker. |
-| Gemini BYOK | Claves personales cifradas en SpacetimeDB; clave maestra en Cloudflare Secrets | Implementado localmente con consentimiento, límites y presupuesto. Las claves no vuelven al cliente; la generación comienza desactivada hasta su configuración. |
+| Gemini BYOK | Claves personales cifradas en SpacetimeDB; clave maestra en Cloudflare Secrets | Publicado y configurado para el grupo, con consentimiento, límites y presupuesto. Las claves no vuelven al cliente; generar exige clave propia y confirmación. La prueba real de Gemini sigue pendiente. |
 | Web/PWA | Cloudflare Pages + `vite-plugin-pwa`, service worker propio (`apps/web/src/sw.ts`) | Web estática, instalación y base para Web Push; recepción real por validar. |
 | Extensión | Manifest V3, `sidePanel`, todo empaquetado | Panel lateral y vista completa (`app.html`). |
 | Android | Capacitor 8 | Proyecto que comparte la bandeja de avisos. Firma, distribución y comprobación en dispositivos siguen pendientes; el push nativo con la app cerrada no está implementado bajo la restricción de proveedores. |

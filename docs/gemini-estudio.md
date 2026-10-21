@@ -1,5 +1,10 @@
 # Gemini BYOK para Aprende enseñando y Repaso
 
+**Estado actual:** esta integración está publicada en el servicio común de IA del grupo,
+según la [sincronización conjunta](sincronizacion-2026-10-21.md). Falta la prueba real con
+clave personal y la aceptación humana; el código publicado y la configuración del servicio
+ya están comprobados.
+
 La cuarta entrega amplía el mismo servicio privado de Gemini de la tercera entrega. SpacetimeDB conserva preparaciones, versiones, generaciones y recibos de aceptación; Cloudflare Workers descifra la clave del solicitante para la llamada. No se añade otra base, proveedor o almacenamiento. La configuración de secretos e identidades técnicas sigue en [Gemini BYOK](gemini-byok.md).
 
 ## Aprende enseñando, 7.8
@@ -20,7 +25,7 @@ Las tarjetas aceptadas conservan versión de origen y referencias de fragmento/c
 
 ## Privacidad, consentimiento y reintentos
 
-Se reutilizan AES-GCM con claves maestras versionadas de Cloudflare Secrets, consentimiento individual, política de habilitación, cuota por hora/día y presupuesto estimado. Cada envío requiere revisar y confirmar el texto exacto y el posible consumo de la clave propia. La versión del consentimiento `2026-10-21.2` se actualiza para incluir estas finalidades. La generación permanece desactivada por defecto.
+Se reutilizan AES-GCM con claves maestras versionadas de Cloudflare Secrets, consentimiento individual, política de habilitación, cuota por hora/día y presupuesto estimado. Cada envío requiere revisar y confirmar el texto exacto y el posible consumo de la clave propia. La versión del consentimiento `2026-10-21.2` se actualiza para incluir estas finalidades. El servicio del grupo está habilitado; no genera contenido sin una clave personal, consentimiento y confirmación de la operación.
 
 Una generación usa un UUID estable: reintentar no vuelve a invocar al proveedor. Una respuesta incierta conserva el presupuesto y exige reconocer el riesgo antes de otra solicitud. Los borradores se recuperan desde SpacetimeDB al volver a la pantalla; un recibo recuperado identifica también la selección ya incorporada para no volver a ofrecer su inserción.
 

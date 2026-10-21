@@ -1,10 +1,19 @@
 # Avisos y recordatorios
 
+**Estado publicado, 21 de octubre de 2026:** el Worker de avisos, su identidad técnica,
+cron y claves VAPID están configurados en producción. El cron real observado y la
+[sincronización conjunta](sincronizacion-2026-10-21.md) acreditan la operación del servicio.
+La recepción push en dispositivos, con permiso y suscripción de sus titulares, sigue
+pendiente de validación; configurar el servicio no concede esos permisos.
+
 La bandeja `/m/avisos` persiste en SpacetimeDB y funciona sin permiso del navegador, sin VAPID y sin activar el Worker. Los eventos de la aplicación materializan los primeros 100 destinatarios inmediatamente. Un cursor privado conserva el resto para el cron. Las preferencias son privadas, tienen versión y permiten elegir categorías, zona IANA, hora del recordatorio y descanso. Descanso con inicio y fin iguales significa desactivado.
 
-Los recordatorios de calendario requieren activar el cron de Cloudflare. Web Push añade la entrega al dispositivo; sus endpoints son transporte estándar de los navegadores. No se usa el SDK de Firebase ni se almacenan eventos, claves o colas en otro servicio. Las suscripciones y la cola viven en tablas privadas de SpacetimeDB. El cliente sólo recibe el nombre y estado de sus instalaciones, nunca endpoints ni claves del resto de miembros.
+Los recordatorios de calendario dependen del cron de Cloudflare, ya activo en el grupo publicado. Web Push añade la entrega al dispositivo; sus endpoints son transporte estándar de los navegadores. No se usa el SDK de Firebase ni se almacenan eventos, claves o colas en otro servicio. Las suscripciones y la cola viven en tablas privadas de SpacetimeDB. El cliente sólo recibe el nombre y estado de sus instalaciones, nunca endpoints ni claves del resto de miembros.
 
-## Activación por el propietario
+## Configuración por el propietario para una instalación nueva
+
+Los pasos siguientes describen la configuración de otra instalación. La configuración
+actual del grupo se conserva; no hay que regenerar ni rotar secretos para validar recepción.
 
 1. Publicar el módulo actualizado conservando los datos. Crear una identidad técnica dedicada de SpacetimeDB y guardar su token directamente como secreto. Su identidad pública debe ser distinta de la del propietario, de todos los miembros y de los servicios de archivos, IA y mantenimiento.
 2. Desde la identidad propietaria, llamar `set_notification_service` con la identidad técnica y `enabled: true`. El servicio no tiene permisos de alumno ni administración general.

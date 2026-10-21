@@ -2,7 +2,25 @@
 
 **App B20 es una plataforma colaborativa para estudiantes de Ingeniería en Desarrollo de Software.** Su propósito es fortalecer la convivencia entre compañeros, organizar los recursos académicos del grupo y utilizar inteligencia artificial como apoyo para comprender, practicar y desarrollar software.
 
-Este documento define el alcance funcional del proyecto. El acceso exclusivo para compañeros, la administración colaborativa, el intercambio amplio de trabajos, Gemini y el leaderboard son decisiones confirmadas. La arquitectura recomendada debe validarse mediante un prototipo; las condiciones pendientes se reúnen en la sección 9.
+Este documento define el alcance funcional del proyecto. El acceso exclusivo para compañeros, la administración colaborativa, el intercambio amplio de trabajos, Gemini y el leaderboard son decisiones confirmadas. La arquitectura ya tiene implementación y publicación; la aceptación con el grupo y los dispositivos se registra por separado en la sección 9 y en la [matriz de estado](estado-del-proyecto.md).
+
+### Estado vigente después de la actualización del 21 de octubre de 2026
+
+La revisión sincronizada `f16e8f5` reúne la cuarta entrega, Exámenes EX-2 y mensajería en `main` y GitHub. El código de ejecución publicado corresponde a `3fbb435`; el commit posterior conserva ese código y registra su comprobación. Maincloud, el Worker y [la web](https://app-b20.pages.dev/) están publicados, según el [registro de sincronización](sincronizacion-2026-10-21.md). Las etapas de este documento organizan el alcance; no sustituyen ese registro de publicación.
+
+**Módulos completos aún pendientes — entrega 5:**
+
+| Sección | Módulo | Alcance por implementar |
+| --- | --- | --- |
+| 3.11 | Lenguaje de señales | Diccionario versionado, constructor, prácticas, parejas e historial privado. |
+| 7.6 | Microproyectos | Propuestas, participación, responsabilidades, tablero, demostración y cierre. |
+| 7.11 | Préstamo de materiales | Catálogo, acuerdo privado, reserva, entrega y devolución sin préstamos simultáneos del mismo objeto. |
+
+**Ampliaciones pendientes de módulos existentes:** audio y Gemini en Exposiciones (7.10); resumen opcional con IA en «¿Qué me perdí?» (7.1); revisión opcional con IA en Revisión de código (7.5). Exposiciones ya tiene su versión por texto publicada: no es un cuarto módulo completo pendiente.
+
+Exámenes EX-2 ya está publicado. Sus ampliaciones se separan en [EX-3A: nuevas fuentes de Preguntas, Repaso y Aprende enseñando; EX-3B: extracción de documentos y OCR; EX-3C: banco reutilizable y variantes; EX-3D: respuestas abiertas, rúbricas y evaluación asistida opcional](examenes-ia.md#ex-3--ampliaciones-en-subhitos-independientes). Cada subhito requiere su propia verificación antes de activarse; no forma parte del cierre confirmado de EX-2.
+
+**Validaciones que siguen abiertas:** aceptación con varias cuentas reales del grupo, permisos/coautorías e historial con archivos reales, prueba de Gemini con clave personal y recepción de avisos en dispositivos compatibles. La elegibilidad del grupo adulto quedó confirmada al publicar Guías; eso no acredita una llamada real a Gemini. También faltan las comprobaciones de instalación y actualización de PWA, extensión y APK en dispositivos reales; el push nativo con el APK Android cerrado conserva la restricción de proveedores. Publicación, ampliación y aceptación son estados distintos; el detalle por módulo está en [estado-del-proyecto.md](estado-del-proyecto.md).
 
 ### Necesidad que busca resolver
 
@@ -291,6 +309,8 @@ Los trabajos sin parcial asignado aparecerán como **sin clasificar**, para no i
 
 ### 3.11. Lenguaje de señales y recursos para intercambiar respuestas
 
+**Estado actual:** módulo pendiente de implementación, previsto para la entrega 5; su entrada en el catálogo no implica que tenga pantalla disponible.
+
 **Idea del módulo:** crear y aprender un lenguaje compartido para comunicar respuestas breves mediante lápices o plumas, zapateadas y golpes de nudillos. Incluir un apartado de respuestas preparadas, como anotaciones en borradores.
 
 **Advertencia de uso:** compartir respuestas o llevar anotaciones durante una evaluación puede incumplir sus reglas si no está autorizado. Este módulo no acredita autorización ni garantiza que las señales pasen inadvertidas. Es una función experimental separada del archivo académico principal.
@@ -344,6 +364,12 @@ Vincular diccionarios, prácticas y fichas a materias y temas. Reutilizar perfil
 
 **Criterios de aceptación:** los participantes consultan la misma versión, pueden practicar los tres medios, distinguen pregunta y respuesta, identifican secuencias ambiguas y conservan el origen de las fichas. El módulo no anuncia que una respuesta es correcta solo porque haya sido recibida mediante una señal.
 
+### 3.12. Exámenes de estudio
+
+**Propósito:** preparar autoevaluaciones y simulacros a partir de fuentes académicas autorizadas, con borradores revisables y resultados privados.
+
+**Estado actual:** EX-2 publicado: configuración, generación Gemini BYOK, revisión y versiones, práctica/simulacro y resultados personales. La prueba real de Gemini y la aceptación con titulares de cuentas y dispositivos siguen pendientes. El [registro de entrega](examenes-entrega.md) documenta la publicación y [el alcance de Exámenes](examenes-ia.md) conserva las reglas y los subhitos EX-3A/B/C/D; no se duplican aquí sus requisitos.
+
 ## 4. Gemini como IA principal mediante BYOK
 
 **Decisión confirmada:** Gemini será el proveedor principal de IA. Se conserva BYOK: cada alumno configura una clave propia, y el consumo de una generación corresponde al proyecto asociado a la clave de quien la solicita, no automáticamente a los autores de los archivos utilizados. Las claves de Gemini pertenecen a proyectos de Google Cloud y comparten la cuota y facturación de su proyecto. [[1]](https://ai.google.dev/gemini-api/docs/api-key)[[2]](https://ai.google.dev/gemini-api/docs/billing)
@@ -355,6 +381,8 @@ Google AI Studio permite acceso con cuentas de Workspace, pero el administrador 
 La API tiene niveles gratuitos y de pago con condiciones y límites propios; no se presupone uso ilimitado por utilizar Gmail o contar con una oferta estudiantil de la aplicación Gemini. La disponibilidad y el costo se verificarán en el proyecto de cada usuario. [[2]](https://ai.google.dev/gemini-api/docs/billing)
 
 **Condición previa a habilitar la integración:** confirmar que el grupo cumple los requisitos de edad. Los términos de la API exigen 18 años o más y excluyen clientes dirigidos a menores o que probablemente sean utilizados por ellos. Si hay menores en el grupo, deberá reevaluarse la integración antes de desplegarla. [[4]](https://ai.google.dev/gemini-api/terms)
+
+**Estado de esta condición en el proyecto:** la elegibilidad del grupo adulto y la configuración de modelo y secretos quedaron confirmadas durante la [publicación de Guías](guias-estudio-ia.md#registro-de-cierre), como registra también la [actualización operativa de EX-1](examenes-ia.md). La condición se mantiene para cambios de integrantes o de elegibilidad. La prueba de Gemini con una clave personal sigue pendiente y requiere la acción expresa de su titular.
 
 ### Capacidades centrales
 
@@ -380,11 +408,11 @@ La API tiene niveles gratuitos y de pago con condiciones y límites propios; no 
 
 **Prioridad de producto:** además de explicar una nota, validar la generación de una guía por materia y parcial a partir del archivo completo de trabajos seleccionados, con fuentes y omisiones visibles.
 
-## 5. Base técnica y arquitectura recomendada
+## 5. Base técnica y arquitectura seleccionada
 
-### Framework y SDK seleccionados para el prototipo
+### Framework y SDK seleccionados
 
-**Recomendación: React + TypeScript + Vite como interfaz compartida, con SpacetimeDB para datos en tiempo real.** El SDK oficial de TypeScript funciona en navegador y Node.js e incluye integración para React mediante `spacetimedb/react`. El paquete actual es `spacetimedb`; el antiguo `@clockworklabs/spacetimedb-sdk` está deprecado. [[5]](https://spacetimedb.com/docs/clients/typescript)
+**Arquitectura implementada: React + TypeScript + Vite como interfaz compartida, con SpacetimeDB para datos en tiempo real.** El SDK oficial de TypeScript funciona en navegador y Node.js e incluye integración para React mediante `spacetimedb/react`. El paquete actual es `spacetimedb`; el antiguo `@clockworklabs/spacetimedb-sdk` está deprecado. [[5]](https://spacetimedb.com/docs/clients/typescript)
 
 ### Formas de distribución confirmadas
 
@@ -417,7 +445,7 @@ La extensión se plantea para Chrome de escritorio. En iPhone la vía de instala
 
 **Cambio respecto a la propuesta anterior:** Capacitor se prioriza para Android; iPhone se entrega inicialmente como PWA. Una app nativa iOS o un ejecutable de escritorio con Tauri pueden evaluarse después, pero no son necesarios para cumplir estas tres formas de distribución.
 
-Estos son objetivos de implementación; aún requieren código, compilación, pruebas y publicación. Una PWA instalable no implica por sí sola funcionamiento sin conexión de todos los módulos.
+La web/PWA está publicada y las compilaciones de web/PWA y extensión se comprobaron en la [sincronización conjunta](sincronizacion-2026-10-21.md). La instalación, autenticación, actualización y recepción de avisos en dispositivos reales siguen como validaciones independientes; publicar la web no acredita distribuir el APK ni la extensión. Una PWA instalable no implica por sí sola funcionamiento sin conexión de todos los módulos.
 
 ### Autenticación
 
@@ -431,11 +459,11 @@ Validar emisor, audiencia, identidad y pertenencia antes de permitir lectura o e
 
 **Límite confirmado: 50 MiB (52,428,800 bytes) por archivo**, igual para adjuntos de trabajos, mensajes, evidencias y fotos. Esta unidad aclara los «50 MB» anteriores y conserva el límite binario del código. La interfaz avisa antes de subir y el servidor lo vuelve a comprobar.
 
-Mantener el almacenamiento cerrado al público general, definir los tipos de archivo permitidos, evitar duplicados y conservar versiones. La entrega inicial establece reservas y cuotas conservadoras, reanudación, cancelación y limpieza de intentos pendientes. La papelera de 30 días corresponde a una entrega posterior. Conservar los IDs y archivos R2 anteriores hasta comprobar su migración; no eliminar datos como efecto de desplegar. Medir almacenamiento, transferencia y procesamiento del plan gratuito, sin activar facturación automáticamente.
+Mantener el almacenamiento cerrado al público general, definir los tipos de archivo permitidos, evitar duplicados y conservar versiones. La entrega inicial establece reservas y cuotas conservadoras, reanudación, cancelación y limpieza de intentos pendientes. La papelera de 30 días, la restauración y la purga están publicadas en la [tercera entrega](tercera-entrega.md), conservadas por la sincronización actual. Conservar los IDs y archivos R2 anteriores hasta comprobar su migración; no eliminar datos como efecto de desplegar. Medir almacenamiento, transferencia y procesamiento del plan gratuito, sin activar facturación automáticamente.
 
 ### Gemini y secretos
 
-**Arquitectura elegida para una entrega posterior:** claves BYOK personales cifradas en tablas privadas de SpacetimeDB y una clave maestra protegida mediante Cloudflare Secrets. Un Cloudflare Worker autenticado realizará el cifrado y la integración con Gemini sin devolver claves al cliente. No se requieren Supabase, D1 ni Google Cloud Secret Manager. La integración permanece deshabilitada hasta implementarla y verificarla; Gemini sigue siendo el proveedor de IA de la sección 4. [[1]](https://ai.google.dev/gemini-api/docs/api-key)
+**Arquitectura publicada:** claves BYOK personales cifradas en tablas privadas de SpacetimeDB y una clave maestra protegida mediante Cloudflare Secrets. Un Cloudflare Worker autenticado realiza el cifrado y la integración con Gemini sin devolver claves al cliente. No se requieren Supabase, D1 ni Google Cloud Secret Manager. El servicio del grupo adulto quedó habilitado al [publicar Guías](guias-estudio-ia.md#registro-de-cierre); una instalación nueva requiere configurar y autorizar expresamente su habilitación. La configuración actual del grupo no debe interpretarse como una plantilla desactivada. La prueba real con clave personal permanece pendiente. Gemini sigue siendo el proveedor de IA de la sección 4. [[1]](https://ai.google.dev/gemini-api/docs/api-key)
 
 ### Notificaciones push por presentación
 
@@ -484,7 +512,9 @@ Cada trabajo enlazará materia, parcial y autores para reutilizarse en el archiv
 
 ## 6. Plan de implementación propuesto
 
-El alcance reúne once módulos base —incluidos perfiles, cumpleaños y el módulo experimental de señales— y las doce funciones adicionales de la sección 7. La prioridad es el archivo colaborativo y el aprendizaje, con comunicación del grupo y 1 a 1. Web/PWA para iPhone, APK Android y extensión Chrome son formas de acceso al mismo producto, no tres proyectos con datos separados.
+El alcance reúne doce módulos base —incluidos perfiles, cumpleaños, Exámenes de estudio y el módulo experimental de señales— y las doce funciones adicionales de la sección 7. La prioridad es el archivo colaborativo y el aprendizaje, con comunicación del grupo y 1 a 1. Web/PWA para iPhone, APK Android y extensión Chrome son formas de acceso al mismo producto, no tres proyectos con datos separados.
+
+Las etapas siguientes conservan la organización original del alcance. El estado vigente es el del resumen inicial y la [matriz de requisitos](estado-del-proyecto.md): los únicos módulos completos pendientes son 3.11, 7.6 y 7.11, previstos para la entrega 5; las mejoras de módulos publicados y su aceptación se registran por separado.
 
 ### Etapa 0. Validación y prototipo técnico
 
@@ -528,7 +558,7 @@ Un alumno puede publicar y consultar trabajos por materia y perfil, conversar co
 
 Las guías muestran fuentes y omisiones. Las pruebas de iPhone incluyen instalación en pantalla de inicio y permiso de avisos; las de Android incluyen instalación del APK y push visible. Una cuenta externa o un tercero del grupo no puede leer una conversación 1 a 1 ajena. Ninguna vista publica claves o tokens.
 
-Las fechas, costos y alcance final de cada entrega se estimarán después del prototipo y de conocer el equipo disponible.
+Las fechas, costos y alcance final de las entregas pendientes se estimarán con el equipo disponible; las etapas anteriores no son fechas comprometidas.
 
 ## 7. Funciones adicionales del proyecto
 
@@ -547,13 +577,13 @@ Las siguientes doce ideas quedan incorporadas al alcance ampliado. Algunas será
 
 **Ejemplo:** «Desde tu última visita se publicaron dos apuntes y cambió la fecha de una actividad».
 
-**Primera versión:** listado de eventos sin IA. Se integrará como pantalla de inicio, no como un repositorio duplicado.
+**Primera versión publicada:** listado de eventos sin IA en la pantalla de inicio, sin duplicar el repositorio de materiales. El resumen opcional con IA permanece pendiente; véase el [estado vigente](estado-del-proyecto.md).
 
 **Criterio de aceptación:** el panel muestra novedades relevantes y no revela publicaciones privadas de otros usuarios.
 
 ### 7.2. Salas de estudio y programación en pareja
 
-**Implementación local:** Salas ya está disponible sin Gemini en demo y preparada para SpacetimeDB, con acceso abierto o por invitación, materiales de Notas/Guías, integración con Ayuda y prácticas privadas de Aprende enseñando. Incluye conversación propia, temporizador compartido, resumen con control de versiones y publicación voluntaria como nota. El comportamiento, los permisos y las verificaciones están documentados en [salas-de-estudio.md](salas-de-estudio.md). Videollamadas y editor de código en vivo quedan fuera de esta entrega.
+**Implementación publicada:** Salas está disponible sin Gemini en SpacetimeDB y en demo aislada, con acceso abierto o por invitación, materiales de Notas/Guías, integración con Ayuda y prácticas privadas de Aprende enseñando. Incluye conversación propia, temporizador compartido, resumen con control de versiones y publicación voluntaria como nota. El comportamiento, los permisos y las verificaciones están documentados en [salas-de-estudio.md](salas-de-estudio.md); la [sincronización conjunta](sincronizacion-2026-10-21.md) conserva esta entrega. La aceptación con varias cuentas reales sigue pendiente. Videollamadas y editor de código en vivo quedan fuera de esta entrega.
 
 **Propósito:** facilitar sesiones de trabajo entre compañeros con un objetivo concreto.
 
@@ -573,6 +603,8 @@ Las siguientes doce ideas quedan incorporadas al alcance ampliado. Algunas será
 
 ### 7.3. «Puedo ayudarte / necesito ayuda»
 
+**Implementación publicada:** ofertas, solicitudes, contactos privados e integración con Salas; la cuarta entrega añade edición, reintentos e historial propio. Su [publicación conjunta](sincronizacion-2026-10-21.md) no cierra la aceptación con cuentas reales del grupo.
+
 **Propósito:** conectar a compañeros que quieren aprender un tema con quienes desean explicarlo.
 
 **Funciones propuestas**
@@ -590,7 +622,7 @@ Las siguientes doce ideas quedan incorporadas al alcance ampliado. Algunas será
 
 ### 7.4. Retos cortos de programación
 
-**Implementación local de la cuarta entrega:** publicación manual de retos, pistas progresivas privadas, soluciones explicadas, discusión y cierre. Véase [Retos y revisión](retos-revision.md).
+**Implementación publicada de la cuarta entrega:** publicación manual de retos, pistas progresivas privadas, soluciones explicadas, discusión y cierre. Véanse [Retos y revisión](retos-revision.md) y la [publicación conjunta](sincronizacion-2026-10-21.md). El recorrido humano con el grupo sigue pendiente.
 
 **Propósito:** fomentar la práctica frecuente mediante problemas pequeños y discusiones sobre distintas soluciones.
 
@@ -611,7 +643,7 @@ Las siguientes doce ideas quedan incorporadas al alcance ampliado. Algunas será
 
 ### 7.5. Revisión de código entre compañeros
 
-**Implementación local de la cuarta entrega:** fragmentos y enlaces, versiones inmutables, observaciones por líneas y resolución del autor. La revisión opcional con IA queda para otra integración. Véase [Retos y revisión](retos-revision.md).
+**Implementación publicada de la cuarta entrega:** fragmentos y enlaces, versiones inmutables, observaciones por líneas y resolución del autor. La revisión opcional con IA queda pendiente para otra integración. Véanse [Retos y revisión](retos-revision.md) y la [publicación conjunta](sincronizacion-2026-10-21.md). El recorrido humano con el grupo sigue pendiente.
 
 **Propósito:** practicar la lectura de código, la comunicación técnica y la mejora conjunta de soluciones.
 
@@ -633,6 +665,8 @@ Las siguientes doce ideas quedan incorporadas al alcance ampliado. Algunas será
 
 ### 7.6. Laboratorio de microproyectos
 
+**Estado actual:** módulo pendiente de implementación, previsto para la entrega 5.
+
 **Propósito:** formar equipos para terminar proyectos pequeños y construir un portafolio de aprendizaje.
 
 **Funciones propuestas**
@@ -651,7 +685,7 @@ Las siguientes doce ideas quedan incorporadas al alcance ampliado. Algunas será
 
 ### 7.7. «Museo de bugs»
 
-**Implementación local de la cuarta entrega:** ficha versionada sobre Preguntas, con su misma discusión y permisos; retirada/restauración y purga siguen al origen. Véase [Museo y oportunidades](museo-oportunidades.md).
+**Implementación publicada de la cuarta entrega:** ficha versionada sobre Preguntas, con su misma discusión y permisos; retirada/restauración y purga siguen al origen. Véanse [Museo y oportunidades](museo-oportunidades.md) y la [publicación conjunta](sincronizacion-2026-10-21.md). La aceptación con casos aportados por el grupo sigue pendiente.
 
 **Propósito:** convertir errores reales en explicaciones reutilizables para otros estudiantes.
 
@@ -672,7 +706,7 @@ Las siguientes doce ideas quedan incorporadas al alcance ampliado. Algunas será
 
 ### 7.8. Modo «Aprende enseñando»
 
-**Ampliación local de la cuarta entrega:** preguntas clarificadoras con Gemini BYOK desde explicaciones guardadas/versionadas, borradores privados y aceptación manual. No se envía la reflexión ni se publica automáticamente. Véase [Gemini para estudio](gemini-estudio.md).
+**Ampliación publicada de la cuarta entrega:** preguntas clarificadoras con Gemini BYOK desde explicaciones guardadas/versionadas, borradores privados y aceptación manual. No se envía la reflexión ni se publica automáticamente. Véanse [Gemini para estudio](gemini-estudio.md) y la [publicación conjunta](sincronizacion-2026-10-21.md). La prueba con clave y cuentas reales permanece pendiente.
 
 **Propósito:** ayudar a detectar vacíos de comprensión al explicar un concepto con palabras propias.
 
@@ -712,7 +746,7 @@ mantiene el mismo aviso de datos temporales y reinicio al recargar.
 
 ### 7.9. Repaso espaciado
 
-**Ampliación local de la cuarta entrega:** borradores de tarjetas con Gemini BYOK desde notas o guías autorizadas, con revisión, citas y aceptación expresa. Los intervalos y el historial personal se conservan. Véase [Gemini para estudio](gemini-estudio.md).
+**Ampliación publicada de la cuarta entrega:** borradores de tarjetas con Gemini BYOK desde notas o guías autorizadas, con revisión, citas y aceptación expresa. Los intervalos y el historial personal se conservan. Véanse [Gemini para estudio](gemini-estudio.md) y la [publicación conjunta](sincronizacion-2026-10-21.md). La prueba con clave y cuentas reales permanece pendiente.
 
 **Propósito:** facilitar la revisión periódica de conceptos mediante tarjetas de preguntas y respuestas.
 
@@ -756,16 +790,16 @@ reinicia su aprendizaje, conservando el historial anterior. Archivar no borra el
 Las inscripciones, resultados e historial solo son consultables por el alumno, también frente
 a administradores. Estudiar y autoevaluarse no suma puntos ni genera novedades comunitarias.
 El modo de demostración aplica las mismas reglas con datos temporales en memoria. La
-generación de borradores con Gemini se incorpora localmente en la cuarta entrega, con revisión y aceptación explícitas.
+generación de borradores con Gemini está publicada con la cuarta entrega, con revisión y aceptación explícitas; su prueba real sigue pendiente.
 
 ### 7.10. Simulador de exposiciones y preguntas
 
-**Primera versión implementada:** ensayos por texto sin IA, con configuración por materia y
+**Primera versión publicada:** ensayos por texto sin IA, con configuración por materia y
 parcial, referencias opcionales versionadas, preguntas de apoyo locales y revisión voluntaria
 de un compañero. Cada intento conserva su explicación y contexto; las autoobservaciones y
 siguientes pasos son exclusivos del autor, también frente a administradores. Los detalles,
 permisos y validaciones están en [Exposiciones](exposiciones.md). Audio y Gemini quedan para
-sus integraciones posteriores.
+sus integraciones posteriores. La [publicación de Guías](guias-estudio-ia.md#registro-de-cierre) registra Salas y Exposiciones como base publicada; la [sincronización conjunta](sincronizacion-2026-10-21.md) conserva esa base. La aceptación humana sigue pendiente.
 
 **Propósito:** ensayar explicaciones y preparar respuestas antes de una exposición o, posteriormente, una entrevista técnica.
 
@@ -786,6 +820,8 @@ sus integraciones posteriores.
 
 ### 7.11. Préstamo de materiales
 
+**Estado actual:** módulo pendiente de implementación, previsto para la entrega 5.
+
 **Propósito:** facilitar préstamos voluntarios de recursos entre compañeros.
 
 **Funciones propuestas**
@@ -801,7 +837,7 @@ sus integraciones posteriores.
 
 ### 7.12. Radar de oportunidades
 
-**Implementación local de la cuarta entrega:** fichas manuales, filtros, plazos, interés privado, contacto autorizado y reportes con resolución. Véase [Museo y oportunidades](museo-oportunidades.md).
+**Implementación publicada de la cuarta entrega:** fichas manuales, filtros, plazos, interés privado, contacto autorizado y reportes con resolución. Véanse [Museo y oportunidades](museo-oportunidades.md) y la [publicación conjunta](sincronizacion-2026-10-21.md). El recorrido humano con el grupo sigue pendiente.
 
 **Propósito:** compartir oportunidades y formar equipos para aprovecharlas juntos.
 
@@ -867,7 +903,7 @@ Todas las ideas están incluidas en el proyecto. La siguiente distribución orga
 | Perfil | Foto, nombre y archivo de trabajos por materia y parcial, con coautorías y versiones. |
 | Archivos | Máximo 50 MiB (52,428,800 bytes) por archivo; fragmentos privados de 1 MiB en SpacetimeDB. |
 | Infraestructura | SpacetimeAuth y SpacetimeDB como backend principal; Cloudflare Pages para web/PWA y Workers solo para integraciones necesarias. Sin servicios adicionales ni activación automática de planes de pago. |
-| Conservación | Papelera de 30 días planificada; conservar versiones y sus archivos mientras sean recuperables. Las claves BYOK se eliminan inmediatamente. |
+| Conservación | Papelera de 30 días, restauración y purga publicadas en la tercera entrega y conservadas en la sincronización actual; conservar versiones y sus archivos mientras sean recuperables. Las claves BYOK se eliminan inmediatamente. |
 | Páginas principales | Lo que se pidió vive en una página que todo el grupo edita como wiki, con historial y restauración; los trabajos de cada alumno se suben aparte en esa página. Aplica también a las actividades de clase. |
 | Tipos de trabajo | Tarea, actividad, exposición o examen; se elige al publicar y se filtra por «Tareas y actividades» o «Exposiciones y exámenes». |
 | Módulo unido | «Actividades de clase» vive dentro de «Tareas y Actividades», con dos vistas de las mismas publicaciones: por materia y por fecha. |
@@ -875,7 +911,7 @@ Todas las ideas están incluidas en el proyecto. La siguiente distribución orga
 | Plan de estudios | Nueve cuatrimestres de cinco materias; cada cuatrimestre se divide en tres parciales. La lista de materias está en `packages/core/src/curriculum.ts`. |
 | Resultado educativo | Ayudar a comprender y realizar tareas y construir guías integrales de los parciales a partir de los materiales del grupo. |
 
-### Recomendaciones técnicas por validar
+### Base técnica implementada y validación por presentación
 
 - React + TypeScript + Vite y SDK oficial `spacetimedb`; compilaciones adaptadas para web/PWA, extensión Manifest V3 y Capacitor Android. Tauri y una app nativa iOS quedan como opciones posteriores.
 - SpacetimeAuth OIDC con Google y acceso autorizado al grupo por invitación (decisión confirmada).
@@ -884,17 +920,17 @@ Todas las ideas están incluidas en el proyecto. La siguiente distribución orga
 
 ### Pendientes que no deben darse por resueltos
 
-- **Edad y acceso a Gemini:** confirmar que el grupo cumple los términos antes de desplegar la integración.
+- **Edad y acceso a Gemini:** el grupo adulto quedó confirmado al publicar Guías; mantener la comprobación ante cambios de integrantes o elegibilidad. Esta confirmación no cierra la prueba real con clave personal ni sustituye las condiciones de la sección 4.
 - **Cuenta institucional:** probar Google AI Studio y creación de clave en una cuenta autorizada, sin solicitar claves en chats o documentos compartidos.
 - **Costos y límites:** infraestructura, archivos, cuotas de API y presupuesto de cada clave BYOK.
 - **Integración real:** SDK y autenticación en PWA, WebView Android y páginas de extensión; callbacks por presentación y permisos de lectura de mensajes.
 - **Instalación y push:** iPhone compatible con PWA añadida a inicio y autorización; APK firmado y permisos Android; solución pendiente para push nativo con el APK cerrado; funcionamiento de la extensión y políticas de distribución.
-- **Cumpleaños:** fechas aportadas voluntariamente, zona de recordatorios, preferencias y tratamiento del 29 de febrero.
-- **Guías:** temarios, identificación de parciales, formatos de archivo y mecanismo para señalar fuentes no procesadas.
-- **Puntuación:** aportes que cuentan, ponderación, límites y tratamiento de duplicados.
+- **Cumpleaños:** validar con fechas aportadas voluntariamente la zona de recordatorios, preferencias y tratamiento del 29 de febrero.
+- **Guías:** aceptar con el grupo los temarios, identificación de parciales, formatos de archivo y mecanismo para señalar fuentes no procesadas ya implementados.
+- **Puntuación:** validar con el grupo los aportes que cuentan, ponderación, límites y tratamiento de duplicados.
 
 **Principio rector confirmado:** una herramienta útil para aprender y colaborar, recopilar los trabajos compartidos y convertirlos en apoyo para tareas y preparación de parciales. La transparencia del grupo debe coexistir con protección técnica básica y autoría clara.
 
-**Estado de las entregas:** estas definiciones son requisitos del proyecto, no paquetes ya compilados o publicados. Para entregar la extensión y el APK y habilitar la PWA con push se necesitarán el código de la app, infraestructura y pruebas en dispositivos reales.
+**Estado de las entregas:** la [sincronización del 21 de octubre de 2026](sincronizacion-2026-10-21.md) acredita la publicación conjunta en Maincloud, Worker y web/PWA. Quedan tres módulos completos de la entrega 5, las ampliaciones identificadas y la aceptación real. La compilación de la extensión no acredita su distribución ni la del APK; instalación, autenticación, actualizaciones y recepción de push requieren pruebas en dispositivos reales. El APK Android cerrado conserva el requisito pendiente de push nativo compatible con la restricción de proveedores.
 
 ---

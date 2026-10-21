@@ -54,6 +54,12 @@ compartido y finalmente la rama de producción de Pages.
   código `3fbb435`, rama `codex/pages-spacetimeauth`. El commit de este recibo actualiza
   documentación y conserva el mismo código de ejecución. Los 16 archivos públicos del
   dominio estable coinciden byte a byte con la compilación validada y responden HTTP 200.
+- **Cierre documental verificado:** revisión `f16e8f5`, despliegue de producción
+  `43f95ed2-418c-430e-be41-311a53b85968`, completado y comprobado a las 15:17 del
+  21 de octubre de 2026 (`America/Tijuana`). Conserva el mismo código de ejecución de
+  `3fbb435`; los 16 archivos públicos del dominio estable y el alias de ese despliegue
+  coinciden con la compilación. Las actualizaciones posteriores de documentación no
+  sustituyen este recibo ni acreditan nuevas funciones.
 
 Los recibos de conservación, esquemas, huellas y despliegues se guardan localmente bajo
 `artifacts/sincronizacion-2026-10-21/`, excluidos de Git. No se guardan valores de secretos

@@ -1,6 +1,6 @@
 # Exámenes con IA (BYOK): alcance y tareas
 
-Estado: **EX-1 publicado con Guías; EX-2 implementado y validado; EX-3 pendiente**. El registro vigente de pruebas, despliegue y aceptación está en [examenes-entrega.md](examenes-entrega.md). Corresponde al módulo
+Estado: **EX-1 y EX-2 publicados; EX-3 pendiente de implementación**. La prueba real de Gemini y la aceptación con cuentas/dispositivos siguen abiertas. El registro de publicación está en [examenes-entrega.md](examenes-entrega.md) y su integración con cuarta entrega y mensajería en [sincronizacion-2026-10-21.md](sincronizacion-2026-10-21.md). Corresponde al módulo
 **3.12**, de la **etapa 2: colaboración y estudio**, según la
 [definición del proyecto](definicion-del-proyecto.md). La evidencia histórica de EX-1 se conserva al final de su entrega; la prueba con Gemini real sigue pendiente por decisión del usuario. Fecha de implementación local: 21 de octubre de 2026.
 
@@ -391,4 +391,4 @@ de las presentaciones afectadas); no se registran como aprobadas antes de ejecut
 
 La validación publicada registrará versión del módulo y de cada presentación, tres
 identidades, escenario y resultado sin secretos ni datos personales. Una compilación, push
-o publicación del backend por sí sola no acredita el recorrido humano. **EX-1 está publicado; EX-2 tiene implementación y validación persistente con tres miembros sintéticos. La prueba real de Gemini y la aceptación del grupo permanecen pendientes. EX-3 no está implementado.** Consultar [el registro de entrega](examenes-entrega.md) para el estado de la publicación.
+o publicación del backend por sí sola no acredita el recorrido humano. **EX-1 y EX-2 están publicados; EX-2 tiene además validación persistente con tres miembros sintéticos. La prueba real de Gemini y la aceptación del grupo permanecen pendientes. EX-3 no está implementado.** Consultar [el registro de entrega](examenes-entrega.md) y [la sincronización conjunta](sincronizacion-2026-10-21.md) para las evidencias de publicación.

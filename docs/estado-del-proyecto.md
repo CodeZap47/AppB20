@@ -1,116 +1,117 @@
 # Estado del proyecto y matriz de requisitos
 
-Fuente de alcance: [definicion-del-proyecto.md](definicion-del-proyecto.md). Esta matriz
-separa el código local del cierre de una entrega con datos reales; no declara publicado ni
-validado un cambio por tener pantalla, bindings o pruebas. La incorporación de Ayuda,
-Aprende enseñando y Repaso se conserva como trabajo existente.
+Fuente de alcance: [definicion-del-proyecto.md](definicion-del-proyecto.md).
+Actualizado tras la publicación conjunta del **21 de octubre de 2026**. Este documento
+separa implementación, publicación y aceptación con personas y dispositivos reales.
 
-**Publicación actual, 21 de octubre de 2026:** la [sincronización conjunta](sincronizacion-2026-10-21.md)
-reúne cuarta entrega, Exámenes EX-2 y mensajería en `main` y producción. Maincloud conserva
-los 310 registros anteriores en 117 tablas y añade 22 tablas vacías; Worker y Pages están
-publicados. Los apartados históricos siguientes conservan sus comprobaciones originales.
+## Publicación comprobada
 
-## Primera entrega
+La [web de B20](https://app-b20.pages.dev/) sirve la cuarta entrega, Guías, Exámenes EX-2,
+Exposiciones, la navegación Slim y la mensajería de Untitled UI. La revisión comprobada
+al cierre de la sincronización fue `f16e8f5`, en `main` y `codex/pages-spacetimeauth`.
+El [registro de sincronización](sincronizacion-2026-10-21.md) conserva las evidencias.
 
-| Requisito | Implementación de la entrega | Evidencia necesaria para cerrarlo |
+- **SpacetimeDB y SpacetimeAuth:** datos, archivos privados y membresía en Maincloud.
+  La publicación pasó de 117 a 139 tablas y conservó exactamente los 310 registros
+  existentes; las 22 tablas añadidas estaban vacías al comprobar la actualización.
+- **Cloudflare Pages y Worker de IA:** publicados y comprobados. El servicio BYOK,
+  los secretos y VAPID están configurados; el programador de avisos está operativo.
+  La generación requiere consentimiento, clave personal y confirmación de cada envío.
+- **Comprobaciones de código:** 1.401 pruebas aprobadas en 156 archivos, tipos y
+  compilaciones correctos y cinco recorridos con SpacetimeDB local aislado.
+- **Comprobaciones de publicación:** programa remoto idéntico al compilado, conservación
+  de datos, salud/autenticación/CORS y 16 archivos web idénticos a la compilación.
+
+**Publicado** indica una implementación desplegada y comprobada; **pendiente** indica
+funciones aún no implementadas. Una **ampliación posterior** añade alcance a una versión
+existente. La **validación pendiente** requiere personas, claves o dispositivos reales y
+no implica por sí sola que falte publicar el código.
+
+## Módulos completos pendientes: entrega 5
+
+Estos son los tres módulos del catálogo que todavía no tienen una implementación disponible.
+
+| Sección | Módulo | Trabajo por implementar |
 | --- | --- | --- |
-| Backend solo SpacetimeDB y Cloudflare | SpacetimeAuth, tablas/reducers/vistas/procedures y archivos en SpacetimeDB; Pages para web. Worker solo como complemento. | Tipos, pruebas, compilación y configuración sin proveedor adicional obligatorio. |
-| Archivos reales | Manifiesto privado, fragmentos de 1 MiB, máximo 50 MiB, hash, reanudación, cancelación y descarga bajo demanda. | Pruebas de módulo/transporte; límites y recorrido con cuentas reales. |
-| Reservas y limpieza | 256 MiB iniciales; propietario hasta 512 MiB; tres pendientes por persona y 24 h de vida. | Rechazo por cuota, reserva concurrente, liberación por cancelación/caducidad; conservar confirmados. |
-| Compatibilidad | Mantener IDs, versiones y referencias; ruta R2 previa solo si hay objetos existentes. | Descarga de archivo y revisión anteriores. No se ejecuta migración remota automática. |
-| SDK y CLI | SDK de cliente y módulo fijado en `2.12.0`; bindings regenerados con esa versión. | Registrar versión de CLI, prueba del runtime y resultados al finalizar la verificación. |
-| Módulo 3.11 | Incluido en catálogo de etapa 3 como `senales`, sin marcarlo disponible; alcance original conservado. | Pantalla y pruebas corresponden a entrega 5, no a esta entrega. |
-| Piloto | Configuración de producción apunta a SpacetimeDB; la demo sigue aislada. | Publicación sin borrar datos y recorridos con autor, compañero autorizado y tercero. Pendientes hasta registrarlos. |
+| 3.11 | Lenguaje de señales | Diccionario versionado para los tres medios definidos, constructor, ejercicios individuales y en parejas, historial privado y fichas con fuentes. |
+| 7.6 | Microproyectos | Propuestas, participación, integrantes y responsabilidades, tablero propio, vínculos a materiales y código, demostración y cierre con contribuciones. |
+| 7.11 | Préstamo de materiales | Catálogo con propietario y disponibilidad, solicitud y acuerdo privado, reserva, entrega y devolución; impedir dos préstamos activos del mismo objeto. |
 
-## Tercera entrega: base publicada
+Exposiciones ya tiene una versión por texto publicada; sus ampliaciones se enumeran abajo.
+Las actividades de clase se incluyen en Tareas y Actividades y no requieren otro módulo.
 
-El [índice de la tercera entrega](tercera-entrega.md) reúne IA, notificaciones y conservación.
-El código incorpora Gemini BYOK cifrado, preparación de texto y adjuntos UTF8 compatibles,
-borradores privados de guías/explicaciones y publicación expresa; bandeja privada,
-preferencias, recordatorios y Web Push configurable; y papelera con plazo de 30 días,
-restauración y purga de datos dependientes. El registro de la tercera entrega documenta su publicación y la configuración activa de los servicios.
+## Ampliaciones posteriores de módulos existentes
 
-Las comprobaciones locales con servidor real aislado usan identidades y claves sintéticas.
-El [registro de despliegue de la tercera entrega](tercera-entrega.md) documenta su publicación
-posterior en Maincloud, Pages y el Worker de IA. La ampliación de la cuarta entrega se publicó
-durante la [sincronización conjunta](sincronizacion-2026-10-21.md); sus pruebas no consumen Gemini real.
-Los formatos binarios no admitidos para IA permanecen como omisiones explícitas. La cuarta
-entrega añade tarjetas de Repaso y preguntas de Aprende enseñando con Gemini; Exámenes EX-2 está publicado y tiene su [registro de cierre](examenes-entrega.md). El módulo 3.11 conserva su entrega 5 y el push nativo del APK permanece pendiente.
+| Módulo | Ampliación pendiente | Alcance de la versión publicada |
+| --- | --- | --- |
+| ¿Qué me perdí? (7.1) | Resumen opcional de novedades con Gemini, solicitado por el usuario y limitado a contenido autorizado. | Listado de novedades y enlaces sin IA. |
+| Revisión de código (7.5) | Revisión opcional con IA, con decisión final del autor. | Fragmentos/enlaces, versiones y observaciones por líneas entre compañeros. |
+| Exposiciones (7.10) | Generación con Gemini y evaluación posterior de audio con consentimiento y reglas de conservación. | Ensayos por texto, preguntas locales, versiones y revisor voluntario. |
+| Exámenes EX-3A | Fuentes de Preguntas y respuestas, Repaso y Aprende enseñando; envío voluntario de errores a tarjetas privadas. | EX-2: preparación, generación, revisión, versiones, práctica/simulacro y resultados privados. |
+| Exámenes EX-3B | Extracción propia de PDF con texto/documentos e imágenes o escaneos con OCR, límites y citas por ubicación. | Exámenes admite los adjuntos UTF-8 compatibles de su preparación compartida. Guías ya extrae PDF textual y DOCX en su recorrido independiente. |
+| Exámenes EX-3C | Banco reutilizable de preguntas y variantes con procedencia, versiones y permisos. | Exámenes guardados y versionados; no equivale a un banco reutilizable entre exámenes. |
+| Exámenes EX-3D | Respuestas abiertas con rúbrica y revisión manual; evaluación asistida por IA opcional. | Opción única y verdadero/falso con corrección determinista. |
 
-## Cuarta entrega: implementación y publicación
-
-El [índice de la cuarta entrega](cuarta-entrega.md) reúne Retos, Revisión de código, Museo,
-Oportunidades, las versiones de Ayuda y la IA opcional de estudio. Se conservan Salas y sus
-permisos; los nuevos borradores requieren consentimiento actualizado y aceptación expresa.
-Los recorridos locales usan identidades sintéticas, sin publicar datos ni llamar a Gemini real.
-
-Validación conjunta del 21 de octubre de 2026: **1.210 pruebas aprobadas**, tipos correctos,
-compilaciones de web/PWA, Pages, extensión y Worker de prueba, cuatro recorridos nuevos
-contra SpacetimeDB local y regresión de Salas. El [registro de comprobaciones](cuarta-entrega.md#comprobación-local)
-detalla los resultados y las condiciones de ejecución.
-
-Al integrar con el `main` que incluye Guías IA y la navegación Slim, la validación combinada
-asciende a **1.339 pruebas aprobadas en 149 archivos**, con tipos, compilaciones y cinco
-recorridos contra SpacetimeDB local correctos. Véase la [integración de la cuarta entrega](cuarta-entrega.md#integración-con-main).
+Los subhitos de [EX-3](examenes-ia.md#ex-3--ampliaciones-en-subhitos-independientes)
+quedan fuera del alcance confirmado de EX-2 y se priorizan por separado.
+Videollamadas y editor de código en vivo en Salas, ejecución de código de usuarios en Retos
+e integración automática con Git no forman parte de las primeras versiones publicadas.
+No se cuentan como módulos completos pendientes ni como requisitos para cerrar esas versiones.
 
 ## Módulos base (sección 3)
 
-La segunda entrega tiene un [registro de alcance y pruebas](segunda-entrega.md). El
-recorrido del servidor real aislado terminó correctamente el 21 de octubre de 2026 con
-tres identidades sintéticas y un reinicio: notas personales y su publicación explícita,
-adjuntos privados en directos, reportes selectivos, canales y lectura, perfiles con foto,
-aclaraciones, guías y retirada/restauración sin duplicar puntos. Esto no constituye una
-publicación en Maincloud ni una prueba de aceptación con el grupo.
-
-«Parcial» significa que falta parte del alcance, de la integración o de su validación real.
-«Manual local» indica una versión sin Gemini cuya publicación debe comprobarse por separado.
-
-| Sección | Estado del código local | Trabajo pendiente según el alcance | Entrega siguiente |
+| Sección | Implementación publicada o planificada | Trabajo pendiente | Próximo paso |
 | --- | --- | --- | --- |
-| 3.1 Mensajes y stickers | Canales, directos con archivos privados, menciones, lectura, silencio, bloqueo y reportes selectivos; stickers nativos. Avisos privados de mensajes/menciones y Web Push configurable incorporados localmente. | Validación con el grupo y recepción real en dispositivos compatibles. | 2–3: validación |
-| 3.2 Tareas y Actividades | Parcial con avance privado, estados, revisión y versiones académicas. | Validación completa de permisos, coautorías e historial con archivos reales; cerrar huecos del recorrido del grupo. | 1–2 |
-| 3.3 Actividades de clase | Integradas en Tareas; evidencias, comentarios, vínculos y recuperación de adjuntos retirados por su autor. | Verificar archivos reales, versiones y permisos por equipo. La recuperación de adjuntos no implica historial completo del texto. | 1–2 |
-| 3.4 Notas de clase | Editor estructurado con listas/tablas/código e imágenes privadas bajo demanda, sesión/parcial, vínculos y versiones completas. Publicar una nota personal crea una copia independiente. | Recorrido de aceptación con el grupo. | 2: validación |
-| 3.5 Guías integrales | Guías manuales y preparación local de archivos, generación BYOK, borradores privados, fuentes versionadas, cobertura, revisiones, compendio e historial. [Entrega publicada](guias-estudio-ia.md). | Prueba real de Gemini y aceptación con cuentas del grupo, pendientes por separado. | Validación humana |
-| 3.6 Contribuciones | Desglose verificable; excluye borradores y retirados, copias idénticas del mismo autor/contexto y registros repetidos. Conserva el primer crédito y su fecha aunque el original esté retirado; mantiene límites entre periodos y recupera puntos al restaurar. | Ajustar los puntos mediante una prueba con el grupo; registrar la validación real. | 2: validación |
-| 3.7 Preguntas | Adjuntos privados, aclaraciones separadas, utilidad por integrante y referencias a notas/guías compartidas; aceptación y reapertura preservadas. | Recorrido de aceptación con el grupo. | 2: validación |
-| 3.8 Votaciones | Nominales con elegibles y cierre; las abiertas aparecen en novedades. Recordatorios por cierre integrados localmente. | Activación de recordatorios y validación con datos reales. | 3: validación |
-| 3.9 Perfiles | Presentación voluntaria, foto privada en SpacetimeDB bajo demanda, intereses, conocimientos, portafolio HTTPS, materias, guías, equipo y contribuciones. Archivo con filtros por parcial, tema, fecha y tipo. | Recorrido con nombres, fotos y trabajos aportados por cada alumno; microproyectos cuando exista 7.6. | 2: validación; 5: microproyectos |
-| 3.10 Cumpleaños | Día/mes voluntarios, calendario mensual/anual y 29 de febrero. Recordatorios con zona, preferencias, descanso, cursor persistente y deduplicación integrados localmente. | Activar el planificador y validar la recepción real con el grupo. | 3: validación |
-| 3.11 Lenguaje de señales | Pendiente: catálogo etapa 3, sin pantalla propia. | Diccionario/versiones para tres medios, constructor, ejercicios, parejas, historial privado y fichas con fuentes. | 5 |
-| 3.12 Exámenes de estudio | EX-2 publicado: configuración, generación BYOK y borradores privados, revisión, versiones, práctica/simulacro, tiempo del servidor y resultados privados. [Registro de cierre](examenes-entrega.md). | Prueba real de Gemini y aceptación con titulares de cuentas/dispositivos; OCR y respuestas abiertas pertenecen a EX-3 y quedan fuera del alcance confirmado. | EX-2: aceptación; EX-3: ampliaciones |
+| 3.1 Mensajes y stickers | Publicados: canales, directos con archivos privados, menciones, lectura, silencio, bloqueo, reportes selectivos y stickers nativos; nueva interfaz Untitled UI. Avisos y Web Push configurados. | Aceptación con el grupo y recepción real en dispositivos compatibles. | Validación humana y de dispositivos. |
+| 3.2 Tareas y Actividades | Parcial publicado: consignas compartidas, trabajos por alumno/equipo, avance privado, estados, revisiones e historial de trabajos. | Cerrar la validación de permisos, coautorías, historial y archivos con el grupo y resolver los huecos que identifique ese recorrido. | Validación y cierre del recorrido. |
+| 3.3 Actividades de clase | Publicadas dentro de Tareas: evidencias, comentarios, vínculos y recuperación de adjuntos retirados por su autor. | Verificar archivos, versiones y permisos por equipo. La recuperación de adjuntos no implica historial completo del texto. | Validación del recorrido. |
+| 3.4 Notas de clase | Publicadas: editor estructurado, imágenes privadas bajo demanda, sesión/parcial, vínculos y versiones; publicar una nota personal crea una copia independiente. | Aceptación con el grupo. | Validación humana. |
+| 3.5 Guías integrales | Publicadas: guías manuales, compendio e historial; preparación local de PDF textual, DOCX y texto/código; Gemini BYOK, borradores privados, cobertura y fuentes versionadas. [Detalle](guias-estudio-ia.md). | Prueba real de Gemini y aceptación con cuentas del grupo. Los archivos incompatibles siguen como omisiones explícitas. | Validación humana y de Gemini. |
+| 3.6 Contribuciones | Publicadas: desglose verificable, exclusión de borradores/retirados/duplicados, límites por periodo y recuperación del crédito al restaurar. | Acordar y ajustar la puntuación mediante una prueba con el grupo. | Validación de reglas y utilidad. |
+| 3.7 Preguntas | Publicadas: adjuntos privados, aclaraciones, utilidad por integrante y referencias; aceptación y reapertura. | Aceptación con el grupo. | Validación humana. |
+| 3.8 Votaciones | Publicadas: nominales con elegibles y cierre, novedades y recordatorios; planificador configurado. | Validar recordatorios y recepción con datos y dispositivos reales. | Validación de extremo a extremo. |
+| 3.9 Perfiles | Publicados: presentación voluntaria, foto privada, intereses, conocimientos, portafolio HTTPS, materias, equipo, archivo académico y contribuciones. | Aceptación con materiales de cada alumno; integración de microproyectos cuando exista 7.6. | Validación humana; entrega 5 para microproyectos. |
+| 3.10 Cumpleaños | Publicados: día/mes voluntarios, calendario mensual/anual, 29 de febrero, zona, preferencias y deduplicación; planificador configurado. | Validar preferencias y recepción real con el grupo. | Validación humana y de dispositivos. |
+| 3.11 Lenguaje de señales | Pendiente: presente en catálogo, sin pantalla propia. | Implementar el módulo descrito en la tabla de entrega 5. | Entrega 5. |
+| 3.12 Exámenes de estudio | EX-2 publicado: configuración, Gemini BYOK, borradores/revisión/versiones, práctica/simulacro, reloj del servidor y resultados privados. [Registro](examenes-entrega.md). | Prueba real de Gemini y aceptación con titulares de cuentas/dispositivos. EX-3 es una ampliación posterior separada. | Aceptación de EX-2; priorización de EX-3. |
 
 ## Funciones adicionales (sección 7)
 
-| Sección | Estado del código local | Trabajo pendiente según el alcance | Entrega siguiente |
+| Sección | Implementación publicada o planificada | Trabajo pendiente | Próximo paso |
 | --- | --- | --- | --- |
-| 7.1 ¿Qué me perdí? | Novedades de guías, votaciones abiertas, ayuda y colecciones grupales; excluye retirados y contenido personal. Lectura de conversaciones separada del inicio. | Validación con el grupo; el resumen BYOK opcional de novedades sigue pendiente. La IA actual genera guías y explicaciones. | Posterior: resumen opcional |
-| 7.2 Salas de estudio | [Implementado sin IA](salas-de-estudio.md): salas abiertas/privadas, agenda, cupo, invitaciones, materiales, chat, temporizador compartido y resumen con publicación voluntaria. Despliegue previo registrado en Maincloud/Pages y regresión local de esta entrega. | Aceptación con varias cuentas reales del grupo; videollamadas y editor en vivo fuera de alcance. | 4: validación |
-| 7.3 Ayuda | Ofertas y solicitudes, filtros, contactos privados y conversión de encuentros aceptados en Salas. La cuarta entrega añade edición con versión esperada, reintentos idempotentes e historial propio. | Validación con cuentas reales del grupo y publicación compatible. | 4: validación |
-| 7.4 Retos | [Implementación local](retos-revision.md): temas/dificultad, ejemplos, pistas progresivas privadas, soluciones explicadas, comentarios y cierre colectivo. | Recorrido humano y publicación compatible. No ejecuta código. | 4: validación |
-| 7.5 Revisión de código | [Implementación local](retos-revision.md): código/enlaces HTTPS, versiones inmutables, observaciones por líneas, resolución por el autor con explicación. | Recorrido humano; revisión opcional con IA en una integración posterior. | 4: validación |
-| 7.6 Microproyectos | Pendiente. | Propuestas, ingreso, responsabilidades, tablero, demostración y cierre. | 5 |
-| 7.7 Museo de bugs | [Implementación local](museo-oportunidades.md): plantilla/versiones sobre Preguntas, etiquetas, referencias y discusión reutilizada; retiro y purga del origen. | Recorrido con casos aportados por el grupo. | 4: validación |
-| 7.8 Aprende enseñando | Práctica manual con control de concurrencia/historial exclusivo del autor y [preguntas Gemini BYOK](gemini-estudio.md) desde explicación guardada/versionada, borrador privado y aceptación expresa. La publicación de nota sigue siendo voluntaria. | Activar Gemini y validar con claves/cuentas reales. | 4: validación |
-| 7.9 Repaso espaciado | Colecciones, tarjetas, cola e historial privados, recordatorios y [borradores Gemini revisables](gemini-estudio.md) con fuente/versiones y aceptación atómica. Intervalos 1/3/7/14/30/60/120 preservados. | Activación y validación real. Exámenes no está incluido. | 4: validación |
-| 7.10 Exposiciones | Texto manual: ensayos versionados, preguntas, observaciones privadas y revisor voluntario; ver [reglas](exposiciones.md). | Audio y generación con Gemini quedan para sus integraciones. La publicación se verifica por separado. | 5 |
-| 7.11 Préstamos | Pendiente. | Catálogo, acuerdo privado, reserva, entrega y devolución sin doble préstamo. | 5 |
-| 7.12 Oportunidades | [Implementación local](museo-oportunidades.md): fichas manuales con fuente, filtros/vencimientos, interés privado, contacto explícito, correcciones y reportes resolubles. | Recorrido humano y publicación compatible. | 4: validación |
+| 7.1 ¿Qué me perdí? | Publicado: novedades de materiales, guías, votaciones, ayuda y colecciones grupales; excluye retirados y contenido personal. Lectura de chats separada. | Aceptación con el grupo y resumen opcional con Gemini. | Validación; ampliación IA posterior. |
+| 7.2 Salas de estudio | [Publicadas sin IA](salas-de-estudio.md): abiertas/privadas, agenda, cupo, invitaciones, materiales, chat, temporizador y resumen publicable. | Aceptación con varias cuentas reales. Videollamadas y editor en vivo fuera del alcance de esta versión. | Validación humana. |
+| 7.3 Ayuda | Publicada: ofertas/solicitudes, filtros, contactos privados y conversión a Salas; edición con versión, reintentos idempotentes e historial propio. | Validación con cuentas reales del grupo. | Validación humana. |
+| 7.4 Retos | [Publicados](retos-revision.md): temas/dificultad, ejemplos, pistas progresivas privadas, soluciones explicadas, comentarios y cierre colectivo. | Recorrido con el grupo. No ejecuta código. | Validación humana. |
+| 7.5 Revisión de código | [Publicada](retos-revision.md): código/enlaces HTTPS, versiones inmutables, observaciones por líneas y resolución por el autor. | Recorrido con el grupo; revisión opcional con IA posterior. | Validación; ampliación IA posterior. |
+| 7.6 Microproyectos | Pendiente. | Implementar el módulo descrito en la tabla de entrega 5. | Entrega 5. |
+| 7.7 Museo de bugs | [Publicado](museo-oportunidades.md): plantilla y versiones sobre Preguntas, etiquetas, referencias y discusión; retiro y purga del origen. | Recorrido con casos aportados por el grupo. | Validación humana. |
+| 7.8 Aprende enseñando | Publicado: práctica manual privada, control de concurrencia e historial; preguntas Gemini BYOK desde explicación guardada/versionada, borrador y aceptación expresa; publicación voluntaria de una nota. | Prueba real de Gemini y validación con participantes. | Validación humana y de Gemini. |
+| 7.9 Repaso espaciado | Publicado: colecciones, tarjetas, cola/historial privados, recordatorios y borradores Gemini con fuente/versiones y aceptación atómica; intervalos 1/3/7/14/30/60/120. | Validar generación real y recordatorios en dispositivos. La conexión adicional con Exámenes corresponde a EX-3A. | Validación; integración EX-3A posterior. |
+| 7.10 Exposiciones | [Publicadas por texto](exposiciones.md): ensayos versionados, preguntas locales, observaciones privadas y revisor voluntario. | Audio y generación con Gemini posteriores; aceptación con compañeros. | Validación; ampliaciones posteriores. |
+| 7.11 Préstamos | Pendiente. | Implementar el módulo descrito en la tabla de entrega 5. | Entrega 5. |
+| 7.12 Oportunidades | [Publicadas](museo-oportunidades.md): fichas manuales con fuente, filtros/plazos, interés privado, contacto explícito, correcciones y reportes resolubles. | Recorrido con el grupo; enlace a microproyectos cuando exista 7.6. | Validación humana; integración con entrega 5. |
 
-## Requisitos compartidos (secciones 2, 4, 5 y 8)
+## Validaciones y requisitos compartidos pendientes
 
-| Área | Estado y criterio de cierre |
+| Área | Estado publicado y comprobaciones que faltan |
 | --- | --- |
-| Acceso, permisos y membresía | Código de invitaciones, vistas y acciones existente. Verificar tres identidades, bajas, caducidad y lectura/descarga privada en datos reales. |
-| Datos académicos y versiones | Preservar referencias y migraciones aditivas; no reiniciar base ni importar ejemplos de la demo. Restaurar sin perder archivos históricos. |
-| BYOK y Gemini | Base común publicada con Guías y reutilizada por Exámenes: claves cifradas por persona en SpacetimeDB, maestras en Cloudflare Secrets, consentimiento y presupuesto compartidos. La cuarta entrega añade IA específica de Repaso/Aprende enseñando. Prueba real de Gemini pendiente por decisión del usuario. |
-| Avisos y programación | [Implementación local](avisos-recordatorios.md): bandeja y preferencias privadas, descanso, cola persistente, reintentos, deduplicación y Web Push. Falta configurar secretos/VAPID y comprobar entrega real en dispositivos. |
-| Papelera y conservación | [Implementación local](tercera-entrega-retencion.md): recuperación antes de 30 días, vencimiento según reloj del servidor, purga programada y mantenimiento de respaldo. Limpia dependencias y copias privadas de IA; conserva publicaciones independientes y bytes aún referenciados. |
-| Moderación y retiro | Completar según cada módulo, con autor, motivo y permisos; no publicar conversaciones privadas al reportar sin selección de evidencia. |
-| PWA, extensión y APK | Compilar y probar autenticación, apertura de contenidos y actualizaciones en dispositivos reales. Push nativo Android cerrado sigue pendiente bajo la restricción de proveedores; no añadir Firebase automáticamente. |
-| Operación gratuita | Medir almacenamiento, transferencia y procesamiento; mostrar límites y detener la operación afectada al agotarse. No prometer cuota ilimitada ni activar pagos. |
+| Acceso, permisos y membresía | Autenticación real e invitaciones publicadas. Las pruebas aisladas cubren varias identidades; falta aceptación con autor, compañero y tercero reales, bajas/caducidad y acceso privado. |
+| Datos académicos y archivos | Archivos nativos privados de hasta 50 MiB, fragmentos de 1 MiB, reservas, cuotas, reanudación y cancelación publicados. Conservación durante actualización comprobada. Falta cerrar el recorrido del grupo con coautorías, versiones y archivos reales; conservar la compatibilidad R2 mientras existan objetos heredados. |
+| BYOK y Gemini | Servicio común publicado y configurado, con claves personales cifradas, consentimiento y presupuestos compartidos. La prueba real de Gemini sigue pendiente por decisión del usuario; no se necesita desplegar otra vez para hacerla. |
+| Avisos y programación | Bandeja, preferencias, cola, deduplicación y Web Push publicados; secretos/VAPID configurados y cron de avisos observado. Falta registrar instalaciones con autorización de sus titulares y comprobar la entrega real. |
+| Papelera y conservación | Publicadas: recuperación durante 30 días y purga programada en SpacetimeDB, con limpieza de dependencias y referencias. El respaldo opcional de mantenimiento del Worker no está activado; esto no desactiva el programador interno. Falta aceptación humana del recorrido de recuperación. |
+| Moderación y retiro | Reportes selectivos y retiro/restauración según cada módulo publicados y probados con identidades sintéticas. Validar criterios y permisos con el grupo sin exponer conversaciones privadas. |
+| PWA, extensión y APK | Código compartido y compilaciones comprobados. Faltan aceptación en dispositivos, autenticación/callbacks por presentación y preparación, firma y distribución del APK. El push nativo con el APK Android cerrado sigue pendiente de una solución compatible con los proveedores permitidos. |
+| Puntuación y operación | Reglas de puntos y controles de cuotas implementados. Falta acordar ponderación con el grupo y medir uso real de almacenamiento, transferencia y procesamiento. No se ha autorizado activar facturación automáticamente. |
 
-## Validación automatizada local de la primera entrega — 2026-10-21
+## Historial de validación
+
+Los registros siguientes corresponden a comprobaciones anteriores de cada entrega.
+Sus frases sobre código local, publicación o activación pendiente describen aquel momento;
+el estado vigente y los pendientes reales se encuentran en las tablas anteriores.
+
+### Primera entrega — validación automatizada local, 2026-10-21
 
 - Node.js `24.15.0`; CLI y SDK SpacetimeDB `2.12.0`; bindings regenerados desde el módulo.
 - `npm test`: **606 pruebas aprobadas** (app 336, core 63, módulo 112, API 50, web 45).
