@@ -10,9 +10,11 @@ proveedor de IA elegido expresamente; no se incorporan otras bases de datos, alm
 o proveedores de IA. La ruta R2 heredada permanece por compatibilidad y los archivos nuevos
 siguen en SpacetimeDB.
 
-El código y las pruebas locales no acreditan publicación en Maincloud, Cloudflare Pages ni
-Workers. La generación y los envíos externos comienzan desactivados y no se han configurado
-claves personales, secretos de producción ni facturación durante esta implementación.
+El registro de implementación local no acredita publicación en Maincloud, Cloudflare Pages
+ni Workers. La integración posterior conserva el servicio de Guías y su activación anterior;
+los resultados de publicación de la tercera entrega se registran al final de este documento.
+Las pruebas de implementación usan proveedores simulados y no realizan inferencias ni envíos
+push reales.
 
 ## Alcance implementado
 
@@ -119,6 +121,45 @@ módulo 271, API 104 y web 51), con bindings regenerados y el recorrido real ais
 Exposiciones aprobado. El total de 999 anterior corresponde a la entrega previa a esa integración.
 Los tipos globales y las compilaciones de web/PWA, extensión y Worker (`--dry-run`) también
 pasaron con el código integrado.
+
+## Publicación de la integración: en verificación
+
+La revisión preparada integra la tercera entrega de `main`, las Guías publicadas desde
+`ff98cc87` y la navegación incorporada posteriormente en `1989745`. Conserva las rutas de
+Guías, sus lotes, borradores y procedencia, junto al historial y publicación expresa de las
+guías y explicaciones de la entrega genérica. Los bindings se regeneran desde el módulo
+combinado; no se sustituye la configuración de autenticación ni se importan datos demo.
+
+El inventario anterior al despliegue contiene **98 tablas y 291 registros**. Las definiciones
+del módulo integrado conservan las 98 tablas anteriores sin cambios y añaden 14. Esto acredita
+que el esquema preparado es aditivo; la conservación de filas debe confirmarse comparando los
+inventarios inmediatamente anteriores y posteriores a la publicación con `--delete-data=never`.
+
+La IA y el cron de avisos se configuran en el Worker dedicado `app-b20-ai`, sin R2,
+mediante `apps/api/wrangler.ai.jsonc`. Se conservan el token técnico y las maestras de IA,
+`AI_ENABLED=true` y el modelo `gemini-3.8-flash`. Los avisos añaden una identidad técnica
+exclusiva, dos secretos propios y VAPID. La misma clave pública se incluye en Pages; no se
+concede permiso del navegador ni se registran dispositivos por cuenta del titular. El Worker
+anterior `app-b20-api` conserva las descargas R2 y `appb20` mantiene sus builds desactivados.
+
+No se configura la credencial de mantenimiento de respaldo ni se ejecuta `purge_due` durante
+este despliegue. El programador interno conserva el vencimiento normal de 30 días.
+
+| Comprobación de esta publicación | Estado por completar con evidencia |
+| --- | --- |
+| Commit final y ramas `main` / `codex/pages-spacetimeauth` | Pendiente de registrar la revisión final y confirmar igualdad remota |
+| Pruebas, tipos y compilaciones del código integrado | En ejecución; registrar resultados finales y ensayos persistentes |
+| Maincloud sin borrado y programa remoto | Pendiente de recibo y coincidencia SHA-256 del bundle |
+| Conservación de 98 tablas y 291 registros anteriores | Pendiente de comparación posterior de filas y huellas |
+| Worker IA, secretos conservados y servicio de avisos | Pendiente de registro y publicación comprobados |
+| Cron de recordatorios y VAPID | Pendiente de observar el cron; recepción push requiere suscripción consentida |
+| Pages y dominio estable | Pendiente de despliegue aprobado y coincidencia de los archivos públicos |
+| Recorrido con la cuenta real titular | Pendiente de registrar las acciones efectivamente comprobadas |
+
+No se realizará una inferencia Gemini como comprobación de despliegue. La aceptación con
+varias cuentas reales, las cuotas del proveedor y la recepción en cada navegador/dispositivo
+se conservan como verificaciones independientes. Los permisos entre identidades se comprueban
+en bases locales aisladas; no se atribuyen a un recorrido realizado con una sola cuenta.
 
 ## Pendientes conservados
 

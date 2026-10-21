@@ -10,7 +10,8 @@ que necesita una cuenta lo hace una persona del grupo.
 | Datos y archivos (`packages/spacetime-module`) | **SpacetimeDB Maincloud** | Tablas privadas, fragmentos de 1 MiB, permisos y operaciones del grupo. |
 | Autenticación | **SpacetimeAuth** | Cliente OIDC e invitaciones; la identidad de CLI no es la del alumno. |
 | Web/PWA (`apps/web`) | **Cloudflare Pages** | Compilación estática con HTTPS en `*.pages.dev`. |
-| Integraciones (`apps/api`) | **Cloudflare Workers**, opcional | Compatibilidad R2 anterior; futuro cifrado BYOK. No se necesita para subir archivos nuevos. |
+| IA y recordatorios (`app-b20-ai`, `apps/api/wrangler.ai.jsonc`) | **Cloudflare Workers** | Gemini BYOK, Guías y cron de avisos; sin R2. |
+| Archivos anteriores (`app-b20-api`) | **Cloudflare Workers** y su R2 existente | Compatibilidad conservada; los archivos nuevos siguen en SpacetimeDB. |
 | Extensión (`apps/extension`) | Paquete local/controlado | Panel lateral y vista completa; publicación en tienda fuera del presupuesto inicial. |
 | Android (`apps/android`) | APK firmado, descarga controlada | Sin Firebase como requisito nuevo; push nativo con la app cerrada permanece pendiente. |
 
@@ -107,6 +108,40 @@ usa como depósito de archivos nuevos. No retirar credenciales o buckets hasta c
 los IDs y versiones. La guía anterior de [Workers/R2](archivos-cloudflare.md) se conserva para
 operación de esa compatibilidad, no como requisito de una instalación nueva.
 
+### 3.1. Worker de IA y recordatorios
+
+El servicio actual se llama **`app-b20-ai`** y se configura con
+`apps/api/wrangler.ai.jsonc`, con entrada `src/guideWorker.ts`. Está separado del Worker
+heredado `app-b20-api` y no requiere un bucket R2. Usa la misma base Maincloud y el mismo
+cliente de autenticación que Pages. `VITE_AI_API_URL=https://app-b20-ai.aguaseero.workers.dev`
+selecciona este servicio; `VITE_API_URL` conserva las descargas anteriores.
+
+Los secretos `AI_SERVICE_TOKEN` y `AI_MASTER_KEYS_JSON` pertenecen al servicio IA y deben
+conservarse al publicar. Los avisos añaden `NOTIFICATION_SERVICE_TOKEN` y
+`VAPID_PRIVATE_KEY`. El propietario registra una identidad técnica exclusiva mediante
+`set_notification_service`; esa identidad no se invita ni se incorpora al grupo como alumno.
+El navegador nunca recibe las credenciales técnicas ni las claves privadas.
+
+La configuración pública de esta instalación conserva `AI_ENABLED=true` y el modelo
+`gemini-3.8-flash`, que ya se utilizaban para Guías. La generación sigue exigiendo la clave
+personal, el consentimiento y la confirmación de cada envío. Los recordatorios se habilitan
+con `NOTIFICATIONS_ENABLED=true` y un cron por minuto. La clave `VAPID_PUBLIC_KEY` del Worker
+debe coincidir con `VITE_VAPID_PUBLIC_KEY` de Pages; el titular decide si concede permiso y
+activa su dispositivo. La bandeja funciona sin ese permiso. Para otra instalación, mantener
+los servicios externos desactivados hasta completar su configuración y habilitación expresa.
+
+Publicar primero el módulo compatible, después el Worker y por último Pages. Conservar
+las variables remotas y los secretos existentes; comprobar especialmente los flags de IA y
+avisos, porque las variables explícitas de Wrangler pueden sustituir los valores del panel.
+La configuración y una compilación correcta no acreditan por sí solas una publicación ni
+la recepción de un aviso. Registrar los resultados en [tercera-entrega.md](tercera-entrega.md).
+Los detalles de las credenciales y permisos están en [gemini-byok.md](gemini-byok.md) y
+[avisos-recordatorios.md](avisos-recordatorios.md).
+
+La retención conserva el programador interno de SpacetimeDB a 30 días. El respaldo de
+Cloudflare permanece inactivo mientras no se configure `MAINTENANCE_SERVICE_TOKEN`; no es
+necesario ejecutar una purga ni adelantar el vencimiento para desplegar la entrega.
+
 ### 4. Web en Cloudflare Pages
 
 El registro anterior de Pages apunta a **https://app-b20.pages.dev** con integración Git:
@@ -123,6 +158,9 @@ resultado. Los detalles previos están en [`cloudflare-pages.md`](cloudflare-pag
   `VITE_API_URL` puede permanecer vacío para archivos nuevos; configurar solo si se necesitan
   descargas R2 anteriores.
   Edita ese archivo y envía el commit; las variables `VITE_*` del panel no sustituyen el archivo.
+- `VITE_AI_API_URL` selecciona el Worker dedicado de IA. `VITE_VAPID_PUBLIC_KEY` contiene
+  únicamente la clave pública del envío push, igual a la configurada en el Worker. Ningún
+  token técnico ni clave privada se incluye en las variables de Pages.
 - `VITE_WEB_ORIGIN=https://app-b20.pages.dev` fija el dominio estable en modo `pages`; las
   nuevas compilaciones llevan los alias allí antes del login. Los callbacks permanecen vacíos
   y sus URLs exactas ya están guardadas en SpacetimeAuth. Los despliegues anteriores son
@@ -138,9 +176,10 @@ y comprobaron tras recargar el panel. Se conservan el servicio, la conexión Git
 historial. Consultar el [registro de corrección](worker-heredado.md) antes de reactivarlo.
 No requiere desplegar código, migrar datos ni modificar R2 o Maincloud.
 
-Esta corrección se registra en `main` y en la rama de producción sin adelantar la tercera
-entrega que llegó a `main` durante la revisión. El código de esa entrega y su activación
-requieren su propio proceso de validación y publicación.
+La corrección se registró en `main` y en la rama de producción sin adelantar entonces la
+tercera entrega que llegó durante la revisión. Su integración y publicación posteriores se
+documentan por separado en [tercera-entrega.md](tercera-entrega.md); no requieren reactivar
+los builds de `appb20`.
 
 La publicación de Pages compila el monorepo y sirve `apps/web/dist`; `app-b20` continúa
 actualizándose mediante Git. El ZIP local queda como alternativa para otro proyecto de

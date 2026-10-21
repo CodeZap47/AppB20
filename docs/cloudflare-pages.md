@@ -62,12 +62,16 @@ el cambio a la rama de producción. No hace falta duplicarlas en el panel.
 | `VITE_SPACETIMEAUTH_CLIENT_ID` | `client_034jL0AHYYQ1bps8SupHU0` |
 | `VITE_SPACETIMEAUTH_REDIRECT_URI` | `""` |
 | `VITE_SPACETIMEAUTH_POST_LOGOUT_REDIRECT_URI` | `""` |
-| `VITE_API_URL` | `https://app-b20-api.sucanasta1.workers.dev`, compatibilidad R2 anterior y API BYOK tras actualizar el Worker |
+| `VITE_API_URL` | `https://app-b20-api.sucanasta1.workers.dev`, compatibilidad R2 anterior |
+| `VITE_AI_API_URL` | `https://app-b20-ai.aguaseero.workers.dev`, IA y Guías en el Worker dedicado |
+| `VITE_VAPID_PUBLIC_KEY` | Misma clave pública VAPID del Worker; valor completo en `wrangler.jsonc` |
 
 Esta tabla refleja la configuración preparada en `wrangler.jsonc`, no las variables del
 último despliegue confirmado. Los archivos nuevos usan SpacetimeDB directamente. Para una
-instalación sin objetos R2 anteriores ni IA activada, `VITE_API_URL` puede quedar vacío;
-conservarlo si hay archivos históricos que dependen del Worker o se habilita Gemini BYOK.
+instalación sin objetos R2 anteriores, `VITE_API_URL` puede quedar vacío; conservarlo si hay
+archivos históricos que dependen de ese Worker. `VITE_AI_API_URL` selecciona por separado
+el servicio de Gemini BYOK. La configuración pública de tercera entrega conserva ambos
+destinos y no necesita trasladar ni eliminar archivos.
 
 El primer intento de compilación de Pages falló porque faltaban estas variables en
 `wrangler.jsonc`: agregarlas únicamente al panel no las aportó al build que usa este archivo.
@@ -78,8 +82,13 @@ commit o uno posterior en **Deployments**. El despliegue de `59d17a7` ya termin�
 El Client ID y la dirección de la base son públicos. Ninguna variable `VITE_*` debe contener
 un Client Secret, una clave de Gemini ni claves de administración. Vite incorpora estos valores
 al compilar; después de cambiarlos, comprobar un nuevo despliegue. `VITE_API_URL` permite
-descargar objetos heredados y conectar con la API BYOK cuando esté configurada; no determina
+descargar objetos heredados; `VITE_AI_API_URL` conecta con IA y Guías. Ninguna determina
 dónde se suben los archivos académicos nuevos. Ver [archivos-spacetime.md](archivos-spacetime.md).
+
+`VITE_VAPID_PUBLIC_KEY` contiene una clave pública, compartida por Pages y el Worker para
+registrar instalaciones push. Su clave privada permanece en Cloudflare Secrets. Compilar
+Pages no solicita permiso ni registra un dispositivo: cada persona lo activa expresamente
+desde sus preferencias. La bandeja de avisos sigue disponible sin permiso push.
 
 El modo `pages` usa `VITE_WEB_ORIGIN=https://app-b20.pages.dev` como origen canónico. En las
 nuevas compilaciones, abrir un alias de Pages lleva a ese dominio estable antes de iniciar
@@ -239,11 +248,18 @@ Publicar primero el módulo compatible de SpacetimeDB con `--delete-data=never` 
 la web. Los archivos nuevos se transfieren directamente a SpacetimeDB; el Worker conserva
 las descargas heredadas de R2 mientras existan objetos que dependan de ellas.
 
-La interfaz de IA/BYOK conecta con el Worker indicado por `VITE_API_URL`. Su habilitación
-requiere publicar el módulo y el Worker actualizados y configurar los secretos descritos en
-[gemini-byok.md](gemini-byok.md). Los recordatorios y Web Push se activan
-según [avisos-recordatorios.md](avisos-recordatorios.md). Publicar la web en Pages no activa
-esos servicios automáticamente.
+La interfaz de IA/BYOK conecta con el Worker indicado por `VITE_AI_API_URL`. El servicio
+`app-b20-ai`, configurado en `apps/api/wrangler.ai.jsonc`, comparte la autenticación y base
+de Pages sin depender del Worker R2 anterior. Su habilitación requiere publicar el módulo
+y el Worker actualizados y conservar los secretos descritos en [gemini-byok.md](gemini-byok.md).
+Los recordatorios y Web Push usan una identidad técnica exclusiva y se activan según
+[avisos-recordatorios.md](avisos-recordatorios.md). Publicar la web en Pages no activa esos
+servicios automáticamente ni concede el permiso del navegador.
+
+La tercera entrega integrada conserva Guías y los cambios posteriores de `main`. Su
+publicación y sincronización se registran en [tercera-entrega.md](tercera-entrega.md) una vez
+comprobados el programa remoto, la conservación de datos y los archivos del dominio estable.
+Los registros históricos de este documento no sustituyen esas comprobaciones.
 
 Fuentes oficiales consultadas el 20 de octubre de 2026; los enlaces de cada apartado respaldan
 las opciones y campos del servicio.
