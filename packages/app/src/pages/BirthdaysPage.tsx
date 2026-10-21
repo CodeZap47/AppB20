@@ -80,6 +80,7 @@ export function BirthdaysPage() {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const { year, month } = parseMonth(params.get('mes'), today);
+  const annual = params.get('vista') === 'ano';
   const selectedDay = Number(params.get('dia')) || 0;
   const isCurrentMonth = year === today.getFullYear() && month === today.getMonth() + 1;
 
@@ -138,6 +139,29 @@ export function BirthdaysPage() {
           </div>
         )}
       </header>
+
+      <div className="toolbar">
+        <div className="segmented" role="group" aria-label="Vista del calendario">
+          <button type="button" aria-pressed={!annual} onClick={() => setParams({ mes: monthParam(year, month) }, { replace: true })}>Mes</button>
+          <button type="button" aria-pressed={annual} onClick={() => setParams({ mes: monthParam(year, month), vista: 'ano' }, { replace: true })}>Año</button>
+        </div>
+        {annual && <div className="row"><button className="icon-button" type="button" aria-label="Año anterior" onClick={() => setParams({ mes: monthParam(year - 1, month), vista: 'ano' })}><Icon name="back" size={18} /></button><strong>{year}</strong><button className="icon-button" type="button" aria-label="Año siguiente" onClick={() => setParams({ mes: monthParam(year + 1, month), vista: 'ano' })}><Icon name="forward" size={18} /></button></div>}
+      </div>
+
+      {annual ? <>
+        <p className="muted">El año indica cuándo se celebra, sin guardar el año de nacimiento ni la edad. El 29 de febrero se celebra el 28 en años no bisiestos y conserva su fecha original.</p>
+        <div className="cards">{Array.from({ length: 12 }, (_, index) => index + 1).map((annualMonth) => <section className="panel bday-cal" key={annualMonth} aria-label={`${monthName.format(new Date(year, annualMonth - 1, 1))} de ${year}`}>
+          <h2><button type="button" className="link-button" onClick={() => go(year, annualMonth)}>{capitalize(monthName.format(new Date(year, annualMonth - 1, 1)))}</button></h2>
+          <div className="bday-cal__weekdays" aria-hidden="true">{WEEKDAYS.map((day) => <span key={day.long}>{day.short}</span>)}</div>
+          <ol className="bday-cal__grid">{monthGrid(year, annualMonth).map((date) => {
+            const people = on(date);
+            if (date.getMonth() !== annualMonth - 1) return <li key={date.toISOString()} aria-hidden="true" className="bday-day bday-day--outside"><span>{date.getDate()}</span></li>;
+            const names = peopleList(people.map((birthday) => birthday.memberId), members);
+            return <li key={date.toISOString()}><button type="button" className={`bday-day${people.length ? ' bday-day--has' : ''}${sameDay(date, today) ? ' bday-day--today' : ''}`} aria-label={`${dayTitle.format(date)}${names ? `, cumple ${names}` : ''}`} title={names || undefined} onClick={() => go(year, annualMonth, date.getDate())}><span className="bday-day__number">{date.getDate()}</span>{people.length > 0 && <span className="bday-day__more">{people.length} 🎂</span>}</button></li>;
+          })}</ol>
+          <ul className="links">{shared.filter((birthday) => celebrationDate(birthday, year).getMonth() === annualMonth - 1).sort((a, b) => celebrationDate(a, year).getDate() - celebrationDate(b, year).getDate() || byName(a, b)).map((birthday) => <li key={birthday.memberId}><Link to={`/perfil/${birthday.memberId}`}>{formatDayMonth(birthday.day, birthday.month)} · {memberName(members, birthday.memberId)}</Link></li>)}</ul>
+        </section>)}</div>
+      </> :
 
       <div className="detail">
         <section className="panel bday-cal" aria-labelledby="bday-month">
@@ -306,7 +330,7 @@ export function BirthdaysPage() {
             </section>
           )}
         </aside>
-      </div>
+      </div>}
     </>
   );
 }

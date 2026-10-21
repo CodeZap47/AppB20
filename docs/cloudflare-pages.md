@@ -1,40 +1,40 @@
 # B20 en Cloudflare Pages
 
-El proyecto **Pages `app-b20`** ya está creado y conectado al repositorio
-`CodeZap47/AppB20`. La web está publicada en **https://app-b20.pages.dev**. El historial de
-**Deployments** identifica cada publicación y el commit que sirve el dominio estable. El acceso
-por enlace al correo y la visualización de datos de prueba se confirmaron el 20 de octubre
-de 2026. También se comprobó que Ajustes separa la cuenta real de los perfiles simulados.
-La configuración temporal
-usa autenticación real y datos simulados, sin invitaciones ni conexiones a Maincloud. Los
-retornos de producción ya están
-guardados en SpacetimeAuth. La URL recomendada para entrar y compartir es siempre
-**https://app-b20.pages.dev**. SpacetimeDB ya está publicado en
-Maincloud como `app-b20-34245`, reservado para el modo de datos reales con invitaciones;
-`VITE_DATA_MODE=demo` no se conecta a esa base.
+El proyecto **Pages `app-b20`** está conectado al repositorio `CodeZap47/AppB20` y su
+dirección estable es **https://app-b20.pages.dev**. El repositorio está preparado para
+publicar `VITE_DATA_MODE=spacetime`: autenticación por SpacetimeAuth, membresía por invitación,
+datos y archivos nuevos en SpacetimeDB. Este estado del código no acredita una publicación.
+Consultar **Deployments** para identificar el commit que sirve el dominio estable y registrar
+el resultado en [estado-del-proyecto.md](estado-del-proyecto.md).
+
+El registro histórico del 20 de octubre de 2026 corresponde a una web con autenticación real
+y datos simulados. Se comprobó el acceso por correo y la separación de la cuenta real frente
+a los perfiles de prueba. Maincloud ya tenía la base `app-b20-34245`, pero aquella web en
+modo `demo` no se conectaba a ella. La actualización con archivos nativos requiere publicar
+primero el módulo compatible, conservando sus datos, y después la web.
 
 El subdominio `pages.dev` se entrega con HTTPS y no requiere comprar un dominio, configurar
 DNS ni entrar a **Custom Domains**. El nombre del proyecto define la URL asignada por
 [Pages](https://developers.cloudflare.com/pages/get-started/git-integration/).
 
-## Configuración actual del proyecto
+## Configuración registrada del proyecto
 
 | Campo | Valor |
 | --- | --- |
 | Servicio | **Pages**, proyecto `app-b20` |
 | Repositorio | `CodeZap47/AppB20` |
-| Production branch | `codex/pages-spacetimeauth` |
+| Production branch registrada | `codex/pages-spacetimeauth`; consultar Pages antes de publicar |
 | Framework preset | **None** |
 | Root directory | `/`, raíz del repositorio |
 | Build command | `npm run build:pages` |
 | Build output directory | `apps/web/dist` |
 | Node.js | `22`, indicado en `.nvmrc` |
 
-La rama de producción es temporalmente `codex/pages-spacetimeauth` porque contiene la versión
-avanzada preparada; `main` todavía contiene la versión anterior. Los cambios enviados a la
-rama de producción disparan otro despliegue. No se fusionan automáticamente con `main`.
-Cuando se decida adoptar esa versión en `main`, primero hay que integrar el código y después
-cambiar la rama de producción de Pages. [Integración Git](https://developers.cloudflare.com/pages/get-started/git-integration/).
+El registro anterior usa `codex/pages-spacetimeauth` como rama de producción. La rama local
+o el último commit de GitHub no determinan por sí solos qué sirve Pages: consultar la rama
+de producción y el despliegue activo antes de enviar cambios o usar Wrangler. Publicar desde
+otra rama puede crear una vista previa. Un cambio de rama de producción debe acompañar la
+integración del código que se quiere servir. [Integración Git](https://developers.cloudflare.com/pages/get-started/git-integration/).
 
 La carpeta local avanzada se llama `appb20-stdb`, pero es un repositorio independiente. No
 pongas `appb20-stdb` ni `apps/web` en **Root directory**: `package.json`, `.nvmrc`,
@@ -54,7 +54,7 @@ el cambio a la rama de producción. No hace falta duplicarlas en el panel.
 
 | Variable en `vars` | Valor |
 | --- | --- |
-| `VITE_DATA_MODE` | `demo` |
+| `VITE_DATA_MODE` | `spacetime` |
 | `VITE_WEB_ORIGIN` | `https://app-b20.pages.dev` |
 | `VITE_SPACETIME_URI` | `wss://maincloud.spacetimedb.com` |
 | `VITE_SPACETIME_DB` | `app-b20-34245` |
@@ -62,7 +62,12 @@ el cambio a la rama de producción. No hace falta duplicarlas en el panel.
 | `VITE_SPACETIMEAUTH_CLIENT_ID` | `client_034jL0AHYYQ1bps8SupHU0` |
 | `VITE_SPACETIMEAUTH_REDIRECT_URI` | `""` |
 | `VITE_SPACETIMEAUTH_POST_LOGOUT_REDIRECT_URI` | `""` |
-| `VITE_API_URL` | `""` mientras la API no esté desplegada |
+| `VITE_API_URL` | `https://app-b20-api.sucanasta1.workers.dev`, solo compatibilidad R2 anterior |
+
+Esta tabla refleja la configuración preparada en `wrangler.jsonc`, no las variables del
+último despliegue confirmado. Los archivos nuevos usan SpacetimeDB directamente. Para una
+instalación sin objetos R2 anteriores, `VITE_API_URL` puede quedar vacío; conservarlo si hay
+archivos históricos que aún dependen del Worker.
 
 El primer intento de compilación de Pages falló porque faltaban estas variables en
 `wrangler.jsonc`: agregarlas únicamente al panel no las aportó al build que usa este archivo.
@@ -72,8 +77,9 @@ commit o uno posterior en **Deployments**. El despliegue de `59d17a7` ya termin�
 
 El Client ID y la dirección de la base son públicos. Ninguna variable `VITE_*` debe contener
 un Client Secret, una clave de Gemini ni claves de administración. Vite incorpora estos valores
-al compilar; después de cambiarlos, espera un nuevo despliegue. `VITE_API_URL` podrá apuntar a
-la URL HTTPS real de la API cuando esté publicada y conectada con la interfaz.
+al compilar; después de cambiarlos, comprobar un nuevo despliegue. `VITE_API_URL` es una
+ruta opcional para descargar objetos heredados; no determina dónde se suben los archivos
+académicos nuevos. Ver [archivos-spacetime.md](archivos-spacetime.md).
 
 El modo `pages` usa `VITE_WEB_ORIGIN=https://app-b20.pages.dev` como origen canónico. En las
 nuevas compilaciones, abrir un alias de Pages lleva a ese dominio estable antes de iniciar
@@ -121,24 +127,25 @@ No hace falta modificar `auth_config` por estos retornos del mismo cliente. Comp
 cada hash ni comodines. El error previo `invalid_redirect_uri` se debía a que únicamente
 estaban registrados los retornos de localhost; esa configuración ya se corrigió.
 
-El formulario ofrece acceso por enlace al correo de SpacetimeAuth. En esta fase cualquier
-correo verificado puede entrar a la interfaz con datos simulados, sin una lista de invitación.
-Google es opcional. `AuthProvider` se utiliza siempre, también si la URL contiene `?demo`:
-la falta de configuración no abre una demo sin sesión.
+El formulario ofrece acceso por enlace al correo de SpacetimeAuth. La compilación preparada
+en modo `spacetime` exige además una invitación para unirse al grupo; un correo verificado
+por sí solo no autoriza consultar sus datos. `AuthProvider` se utiliza siempre, también si
+la URL contiene `?demo`: la falta de configuración no abre una demo sin sesión.
 
-## Datos de la versión temporal
+## Registro histórico de la versión de prueba
 
-`VITE_DATA_MODE=demo` está configurado para Pages. Después del login se crea una fuente de
+La publicación de prueba usaba `VITE_DATA_MODE=demo`. Después del login se creaba una fuente de
 datos simulados para el `subject` autenticado; no se monta la conexión a Maincloud ni se
 realizan lecturas o escrituras contra esa base. La interfaz conserva los ejemplos actuales y
 el selector de perfiles y roles ficticios, identificados como simulación. **Ajustes** muestra
 por separado la cuenta real que inició sesión.
 
-Los cambios viven en memoria: renovar el token de la misma cuenta conserva la simulación;
+En ese modo, los cambios viven en memoria: renovar el token de la misma cuenta conserva la simulación;
 recargar, cerrar sesión o cambiar de identidad la reinicia. No se guardan datos simulados en
-`localStorage` ni se comparten entre personas. Para activar datos persistentes más adelante,
-se compilará con `VITE_DATA_MODE=spacetime` y se validarán conexión y membresía por invitación.
-Las cuentas de SpacetimeAuth se conservarán; la simulación no migra sus cambios automáticamente.
+`localStorage` ni se comparten entre personas. La configuración preparada ahora usa
+`VITE_DATA_MODE=spacetime`; hay que validar conexión, persistencia y membresía por invitación
+en la publicación correspondiente. Las cuentas de SpacetimeAuth se conservan; la simulación
+no importa sus ejemplos ni cambios al grupo real.
 
 ## Comprobar después de compilar
 
@@ -146,19 +153,18 @@ Las cuentas de SpacetimeAuth se conservarán; la simulación no migra sus cambio
    la URL HTTPS estable.
 2. Abrir directamente `/auth/callback` y `/auth/logout`: deben cargar B20 y manejar la ruta,
    en lugar de mostrar un 404 del hosting.
-3. El acceso humano por enlace al correo y la visualización de la simulación se confirmaron el
-   20 de octubre de 2026. Esa cuenta ya tenía una invitación guardada: todavía falta la prueba
-   humana con un correo verificado sin invitación.
-4. Se comprobó que **Ajustes** identifica la cuenta real separada de los perfiles y roles
-   ficticios de simulación. Cambiar un perfil ficticio no debe cambiar la cuenta autenticada.
-5. Modificar datos simulados, verificar que la renovación de sesión los conserva y que
-   recargar, salir o cambiar de cuenta los reinicia. No deben aparecer conexiones a Maincloud.
-   La renovación esperando la expiración y el cambio a otra cuenta siguen pendientes de prueba
-   humana; esos casos y el acceso sin invitación cuentan con pruebas automatizadas.
+3. Confirmar que la compilación usa datos reales: una persona invitada puede unirse y un
+   correo verificado sin invitación no puede consultar contenido del grupo.
+4. Probar con autor y compañero autorizado: publicar, adjuntar un archivo, recargar y
+   descargar desde la otra sesión. Comprobar también avance privado, coautoría e historial.
+5. Probar una tercera identidad sin acceso y dar de baja a una cuenta que ya tenía sesión:
+   la consulta y descarga deben rechazarse. Verificar renovación, cierre y cambio de cuenta.
+6. Interrumpir y reanudar una subida, cancelar otra y comprobar conflictos de versión.
+   Registrar los resultados y el commit publicado; las pruebas locales y la antigua demo
+   no sustituyen estas comprobaciones.
 
-Antes de cambiar a `VITE_DATA_MODE=spacetime`, probar con dos cuentas la persistencia,
-invitaciones, bajas y privacidad del grupo real. Más información en
-[SpacetimeAuth y modos de datos](spacetimeauth.md).
+Los pasos completos están en [Tareas y Actividades](tareas-actividades.md),
+[archivos privados](archivos-spacetime.md) y [SpacetimeAuth y modos de datos](spacetimeauth.md).
 
 ## Resolver los errores encontrados
 
@@ -207,13 +213,16 @@ No es necesario crear otro proyecto ni usar el ZIP para actualizar `app-b20`.
 [Direct Upload](https://developers.cloudflare.com/pages/get-started/direct-upload/).
 
 El script `npm run pages:deploy` compila y publica con Wrangler usando la rama Git actual.
-Para actualizar producción manualmente, ejecútalo desde `codex/pages-spacetimeauth` con acceso
-a tu cuenta de Cloudflare. Otras ramas generan vistas previas. El flujo habitual del proyecto
-es enviar los cambios a su rama de producción en GitHub.
+Antes de actualizar producción manualmente, comprobar qué rama tiene configurada Pages y
+seleccionar ese destino explícitamente o ejecutar desde esa rama, con los cambios integrados
+y acceso de escritura a Pages. No asumir que ejecutar el script desde `main` actualiza el
+dominio estable. El flujo habitual del proyecto es enviar los cambios a su rama de producción
+en GitHub y comprobar el resultado de **Deployments**.
 
-La web puede publicarse mientras se completan las funciones pendientes. La interfaz de IA/BYOK
-aún no conecta con la API; el alojamiento de la API, archivos y envío de notificaciones push
-requieren trabajo propio. Publicar la web en Pages no activa esos servicios automáticamente.
+Publicar primero el módulo compatible de SpacetimeDB con `--delete-data=never` y después
+la web. La interfaz de IA/BYOK y los avisos siguen pendientes de sus entregas; publicar Pages
+no los activa. El Worker R2 anterior se mantiene únicamente mientras se necesite recuperar
+archivos existentes y no es requisito para las subidas nuevas.
 
 Fuentes oficiales consultadas el 20 de octubre de 2026; los enlaces de cada apartado respaldan
 las opciones y campos del servicio.

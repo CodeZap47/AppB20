@@ -14,10 +14,12 @@ import type { Id, Member, MessageScope } from '../data/types';
 import { formatClock, formatDayLabel, hueOf, memberName } from '../lib/format';
 import { groupByDay, type ChatMessage } from '../lib/messages';
 import { messagePreview, referencesIn, stickerOnly, stripReferences } from '../lib/references';
-import { Avatar } from './Avatar';
+import { ChatAvatar, ChatBubble, ChatButton } from './messaging/Messaging';
 import { Icon } from './Icon';
 import { MessageMenu, ReactionBar, RefCard, StickerImage, type MenuAction } from './MessageParts';
 import { MessageText } from './MessageText';
+import { ResourceDownloads } from './AcademicTools';
+import { chatTarget } from '../lib/chat';
 
 /** Lo que se puede hacer con un mensaje desde la conversación. */
 export interface MessageHandlers {
@@ -25,6 +27,7 @@ export interface MessageHandlers {
   onEdit: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
   onReact: (message: ChatMessage, emoji: string) => void;
+  onReport?: (message: ChatMessage) => void;
 }
 
 /** Distancia al final (px) dentro de la cual se considera que sigues leyendo lo último. */
@@ -38,6 +41,7 @@ export function MessageList({
   empty,
   scope,
   handlers,
+  onReadThrough,
 }: {
   messages: ChatMessage[];
   members: Member[];
@@ -47,8 +51,10 @@ export function MessageList({
   empty: ReactNode;
   scope: MessageScope;
   handlers: MessageHandlers;
+  /** Solo al llegar al final con la página visible. */
+  onReadThrough?: (messageId: Id) => void;
 }) {
-  const { me, reactions } = useSnapshot();
+  const { me, reactions, resourceFiles } = useSnapshot();
   const [flash, setFlash] = useState<Id | null>(null);
   const byId = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
   const domId = (id: Id) => `msg-${scope}-${id}`;
@@ -91,6 +97,7 @@ export function MessageList({
           onSelect: () => handlers.onDelete(m),
         });
       }
+      if (!mine && handlers.onReport) actions.push({ icon: 'lock', label: 'Reportar mensaje', onSelect: () => handlers.onReport?.(m) });
     }
     const deletedLabel =
       m.deletedBy && m.deletedBy !== m.senderId
@@ -105,8 +112,8 @@ export function MessageList({
         id={domId(m.id)}
         className={['msg', flash === m.id && 'msg--flash'].filter(Boolean).join(' ')}
       >
-        <div
-          className={['bubble', sticker && 'bubble--sticker', m.deletedAt && 'bubble--deleted']
+        <ChatBubble
+          className={['bubble', 'messaging-bubble', sticker && 'bubble--sticker', m.deletedAt && 'bubble--deleted']
             .filter(Boolean)
             .join(' ')}
         >
@@ -149,11 +156,12 @@ export function MessageList({
               </>
             )}
           </div>
+          {!m.deletedAt && <ResourceDownloads files={resourceFiles.filter((file) => file.targetKind === chatTarget(scope) && file.targetId === m.id && !file.removedAt)} />}
           <span className="bubble__time">
             {m.editedAt && !m.deletedAt && <span className="bubble__edited">editado · </span>}
             <time dateTime={m.sentAt.toISOString()}>{formatClock(m.sentAt)}</time>
           </span>
-        </div>
+        </ChatBubble>
         {!m.deletedAt && (
           <MessageMenu
             mine={mine}
@@ -174,6 +182,19 @@ export function MessageList({
   const [unseen, setUnseen] = useState(0);
   const days = useMemo(() => groupByDay(messages), [messages]);
   const last = messages.at(-1);
+  const readLatest = () => {
+    if (atBottom.current && last && document.visibilityState === 'visible') onReadThrough?.(last.id);
+  };
+
+  useEffect(() => {
+    readLatest();
+    document.addEventListener('visibilitychange', readLatest);
+    window.addEventListener('focus', readLatest);
+    return () => {
+      document.removeEventListener('visibilitychange', readLatest);
+      window.removeEventListener('focus', readLatest);
+    };
+  }, [last?.id, onReadThrough]);
 
   const toBottom = (smooth = false) => {
     const el = scrollRef.current;
@@ -212,7 +233,7 @@ export function MessageList({
     const near = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM;
     atBottom.current = near;
     setAway(!near);
-    if (near) setUnseen(0);
+    if (near) { setUnseen(0); readLatest(); }
   };
 
   return (
@@ -247,7 +268,11 @@ export function MessageList({
                       tabIndex={-1}
                       aria-hidden="true"
                     >
-                      <Avatar member={members.find((m) => m.id === run.senderId)} size={32} />
+                      <ChatAvatar
+                        name={memberName(members, run.senderId)}
+                        src={members.find((m) => m.id === run.senderId)?.photoUrl}
+                        size="xs"
+                      />
                     </Link>
                   )}
                   <div className="run__bubbles">
@@ -269,14 +294,14 @@ export function MessageList({
         ))}
       </div>
       {away && (
-        <button type="button" className="thread__jump" onClick={() => toBottom(true)}>
+        <ChatButton variant="secondary" type="button" className="thread__jump" onClick={() => toBottom(true)}>
           <Icon name="down" size={18} />
           {unseen > 0 ? (
             <span>{unseen === 1 ? '1 mensaje nuevo' : `${unseen} mensajes nuevos`}</span>
           ) : (
             <span className="sr-only">Ir al último mensaje</span>
           )}
-        </button>
+        </ChatButton>
       )}
     </div>
   );

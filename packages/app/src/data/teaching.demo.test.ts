@@ -63,6 +63,20 @@ describe('Aprende enseñando en la demo', () => {
     expect(data.getSnapshot().teachingPractices.find((item) => item.id === id)?.initial).toEqual(initial);
   });
 
+  it.each([{ kind: 'note' as const, id: 'n1', version: 1 }, { kind: 'guide' as const, id: 'gd1', version: 2 }])('rechaza una fuente $kind retirada al practicar desde una sala, incluso para su autor', (ref) => {
+    const data = source('demo-2');
+    const before = data.getSnapshot().teachingPractices.length;
+    data.withdrawContent(ref.kind, ref.id, true, ref.version, 'Material retirado de la sala');
+    const visibleToAuthor = ref.kind === 'note' ? data.getSnapshot().notes : data.getSnapshot().guides;
+    expect(visibleToAuthor.find((item) => item.id === ref.id)?.withdrawnAt).toBeDefined();
+    expect(() => data.createTeachingPractice({ subjectId: SUBJECT, topic: 'Desde un material retirado', initial,
+      source: { kind: ref.kind, id: ref.id } })).toThrow('fuente');
+    expect(data.getSnapshot().teachingPractices).toHaveLength(before);
+    data.setViewer('demo-3');
+    expect(() => data.createTeachingPractice({ subjectId: SUBJECT, topic: 'Desde una referencia guardada', initial,
+      source: { kind: ref.kind, id: ref.id } })).toThrow('fuente');
+  });
+
   it('exige explicación revisada, reflexión y una respuesta para completar', () => {
     const data = source();
     const id = practice(data);

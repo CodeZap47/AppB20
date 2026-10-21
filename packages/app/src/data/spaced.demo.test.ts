@@ -173,7 +173,8 @@ describe('repaso espaciado en la demo', () => {
     data.saveNote({ ...note, body: 'Fuente actualizada', id: 'n1' });
     expect(data.getSnapshot().spacedCards[0]).toEqual(originalCard);
     expect(data.getSnapshot().notes.find((item) => item.id === 'n1')?.version).toBe(2);
-    data.saveNote({ ...note, visibility: 'personal', id: 'n1' });
+    expect(() => data.saveNote({ ...note, visibility: 'personal', id: 'n1' })).toThrow(/visibilidad|copia/);
+    data.withdrawContent('note', 'n1', true, 2);
     expect(data.getSnapshot().spacedCards).toEqual([]);
     expect(data.getSnapshot().spacedUnavailableCards).toEqual([{ id: cardId, collectionId, version: 1, archived: false }]);
     expect(data.getSnapshot().spacedProgress).toHaveLength(1);

@@ -48,9 +48,12 @@ function setup() {
     appConfig: tableStore('id', [{ id: 0, owner }]),
     authConfig: tableStore('id', [{ id: 0, issuer, audiences: ['web-client', 'android-client'] }]),
     fileServiceConfig: tableStore('id'),
+    aiServiceConfig: tableStore('id'),
     member: tableStore('identity'),
     invitation: tableStore('email'),
     subject: tableStore('id', [{ id: 1, name: 'Privado del grupo' }]),
+    studyRoom: { iter: () => [] },
+    roomMember: { memberId: { filter: () => [] } },
     changeLog: { insert: vi.fn() },
   };
   const mutableCtx = {

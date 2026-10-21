@@ -952,6 +952,10 @@ function AssignmentForm({ assignment }: { assignment: Assignment | undefined }) 
 /** Subir el trabajo propio o del equipo a una página principal. */
 export function SubmitWorkPage() {
   const { assignmentId = '' } = useParams();
+  return <SubmitWorkForAssignment key={assignmentId} assignmentId={assignmentId} />;
+}
+
+function SubmitWorkForAssignment({ assignmentId }: { assignmentId: string }) {
   const source = useDataSource();
   const navigate = useNavigate();
   const { me, assignments, members } = useSnapshot();
@@ -968,7 +972,11 @@ export function SubmitWorkPage() {
   const [uploadErrors, setUploadErrors] = useState<string[]>([]);
   const uploadController = useRef<AbortController | null>(null);
   const [uploadProgress, setUploadProgress] = useState<{ name: string; done: number; total: number } | null>(null);
-  useEffect(() => () => uploadController.current?.abort(), []);
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; uploadController.current?.abort(); };
+  }, []);
   const assignment = assignments.find((a) => a.id === assignmentId);
 
   if (!assignment) {
@@ -1003,33 +1011,41 @@ export function SubmitWorkPage() {
     e.preventDefault();
     if (busy) return;
     setBusy(true);
-    const id = createdId ?? await run(() => source.publishWork({ assignmentId: assignment.id, title, description, coauthorIds, topic, status }));
-    if (!id) { setBusy(false); return; }
-    setCreatedId(id);
-    setUploadErrors([]);
     const controller = new AbortController();
     uploadController.current = controller;
-    let expectedVersion = Math.max(uploadVersion, source.getSnapshot().works.find((work) => work.id === id)?.version ?? uploadVersion);
-    for (let index = 0; index < files.length; index++) {
-      const file = files[index]!;
-      try {
-        setUploadProgress({ name: file.name, done: 0, total: file.size });
-        await source.attachResourceFile('work', id, file, expectedVersion, { signal: controller.signal,
-          onProgress: (done, total) => setUploadProgress({ name: file.name, done, total }) });
+    try {
+      const id = createdId ?? await run(() => source.publishWork({ assignmentId: assignment.id, title, description, coauthorIds, topic, status }));
+      if (!active.current || !id) return;
+      setCreatedId(id);
+      if (controller.signal.aborted) return;
+      setUploadErrors([]);
+      // Recuperar un archivo ya confirmado no crea otra versión. Conserva la base del lote
+      // para avanzar una sola vez y para detectar cambios hechos por un coautor.
+      let expectedVersion = uploadVersion;
+      for (let index = 0; index < files.length; index++) {
+        const file = files[index]!;
+        try {
+          setUploadProgress({ name: file.name, done: 0, total: file.size });
+          await source.attachResourceFile('work', id, file, expectedVersion, { signal: controller.signal,
+            onProgress: (done, total) => { if (active.current) setUploadProgress({ name: file.name, done, total }); } });
+        } catch (failure) {
+          if (active.current) { setUploadErrors([uploadError(failure, file)]); setFiles(files.slice(index)); }
+          return;
+        }
+        if (!active.current) return;
         expectedVersion++;
         setUploadVersion(expectedVersion);
-      } catch (failure) {
-        setUploadErrors([uploadError(failure, file)]);
-        setFiles(files.slice(index));
-        uploadController.current = null;
-        setUploadProgress(null);
-        setBusy(false);
-        return;
+        if (controller.signal.aborted) {
+          setFiles(files.slice(index + 1));
+          setUploadErrors(['Cancelaste la subida. Los archivos ya confirmados permanecen guardados.']);
+          return;
+        }
       }
+      if (active.current && !controller.signal.aborted) void navigate(`${backTo}?trabajo=${id}`);
+    } finally {
+      if (uploadController.current === controller) uploadController.current = null;
+      if (active.current) { setUploadProgress(null); setBusy(false); }
     }
-    uploadController.current = null;
-    setUploadProgress(null);
-    void navigate(`${backTo}?trabajo=${id}`);
   };
 
   return (

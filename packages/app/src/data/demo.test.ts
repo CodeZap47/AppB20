@@ -510,13 +510,14 @@ describe('guías de estudio', () => {
     expect(() => data.reviewGuide('gd1', 'approved', '')).toThrow('otro compañero');
     data.setViewer('demo-4');
     expect(() => data.reviewGuide('gd1', 'changes', '')).toThrow('Di qué cambios');
-    data.reviewGuide('gd1', 'approved', '');
-    data.reviewGuide('gd1', 'changes', 'Falta un ejemplo.');
+    expect(() => data.reviewGuide('gd1', 'approved', '')).toThrow('comentario');
+    data.reviewGuide('gd1', 'approved', 'Revisé los ejemplos y sus fuentes.');
+    expect(() => data.reviewGuide('gd1', 'changes', 'Falta un ejemplo.')).toThrow('Ya revisaste');
     const mine = data
       .getSnapshot()
       .guideReviews.filter((r) => r.reviewerId === 'demo-4' && r.guideVersion === 2);
     expect(mine).toHaveLength(1);
-    expect(mine[0]?.verdict).toBe('changes');
+    expect(mine[0]?.verdict).toBe('approved');
   });
 });
 

@@ -270,6 +270,67 @@ El cambio añade tablas, vistas y reducers, sin migrar datos existentes ni cambi
 datos del despliegue. Para usarlo en modo real hace falta publicar el módulo actualizado por
 el procedimiento habitual; la implementación local no publica ni elimina datos.
 
+### Exámenes con IA BYOK (3.12, EX-1 local completo)
+
+El módulo tendrá una entrada propia, `examenes`, en la interfaz compartida y accesos desde
+notas, actividades y guías. El tipo de publicación `assignment.kind = 'examen'` conserva su
+función de archivo académico; puede aportar una fuente al nuevo módulo. EX-1 implementa la base BYOK,
+fuentes, vista previa en Ajustes y API; las pantallas de exámenes e intentos siguen pendientes. El alcance y
+las tareas por entrega se detallan en [examenes-ia.md](examenes-ia.md).
+
+La implementación sigue SpacetimeAuth, SpacetimeDB y Cloudflare. Un Worker autenticado
+reutilizará la validación OIDC y de membresía activa para administrar BYOK y generar con
+Gemini. Las claves personales se cifrarán con autenticación de integridad en tablas privadas
+de SpacetimeDB; la clave maestra permanecerá en Cloudflare Secrets. Solo el servicio
+autorizado podrá acceder al material cifrado y descifrarlo; las vistas del cliente informarán
+si existe una clave, sin entregar el secreto ni el texto cifrado. El acceso del servicio
+deberá tener permisos específicos, sin usar la identidad propietaria del módulo. La API Node
+heredada no acredita que esta integración ya exista en el Worker.
+
+El cliente enviará identificadores y versiones de fuentes, temario y configuración. El
+servicio volverá a comprobar permisos y que el contenido no esté retirado, leerá los registros
+autorizados y preparará el contexto. La selección de Guías es reutilizable, pero debe ampliarse de forma específica
+para admitir notas personales propias en exámenes privados. Las notas y preguntas sin
+parcial se incluirán solo mediante selección manual. Una fuente normalizada conservará
+tipo, identificador, versión o huella de contenido, tema, visibilidad, procedencia y
+fragmentos citables. Cuando una fuente no conserve historial completo de su texto, se
+guardará una instantánea de la extracción autorizada. Las guías mantendrán la relación con
+sus originales para evitar duplicados. La extracción textual se compartirá con Guías;
+PDF, documentos y OCR serán
+ampliaciones con estados explícitos de procesamiento.
+
+El modelo propuesto separará examen, versiones, fuentes, preguntas, solucionario, intentos,
+respuestas y solicitudes de generación. Los nombres definitivos se fijarán al implementar:
+
+- El examen pertenece a su autor y nace privado; publicar una versión exige que todas sus
+  fuentes y el contenido derivado puedan compartirse con el grupo.
+- Cada versión guarda configuración, preguntas, explicación y evidencia de las respuestas.
+  Editar o regenerar crea otra versión; cada intento conserva la versión con que comenzó.
+- El solucionario queda fuera de las suscripciones de preguntas. En práctica se entrega la
+  explicación de una pregunta después de confirmar su respuesta; en simulacro, al cerrar
+  el intento. La corrección de opción única y verdadero/falso se realiza en el servidor con
+  reglas deterministas, sin llamar a Gemini.
+- Intentos y respuestas solo se consultan por su participante. Publicar el examen no
+  publica resultados ni los incorpora a perfiles, contribuciones o novedades del grupo.
+- La retirada o restricción de una fuente obliga a revalidar acceso al iniciar y reanudar;
+  suspende el acceso al contenido afectado para quien perdió permiso. Las versiones
+  históricas no conceden permisos adicionales ni se recalifican por cambios posteriores.
+
+La generación producirá una respuesta estructurada con tipo de pregunta, opciones,
+respuesta, explicación, tema, dificultad y referencias. Antes de guardar un borrador, el
+servicio validará el formato, la correspondencia de citas con fuentes autorizadas y las
+reglas de cada tipo. El material académico se tratará como datos, no como instrucciones
+para el servicio. Las contradicciones o la evidencia insuficiente se señalarán para revisión;
+el formato válido no garantiza por sí solo corrección académica.
+
+Las solicitudes tendrán límites de tamaño y consumo, identificador idempotente, estados
+recuperables y reintentos acotados. La clave utilizada será la de quien inicia cada acción
+con IA; resolver y corregir un examen existente no requiere BYOK. El registro de consumo
+conservará metadatos, sin claves ni contenido personal en logs, y distinguirá estimaciones
+de consumo de cargos efectivos. EX-1 entrega esta base común; EX-2 implementa el recorrido
+completo desde texto y EX-3 incorpora las ampliaciones. Esta secuencia depende de habilitar
+BYOK en la entrega general 3 y no cambia su numeración.
+
 ## Pendientes de la Etapa 0
 
 - Verificar la publicación del módulo actualizado, `auth_config` e invitaciones existentes.
@@ -292,6 +353,9 @@ La incorporación del módulo 3.11 al catálogo no implementa su pantalla. Su al
 se conserva íntegro en la definición y su primera incorporación corresponde a la etapa 3.
 Ayuda, Aprende enseñando y Repaso ya tienen implementación manual local; sus integraciones
 pendientes y las pruebas reales se reflejan en [estado-del-proyecto.md](estado-del-proyecto.md).
+Exámenes con IA (3.12) tiene EX-1 implementado y verificado localmente, con base BYOK
+persistente y vista previa en Ajustes. La interfaz y el motor de intentos de EX-2 y la
+activación de Gemini real siguen pendientes. Ver [operación EX-1](examenes-ia-operacion.md).
 
 La papelera de 30 días, Gemini, programación de recordatorios y push pertenecen a entregas
 posteriores; no se consideran implementados por elegir SpacetimeDB para alojarlos. El SDK

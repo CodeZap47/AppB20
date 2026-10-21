@@ -8,7 +8,13 @@ export * from './calendar';
 export * from './messages';
 export * from './guides';
 export * from './contributions';
+export * from './contributionOrigins';
 export * from './polls';
 export * from './teaching';
 export * from './help';
 export * from './spaced';
+export * from './rooms';
+export * from './ai';
+export * from './exam';
+
+export * from './guideAi';

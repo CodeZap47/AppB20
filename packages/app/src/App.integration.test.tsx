@@ -26,8 +26,8 @@ let root: Root;
 let source: DemoDataSource;
 
 function field(label: string, within: ParentNode = container): Field {
-  const target = [...within.querySelectorAll('label')]
-    .find((node) => node.textContent?.includes(label))?.querySelector('input, textarea, select');
+  const labelNode = [...within.querySelectorAll('label')].find((node) => node.textContent?.includes(label));
+  const target = labelNode?.control ?? labelNode?.querySelector('input, textarea, select');
   if (!target) throw new Error(`Falta el campo ${label}`);
   return target as Field;
 }
@@ -173,7 +173,7 @@ describe('integración real de Aprende enseñando en la aplicación', () => {
       .toBe('Nueva explicación guardada después de publicar.');
     expect(source.getSnapshot().notes.filter((item) => item.id === publishedId)).toHaveLength(1);
     await navigate('/perfil/demo-1');
-    await clickButton('Notas');
+    await clickButton('Notas y guías');
     const publishedLinks = [...container.querySelectorAll('main a')]
       .filter((link) => link.getAttribute('href') === `#/m/notas/${publishedId}`);
     expect(publishedLinks).toHaveLength(1);
@@ -208,14 +208,31 @@ describe('integración real de Aprende enseñando en la aplicación', () => {
   });
 
   it('abre cada módulo disponible desde el menú real y conserva el aviso de simulación', async () => {
-    const nav = container.querySelector('nav[aria-label="Módulos"]')!;
-    expect([...nav.querySelectorAll('a')].map((link) => link.textContent)).toEqual(navigableModules().map((module) => module.title));
+    const desktop = container.querySelector<HTMLElement>('.b20-slim-desktop')!;
+    const nav = desktop.querySelector('nav[aria-label="Módulos"]')!;
+    const groups = [...nav.querySelectorAll<HTMLButtonElement>('button[aria-controls]')];
+    async function moduleLink(id: string) {
+      const selector = `a[href="#/m/${id}"]`;
+      let target = nav.querySelector<HTMLAnchorElement>(selector);
+      for (const group of groups) {
+        if (target) break;
+        if (group.getAttribute('aria-expanded') !== 'true') await act(async () => group.click());
+        // Exit animations may briefly retain another area's links. Use the open area only.
+        const panel = desktop.querySelector(`[data-area="${group.getAttribute('aria-label')}"]`);
+        target = panel?.querySelector<HTMLAnchorElement>(selector) ?? null;
+      }
+      if (!target) throw new Error(`Falta el acceso al módulo ${id}`);
+      return target;
+    }
     for (const module of navigableModules()) {
-      await clickLink(module.title, nav);
+      const target = await moduleLink(module.id);
+      expect(target.getAttribute('aria-label') ?? target.textContent).toContain(module.id === 'inicio' ? 'Inicio' : module.title);
+      await act(async () => target.click());
       expect(window.location.hash).toBe(`#/m/${module.id}`);
       expectHealthyPage();
       expect(container.querySelector('.demo-banner')?.textContent).toContain('los cambios no se guardan ni se comparten');
-      expect(container.querySelector('a.sidenav__link[aria-current="page"]')?.textContent).toBe(module.title);
+      expect((await moduleLink(module.id)).getAttribute('aria-current'), module.id).toBe('page');
     }
+    expect(desktop.querySelector('.b20-slim-account')?.textContent).toContain('Perfil simulado');
   });
 });

@@ -1,8 +1,11 @@
 import { CURRICULUM } from '@b20/core';
+import { createStudyRoomActions } from './roomsActions';
 import { Identity, Timestamp } from 'spacetimedb';
 import type { DbConnection } from '../module_bindings';
 import type { ResourceTargetKind } from './types';
+import type { GuideAiActions } from './guideAiTypes';
 import type { ResourceTransport } from './resourceTransport';
+import { StickerTransport } from './stickerTransport';
 import type { HelpPostInput } from './types';
 import type { Actions, AssignmentInput, CreateActivityInput, GuideInput, GuideSourceRef, PollInput, CreateTeachingPracticeInput, SaveTeachingPracticeInput } from './types';
 
@@ -28,7 +31,8 @@ const teachingUpdate = (input: SaveTeachingPracticeInput) => ({
 });
 
 /** Los reducers confirman los permisos en el servidor; nunca se modifica la caché de forma optimista. */
-export function createSpacetimeActions(getConnection: () => DbConnection, identity: () => string, files?: ResourceTransport): Actions {
+export function createSpacetimeActions(getConnection: () => DbConnection, identity: () => string, files?: ResourceTransport): Omit<Actions, keyof GuideAiActions> {
+  const stickers = new StickerTransport(getConnection, identity);
   let queue = Promise.resolve();
   function serial<T>(task: () => Promise<T>): Promise<T> {
     const pending = queue.then(task);
@@ -56,9 +60,20 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
     const db = getConnection().db;
     const target = id(targetId);
     if (kind === 'evidence') return [...db.evidenceDetails.iter()].find((row) => row.evidenceId === target)?.version ?? 1;
+    if (kind === 'note' || kind === 'guide' || kind === 'profile') {
+      const row = kind === 'note' ? [...db.notes.iter()].find((r) => r.id === target)
+        : kind === 'guide' ? [...db.studyGuides.iter()].find((r) => r.id === target) : [...db.memberProfiles.iter()].find((r) => r.id === target);
+      if (!row) throw new Error('Actualiza la página para comprobar la versión del recurso.');
+      return row.version;
+    }
+    if (['question', 'answer', 'group_message', 'direct_message', 'channel_message'].includes(kind)) {
+      return [...db.resourceVersions.iter()].find((r) => r.targetKind === kind && r.targetId === target)?.version ?? 1;
+    }
     const rows = kind === 'work' ? db.works.iter() : kind === 'assignment' ? db.assignments.iter() : db.activities.iter();
     const row = [...rows].find((entry) => entry.id === target);
-    if (!row) throw new Error('La publicación ya no existe.');
+    if (!row || !Number.isInteger(row.version) || row.version < 1) {
+      throw new Error('No se pudo comprobar la versión de esta publicación. Actualiza la página antes de guardar.');
+    }
     return row.version;
   };
   const resource = (fileId: string) => {
@@ -85,6 +100,40 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
   };
 
   return {
+    ...createStudyRoomActions(getConnection, identity),
+    createChatChannel: (input) => create((c) => c.db.chatChannels.iter(),
+      (c) => c.reducers.createChatChannel({ ...input, subjectId: optionalId(input.subjectId) }),
+      (row, author) => own(row.createdBy, author) && row.kind === input.kind && row.name === input.name.trim()),
+    setChatChannelArchived: (channelId, archived) => getConnection().reducers.setChatChannelArchived({ channelId: id(channelId), archived }),
+    sendChannelMessage: (channelId, text, replyToId) => create((c) => c.db.channelMessages.iter(),
+      (c) => c.reducers.sendChannelMessage({ channelId: id(channelId), text, replyToId: optionalId(replyToId) }),
+      (row, author) => own(row.sender, author) && row.channelId === id(channelId) && row.text === text.trim()),
+    markConversationRead: (scope, conversationId, messageId) => getConnection().reducers.markConversationRead({ scope, conversationId, messageId: id(messageId) }),
+    setConversationMuted: (scope, conversationId, muted) => getConnection().reducers.setConversationMuted({ scope, conversationId, muted }),
+    setMemberBlocked: (memberId, blocked) => getConnection().reducers.setMemberBlocked({ memberId: member(memberId), blocked }),
+    reportMessage: (input) => create((c) => c.db.myMessageReports.iter(),
+      (c) => c.reducers.reportMessage({ ...input, messageId: id(input.messageId) }),
+      (row, author) => own(row.reporter, author) && row.scope === input.scope && row.messageId === id(input.messageId)),
+    resolveMessageReport: (reportId) => getConnection().reducers.resolveMessageReport({ reportId: id(reportId) }),
+    saveMemberProfile: (input) => serial(async () => {
+      const c = getConnection(); const actor = identity();
+      await c.reducers.saveMemberProfile({ ...input, subjectIds: input.subjectIds.map(id) });
+      const row = [...c.db.memberProfiles.iter()].find((p) => own(p.memberId, actor));
+      if (!row) throw new Error('Se guardó el perfil. Reconecta para consultar su versión.');
+      return row.id.toString();
+    }),
+    publishNoteVersion: (noteId, expectedVersion) => serial(async () => {
+      const c = getConnection(); await c.reducers.publishNoteVersion({ noteId: id(noteId), expectedVersion });
+      const result = [...c.db.noteDetails.iter()].find((d) => d.publishedFromId === id(noteId) && d.publishedFromVersion === expectedVersion);
+      if (!result) throw new Error('Se publicó la nota. Actualiza la lista antes de volver a intentarlo.');
+      return result.noteId.toString();
+    }),
+    restoreNoteVersion: (noteId, version, expectedVersion) => getConnection().reducers.restoreNoteVersion({ noteId: id(noteId), version, expectedVersion }),
+    restoreGuideVersion: (guideId, version, expectedVersion) => getConnection().reducers.restoreGuideVersion({ guideId: id(guideId), version, expectedVersion }),
+    commentQuestion: (questionId, text, answerId) => getConnection().reducers.commentQuestion({ questionId: id(questionId), text, answerId: optionalId(answerId) }),
+    toggleAnswerUsefulness: (answerId) => getConnection().reducers.toggleAnswerUsefulness({ answerId: id(answerId) }),
+    saveQuestionLinks: (questionId, noteIds, guideIds) => getConnection().reducers.saveQuestionLinks({ questionId: id(questionId), noteIds: noteIds.map(id), guideIds: guideIds.map(id) }),
+    withdrawContent: (kind, targetId, withdrawn, expectedVersion, reason = '') => getConnection().reducers.withdrawContent({ kind, targetId: id(targetId), withdrawn, expectedVersion, reason }),
     saveSpacedCollection: (input) => {
       const fields = { collectionId: optionalId(input.id), subjectId: id(input.subjectId), termId: optionalId(input.termId),
         title: input.title, visibility: input.visibility, expectedVersion: input.expectedVersion };
@@ -166,11 +215,10 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
       (c) => input.topic === undefined ? c.reducers.createAssignment(assignment(input))
         : c.reducers.createAssignmentV2({ ...assignment(input), topic: input.topic }),
       (row, author) => own(row.createdBy, author) && row.subjectId === id(input.subjectId) && row.title === input.title.trim()),
-    updateAssignment: (assignmentId, input, expectedVersion) => input.topic !== undefined || expectedVersion !== undefined
-      ? getConnection().reducers.updateAssignmentV2({ assignmentId: id(assignmentId), ...assignment(input),
-        topic: input.topic ?? [...getConnection().db.assignmentDetails.iter()].find((row) => row.assignmentId === id(assignmentId))?.topic ?? '',
-        expectedVersion: expectedVersion ?? versionFor('assignment', assignmentId) })
-      : getConnection().reducers.updateAssignment({ assignmentId: id(assignmentId), ...assignment(input) }),
+    updateAssignment: (assignmentId, input, expectedVersion) => getConnection().reducers.updateAssignmentV2({
+      assignmentId: id(assignmentId), ...assignment(input),
+      topic: input.topic ?? [...getConnection().db.assignmentDetails.iter()].find((row) => row.assignmentId === id(assignmentId))?.topic ?? '',
+      expectedVersion: expectedVersion ?? versionFor('assignment', assignmentId) }),
     publishWork: (input) => create((c) => c.db.works.iter(),
       (c) => input.topic !== undefined || input.status !== undefined
         ? c.reducers.publishWorkV2({ assignmentId: id(input.assignmentId), title: input.title,
@@ -216,7 +264,8 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
     editMessage: (scope, messageId, text) => getConnection().reducers.editMessage({ scope, messageId: id(messageId), text }),
     deleteMessage: (scope, messageId) => getConnection().reducers.deleteMessage({ scope, messageId: id(messageId) }),
     toggleReaction: (scope, messageId, emoji) => getConnection().reducers.toggleReaction({ scope, messageId: id(messageId), emoji }),
-    async importStickers() { throw new Error('Todavía falta configurar el almacenamiento remoto de stickers. No se importó ningún paquete.'); },
+    importStickers: (name, files) => stickers.import(name, files),
+    downloadSticker: (stickerId) => stickers.download(stickerId),
     setStickerPackShared: (packId, shared) => getConnection().reducers.setStickerPackShared({ packId: id(packId), shared }),
     removeStickerPack: (packId) => getConnection().reducers.removeStickerPack({ packId: id(packId) }),
     saveChatCommand: (input) => input.id ? getConnection().reducers.saveChatCommand({ ...input, id: id(input.id) }).then(() => input.id!) :
@@ -227,15 +276,20 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
     withdrawBirthday: () => getConnection().reducers.withdrawBirthday({}),
     createActivity: (input) => create((c) => c.db.activities.iter(), (c) => c.reducers.createActivity(activity(input)),
       (row, author) => own(row.createdBy, author) && row.subjectId === id(input.subjectId) && row.title === input.title.trim()),
-    updateActivity: (activityId, input, expectedVersion) => expectedVersion === undefined
-      ? getConnection().reducers.updateActivity({ activityId: id(activityId), ...activity(input) })
-      : getConnection().reducers.updateActivityV2({ activityId: id(activityId), ...activity(input), expectedVersion }),
+    updateActivity: (activityId, input, expectedVersion) => getConnection().reducers.updateActivityV2({
+      activityId: id(activityId), ...activity(input), expectedVersion: expectedVersion ?? versionFor('activity', activityId) }),
     addEvidence: (activityId, content, participantIds) => create((c) => c.db.evidences.iter(),
       (c) => c.reducers.addEvidence({ activityId: id(activityId), content, participants: participantIds.map(member) }),
       (row, author) => own(row.author, author) && row.activityId === id(activityId) && row.content === content.trim()),
-    saveNote: (input) => input.id ? getConnection().reducers.saveNote({ ...input, noteId: id(input.id), subjectId: id(input.subjectId) }).then(() => input.id!) :
-      create((c) => c.db.notes.iter(), (c) => c.reducers.saveNote({ ...input, noteId: undefined, subjectId: id(input.subjectId) }),
-        (row, author) => own(row.author, author) && row.subjectId === id(input.subjectId) && row.title === input.title.trim()),
+    saveNote: (input) => {
+      const fields = { noteId: optionalId(input.id), subjectId: id(input.subjectId), termId: optionalId(input.termId), session: input.session ?? '',
+        topic: input.topic, title: input.title, body: input.body, tags: input.tags, visibility: input.visibility, source: input.source,
+        assignmentIds: (input.assignmentIds ?? []).map(id), activityIds: (input.activityIds ?? []).map(id), questionIds: (input.questionIds ?? []).map(id),
+        expectedVersion: input.id ? input.expectedVersion ?? versionFor('note', input.id) : undefined };
+      return input.id ? getConnection().reducers.saveNoteV2(fields).then(() => input.id!)
+        : create((c) => c.db.notes.iter(), (c) => c.reducers.saveNoteV2(fields),
+          (row, author) => own(row.author, author) && row.subjectId === id(input.subjectId) && row.title === input.title.trim());
+    },
     commentNote: (noteId, text) => getConnection().reducers.commentNote({ noteId: id(noteId), text }),
     askQuestion: (input) => create((c) => c.db.questions.iter(), (c) => c.reducers.askQuestion({ ...input, subjectId: id(input.subjectId) }),
       (row, author) => own(row.author, author) && row.subjectId === id(input.subjectId) && row.title === input.title.trim()),
@@ -248,12 +302,12 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
     createGuide: (input, refs) => create((c) => c.db.studyGuides.iter(),
       (c) => c.reducers.createGuide({ ...guide(input), sources: sources(refs) }),
       (row, author) => own(row.createdBy, author) && row.subjectId === id(input.subjectId) && row.title === input.title.trim()),
-    updateGuide: (guideId, input) => getConnection().reducers.updateGuide({ guideId: id(guideId), ...guide(input) }),
-    addGuideSources: (guideId, refs) => getConnection().reducers.addGuideSources({ guideId: id(guideId), sources: sources(refs) }),
-    updateGuideSource: (sourceId, update) => getConnection().reducers.updateGuideSource({ sourceId: id(sourceId), ...update }),
-    refreshGuideSource: (sourceId) => getConnection().reducers.refreshGuideSource({ sourceId: id(sourceId) }),
-    removeGuideSource: (sourceId) => getConnection().reducers.removeGuideSource({ sourceId: id(sourceId) }),
-    reviewGuide: (guideId, verdict, comment) => getConnection().reducers.reviewGuide({ guideId: id(guideId), verdict, comment }),
+    updateGuide: (guideId, input, expectedVersion) => getConnection().reducers.updateGuideV2({ guideId: id(guideId), ...guide(input), expectedVersion: expectedVersion ?? versionFor('guide', guideId) }),
+    addGuideSources: (guideId, refs, expectedVersion) => getConnection().reducers.addGuideSourcesV3({ guideId: id(guideId), sources: sources(refs), expectedVersion: expectedVersion ?? versionFor('guide', guideId) }),
+    updateGuideSource: (sourceId, update, expectedVersion) => { const source = [...getConnection().db.guideSources.iter()].find((row) => row.id === id(sourceId)); if (!source) throw new Error('La fuente ya no está disponible.'); return getConnection().reducers.updateGuideSourceV3({ sourceId: id(sourceId), ...update, expectedVersion: expectedVersion ?? versionFor('guide', source.guideId.toString()) }); },
+    refreshGuideSource: (sourceId, expectedVersion) => { const source = [...getConnection().db.guideSources.iter()].find((row) => row.id === id(sourceId)); if (!source) throw new Error('La fuente ya no está disponible.'); return getConnection().reducers.refreshGuideSourceV3({ sourceId: id(sourceId), expectedVersion: expectedVersion ?? versionFor('guide', source.guideId.toString()) }); },
+    removeGuideSource: (sourceId, expectedVersion) => { const source = [...getConnection().db.guideSources.iter()].find((row) => row.id === id(sourceId)); if (!source) throw new Error('La fuente ya no está disponible.'); return getConnection().reducers.removeGuideSourceV3({ sourceId: id(sourceId), expectedVersion: expectedVersion ?? versionFor('guide', source.guideId.toString()) }); },
+    reviewGuide: (guideId, verdict, comment, expectedVersion) => getConnection().reducers.reviewGuideV3({ guideId: id(guideId), verdict, comment, expectedVersion: expectedVersion ?? versionFor('guide', guideId) }),
     createPoll: (input) => create((c) => c.db.polls.iter(),
       (c) => c.reducers.createPoll({ ...poll(input), restartOf: optionalId(input.restartOf) }),
       (row, author) => own(row.createdBy, author) && row.title === input.title.trim()),

@@ -15,6 +15,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@b20/core": "*",
     "@google/genai": "^2.28.0",
     "@hono/node-server": "^2.1.4",
     "hono": "^4.13.13",

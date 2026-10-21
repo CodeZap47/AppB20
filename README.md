@@ -39,6 +39,14 @@ conserva cambios en memoria por cuenta y los reinicia al recargar. Las integraci
 con R2 se mantienen solo para recuperar archivos existentes; no se borran ni migran datos
 remotos como efecto de compilar o ejecutar pruebas.
 
+## Segunda entrega: colaboración
+
+Canales, adjuntos directos privados, lectura por conversación, bloqueo y reportes selectivos;
+notas con editor e historial, publicación voluntaria de copias personales y guías recuperables;
+aclaraciones y utilidad en preguntas, perfiles con fotos privadas, calendario anual y novedades.
+Los retiros conservan archivos y versiones; el ranking excluye borradores, retirados y duplicados.
+Consulta el [alcance y la validación de la segunda entrega](docs/segunda-entrega.md).
+
 ## Qué es la app
 
 - **En el modo de datos reales, acceso exclusivo para el grupo** por invitación y validación
@@ -55,6 +63,7 @@ remotos como efecto de compilar o ejecutar pruebas.
   ([`packages/core/src/curriculum.ts`](packages/core/src/curriculum.ts)).
 - **Gemini con clave propia (BYOK):** cada alumno configura su clave y el consumo corre a cargo
   de quien solicita la generación. Todas las funciones comunitarias siguen disponibles sin IA.
+  EX-1 implementa su base y validación local; la activación real y la interfaz completa de Exámenes siguen pendientes.
 - **No es un sistema oficial** de entregas, calificaciones ni asistencia de la universidad.
 
 ## Módulos
@@ -74,12 +83,13 @@ remotos como efecto de compilar o ejecutar pruebas.
 | **Votaciones** | Encuestas nominales de opción única o múltiple, con participantes elegibles, fecha de cierre y registro del acuerdo adoptado. |
 | **Contribuciones** | Estadísticas y leaderboard que reconocen aportes útiles (no volumen de mensajes), con reglas visibles y desglose de cada punto. |
 | **Lenguaje de señales — 3.11** | Diccionario versionado para los tres medios del documento, prácticas individuales y en parejas y fichas con fuente. Pendiente de la etapa 3. |
+| **Exámenes con IA (BYOK) — 3.12** | Autoevaluaciones y simulacros con preguntas, respuestas explicadas y fuentes de notas, tareas, actividades, trabajos y guías. Borrador privado revisable, publicación voluntaria y resultados personales privados. EX-1 implementado localmente; interfaz completa EX-2 y ampliaciones EX-3 pendientes, con Gemini real desactivado. |
 
 ### Funciones adicionales
 
 | Función | Qué hace | Etapa |
 | --- | --- | --- |
-| Salas de estudio | Sesiones con tema, horario, objetivo, temporizador compartido y registro de resultados. | 2 |
+| [Salas de estudio](docs/salas-de-estudio.md) | Implementado sin IA: sesiones abiertas o privadas, materiales, conversación, temporizador y resumen publicable. | 2 |
 | Puedo ayudarte / necesito ayuda | Ofertas y solicitudes de ayuda por tema, voluntarias y sin exponer datos personales. | 2 |
 | Retos de programación | Problemas cortos con pistas progresivas y soluciones explicadas; se prioriza la comprensión, no la velocidad. | 2 |
 | Revisión de código | Fragmentos o enlaces con comentarios por línea y estado de cada observación. | 2 |
@@ -93,6 +103,9 @@ remotos como efecto de compilar o ejecutar pruebas.
 
 El catálogo que usa la interfaz para la navegación está en
 [`packages/core/src/modules.ts`](packages/core/src/modules.ts).
+La base EX-1 ya está disponible en Ajustes; Exámenes con intentos todavía no está incorporado a ese catálogo. Su alcance,
+fuentes candidatas, criterios de aceptación y tareas están en
+[`docs/examenes-ia.md`](docs/examenes-ia.md).
 
 ## Gemini con clave propia (BYOK)
 
@@ -101,6 +114,7 @@ El catálogo que usa la interfaz para la navegación está en
 | Tareas y Actividades | Explicar instrucciones, planear un enfoque, dar pistas y ayudar a depurar código. |
 | Archivo de trabajos | Resumir documentos y comparar enfoques conservando sus fuentes. |
 | Guías de parciales | Sintetizar materiales y temario, indicar cobertura y generar ejercicios revisables. |
+| Exámenes con IA | Generar o regenerar preguntas con su explicación y fuentes; resolver y corregir exámenes guardados de la primera versión no requiere IA ni clave del participante. |
 | Notas y actividades | Aclarar conceptos y generar ejemplos. |
 | Preguntas y revisiones | Preparar borradores de respuestas que el alumno revisa antes de publicar. |
 | Práctica personal | Preguntas de repaso, aprender enseñando y simulación de exposiciones. |
@@ -139,10 +153,17 @@ categoría. Los mensajes directos mostrarán por defecto un aviso genérico, sin
 | --- | --- |
 | **0. Prototipo técnico** | Validar React, SpacetimeDB, autenticación y permisos en las tres presentaciones; PWA con push en iPhone, APK firmado y extensión con panel lateral. Push nativo Android pendiente bajo la restricción de proveedores. |
 | **1. MVP** | Acceso exclusivo, perfiles, Tareas y Actividades, notas, preguntas, ¿Qué me perdí?, mensajería del grupo y 1 a 1, cumpleaños y Gemini para explicar y generar borradores de guía. |
-| **2. Colaboración y estudio** | Guías integrales, búsqueda, repaso espaciado, salas de estudio, ayuda entre compañeros, retos, revisión de código, museo de bugs, votaciones y radar de oportunidades. |
+| **2. Colaboración y estudio** | Guías integrales, Exámenes con IA (3.12, condicionado a BYOK), búsqueda, repaso espaciado, salas de estudio, ayuda entre compañeros, retos, revisión de código, museo de bugs, votaciones y radar de oportunidades. |
 | **3. Comunidad** | Stickers, leaderboard verificable, microproyectos, simulador de exposiciones, préstamo de materiales y lenguaje de señales (3.11). |
 
 Las etapas no son fechas comprometidas; las fechas y costos se estimarán después del prototipo.
+
+Exámenes con IA se divide en **EX-1** (base BYOK y selección/lectura de fuentes reutilizable
+con Guías), **EX-2** (primera versión desde texto, revisión, práctica y simulacro, corrección
+sin IA, historial privado y publicación voluntaria) y **EX-3** (más fuentes, adjuntos,
+preguntas abiertas, banco reutilizable e integración con Repaso). EX-1 está implementado y
+verificado localmente; EX-2/EX-3 y la activación real siguen pendientes. Tienen su [desglose de tareas](docs/examenes-ia.md); no renumeran las entregas
+generales del proyecto.
 
 ## Estructura del repositorio
 
@@ -164,6 +185,7 @@ app-b20/
     ├── despliegue.md     Publicación de web, base de datos e integraciones opcionales
     ├── archivos-spacetime.md   Subidas privadas por fragmentos y migración conservadora
     ├── estado-del-proyecto.md  Matriz de requisitos y comprobaciones pendientes
+    ├── examenes-ia.md     Alcance, fuentes y tareas de Exámenes con IA (pendiente)
     └── definicion-del-proyecto.md   Alcance funcional completo
 ```
 
@@ -287,8 +309,8 @@ autorizar cada alias de despliegue. El subdominio `pages.dev` no necesita DNS ni
   conexiones ni escrituras a Maincloud.
 - El modo `spacetime` exige una invitación para unirse. Módulo y backend limitan la confianza
   al emisor y client IDs configurados; sus rutas protegidas requieren membresía activa.
-- La integración Gemini permanece deshabilitada en esta entrega. Su implementación posterior
-  deberá cifrar las claves personales en SpacetimeDB mediante un Worker y mostrar solo su estado.
+- Gemini real permanece deshabilitado. EX-1 implementa claves personales cifradas en
+  SpacetimeDB mediante un Worker y muestra solo su estado; su activación real sigue pendiente.
 - Los cumpleaños guardan día y mes, nunca el año, y son voluntarios.
 - Los cambios importantes quedan en un historial con responsable y fecha.
 
@@ -301,8 +323,8 @@ autorizar cada alias de despliegue. El subdominio `pages.dev` no necesita DNS ni
   pendiente. Para cerrar esta entrega, probar invitación,
   baja, persistencia y privacidad con autor, compañero autorizado y tercero. Extensión y Android requieren sus pruebas
   propias. Pasos en [`docs/spacetimeauth.md`](docs/spacetimeauth.md).
-- **IA y BYOK:** siguen desactivadas. El Worker desplegado solo monta archivos y salud; Gemini
-  requiere su propia entrega y configuración antes de habilitarse.
+- **IA y BYOK:** EX-1 está implementado y probado localmente con un proveedor simulado.
+  Configuración, elegibilidad del grupo, publicación y prueba con Gemini real siguen pendientes.
 - **Archivos:** la primera entrega incorpora archivos académicos privados en SpacetimeDB.
   Deben comprobarse los recorridos reales y la preservación de archivos anteriores; stickers y
   adjuntos de mensajes utilizarán el mismo almacenamiento al completar sus módulos.
@@ -317,3 +339,6 @@ autorizar cada alias de despliegue. El subdominio `pages.dev` no necesita DNS ni
 El módulo **3.11 sí está incluido** y se mantiene pendiente en el catálogo de la etapa 3, sin
 marcarlo como disponible. La [matriz de requisitos](docs/estado-del-proyecto.md) distingue
 implementación local, pruebas automatizadas y validación real.
+
+La configuración y las pruebas sin consumo de EX-1 están en
+[operación de Exámenes con IA](docs/examenes-ia-operacion.md).

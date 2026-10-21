@@ -1,0 +1,10 @@
+{
+  "version": "8",
+  "aliases": {
+    "components": "@b20-ui/components/",
+    "utils": "@b20-ui/utils/",
+    "hooks": "@b20-ui/hooks/",
+    "styles": "@b20-ui/styles/",
+    "src": "@b20-ui/"
+  }
+}

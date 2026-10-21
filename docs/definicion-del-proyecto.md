@@ -10,7 +10,7 @@ Centralizar tareas, actividades, apuntes, guías y dudas en un espacio organizad
 
 ### Objetivo general
 
-Crear una comunidad digital de acceso exclusivo para compañeros, con transparencia interna, donde puedan colaborar, recopilar sus trabajos por materia y aprender software con apoyo de Gemini. La aplicación deberá ayudar a comprender y realizar tareas y producir guías integrales para los parciales, sin sustituir el trabajo individual ni las indicaciones de los docentes.
+Crear una comunidad digital de acceso exclusivo para compañeros, con transparencia interna, donde puedan colaborar, recopilar sus trabajos por materia y aprender software con apoyo de Gemini. La aplicación deberá ayudar a comprender y realizar tareas, producir guías integrales para los parciales y preparar autoevaluaciones y simulacros con fuentes verificables, sin sustituir el trabajo individual ni las indicaciones de los docentes.
 
 ### Objetivos específicos
 
@@ -18,6 +18,7 @@ Crear una comunidad digital de acceso exclusivo para compañeros, con transparen
 - Facilitar el intercambio de materiales y la resolución de dudas.
 - Dar seguimiento personal a tareas y actividades.
 - Transformar apuntes y explicaciones en recursos de estudio reutilizables.
+- Crear exámenes de práctica con IA a partir de materiales seleccionados, revisar sus preguntas y consultar resultados personales por tema.
 - Reconocer las contribuciones útiles sin convertir el aprendizaje en una competencia obligatoria.
 - Ofrecer Gemini como IA principal mediante claves personales: **BYOK, Bring Your Own Key**, sujeto a elegibilidad y condiciones de la API.
 - Distribuir la misma app como web, PWA instalable en iPhone con push visible, APK para Android con notificaciones y extensión de Chrome para escritorio.
@@ -344,6 +345,80 @@ Vincular diccionarios, prácticas y fichas a materias y temas. Reutilizar perfil
 
 **Criterios de aceptación:** los participantes consultan la misma versión, pueden practicar los tres medios, distinguen pregunta y respuesta, identifican secuencias ambiguas y conservan el origen de las fichas. El módulo no anuncia que una respuesta es correcta solo porque haya sido recibida mediante una señal.
 
+### 3.12. Exámenes con IA (BYOK)
+
+**Propósito:** crear autoevaluaciones y simulacros por materia, parcial y tema a partir de
+materiales académicos accesibles, con preguntas revisables, respuestas explicadas y referencias
+al contenido que las respalda. Son herramientas de estudio; sus resultados no son calificaciones
+oficiales ni prometen anticipar el examen del docente.
+
+**Estado:** módulo de la etapa 2. EX-1 implementa y verifica localmente la base BYOK y
+preparación de fuentes; la activación real y las entregas EX-2/EX-3 siguen pendientes. El alcance y las tareas concretas de las entregas **EX-1, EX-2 y EX-3** están
+en [Exámenes con IA: especificación y tareas](examenes-ia.md). Estos identificadores son propios
+del módulo y no renumeran las entregas generales del proyecto.
+
+#### Fuentes candidatas y prioridad
+
+| Incorporación | Fuente | Información aprovechable y condición |
+| --- | --- | --- |
+| Primera versión | Notas de clase | Conceptos, explicaciones, ejemplos, fórmulas y código de notas compartidas o personales del solicitante. |
+| Primera versión | Tareas y actividades de clase | Objetivos, instrucciones, consignas, ejercicios y resultados documentados; incluye exposiciones y exámenes archivados accesibles. Una consigna no se considera una respuesta validada. |
+| Primera versión | Trabajos y evidencias | Procedimientos, soluciones y código; preferir versiones finales o revisadas e identificar lo que aún requiere verificación. |
+| Primera versión | Guías de estudio | Temario, conceptos, errores comunes y ejercicios, conservando referencias a sus fuentes originales y evitando contar dos veces el mismo contenido. |
+| Ampliación EX-3 | Preguntas y respuestas | Dudas y explicaciones, con preferencia por respuestas aceptadas y revisión de su contenido. Las preguntas sin parcial se incluyen manualmente. |
+| Ampliación EX-3 | Repaso espaciado y Aprende enseñando | Tarjetas y explicaciones accesibles; no extraer el historial de repaso, respuestas de práctica ni reflexiones privadas de otros alumnos. |
+| Ampliación EX-3 | Adjuntos de los materiales seleccionados | Extracción de PDF, documentos e imágenes con reconocimiento de texto, mostrando errores y archivos no procesados. |
+| Posterior, cuando estén disponibles | Retos, revisión de código y museo de bugs | Problemas de aplicación, observaciones y diagnóstico de errores con sus versiones y fuentes. |
+
+La primera versión procesa **texto disponible dentro de los módulos**, incluidos fragmentos de
+código; no presupone lectura de adjuntos. Materia, parcial y temario organizan la selección.
+Las notas que todavía no tengan parcial aparecen como «Material sin parcial» y requieren
+selección manual. Solo se ofrece contenido no retirado que el solicitante pueda leer; mensajes 1 a 1,
+cumpleaños y datos personales no son fuentes automáticas.
+
+#### Flujo y primera versión
+
+1. Elegir materia, parcial y temas, desde el módulo o desde una nota, actividad o guía.
+2. Revisar las fuentes sugeridas, agregar o excluir materiales y consultar cuáles se pueden
+   procesar. El usuario decide la distribución por tema; no se pondera por número de archivos.
+3. Configurar cantidad de preguntas, dificultad y tiempo opcional. Antes de enviar, mostrar
+   materiales, proveedor/modelo, clave que asumirá el consumo y estimación con sus límites.
+4. Generar un borrador privado de preguntas de **opción múltiple con una única respuesta correcta
+   y verdadero/falso**, con respuesta, explicación y fuente. Señalar cobertura insuficiente,
+   omisiones y contradicciones para revisión, sin inventar contenido para completar un tema.
+5. Editar, quitar o regenerar preguntas concretas, revisar y guardar el examen. Publicarlo para
+   el grupo requiere una acción expresa y fuentes accesibles al grupo. Una nota personal debe
+   publicarse por separado o excluirse y regenerar sus preguntas para preparar una versión
+   compartible del examen.
+6. Resolver en modo **práctica**, con explicación después de responder, o **simulacro**, con
+   resultados al terminar. Guardar y reanudar el avance y consultar resultados por tema.
+
+#### Integridad, privacidad y consumo
+
+- Cada pregunta conserva el identificador y la versión de su fuente y el fragmento que justifica
+  la respuesta. Validar que las referencias existan y distinguir material generado de contenido
+  revisado; una evidencia de un compañero no es automáticamente una solución correcta.
+- Cada intento queda unido a una versión fija del examen. Editar un examen utilizado crea otra
+  versión; los cambios de las fuentes se señalan sin reescribir preguntas ni resultados previos.
+- El servidor mantiene el solucionario separado de la consulta de preguntas y lo revela según
+  el modo del intento. Si una fuente se retira o restringe, se vuelve a comprobar el acceso al
+  iniciar y reanudar; conservar una versión no permite consultar contenido sin permiso vigente.
+- Intentos, respuestas, avance y resultados pertenecen al alumno y son privados también frente
+  a administradores. Publicar un examen no publica el desempeño ni genera puntos por resolverlo.
+- Generar o regenerar consume únicamente la clave BYOK del solicitante. Resolver y corregir un
+  examen ya guardado de estos tipos utiliza su clave de respuestas, sin llamadas a IA ni exigir
+  configurar BYOK al participante.
+- Usar el backend autenticado y el almacenamiento cifrado de claves previstos en la sección 5.
+  La configuración, sustitución y eliminación de la clave vive en Ajustes; cuotas, errores y
+  reintentos deben conservar el borrador, evitar guardados duplicados y señalar solicitudes
+  cuyo resultado sea incierto antes de decidir un nuevo envío con posible consumo adicional.
+
+**Criterio de aceptación:** un alumno selecciona notas y actividades de un parcial, genera y
+revisa un borrador con fuentes, guarda el examen, lo resuelve y consulta explicaciones que le
+permiten volver al material de estudio. Otro alumno puede resolver una versión publicada sin
+aportar su clave y sin acceder a intentos ajenos. Los casos de privacidad, versiones y consumo
+se detallan en [examenes-ia.md](examenes-ia.md).
+
 ## 4. Gemini como IA principal mediante BYOK
 
 **Decisión confirmada:** Gemini será el proveedor principal de IA. Se conserva BYOK: cada alumno configura una clave propia, y el consumo de una generación corresponde al proyecto asociado a la clave de quien la solicita, no automáticamente a los autores de los archivos utilizados. Las claves de Gemini pertenecen a proyectos de Google Cloud y comparten la cuota y facturación de su proyecto. [[1]](https://ai.google.dev/gemini-api/docs/api-key)[[2]](https://ai.google.dev/gemini-api/docs/billing)
@@ -363,6 +438,7 @@ La API tiene niveles gratuitos y de pago con condiciones y límites propios; no 
 | Tareas y Actividades | Explicar instrucciones, planear un enfoque, dar pistas, revisar razonamientos y ayudar a depurar código. |
 | Archivo de trabajos | Resumir documentos y comparar enfoques relacionados, conservando sus fuentes. |
 | Guías de parciales | Sintetizar el conjunto de materiales seleccionado y el temario, indicar cobertura y producir ejercicios y respuestas revisables. |
+| Exámenes con IA | Generar o regenerar preguntas con respuesta explicada y fuentes; resolver y corregir exámenes guardados de la primera versión no realiza llamadas a IA. |
 | Notas y actividades | Aclarar conceptos, generar ejemplos y apoyar reflexiones sobre evidencias. |
 | Preguntas y revisiones | Preparar borradores de respuestas o comentarios técnicos que el alumno revise antes de publicar. |
 | Práctica personal | Preguntas de repaso, aprender enseñando y simulación de exposiciones, según las funciones previstas. |
@@ -378,7 +454,7 @@ La API tiene niveles gratuitos y de pago con condiciones y límites propios; no 
 - No analizar automáticamente las conversaciones ni generar contenido con la clave de otra persona sin una acción autorizada. Los chats 1 a 1 y el calendario de cumpleaños no se incorporan automáticamente a las fuentes de las guías.
 - Mantener las funciones comunitarias disponibles para quien no configure IA.
 
-**Prioridad de producto:** además de explicar una nota, validar la generación de una guía por materia y parcial a partir del archivo completo de trabajos seleccionados, con fuentes y omisiones visibles.
+**Prioridad de producto:** además de explicar una nota, validar la generación de una guía por materia y parcial a partir del archivo completo de trabajos seleccionados, con fuentes y omisiones visibles. La selección y lectura de fuentes será reutilizable por Exámenes con IA, cuya primera versión se incorpora en la etapa 2 después de habilitar BYOK.
 
 ## 5. Base técnica y arquitectura recomendada
 
@@ -474,6 +550,7 @@ Guardar preferencias, eliminar suscripciones inválidas, controlar reintentos y 
 - Cumpleaños compartido: día, mes, consentimiento y configuración de recordatorios, enlazado al perfil.
 - Parcial o unidad, temario, consigna, trabajo compartido, coautoría, versión y archivo.
 - Actividad, nota, guía, fuentes de guía y revisión.
+- Examen, versión del examen, pregunta con opciones y respuesta explicada, referencia de fuente con versión y fragmento, y configuración de generación. Intento, respuestas, avance y resultado por tema con acceso privado del alumno.
 - Pregunta, respuesta, canal, conversación y participantes; mensajes del grupo o directos con autorización diferenciada.
 - Encuesta, voto y evento de contribución.
 - Diccionario de señales, versión, convención por medio físico, práctica y ficha de anotación preparada.
@@ -484,7 +561,7 @@ Cada trabajo enlazará materia, parcial y autores para reutilizarse en el archiv
 
 ## 6. Plan de implementación propuesto
 
-El alcance reúne once módulos base —incluidos perfiles, cumpleaños y el módulo experimental de señales— y las doce funciones adicionales de la sección 7. La prioridad es el archivo colaborativo y el aprendizaje, con comunicación del grupo y 1 a 1. Web/PWA para iPhone, APK Android y extensión Chrome son formas de acceso al mismo producto, no tres proyectos con datos separados.
+El alcance reúne doce módulos base —incluidos perfiles, cumpleaños, el módulo experimental de señales y Exámenes con IA— y las doce funciones adicionales de la sección 7. La prioridad es el archivo colaborativo y el aprendizaje, con comunicación del grupo y 1 a 1. Web/PWA para iPhone, APK Android y extensión Chrome son formas de acceso al mismo producto, no tres proyectos con datos separados.
 
 ### Etapa 0. Validación y prototipo técnico
 
@@ -509,6 +586,7 @@ El alcance reúne once módulos base —incluidos perfiles, cumpleaños y el mó
 ### Etapa 2. Colaboración y estudio
 
 - Guías integrales, búsqueda, revisión de materiales y repaso espaciado.
+- Exámenes con IA (3.12), condicionado a BYOK: EX-1 prepara claves y fuentes compartidas con Guías; EX-2 completa generación desde texto, revisión, práctica/simulacro, historial privado y publicación voluntaria; EX-3 amplía fuentes, adjuntos, preguntas abiertas, banco de preguntas e integración con Repaso. El desglose está en [examenes-ia.md](examenes-ia.md).
 - Salas de estudio, intercambio de ayuda, retos, revisión de código y museo de bugs.
 - Votaciones nominales, radar de oportunidades y mejoras de recordatorios.
 - Fortalecer actualización de versiones, compatibilidad de archivos y notificaciones de las tres presentaciones.
@@ -552,6 +630,8 @@ Las siguientes doce ideas quedan incorporadas al alcance ampliado. Algunas será
 **Criterio de aceptación:** el panel muestra novedades relevantes y no revela publicaciones privadas de otros usuarios.
 
 ### 7.2. Salas de estudio y programación en pareja
+
+**Implementación local:** Salas ya está disponible sin Gemini en demo y preparada para SpacetimeDB, con acceso abierto o por invitación, materiales de Notas/Guías, integración con Ayuda y prácticas privadas de Aprende enseñando. Incluye conversación propia, temporizador compartido, resumen con control de versiones y publicación voluntaria como nota. El comportamiento, los permisos y las verificaciones están documentados en [salas-de-estudio.md](salas-de-estudio.md). Videollamadas y editor de código en vivo quedan fuera de esta entrega.
 
 **Propósito:** facilitar sesiones de trabajo entre compañeros con un objetivo concreto.
 
@@ -815,6 +895,7 @@ Todas las ideas están incluidas en el proyecto. La siguiente distribución orga
 | Museo de bugs | Colección de preguntas y respuestas | Etapa 2: plantilla y etiquetas. |
 | Aprende enseñando | Práctica vinculada a notas y guías | Etapa 2: texto y preguntas. |
 | Repaso espaciado | Guías de estudio | Etapa 2: tarjetas e historial personal. |
+| Exámenes con IA (3.12) | Módulo de autoevaluaciones y simulacros vinculado a materiales de estudio | Etapa 2: texto y corrección sin IA después de habilitar BYOK; ampliaciones en EX-3. |
 | Simulador de exposiciones | Práctica vinculada a materiales de estudio | Etapa 3: ensayo por texto antes de evaluar audio. |
 | Préstamo de materiales | Espacio de convivencia y recursos | Etapa 3: catálogo y acuerdos sin pagos. |
 | Radar de oportunidades | Tablón del grupo | Etapa 2: publicaciones manuales y búsqueda de equipo. |
@@ -823,7 +904,7 @@ Todas las ideas están incluidas en el proyecto. La siguiente distribución orga
 
 - Reutilizar usuarios, materias, publicaciones, archivos y permisos existentes para evitar duplicados.
 - Incorporar, cuando corresponda, sesiones de estudio, ofertas y solicitudes de ayuda, retos, revisiones de código, proyectos, tarjetas e historial de repaso, ensayos, artículos y préstamos, y oportunidades.
-- Mantener privados los ensayos, el historial de repaso y las solicitudes que no se hayan compartido expresamente.
+- Mantener privados los ensayos, el historial de repaso, los intentos y resultados de exámenes y las solicitudes que no se hayan compartido expresamente.
 - Aplicar a todas las funciones con IA las reglas de BYOK, consentimiento, costos y revisión de la sección 4.
 - Evaluar qué aportes públicos podrían contar como contribuciones útiles; no dar puntos por prestar objetos, revelar disponibilidad ni compartir dificultades personales.
 - Definir criterios de eliminación, moderación y conservación de datos antes de habilitar cada función.
@@ -842,6 +923,7 @@ Todas las ideas están incluidas en el proyecto. La siguiente distribución orga
 | Cumpleaños | Calendario anual del salón basado en día y mes compartidos voluntariamente desde el perfil. |
 | Distribución | Extensión Chrome de escritorio, PWA instalable en iPhone y APK Android; push visible en iPhone compatible y Android con permisos. |
 | IA | Gemini como proveedor principal, conservando BYOK y comprobando elegibilidad y consumo. |
+| Exámenes con IA | Módulo 3.12 para autoevaluaciones y simulacros en la etapa 2, condicionado a BYOK. Borradores privados, preguntas con fuente, versiones fijas por intento y publicación voluntaria con fuentes grupales. Genera con la clave del solicitante; resolver y corregir la primera versión no consume IA. |
 | Motivación | Leaderboard incluido; reglas de puntos pendientes de validación. |
 | Perfil | Foto, nombre y archivo de trabajos por materia y parcial, con coautorías y versiones. |
 | Archivos | Máximo 50 MiB (52,428,800 bytes) por archivo; fragmentos privados de 1 MiB en SpacetimeDB. |
@@ -852,7 +934,7 @@ Todas las ideas están incluidas en el proyecto. La siguiente distribución orga
 | Módulo unido | «Actividades de clase» vive dentro de «Tareas y Actividades», con dos vistas de las mismas publicaciones: por materia y por fecha. |
 | Calendario de parciales | En Ajustes, los administradores (creadores de la app) fijan cuándo empieza y termina cada parcial de cada cuatrimestre. Con eso la app sabe cuál está en curso y abre así los formularios de «Registrar actividad» y «Nueva tarea o actividad». |
 | Plan de estudios | Nueve cuatrimestres de cinco materias; cada cuatrimestre se divide en tres parciales. La lista de materias está en `packages/core/src/curriculum.ts`. |
-| Resultado educativo | Ayudar a comprender y realizar tareas y construir guías integrales de los parciales a partir de los materiales del grupo. |
+| Resultado educativo | Ayudar a comprender y realizar tareas, construir guías integrales y preparar autoevaluaciones y simulacros de los parciales a partir de materiales seleccionados, con fuentes y resultados privados. |
 
 ### Recomendaciones técnicas por validar
 
@@ -870,6 +952,7 @@ Todas las ideas están incluidas en el proyecto. La siguiente distribución orga
 - **Instalación y push:** iPhone compatible con PWA añadida a inicio y autorización; APK firmado y permisos Android; solución pendiente para push nativo con el APK cerrado; funcionamiento de la extensión y políticas de distribución.
 - **Cumpleaños:** fechas aportadas voluntariamente, zona de recordatorios, preferencias y tratamiento del 29 de febrero.
 - **Guías:** temarios, identificación de parciales, formatos de archivo y mecanismo para señalar fuentes no procesadas.
+- **Exámenes con IA:** implementar EX-1 y EX-2 antes de habilitar el módulo, validar referencias y contradicciones, separación de respuestas correctas durante el intento, versiones, permisos de publicación y privacidad de resultados; ampliaciones de EX-3 según [su plan](examenes-ia.md).
 - **Puntuación:** aportes que cuentan, ponderación, límites y tratamiento de duplicados.
 
 **Principio rector confirmado:** una herramienta útil para aprender y colaborar, recopilar los trabajos compartidos y convertirlos en apoyo para tareas y preparación de parciales. La transparencia del grupo debe coexistir con protección técnica básica y autoría clara.

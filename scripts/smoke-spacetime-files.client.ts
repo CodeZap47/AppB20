@@ -9,6 +9,13 @@ const bounded = <T>(pending: Promise<T>, label: string): Promise<T> => new Promi
   const timer = setTimeout(() => reject(new Error(`Tiempo agotado: ${label}`)), 30_000);
   pending.then((value) => { clearTimeout(timer); resolve(value); }, (error) => { clearTimeout(timer); reject(error); });
 });
+const waitForSubscription = async (ready: () => boolean, label: string): Promise<void> => {
+  const deadline = performance.now() + 30_000;
+  while (!ready()) {
+    if (performance.now() >= deadline) throw new Error(`Tiempo agotado esperando la suscripción: ${label}`);
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+  }
+};
 
 export async function runSmoke(options: {
   address: string; database: string; tokens: string[]; restart(): Promise<void>;
@@ -84,6 +91,8 @@ export async function runSmoke(options: {
     await author.reducers.finalizeResourceUpload({ uploadId });
     await author.reducers.finalizeResourceUpload({ uploadId });
     assert.equal([...author.db.works.iter()][0].version, 2);
+    // El acuse de autor no es una barrera para las suscripciones de otras sesiones.
+    await waitForSubscription(() => [...owner.db.resourceFiles.iter()].some((row) => row.id === uploadId), 'archivo visible para el propietario');
     assert.equal([...owner.db.resourceFiles.iter()].filter((row) => row.id === uploadId).length, 1);
     checks.push('subida reanudada después de reiniciar el servidor y confirmada una sola vez');
 
@@ -97,6 +106,8 @@ export async function runSmoke(options: {
     assert.equal(hash(result), hash(bytes));
     await assert.rejects(outsider.procedures.getResourceManifest({ fileId: uploadId }), /activo/);
     await assert.rejects(outsider.procedures.readResourceChunk({ fileId: uploadId, index: 0 }), /activo/);
+    // Una nueva suscripción aplicada comprueba el estado actual, sin depender del retraso de eventos.
+    await observe(outsider);
     assert.equal([...outsider.db.resourceFiles.iter()].length, 0);
     checks.push('descarga binaria íntegra y rechazo de una cuenta ajena al grupo');
 

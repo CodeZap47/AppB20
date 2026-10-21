@@ -19,30 +19,55 @@ Aprende enseñando y Repaso se conserva como trabajo existente.
 
 ## Módulos base (sección 3)
 
+La segunda entrega tiene un [registro de alcance y pruebas](segunda-entrega.md). El
+recorrido del servidor real aislado terminó correctamente el 21 de octubre de 2026 con
+tres identidades sintéticas y un reinicio: notas personales y su publicación explícita,
+adjuntos privados en directos, reportes selectivos, canales y lectura, perfiles con foto,
+aclaraciones, guías y retirada/restauración sin duplicar puntos. Esto no constituye una
+publicación en Maincloud ni una prueba de aceptación con el grupo.
+
 «Parcial» significa que falta parte del alcance, de la integración o de su validación real.
 «Manual local» indica una versión sin Gemini cuya publicación debe comprobarse por separado.
 
 | Sección | Estado del código local | Trabajo pendiente según el alcance | Entrega siguiente |
 | --- | --- | --- | --- |
-| 3.1 Mensajes y stickers | Parcial: canal, directos, reacciones y herramientas de stickers. | Canales por materia/proyecto, adjuntos con bytes reales, lectura por conversación, menciones, silenciado, bloqueo y reportes. | 2 |
+| 3.1 Mensajes y stickers | Canales de materia/tema/proyecto, directos con archivos privados, menciones, lectura individual, silencio, bloqueo y reportes con evidencia seleccionada. Importación nativa idempotente de stickers y descarga privada bajo demanda. | Validación con el grupo y avisos externos de la entrega 3. | 2: validación; 3: avisos |
 | 3.2 Tareas y Actividades | Parcial con avance privado, estados, revisión y versiones académicas. | Validación completa de permisos, coautorías e historial con archivos reales; cerrar huecos del recorrido del grupo. | 1–2 |
 | 3.3 Actividades de clase | Integradas en Tareas; evidencias, comentarios, vínculos y recuperación de adjuntos retirados por su autor. | Verificar archivos reales, versiones y permisos por equipo. La recuperación de adjuntos no implica historial completo del texto. | 1–2 |
-| 3.4 Notas de clase | Parcial: notas personales/de grupo, revisiones y comentarios. | Editor con tablas/imágenes, clasificación por sesión y restauración completa; publicación voluntaria. | 2 |
-| 3.5 Guías integrales | Manual local: fuentes, cobertura, revisiones y compendio. | Historial recuperable, extracción de archivos, generación BYOK y borradores privados con fuentes versionadas. | 2–3 |
-| 3.6 Contribuciones | Desglose calculado con reglas y límites locales. | Validación con el grupo y pruebas contra duplicados, retirada y restauración. | 2 |
-| 3.7 Preguntas | Parcial: dudas, respuestas, aceptación, reapertura y similares. | Adjuntos, aclaraciones separadas, señales de utilidad y referencias a materiales. | 2 |
-| 3.8 Votaciones | Implementación nominal local con elegibles y reglas de cierre. | Integración de novedades/avisos y validación con datos reales. | 2–3 |
-| 3.9 Perfiles | Parcial: identidad y archivo de trabajos compartidos. | Foto real, presentación, intereses, habilidades, portafolio y pestañas de guías/proyectos/contribuciones. | 2 |
-| 3.10 Cumpleaños | Parcial: día/mes voluntarios y próximos cumpleaños. | Vista anual y recordatorios efectivos con preferencias y control de duplicados. | 2–3 |
+| 3.4 Notas de clase | Editor estructurado con listas/tablas/código e imágenes privadas bajo demanda, sesión/parcial, vínculos y versiones completas. Publicar una nota personal crea una copia independiente. | Recorrido de aceptación con el grupo. | 2: validación |
+| 3.5 Guías integrales | Manual: fuentes versionadas, cobertura, revisiones, compendio e historial recuperable que conserva autoría y fecha originales de fuentes. | Extracción de archivos, generación BYOK y borradores privados con fuentes. | 3 |
+| 3.6 Contribuciones | Desglose verificable; excluye borradores y retirados, copias idénticas del mismo autor/contexto y registros repetidos. Conserva el primer crédito y su fecha aunque el original esté retirado; mantiene límites entre periodos y recupera puntos al restaurar. | Ajustar los puntos mediante una prueba con el grupo; registrar la validación real. | 2: validación |
+| 3.7 Preguntas | Adjuntos privados, aclaraciones separadas, utilidad por integrante y referencias a notas/guías compartidas; aceptación y reapertura preservadas. | Recorrido de aceptación con el grupo. | 2: validación |
+| 3.8 Votaciones | Nominales con elegibles y cierre; las abiertas aparecen en novedades. | Avisos y validación con datos reales. | 3 |
+| 3.9 Perfiles | Presentación voluntaria, foto privada en SpacetimeDB bajo demanda, intereses, conocimientos, portafolio HTTPS, materias, guías, equipo y contribuciones. Archivo con filtros por parcial, tema, fecha y tipo. | Recorrido con nombres, fotos y trabajos aportados por cada alumno; microproyectos cuando exista 7.6. | 2: validación; 5: microproyectos |
+| 3.10 Cumpleaños | Día/mes voluntarios, calendario mensual y anual, próximos cumpleaños y tratamiento del 29 de febrero. | Recordatorios efectivos, zona y preferencias de avisos con control de duplicados; validación real. | 3 |
 | 3.11 Lenguaje de señales | Pendiente: catálogo etapa 3, sin pantalla propia. | Diccionario/versiones para tres medios, constructor, ejercicios, parejas, historial privado y fichas con fuentes. | 5 |
+| 3.12 Exámenes con IA (BYOK) | EX-1 implementado y verificado localmente: BYOK persistente, fuentes, vista previa y API de generación. IA real desactivada. | Activación real y EX-2: editor, práctica/simulacro, corrección e intentos privados; EX-3 ampliaciones. | EX-1 local completo; EX-2 → EX-3 pendientes. |
+
+### Entregas de Exámenes con IA
+
+El módulo 3.12 pertenece a la etapa 2 del alcance. **EX-1, EX-2 y EX-3 son entregas propias
+del módulo**, no sustituyen las entregas generales 1–5 de esta matriz. EX1-01 a EX1-09 están verificados localmente; EX-2 y EX-3
+permanecen pendientes. Su desglose, componentes, dependencias y criterios de aceptación
+están en [examenes-ia.md](examenes-ia.md).
+
+| Entrega | Resultado verificable | Dependencias y cierre |
+| --- | --- | --- |
+| EX-1 — BYOK y fuentes | Configuración segura de clave propia, selección y preparación de texto académico autorizado, cobertura y estados de procesamiento. | Implementado y verificado localmente: pruebas de aislamiento, límites, errores, Miniflare y servidor persistente con tres identidades. Activación, elegibilidad, prueba real y publicación pendientes. |
+| EX-2 — Primera versión completa | Generación y revisión de opción única y verdadero/falso; práctica/simulacro, avance persistente, corrección sin IA, resultados privados y publicación voluntaria. | Requiere EX-1. Cerrar el recorrido seleccionar → generar → revisar → resolver → resultados, con versión fija por intento, solucionario protegido y bloqueo de publicación de fuentes privadas. |
+| EX-3 — Ampliaciones | Fuentes de Preguntas/Repaso/Aprende enseñando, adjuntos y OCR, banco/variantes y preguntas abiertas en subhitos independientes. | Requiere EX-2 y disponibilidad de cada fuente/procesador. Cada subhito tiene pruebas y cierre propios; el estado de uno no acredita los demás. |
+
+El cierre local de EX-1 no habilita Gemini ni acredita despliegue. Registrar la comprobación
+con cuentas reales por separado; mantener la activación y validación reales pendientes.
+La configuración y evidencia se explican en [operación de EX-1](examenes-ia-operacion.md). El historial de resultados no alimentará el leaderboard.
 
 ## Funciones adicionales (sección 7)
 
 | Sección | Estado del código local | Trabajo pendiente según el alcance | Entrega siguiente |
 | --- | --- | --- | --- |
-| 7.1 ¿Qué me perdí? | Parcial: novedades y última visita. | Votaciones, guías y nuevos tipos; excluir actividad privada y separar lectura de chats. | 2 |
-| 7.2 Salas de estudio | Pendiente. | Horario, objetivo, cupo, inscripción, materiales, resultados y temporizador. | 4 |
-| 7.3 Ayuda | Manual local: publicaciones y contactos privados con conversación aceptada. | Validación real y conversión en sala cuando exista 7.2. | 4 |
+| 7.1 ¿Qué me perdí? | Novedades de guías, votaciones abiertas, ayuda y colecciones grupales; excluye retirados y contenido personal. Lectura de conversaciones separada del inicio. | Validación con el grupo; resumen BYOK opcional corresponde a entrega 3. | 2: validación; 3: IA |
+| 7.2 Salas de estudio | [Implementado sin IA](salas-de-estudio.md): salas abiertas/privadas, agenda, cupo, invitaciones, materiales, chat, temporizador compartido y resumen con publicación voluntaria. Demo y SpacetimeDB preparados y probados localmente. | Validación con el grupo y activación real fuera de esta entrega; videollamadas y editor en vivo fuera de alcance. | 4: validación |
+| 7.3 Ayuda | Manual local: publicaciones y contactos privados con conversación aceptada; «Organizar sesión» integrado con Salas. | Validación con el grupo y activación real. | 4: validación |
 | 7.4 Retos | Pendiente. | Temas, dificultad, pistas, soluciones explicadas y revisión colectiva. | 4 |
 | 7.5 Revisión de código | Pendiente. | Fragmentos/versiones, comentarios por línea y resolución de observaciones. | 4 |
 | 7.6 Microproyectos | Pendiente. | Propuestas, ingreso, responsabilidades, tablero, demostración y cierre. | 5 |
@@ -59,7 +84,8 @@ Aprende enseñando y Repaso se conserva como trabajo existente.
 | --- | --- |
 | Acceso, permisos y membresía | Código de invitaciones, vistas y acciones existente. Verificar tres identidades, bajas, caducidad y lectura/descarga privada en datos reales. |
 | Datos académicos y versiones | Preservar referencias y migraciones aditivas; no reiniciar base ni importar ejemplos de la demo. Restaurar sin perder archivos históricos. |
-| BYOK y Gemini | Pendiente de entrega 3: claves cifradas por persona en SpacetimeDB, maestra en Cloudflare Secrets, consentimiento, presupuesto y publicación voluntaria. |
+| BYOK y Gemini | EX-1 implementa y verifica localmente claves cifradas por persona en SpacetimeDB, maestra versionada, consentimiento, límites y reservas. Habilitación real y prueba con Gemini pendientes; las demás integraciones de entrega 3 siguen separadas. |
+| Generación de exámenes | Base EX-1 local completa; pendiente EX-2: reutilizar la base BYOK, fuentes versionadas y cobertura; corregir preguntas cerradas sin nuevas llamadas. Los intentos son privados aunque el examen se comparta. |
 | Avisos y programación | Pendiente de entrega 3: bandeja, preferencias, descanso, cola persistente, reintentos y deduplicación; Web Push en PWA. |
 | Papelera y conservación | Papelera de 30 días pendiente. La primera entrega limpia subidas pendientes; conserva bytes confirmados y versiones vigentes. |
 | Moderación y retiro | Completar según cada módulo, con autor, motivo y permisos; no publicar conversaciones privadas al reportar sin selección de evidencia. |
@@ -87,15 +113,73 @@ La API Node de desarrollo ya no registra Google Secret Manager; BYOK de producci
 pendiente de la entrega 3. El Worker R2 anterior se conserva para compatibilidad, sin crear
 recursos nuevos ni activar facturación.
 
+### Segunda entrega y coordinación con Salas — 2026-10-21
+
+- La suite conjunta terminó con **814 pruebas aprobadas**: app 463, core 72,
+  módulo SpacetimeDB 184, API 50 y web 45. Incluye las regresiones que impiden
+  usar fuentes retiradas en Aprende enseñando, tanto en la demo como en la interfaz.
+- Bindings regenerados con CLI/SDK `2.12.0`; comprobación global de tipos correcta.
+- Compilaciones finales de web/PWA, extensión y Cloudflare Pages correctas; el Worker
+  heredado pasó `wrangler deploy --dry-run`. `git diff --check` terminó sin errores.
+- El recorrido real aislado de la segunda entrega pasó con tres identidades y un
+  reinicio: publicación explícita y privada de archivos, canales, lectura, bloqueos,
+  reportes selectivos, perfiles, preguntas, historial y retirada/restauración.
+- La importación nativa de stickers comprobó reintentos idempotentes y aislamiento de
+  los bytes de un directo. Las copias idénticas de aportes no sumaron puntos aunque
+  el original estuviera retirado; restaurarlo recuperó solo su crédito original.
+- El recorrido de archivos volvió a confirmar 50 MiB y SHA-256, reanudación, reserva,
+  persistencia y revocación. Salas pasó su recorrido real aislado con invitaciones,
+  cupo concurrente, temporizador compartido, publicación única y revocación.
+- Se conserva la separación entre implementación local y despliegue: estas pruebas
+  no publican la segunda entrega ni Salas en Maincloud o Cloudflare Pages.
+
 ## Registro de validación en producción
 
-La lectura del esquema de Maincloud y de la web pública del 21 de octubre de 2026 confirma
+La lectura previa a esta adaptación, el 21 de octubre de 2026, confirmó
 que el despliegue conserva una versión anterior: Maincloud incluye Ayuda, pero no las
 operaciones de archivos nativos ni `restore_resource_file`; Pages tampoco incorpora la
 pantalla de Ayuda. El código, los bindings y GitHub se verifican por separado de esa
 publicación. Un push a `main` no se registra como un despliegue completado.
 
-Esta entrega no incorpora todavía evidencia de publicación ni de recorridos con tres cuentas.
+El registro siguiente actualiza la publicación del módulo. Los recorridos con tres cuentas reales siguen pendientes.
 Al realizarlos, registrar fecha, versión publicada, presentación, escenario, resultado y
 referencia de evidencia sin tokens ni datos personales. Los resultados automatizados y de
 compilación se adjuntan al cierre de implementación, separados de la validación humana.
+
+
+### Adaptación de Tareas y Actividades — 2026-10-21
+
+- Módulo `e64bfc4` publicado en Maincloud `app-b20-34245` con `--delete-data=never`.
+  Se verificaron las tablas privadas nativas y la conservación íntegra de las filas de 22 tablas
+  académicas/configuración, incluidas invitaciones. No se importaron datos de la simulación.
+- Node `22.23.3`, CLI/SDK `2.12.0`: **622 pruebas aprobadas** (app 348, core 63,
+  módulo 116, API 50, web 45), tipos y compilaciones web/PWA, extensión y Worker heredado.
+- Prueba con servidor persistente y tres identidades sintéticas aprobada: archivo de 50 MiB,
+  interrupción/reanudación, dos reinicios, historial, cancelación, integridad y baja inmediata.
+  La prueba espera la actualización de la segunda sesión antes de comprobar su caché.
+- Se corrigieron reintentos de lotes con confirmación incierta, aislamiento de formularios entre
+  tareas y respuestas tardías al abandonar una pantalla. Las operaciones antiguas sin versión
+  conservan su firma y piden actualizar antes de editar o retirar adjuntos.
+- Pages usa la integración Git existente de `codex/pages-spacetimeauth`. Verificar su revisión
+  y resultado en Deployments; la compilación local o el push no acreditan por sí solos éxito.
+- La base aún no tiene miembros incorporados ni publicaciones académicas. La primera persona
+  invitada debe unirse; permanecen pendientes los recorridos humanos con cuentas reales y la
+  medición de transferencias grandes en dispositivos del grupo.
+
+- Pages confirmó **Success** el 21 de octubre de 2026 a las 09:47 (America/Tijuana):
+  revisión `2691430`, despliegue `20b15660-6139-4c98-860a-159bd100bc5a` en
+  [app-b20.pages.dev](https://app-b20.pages.dev). El script público
+  `/assets/index-CGPK9YM4.js` coincide con la compilación local verificada. La pantalla
+  de acceso confirma membresía por invitación; no se realizó inicio de sesión humano.
+
+## Verificación local de EX-1 — 2026-10-21
+
+- EX1-01 a EX1-09 completadas y verificadas localmente; se mantienen sin completar EX-2 y EX-3.
+- Últimas ejecuciones por paquete: app **473**, core **83**, módulo **205**, API **79**, web **45**: **885 pruebas aprobadas** en conjunto, incluidas las del trabajo local existente.
+- Tipos y compilaciones web/PWA, extensión, Worker y Pages pasaron antes de la última revisión concurrente. La compilación Worker se ejecutó con `--dry-run`, sin publicación.
+- La revalidación global final detectó errores en cambios concurrentes ajenos a EX-1: `components/messaging/Messaging.tsx`, `RoomsPage.tsx`/su prueba y `guideAiHandlers.ts`. Se conservan esos cambios; el tipado y build global del estado más reciente requieren una nueva comprobación cuando termine ese trabajo.
+- La revalidación focalizada posterior de core y API pasó; el Worker volvió a compilar correctamente en modo `--dry-run` con IA desactivada y modelo vacío.
+- Bindings regenerados con CLI/SDK 2.12.0 desde el esquema aditivo; tablas IA privadas excluidas de suscripciones.
+- `npm run test:spacetime:ai`: servidor local aislado, tres identidades, cifrado, fuentes personales, redacción, un solo envío simulado ante UUID concurrente, persistencia tras reinicio, retiro, borrado de clave y política desactivada.
+- **Una llamada al proveedor simulado y cero llamadas reales a Gemini** en ese recorrido. Pruebas Miniflare adicionales cubren errores, cuotas, timeout y resultados inciertos.
+- Gemini real, elegibilidad de cuentas/grupo, configuración de secretos/modelo y despliegue de EX-1 continúan pendientes. Ver [operación](examenes-ia-operacion.md).

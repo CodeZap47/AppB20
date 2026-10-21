@@ -56,6 +56,14 @@ describe('contribuciones', () => {
     expect(scored.map((e) => e.refId)).toEqual(['n5']);
   });
 
+  it('no reinicia un límite cuando cambia el periodo ni duplica eventos repetidos', () => {
+    const first: ContributionEvent = { kind: 'correccion', memberId: 'a', at: day(1), refId: 'r1', limitKey: 'p1' };
+    const later: ContributionEvent = { kind: 'correccion', memberId: 'a', at: day(8), refId: 'r2', limitKey: 'p1' };
+    expect(scoreContributions([first, first, later]).map((event) => event.points)).toEqual([0, 3]);
+    expect(scoreContributions([first, later], { from: day(5) })).toMatchObject([{ refId: 'r2', points: 0 }]);
+    expect(scoreContributions([first, { ...first, memberId: 'b' }])).toHaveLength(2);
+  });
+
   it('ordena por puntos, empata lugares y deja sin lugar a quien no tiene puntos', () => {
     const scored = scoreContributions([
       { kind: 'trabajo', memberId: 'b', at: day(1), refId: 'w1' },

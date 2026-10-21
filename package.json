@@ -2,7 +2,7 @@
   "name": "app-b20",
   "private": true,
   "version": "0.0.0",
-  "description": "Plataforma colaborativa del grupo B20 (web/PWA, extensión Chrome, APK Android).",
+  "description": "Plataforma colaborativa del grupo B20 (web/PWA, extensi\u00f3n Chrome, APK Android).",
   "type": "module",
   "workspaces": [
     "packages/*",
@@ -26,9 +26,13 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "test:spacetime:files": "node scripts/smoke-spacetime-files.mjs",
+    "test:spacetime:ai": "node scripts/smoke-spacetime-ai.mjs",
+    "test:spacetime:delivery2": "node scripts/smoke-spacetime-delivery2.mjs",
+    "test:spacetime:rooms": "node scripts/smoke-spacetime-rooms.mjs",
     "spacetime:publish": "spacetime publish --server http://localhost:3000 --module-path packages/spacetime-module app-b20",
     "spacetime:publish:maincloud": "spacetime publish --server maincloud --module-path packages/spacetime-module --delete-data=never app-b20-34245",
-    "spacetime:generate": "spacetime generate --lang typescript --out-dir packages/app/src/module_bindings --module-path packages/spacetime-module"
+    "spacetime:generate": "spacetime generate --lang typescript --out-dir packages/app/src/module_bindings --module-path packages/spacetime-module",
+    "test:spacetime:guides": "node scripts/smoke-spacetime-guides.mjs"
   },
   "devDependencies": {
     "typescript": "~5.9.3",
