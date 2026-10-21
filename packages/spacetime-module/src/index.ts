@@ -4844,14 +4844,6 @@ export const opportunity_revisions = spacetimedb.view({ name: 'opportunity_revis
 export const opportunity_interests = spacetimedb.view({ name: 'opportunity_interests', public: true }, t.array(opportunityInterest.rowType), ctx => [...ctx.db.opportunityInterest.iter()].filter(row => community4.interestReadable(ctx.db, ctx.sender, row)));
 export const opportunity_feedback = spacetimedb.view({ name: 'opportunity_feedback', public: true }, t.array(opportunityFeedback.rowType), ctx => [...ctx.db.opportunityFeedback.iter()].filter(row => community4.opportunityReadable(ctx.db, ctx.sender, row.opportunityId)));
 
-// Ayuda: migración aditiva para versiones, historia propia e intenciones idempotentes.
-export const help_mutate = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => helpVersioning.helpResponse(() => ctx.withTx(tx => helpVersioning.mutateHelp(tx, payload))));
-export const help_read_history = spacetimedb.procedure({ postId: t.u64() }, t.string(), (ctx, { postId }) => helpVersioning.helpResponse(() => ctx.withTx(tx => helpVersioning.readHelpHistory(tx, postId))));
-export const help_post_versions = spacetimedb.view({ name: 'help_post_versions', public: true }, t.array(helpVersion.rowType), ctx => helpVersioning.visibleHelpVersions(ctx.db, ctx.sender));
-
-export const teaching_save_v2 = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => teachingVersions.teachingResponse(() => ctx.withTx(tx => teachingVersions.saveTeachingVersion(tx, payload))));
-export const teaching_read_history = spacetimedb.procedure({ practiceId: t.u64() }, t.string(), (ctx, { practiceId }) => teachingVersions.teachingResponse(() => ctx.withTx(tx => teachingVersions.readTeachingHistory(tx, practiceId))));
-export const my_teaching_versions = spacetimedb.view({ name: 'my_teaching_versions', public: true }, t.array(teachingHead.rowType), (ctx) => teachingVersions.myTeachingVersions(ctx.db, ctx.sender));
 // Feed de la primera vista: reacciones al contenido del grupo y publicaciones con comentarios.
 export const toggle_feed_reaction = spacetimedb.reducer({ targetKind: t.string(), targetId: t.u64(), emoji: t.string() }, feed.toggleFeedReaction);
 export const create_feed_post = spacetimedb.reducer({ text: t.string(), subjectId: t.u64().optional(), requestId: t.string() }, feed.createFeedPost);
@@ -4863,3 +4855,11 @@ export const feed_reactions = spacetimedb.view({ name: 'feed_reactions', public:
 export const feed_posts = spacetimedb.view({ name: 'feed_posts', public: true }, t.array(feedPost.rowType), ctx => [...ctx.db.feedPost.iter()].filter(row => feed.postReadable(ctx.db, ctx.sender, row.id)));
 export const feed_comments = spacetimedb.view({ name: 'feed_comments', public: true }, t.array(feedComment.rowType), ctx => [...ctx.db.feedComment.iter()].filter(row => feed.commentReadable(ctx.db, ctx.sender, row)));
 
+// Ayuda: migración aditiva para versiones, historia propia e intenciones idempotentes.
+export const help_mutate = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => helpVersioning.helpResponse(() => ctx.withTx(tx => helpVersioning.mutateHelp(tx, payload))));
+export const help_read_history = spacetimedb.procedure({ postId: t.u64() }, t.string(), (ctx, { postId }) => helpVersioning.helpResponse(() => ctx.withTx(tx => helpVersioning.readHelpHistory(tx, postId))));
+export const help_post_versions = spacetimedb.view({ name: 'help_post_versions', public: true }, t.array(helpVersion.rowType), ctx => helpVersioning.visibleHelpVersions(ctx.db, ctx.sender));
+
+export const teaching_save_v2 = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => teachingVersions.teachingResponse(() => ctx.withTx(tx => teachingVersions.saveTeachingVersion(tx, payload))));
+export const teaching_read_history = spacetimedb.procedure({ practiceId: t.u64() }, t.string(), (ctx, { practiceId }) => teachingVersions.teachingResponse(() => ctx.withTx(tx => teachingVersions.readTeachingHistory(tx, practiceId))));
+export const my_teaching_versions = spacetimedb.view({ name: 'my_teaching_versions', public: true }, t.array(teachingHead.rowType), (ctx) => teachingVersions.myTeachingVersions(ctx.db, ctx.sender));
