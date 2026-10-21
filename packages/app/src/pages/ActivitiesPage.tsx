@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { ExamMaterialLink } from '../components/ExamMaterialLink';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router';
 import { isValidPeriod, PERIOD_COUNT, periodLabel, WORK_KIND_LABEL } from '@b20/core';
 import { useDataSource, useSnapshot } from '../data/DataContext';
@@ -221,6 +222,7 @@ export function ActivityPage() {
           <Link to={`/m/actividades/${activity.id}/editar`} className="button secondary with-icon">
             <Icon name="edit" size={16} /> Editar página
           </Link>
+          <ExamMaterialLink kind="activity" id={activity.id} />
           {!adding && (
             <button type="button" className="with-icon" onClick={() => setAdding(true)}>
               <Icon name="plus" size={18} /> Agregar evidencia

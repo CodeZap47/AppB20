@@ -17,21 +17,20 @@ Aprende enseñando y Repaso se conserva como trabajo existente.
 | Módulo 3.11 | Incluido en catálogo de etapa 3 como `senales`, sin marcarlo disponible; alcance original conservado. | Pantalla y pruebas corresponden a entrega 5, no a esta entrega. |
 | Piloto | Configuración de producción apunta a SpacetimeDB; la demo sigue aislada. | Publicación sin borrar datos y recorridos con autor, compañero autorizado y tercero. Pendientes hasta registrarlos. |
 
-## Tercera entrega: implementación local
+## Tercera entrega: base publicada
 
 El [índice de la tercera entrega](tercera-entrega.md) reúne IA, notificaciones y conservación.
 El código incorpora Gemini BYOK cifrado, preparación de texto y adjuntos UTF8 compatibles,
 borradores privados de guías/explicaciones y publicación expresa; bandeja privada,
 preferencias, recordatorios y Web Push configurable; y papelera con plazo de 30 días,
-restauración y purga de datos dependientes. Los servicios externos comienzan desactivados.
+restauración y purga de datos dependientes. El registro de la tercera entrega documenta su publicación y la configuración activa de los servicios.
 
 Las comprobaciones locales con servidor real aislado usan identidades y claves sintéticas.
 El [registro de despliegue de la tercera entrega](tercera-entrega.md) documenta su publicación
 posterior en Maincloud, Pages y el Worker de IA. La ampliación de la cuarta entrega todavía
 requiere su propio despliegue; sus pruebas locales no consumen Gemini real.
 Los formatos binarios no admitidos para IA permanecen como omisiones explícitas. La cuarta
-entrega añade tarjetas de Repaso y preguntas de Aprende enseñando con Gemini; Exámenes
-sigue pendiente. El módulo 3.11 conserva su entrega 5 y el push nativo del APK permanece pendiente.
+entrega añade tarjetas de Repaso y preguntas de Aprende enseñando con Gemini; Exámenes EX-2 está publicado y tiene su [registro de cierre](examenes-entrega.md). El módulo 3.11 conserva su entrega 5 y el push nativo del APK permanece pendiente.
 
 ## Cuarta entrega: implementación local
 
@@ -67,13 +66,14 @@ publicación en Maincloud ni una prueba de aceptación con el grupo.
 | 3.2 Tareas y Actividades | Parcial con avance privado, estados, revisión y versiones académicas. | Validación completa de permisos, coautorías e historial con archivos reales; cerrar huecos del recorrido del grupo. | 1–2 |
 | 3.3 Actividades de clase | Integradas en Tareas; evidencias, comentarios, vínculos y recuperación de adjuntos retirados por su autor. | Verificar archivos reales, versiones y permisos por equipo. La recuperación de adjuntos no implica historial completo del texto. | 1–2 |
 | 3.4 Notas de clase | Editor estructurado con listas/tablas/código e imágenes privadas bajo demanda, sesión/parcial, vínculos y versiones completas. Publicar una nota personal crea una copia independiente. | Recorrido de aceptación con el grupo. | 2: validación |
-| 3.5 Guías integrales | Fuentes versionadas, cobertura, revisiones, compendio e historial; conserva autoría original. BYOK local genera guías/explicaciones privadas con citas y publicación expresa; extrae texto UTF8 compatible y registra omisiones. | Configurar el modelo y secretos; validar con cuentas reales. PDF/DOCX, OCR y formatos binarios siguen sin extracción. | 3: validación |
+| 3.5 Guías integrales | Guías manuales y preparación local de archivos, generación BYOK, borradores privados, fuentes versionadas, cobertura, revisiones, compendio e historial. [Entrega publicada](guias-estudio-ia.md). | Prueba real de Gemini y aceptación con cuentas del grupo, pendientes por separado. | Validación humana |
 | 3.6 Contribuciones | Desglose verificable; excluye borradores y retirados, copias idénticas del mismo autor/contexto y registros repetidos. Conserva el primer crédito y su fecha aunque el original esté retirado; mantiene límites entre periodos y recupera puntos al restaurar. | Ajustar los puntos mediante una prueba con el grupo; registrar la validación real. | 2: validación |
 | 3.7 Preguntas | Adjuntos privados, aclaraciones separadas, utilidad por integrante y referencias a notas/guías compartidas; aceptación y reapertura preservadas. | Recorrido de aceptación con el grupo. | 2: validación |
 | 3.8 Votaciones | Nominales con elegibles y cierre; las abiertas aparecen en novedades. Recordatorios por cierre integrados localmente. | Activación de recordatorios y validación con datos reales. | 3: validación |
 | 3.9 Perfiles | Presentación voluntaria, foto privada en SpacetimeDB bajo demanda, intereses, conocimientos, portafolio HTTPS, materias, guías, equipo y contribuciones. Archivo con filtros por parcial, tema, fecha y tipo. | Recorrido con nombres, fotos y trabajos aportados por cada alumno; microproyectos cuando exista 7.6. | 2: validación; 5: microproyectos |
 | 3.10 Cumpleaños | Día/mes voluntarios, calendario mensual/anual y 29 de febrero. Recordatorios con zona, preferencias, descanso, cursor persistente y deduplicación integrados localmente. | Activar el planificador y validar la recepción real con el grupo. | 3: validación |
 | 3.11 Lenguaje de señales | Pendiente: catálogo etapa 3, sin pantalla propia. | Diccionario/versiones para tres medios, constructor, ejercicios, parejas, historial privado y fichas con fuentes. | 5 |
+| 3.12 Exámenes de estudio | EX-2 publicado: configuración, generación BYOK y borradores privados, revisión, versiones, práctica/simulacro, tiempo del servidor y resultados privados. [Registro de cierre](examenes-entrega.md). | Prueba real de Gemini y aceptación con titulares de cuentas/dispositivos; OCR y respuestas abiertas pertenecen a EX-3 y quedan fuera del alcance confirmado. | EX-2: aceptación; EX-3: ampliaciones |
 
 ## Funciones adicionales (sección 7)
 
@@ -98,7 +98,7 @@ publicación en Maincloud ni una prueba de aceptación con el grupo.
 | --- | --- |
 | Acceso, permisos y membresía | Código de invitaciones, vistas y acciones existente. Verificar tres identidades, bajas, caducidad y lectura/descarga privada en datos reales. |
 | Datos académicos y versiones | Preservar referencias y migraciones aditivas; no reiniciar base ni importar ejemplos de la demo. Restaurar sin perder archivos históricos. |
-| BYOK y Gemini | [Implementación local](gemini-byok.md): AES-GCM por persona, maestra en Cloudflare Secrets, consentimiento, presupuesto, fuentes/versiones y publicación expresa. Generación desactivada hasta configurar y habilitar; la cuarta entrega añade IA específica de Repaso/Aprende enseñando. Exámenes sigue pendiente. |
+| BYOK y Gemini | Base común publicada con Guías y reutilizada por Exámenes: claves cifradas por persona en SpacetimeDB, maestras en Cloudflare Secrets, consentimiento y presupuesto compartidos. La cuarta entrega añade IA específica de Repaso/Aprende enseñando. Prueba real de Gemini pendiente por decisión del usuario. |
 | Avisos y programación | [Implementación local](avisos-recordatorios.md): bandeja y preferencias privadas, descanso, cola persistente, reintentos, deduplicación y Web Push. Falta configurar secretos/VAPID y comprobar entrega real en dispositivos. |
 | Papelera y conservación | [Implementación local](tercera-entrega-retencion.md): recuperación antes de 30 días, vencimiento según reloj del servidor, purga programada y mantenimiento de respaldo. Limpia dependencias y copias privadas de IA; conserva publicaciones independientes y bytes aún referenciados. |
 | Moderación y retiro | Completar según cada módulo, con autor, motivo y permisos; no publicar conversaciones privadas al reportar sin selección de evidencia. |

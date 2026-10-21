@@ -528,6 +528,63 @@ export type EvidenceDetails = __Infer<typeof EvidenceDetails>;
 export const Evidences = __t.object("Evidences", {});
 export type Evidences = __Infer<typeof Evidences>;
 
+export const Exam = __t.object("Exam", {
+  id: __t.string(),
+  owner: __t.identity(),
+  title: __t.string(),
+  subjectId: __t.u64(),
+  termId: __t.option(__t.u64()),
+  visibility: __t.string(),
+  archived: __t.bool(),
+  revision: __t.u32(),
+  readyVersion: __t.option(__t.u32()),
+  draftVersion: __t.option(__t.u32()),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type Exam = __Infer<typeof Exam>;
+
+export const ExamAttempt = __t.object("ExamAttempt", {
+  id: __t.string(),
+  actor: __t.identity(),
+  examId: __t.string(),
+  version: __t.u32(),
+  revision: __t.u32(),
+  state: __t.string(),
+  json: __t.string(),
+  startedAt: __t.timestamp(),
+});
+export type ExamAttempt = __Infer<typeof ExamAttempt>;
+
+export const ExamGenerationImport = __t.object("ExamGenerationImport", {
+  generationId: __t.string(),
+  actor: __t.identity(),
+  examId: __t.string(),
+  version: __t.u32(),
+});
+export type ExamGenerationImport = __Infer<typeof ExamGenerationImport>;
+
+export const ExamOperation = __t.object("ExamOperation", {
+  key: __t.string(),
+  actor: __t.identity(),
+  action: __t.string(),
+  requestHash: __t.string(),
+  examId: __t.string(),
+  attemptId: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type ExamOperation = __Infer<typeof ExamOperation>;
+
+export const ExamVersion = __t.object("ExamVersion", {
+  key: __t.string(),
+  examId: __t.string(),
+  version: __t.u32(),
+  state: __t.string(),
+  json: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type ExamVersion = __Infer<typeof ExamVersion>;
+
 export const FileServiceConfig = __t.object("FileServiceConfig", {
   id: __t.u32(),
   identity: __t.identity(),

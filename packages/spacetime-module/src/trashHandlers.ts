@@ -5,6 +5,7 @@ import { activeMember, isActive, type Ctx, type ViewDb } from './moduleContext';
 import { purgeAiSource } from './aiHandlers';
 import { purgeMuseum } from './community4Handlers';
 import { purgeGuideAiSource } from './guideAiHandlers';
+import { purgeExamSource } from './examHandlers';
 import { rememberContributionOrigins } from './contributionOrigins';
 
 const KINDS = ['note', 'question', 'answer', 'guide', 'work', 'evidence'];
@@ -169,6 +170,7 @@ function purgeOne(ctx: Ctx, row: RetentionRow) {
     purgeAiSource(ctx, kind, id);
     purgeMuseum(ctx.db, kind, id);
     purgeGuideAiSource(ctx, kind, id);
+    purgeExamSource(ctx, kind, id);
     unlinkSources(ctx, kind, id);
     if (kind === 'note') {
       drop(ctx.db.noteComment.iter(), (item) => item.noteId === id, (key) => ctx.db.noteComment.id.delete(key));

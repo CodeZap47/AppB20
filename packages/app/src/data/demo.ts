@@ -1,4 +1,6 @@
 import { DemoGuideAiStore } from './demoGuideAi';
+import { DemoExamStore } from './demoExams';
+import type { ExamActions } from './examTypes';
 import type { GuideAiActions } from './guideAiTypes';
 import {
   presentationGuidingQuestions,
@@ -267,6 +269,7 @@ export class DemoDataSource implements DataSource {
   #batchDepth = 0;
   #batchChanged = false;
   #guideAi: DemoGuideAiStore;
+  #exams: DemoExamStore;
   #profiles: MemberProfile[] = [];
   #withdrawals: Map<string, DemoWithdrawal>;
   #invalidate = () => { this.#snapshot = undefined; for (const listener of this.#listeners) listener(); };
@@ -297,10 +300,11 @@ export class DemoDataSource implements DataSource {
     this.#practice = new DemoPracticeStore({ state: () => this.#state, active: () => this.#activeMember(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit() });
     this.#community4 = new DemoCommunity4Store({ state: () => this.#state, active: () => this.#activeMember(), current: () => this.getSnapshot(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit(), createQuestion: (input) => this.askQuestion(input) });
     this.#trash = new DemoTrashStore({ state: () => this.#state, active: () => this.#activeMember(), now: () => this.#now(), emit: () => this.#emit(), resources: () => this.#academic.resources(),
-      purgePrivate: (targets) => { const references = this.#knowledge.purgeTargets(targets); this.#academic.purgeTargets(targets, references); for (const key of targets) { const separator = key.indexOf(':'); this.#community4.purgeMuseum(key.slice(0, separator), key.slice(separator + 1)); } } });
+      purgePrivate: (targets) => { const references = this.#knowledge.purgeTargets(targets); this.#academic.purgeTargets(targets, references); this.#exams?.purgeTargets(targets); for (const key of targets) { const separator = key.indexOf(':'); this.#community4.purgeMuseum(key.slice(0, separator), key.slice(separator + 1)); } } });
     this.#notifications = new DemoNotificationsStore({ state: () => this.#state, active: () => this.#activeMember(), current: () => this.getSnapshot(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit() });
     this.#rooms = new DemoRoomsStore({ state: () => this.#state, active: () => this.#activeMember(), id: () => this.#id(), now: () => this.#now(), emit: () => this.#emit(),
       sourceAvailable: (kind, sourceId) => !this.#withdrawals.get(`${kind}:${sourceId}`)?.withdrawnAt });
+    this.#exams = new DemoExamStore({ snapshot: () => this.getSnapshot(), now: () => this.#now() }, this.#state);
     this.#guideAi = new DemoGuideAiStore({ snapshot: () => this.getSnapshot(), now: () => this.#now(), changed: () => this.#emit(),
       publish: (input, refs, target) => {
         const me = this.#activeMember(); const checked = this.#checkGuide(input); const now = this.#now();
@@ -351,6 +355,10 @@ export class DemoDataSource implements DataSource {
     return this.#now();
   }
   getGuideAiStatus = () => this.#guideAi.getGuideAiStatus();
+  examAction: ExamActions['examAction'] = (request) => this.#exams.examAction(request);
+  prepareExamMaterial = (...args: Parameters<ExamActions['prepareExamMaterial']>) => this.#exams.prepareExamMaterial(...args);
+  generateExamQuestions = (...args: Parameters<ExamActions['generateExamQuestions']>) => this.#exams.generateExamQuestions(...args);
+  getExamGeneration = (...args: Parameters<ExamActions['getExamGeneration']>) => this.#exams.getExamGeneration(...args);
   prepareGuideAiDraft = (...args: Parameters<GuideAiActions['prepareGuideAiDraft']>) => this.#guideAi.prepareGuideAiDraft(...args);
   refreshGuideAiDraft = (...args: Parameters<GuideAiActions['refreshGuideAiDraft']>) => this.#guideAi.refreshGuideAiDraft(...args);
   listGuideAiDrafts = () => this.#guideAi.listGuideAiDrafts();
@@ -411,6 +419,7 @@ export class DemoDataSource implements DataSource {
     this.#objectUrls.clear();
     this.#academic.dispose();
     this.#guideAi.dispose();
+    this.#exams.dispose();
     this.#chat.dispose();
     this.#notifications.dispose();
     this.#profiles = [];

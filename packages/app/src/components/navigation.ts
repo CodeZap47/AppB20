@@ -10,7 +10,7 @@ import type { NavItemType } from '@b20-ui/components/application/app-navigation/
 type NavigationIcon = FC<{ className?: string }>;
 export type NavigationItem = NavItemType & { icon: NavigationIcon };
 
-const STUDY_MODULES = ['tareas', 'notas', 'preguntas', 'guias', 'retos', 'revision-codigo', 'museo-bugs', 'aprende-ensenando', 'repaso', 'salas', 'exposiciones'];
+const STUDY_MODULES = ['tareas', 'notas', 'preguntas', 'guias', 'retos', 'revision-codigo', 'museo-bugs', 'aprende-ensenando', 'repaso', 'salas', 'exposiciones', 'examenes'];
 const COMMUNITY_MODULES = ['perfiles', 'cumpleanos', 'votaciones', 'ayuda', 'oportunidades', 'leaderboard'];
 const MODULE_ICONS: Record<string, NavigationIcon> = {
   inicio: HomeLine,
@@ -26,6 +26,7 @@ const MODULE_ICONS: Record<string, NavigationIcon> = {
   repaso: RefreshCw01,
   salas: Users01,
   exposiciones: PresentationChart01,
+  examenes: CheckDone01,
   perfiles: User01,
   cumpleanos: CalendarHeart01,
   votaciones: BarChartSquare02,

@@ -29,6 +29,18 @@ describe('Política de envío Gemini sin llamadas reales', () => {
     expect(transport).toHaveBeenCalledTimes(1);
     expect(classifyProviderError(new DOMException('secret', 'TimeoutError')).message).not.toContain('secret');
   });
+  it('envía la distribución explícita y usa el razonamiento admitido por el modelo configurado', async () => {
+    let body: Record<string, unknown> = {};
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+      body = JSON.parse(String(init?.body));
+      return Response.json({ candidates: [{ content: { role: 'model', parts: [{ text: '{"questions":[]}' }] }, finishReason: 'STOP' }] });
+    }));
+    await createGeminiProvider().generate({ ...input, model: 'gemini-3.8-flash', config: { ...input.config, topicWeights: [{ topic: 'Variables', weight: 100 }] } });
+    const contents = body.contents as { parts: { text: string }[] }[];
+    const payload = JSON.parse(contents[0]!.parts[0]!.text);
+    expect(payload.topicDistribution).toEqual([{ topic: 'Variables', count: 1 }]);
+    expect(body.generationConfig).toMatchObject({ thinkingConfig: { thinkingLevel: 'LOW' } });
+  });
   it('429 usa un solo intento y rechazo definitivo sin propagar el cuerpo del error', async () => {
     const transport = vi.fn(async () => Response.json({ error: { code: 429, message: 'private details', status: 'RESOURCE_EXHAUSTED' } }, { status: 429 }));
     vi.stubGlobal('fetch', transport);

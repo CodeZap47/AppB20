@@ -10,7 +10,7 @@ que necesita una cuenta lo hace una persona del grupo.
 | Datos y archivos (`packages/spacetime-module`) | **SpacetimeDB Maincloud** | Tablas privadas, fragmentos de 1 MiB, permisos y operaciones del grupo. |
 | Autenticación | **SpacetimeAuth** | Cliente OIDC e invitaciones; la identidad de CLI no es la del alumno. |
 | Web/PWA (`apps/web`) | **Cloudflare Pages** | Compilación estática con HTTPS en `*.pages.dev`. |
-| IA y recordatorios (`app-b20-ai`, `apps/api/wrangler.ai.jsonc`) | **Cloudflare Workers** | Gemini BYOK, Guías y cron de avisos; sin R2. |
+| IA, Exámenes y recordatorios (`app-b20-ai`, `apps/api/wrangler.ai.jsonc`) | **Cloudflare Workers** | Gemini BYOK, Guías, operaciones privadas de Exámenes y cron de avisos; sin R2. |
 | Archivos anteriores (`app-b20-api`) | **Cloudflare Workers** y su R2 existente | Compatibilidad conservada; los archivos nuevos siguen en SpacetimeDB. |
 | Extensión (`apps/extension`) | Paquete local/controlado | Panel lateral y vista completa; publicación en tienda fuera del presupuesto inicial. |
 | Android (`apps/android`) | APK firmado, descarga controlada | Sin Firebase como requisito nuevo; push nativo con la app cerrada permanece pendiente. |
@@ -143,6 +143,8 @@ Cloudflare permanece inactivo mientras no se configure `MAINTENANCE_SERVICE_TOKE
 necesario ejecutar una purga ni adelantar el vencimiento para desplegar la entrega.
 
 ### 4. Web en Cloudflare Pages
+
+Guías y Exámenes reutilizan el servicio `app-b20-ai` con `VITE_AI_API_URL=https://app-b20-ai.aguaseero.workers.dev`. Las claves cifradas y el consentimiento permanecen en SpacetimeDB; las maestras y el token técnico exclusivo permanecen en Cloudflare Secrets. La entrega de Exámenes no crea credenciales nuevas ni sustituye el Worker de archivos anteriores. Primero se publica el módulo aditivo con `--delete-data=never`, después `apps/api/wrangler.ai.jsonc` conservando los secretos y la política vigente, y por último Pages. Resolver exámenes guardados usa `/ai/exams` autenticado y funciona sin clave ni llamadas al proveedor. Consultar el [registro de Exámenes](examenes-entrega.md) para separar pruebas locales, publicación y aceptación humana.
 
 El registro anterior de Pages apunta a **https://app-b20.pages.dev** con integración Git:
 el commit `59d17a7` terminó en **Success** y se comprobó entonces la pantalla de acceso.

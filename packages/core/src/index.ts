@@ -18,6 +18,7 @@ export * from './rooms';
 
 export * from './ai';
 export * from './exam';
+export * from './exams';
 export * from './aiStudyDraft';
 export * from './notifications';
 export * from './practice';

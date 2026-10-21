@@ -39,7 +39,8 @@
     "spacetime:generate": "spacetime generate --lang typescript --out-dir packages/app/src/module_bindings --module-path packages/spacetime-module",
     "test:spacetime:presentations": "node scripts/smoke-spacetime-presentations.mjs",
     "test:spacetime:ai": "node scripts/smoke-spacetime-ai.mjs",
-    "test:spacetime:guides": "node scripts/smoke-spacetime-guides.mjs"
+    "test:spacetime:guides": "node scripts/smoke-spacetime-guides.mjs",
+    "test:spacetime:exams": "node scripts/smoke-spacetime-exams.mjs"
   },
   "devDependencies": {
     "typescript": "~5.9.3",

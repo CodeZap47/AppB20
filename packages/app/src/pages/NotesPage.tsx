@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { ExamMaterialLink } from '../components/ExamMaterialLink';
 import { Link, useNavigate, useParams } from 'react-router';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import type { Note, NoteSource, NoteVisibility } from '../data/types';
@@ -245,6 +246,7 @@ export function NotePage() {
         <h1>{note.title}</h1>
         {!note.withdrawnAt && <Link className="button secondary" to={`/ajustes?aiSource=note:${note.id}&purpose=explanation`}>Explicar con Gemini</Link>}
         <div className="row">
+        {!note.withdrawnAt && <ExamMaterialLink kind="note" id={note.id} />}
         <Link to={`/m/repaso/tarjetas/nueva?nota=${encodeURIComponent(note.id)}`} className="button secondary">
           Crear tarjeta
         </Link>

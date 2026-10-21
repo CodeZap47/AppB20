@@ -9,6 +9,7 @@ import { matchesMetadata, MAX_FILE_BYTES, metadata, objectKey, storeFile } from 
 import { createAiDatabase, type AiDatabase, type AiWorkerEnv } from './ai/database.ts';
 import { aiWorkerRoutes, aiPublicError } from './ai/routes.ts';
 import { guideAiRoutes } from './ai/guideRoutes.ts';
+import { examRoutes } from './ai/examRoutes.ts';
 import type { GuideProvider } from './ai/guideProvider.ts';
 import type { AiProvider } from './ai/provider.ts';
 
@@ -75,6 +76,7 @@ export function createWorkerApp(options: WorkerOptions = {}) {
     });
   });
   app.route('/ai/study-guides', guideAiRoutes({ provider: options.guideProvider }));
+  app.route('/ai/exams', examRoutes());
   app.route('/ai', aiWorkerRoutes({ provider: options.aiProvider }));
   app.use('/files/*', async (c, next) => {
     if (!c.env.FILES) return c.json({ error: 'La compatibilidad con archivos anteriores no está configurada en este servicio.' }, 503);

@@ -22,6 +22,7 @@ import * as AiSetConsentProcedure from "../ai_set_consent_procedure";
 import * as AiStatusProcedure from "../ai_status_procedure";
 import * as AuthorizeFileUploadProcedure from "../authorize_file_upload_procedure";
 import * as CreateStickerPackNativeProcedure from "../create_sticker_pack_native_procedure";
+import * as ExamActionProcedure from "../exam_action_procedure";
 import * as GetFileDownloadAccessProcedure from "../get_file_download_access_procedure";
 import * as GetFileUploadStatusProcedure from "../get_file_upload_status_procedure";
 import * as GetResourceManifestProcedure from "../get_resource_manifest_procedure";
@@ -75,6 +76,8 @@ export type AuthorizeFileUploadArgs = __Infer<typeof AuthorizeFileUploadProcedur
 export type AuthorizeFileUploadResult = __Infer<typeof AuthorizeFileUploadProcedure.returnType>;
 export type CreateStickerPackNativeArgs = __Infer<typeof CreateStickerPackNativeProcedure.params>;
 export type CreateStickerPackNativeResult = __Infer<typeof CreateStickerPackNativeProcedure.returnType>;
+export type ExamActionArgs = __Infer<typeof ExamActionProcedure.params>;
+export type ExamActionResult = __Infer<typeof ExamActionProcedure.returnType>;
 export type GetFileDownloadAccessArgs = __Infer<typeof GetFileDownloadAccessProcedure.params>;
 export type GetFileDownloadAccessResult = __Infer<typeof GetFileDownloadAccessProcedure.returnType>;
 export type GetFileUploadStatusArgs = __Infer<typeof GetFileUploadStatusProcedure.params>;

@@ -45,6 +45,8 @@ import { helpVersionTables, helpVersion } from './helpVersioning';
 import * as helpVersioning from './helpVersioning';
 import { guideAiTables } from './guideAiTables';
 import { guideAiResponse, guideAiSourceAvailability } from './guideAiHandlers';
+import { examTables } from './examTables';
+import { examResponse } from './examHandlers';
 
 // ---------------------------------------------------------------------------
 // Tablas
@@ -799,6 +801,7 @@ const spacetimedb = schema({
   ...notificationTables,
   ...trashTables,
   presentationPractice, presentationAttempt, presentationPersonal, presentationQuestion, presentationFeedback,
+  ...examTables,
   ...guideAiTables,
   ...delivery2Tables,
   ...roomsTables,
@@ -3109,6 +3112,8 @@ export const backfill_academic_v2 = spacetimedb.reducer((ctx) => {
 
 export const guide_ai = spacetimedb.procedure({ payload: t.string() }, t.string(),
   (ctx, { payload }) => ctx.withTx((tx) => guideAiResponse(tx, payload)));
+export const exam_action = spacetimedb.procedure({ payload: t.string() }, t.string(),
+  (ctx, { payload }) => ctx.withTx((tx) => examResponse(tx, payload)));
 
 /** IA usa procedimientos privados; sus tablas nunca se exponen mediante vistas. */
 export const set_ai_service = spacetimedb.reducer({ identity: t.identity(), enabled: t.bool(), dailyTokenBudget: t.u32().optional() },

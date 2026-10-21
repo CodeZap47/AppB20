@@ -11,7 +11,7 @@ export interface AiDatabase {
 }
 export interface AiAuthorizedKey { actor: string; intentId: string; keyId: string; expiresAt: number }
 export interface AiEncryptedKey extends AiCiphertext { keyId: string; provider: 'gemini' }
-const USER_PROCEDURES = new Set(['guide_ai', 'ai_status', 'ai_key_status', 'ai_set_consent', 'ai_authorize_key', 'ai_delete_key', 'ai_prepare', 'ai_authorize_generation', 'ai_get_generation', 'ai_list_generations', 'ai_publish_generation']);
+const USER_PROCEDURES = new Set(['exam_action', 'guide_ai', 'ai_status', 'ai_key_status', 'ai_set_consent', 'ai_authorize_key', 'ai_delete_key', 'ai_prepare', 'ai_authorize_generation', 'ai_get_generation', 'ai_list_generations', 'ai_publish_generation']);
 const SERVICE_PROCEDURES = new Set(['guide_ai', 'ai_commit_key', 'ai_claim_generation', 'ai_finish_generation']);
 const ERRORS: Record<string, [AiApiError['status'], string]> = {
   invalid: [400, 'Revisa los datos de la solicitud.'], unauthorized: [403, 'Ya no tienes acceso a este material.'],
@@ -75,7 +75,7 @@ export function createAiDatabase(env: AiWorkerEnv, fetchFn: typeof fetch = fetch
       throw new AiApiError(503, 'database_unavailable', 'No pudimos confirmar la operación. Consulta su estado antes de repetirla.');
     }
     try {
-      const data: unknown = JSON.parse(await boundedText(response, name === 'guide_ai' ? 4 * 1024 * 1024 : 1024 * 1024));
+      const data: unknown = JSON.parse(await boundedText(response, name === 'guide_ai' || name === 'exam_action' ? 4 * 1024 * 1024 : 1024 * 1024));
       const parsed: unknown = typeof data === 'string' ? JSON.parse(data) : data;
       if (parsed && typeof parsed === 'object' && 'ok' in parsed && parsed.ok === false) {
         const code = 'code' in parsed ? String(parsed.code) : 'access_changed';
