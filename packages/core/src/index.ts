@@ -14,3 +14,8 @@ export * from './teaching';
 export * from './help';
 export * from './spaced';
 export * from './rooms';
+
+export * from './ai';
+export * from './exam';
+export * from './aiStudyDraft';
+export * from './notifications';

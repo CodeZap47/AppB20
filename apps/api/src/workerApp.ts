@@ -6,11 +6,16 @@ import { createRequireAuth, type AuthOptions, type AuthVariables } from './lib/a
 import { checkActiveMembership } from './lib/membership.ts';
 import { createFileDatabase, FileApiError, type FileDatabase, type TargetKind } from './files/database.ts';
 import { matchesMetadata, MAX_FILE_BYTES, metadata, objectKey, storeFile } from './files/storage.ts';
+import { createAiDatabase, type AiDatabase, type AiWorkerEnv } from './ai/database.ts';
+import { aiWorkerRoutes, aiPublicError } from './ai/routes.ts';
+import type { AiProvider } from './ai/provider.ts';
 
-type WorkerContext = { Bindings: FileWorkerEnv; Variables: AuthVariables & { sessionToken: string; files: FileDatabase } };
+type WorkerContext = { Bindings: AiWorkerEnv; Variables: AuthVariables & { sessionToken: string; files: FileDatabase; ai: AiDatabase } };
 interface WorkerOptions {
   auth?: AuthOptions;
   database?: (env: FileWorkerEnv) => FileDatabase;
+  aiDatabase?: (env: AiWorkerEnv) => AiDatabase;
+  aiProvider?: AiProvider;
 }
 const kinds = new Set(['assignment', 'activity', 'work', 'evidence']);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -51,10 +56,22 @@ export function createWorkerApp(options: WorkerOptions = {}) {
   const app = new Hono<WorkerContext>();
   app.use('*', secureHeaders());
   app.use('*', (c, next) => cors({ origin: c.env.CORS_ORIGINS.split(',').map((v) => v.trim()).filter(Boolean),
-    allowMethods: ['GET', 'PUT', 'OPTIONS'],
+    allowMethods: ['GET', 'PUT', 'POST', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Authorization', 'Content-Type', 'X-File-Name', 'X-File-Size'],
     exposeHeaders: ['Content-Disposition', 'Content-Length'] })(c, next));
   app.get('/health', (c) => c.json({ ok: true, files: 'r2', ai: false }));
+  app.use('/ai/*', async (c, next) => {
+    c.header('Cache-Control', 'private, no-store');
+    let auth: AuthOptions;
+    try { auth = options.auth ?? configAuth(c.env); }
+    catch { return c.json({ error: 'El acceso todavía no está configurado.' }, 503); }
+    return createRequireAuth<WorkerContext>(auth)(c, async () => {
+      c.set('sessionToken', c.req.header('Authorization')!.replace(/^Bearer\s+/i, ''));
+      c.set('ai', options.aiDatabase?.(c.env) ?? createAiDatabase(c.env));
+      await next();
+    });
+  });
+  app.route('/ai', aiWorkerRoutes({ provider: options.aiProvider }));
   app.use('/files/*', async (c, next) => {
     let auth: AuthOptions;
     try { auth = options.auth ?? configAuth(c.env); }
@@ -140,6 +157,8 @@ export function createWorkerApp(options: WorkerOptions = {}) {
       'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' } });
   });
   app.onError((error, c) => {
+    const aiError = aiPublicError(error);
+    if (aiError) return c.json({ error: aiError.message, code: aiError.code }, aiError.status);
     if (error instanceof FileApiError) return c.json({ error: error.message }, error.status);
     console.error(JSON.stringify({ event: 'file_api_error', error: error.name }));
     return c.json({ error: 'No se pudo completar la operación. Vuelve a intentarlo.' }, 503);

@@ -1,0 +1,14 @@
+.ai-scope { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: 1rem; }
+.ai-notice { padding: .8rem 1rem; border-inline-start: 3px solid currentColor; background: color-mix(in srgb, currentColor 5%, transparent); }
+.ai-selector, .ai-consent { margin-block: 1rem; padding: 1rem; border: 1px solid var(--border, #cbd5e1); border-radius: .7rem; min-width: 0; }
+.ai-source { border-top: 1px solid var(--border, #cbd5e1); padding-block: .8rem; }
+.ai-source__choice { display: flex; align-items: flex-start; gap: .6rem; }
+.ai-source input[type=checkbox], .ai-consent input[type=checkbox] { width: auto; flex: 0 0 auto; margin-inline-end: .45rem; }
+.ai-source__choice .badge { margin-inline-start: .4rem; }
+.ai-source__choice .field__hint { display: block; }
+.ai-source__topics { display: flex; flex-wrap: wrap; gap: .5rem 1rem; margin-block-start: .7rem; border: 0; padding: 0; }
+.ai-source__topics legend { margin-block-end: .4rem; }
+.ai-preview { margin-block-start: 1.5rem; min-width: 0; }
+.ai-fragment { padding: .75rem; border: 1px solid var(--border, #cbd5e1); border-radius: .5rem; margin-block: .75rem; }
+.ai-fragment summary { overflow-wrap: anywhere; }
+.ai-fragment pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 32rem; overflow: auto; padding: .75rem; background: color-mix(in srgb, currentColor 5%, transparent); }

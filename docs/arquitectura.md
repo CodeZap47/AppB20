@@ -10,11 +10,11 @@ Arquitectura elegida para completar el proyecto con SpacetimeDB y Cloudflare. La
 | Interfaz | React 19 + TypeScript + Vite, `react-router` con rutas hash | Una sola app para todas las presentaciones. |
 | Datos y backend principal | SpacetimeDB, SDK `spacetimedb` (cliente y módulo en TypeScript) | Datos, archivos binarios privados, permisos, reducers, vistas, procedures y trabajos programados. |
 | Autenticación | SpacetimeAuth OIDC (Google) + invitaciones (`invitation`) | Emisor y audiencias configurables en `auth_config`; alta con correo verificado, vistas/acciones y backend con membresía activa. |
-| Integraciones complementarias | Cloudflare Workers + Hono | Compatibilidad opcional con archivos R2 anteriores; futuro cifrado BYOK y envíos externos. No se requiere Worker para los archivos nuevos. |
-| Secretos (entrega posterior) | Claves personales cifradas en SpacetimeDB; clave maestra en Cloudflare Secrets | No se devuelven las claves al cliente. Gemini permanece deshabilitado en esta entrega. |
+| Integraciones complementarias | Cloudflare Workers + Hono | Cifrado BYOK, solicitudes autorizadas a Gemini, planificación y entrega Web Push, y mantenimiento de respaldo. Conserva compatibilidad opcional con R2 anterior; los archivos nuevos no requieren Worker. |
+| Gemini BYOK | Claves personales cifradas en SpacetimeDB; clave maestra en Cloudflare Secrets | Implementado localmente con consentimiento, límites y presupuesto. Las claves no vuelven al cliente; la generación comienza desactivada hasta su configuración. |
 | Web/PWA | Cloudflare Pages + `vite-plugin-pwa`, service worker propio (`apps/web/src/sw.ts`) | Web estática, instalación y base para Web Push; recepción real por validar. |
 | Extensión | Manifest V3, `sidePanel`, todo empaquetado | Panel lateral y vista completa (`app.html`). |
-| Android | Capacitor 8 | APK firmado, avisos internos y recordatorios locales planificados. El push nativo con la app cerrada sigue pendiente sin un proveedor adicional. |
+| Android | Capacitor 8 | Proyecto que comparte la bandeja de avisos. Firma, distribución y comprobación en dispositivos siguen pendientes; el push nativo con la app cerrada no está implementado bajo la restricción de proveedores. |
 
 ## Modelo de datos inicial (`packages/spacetime-module`)
 
@@ -37,8 +37,10 @@ las resuelve con lo que su vista le deja ver. Eliminar un mensaje vacía el text
 `deleted_at`, para que las respuestas no pierdan el hilo.
 `study_guides`, `guide_sources`, `guide_reviews`.
 
-Faltan para el MVP: el borrador de guías con Gemini, adjuntos fuera de los trabajos,
-instalaciones/suscripciones push y preferencias de avisos.
+La tercera entrega añade tablas privadas para claves cifradas, preparaciones y borradores de
+IA; avisos, preferencias, instalaciones y cola de entrega; y retención con purga programada.
+Los adjuntos nativos ya abarcan los recursos académicos y mensajes. Los servicios y su
+validación operativa se describen en el [índice de la entrega](tercera-entrega.md).
 
 ### Páginas que edita todo el grupo
 
@@ -110,16 +112,18 @@ instalación nueva no requiere R2, buckets ni una credencial técnica de archivo
 
 Las nuevas tablas son aditivas: avance privado, metadatos, revisiones de trabajos, snapshots
 completos de páginas, revisiones nominales, comentarios, recursos y vínculos. Cada cambio
-material conserva un snapshot y requiere la versión esperada. Los archivos históricos no se
-borran al retirarlos de la versión actual. Las evidencias y sus archivos actualizan la versión
-de la actividad para que las guías avisen del cambio; comentar no la modifica. Los adjuntos
+material conserva un snapshot y requiere la versión esperada. Los archivos históricos se
+conservan al retirarlos de la versión actual durante el plazo aplicable. La papelera permite
+restaurar contenido antes de 30 días; después se purgan sus dependencias, preservando los
+bytes todavía referenciados por otras publicaciones. Las evidencias y sus archivos actualizan
+la versión de la actividad para que las guías avisen del cambio; comentar no la modifica. Los adjuntos
 retirados de evidencias siguen descargables para miembros activos mientras exista su destino;
 solo el autor de la evidencia puede recuperarlos con su versión actual. Esto conserva archivos
 y referencias, sin presentar un historial completo del texto de la evidencia.
 
 ### Guías de estudio (3.5)
 
-Primera versión manual. Una guía (`study_guide`) es de una materia y, si se elige, de un parcial;
+La base manual de una guía (`study_guide`) es de una materia y, si se elige, de un parcial;
 guarda el temario y una entrada por sección en el orden de `GUIDE_SECTIONS`
 (`packages/core/src/guides.ts`). Como las páginas de tareas, cualquier miembro activo la edita y la
 versión sube; quién guardó cada una queda en `change_log`.
@@ -135,6 +139,12 @@ versión sube; quién guardó cada una queda en `change_log`.
   comentario), una por persona y versión; quien guardó la versión no puede revisarla.
 - **Compendio**: `/m/guias/compendio?cuatri=N` junta las guías de un cuatrimestre, cada materia por
   separado, y se puede imprimir o guardar como PDF.
+
+La tercera entrega permite preparar texto y adjuntos UTF8 compatibles para Gemini BYOK,
+revisar sus versiones y omisiones y generar un borrador privado. Publicarlo crea una guía
+o nota independiente con citas, historial y control de acceso; los resultados basados en
+fuentes personales no se comparten directamente. Los formatos no admitidos quedan
+explícitamente omitidos. Véase [gemini-byok.md](gemini-byok.md).
 
 ### Contribuciones y leaderboard (3.6)
 
@@ -277,13 +287,16 @@ el procedimiento habitual; la implementación local no publica ni elimina datos.
   rechazo de lectura de bytes privados. El código local no acredita el despliegue de esta entrega.
 - Registrar y probar el acceso de extensión y Android; la configuración web no basta para
   estas presentaciones. Validar renovación y cierre de sesión también en la PWA instalada.
-- Confirmar edad del grupo y acceso a Google AI Studio antes de habilitar Gemini; definir el
-  modelo vigente en `GEMINI_MODEL`, límites de solicitudes y presupuesto.
+- Confirmar elegibilidad del grupo y acceso a Google AI Studio antes de habilitar Gemini;
+  configurar el modelo vigente en `GEMINI_MODEL` y los secretos, y comprobar el presupuesto
+  y los límites implementados. La integración local no activa el proveedor.
 - Iconos PNG de la PWA (192, 512 y apple-touch-icon 180) y de la extensión.
-- Claves VAPID, suscripciones Web Push y prueba en un iPhone real con la PWA instalada.
+- Configurar claves VAPID y suscripciones Web Push; comprobar recepción en dispositivos
+  reales, incluido iPhone con la PWA instalada.
 - APK firmado de prueba y recordatorios locales. El requisito original de push nativo Android
   permanece pendiente bajo la restricción de usar únicamente SpacetimeDB y Cloudflare.
-- Bandeja de avisos de la extensión.
+- Validar la bandeja de avisos incluida en la extensión y la disponibilidad de Push API en
+  cada presentación; no asumir que el contenedor ofrece entrega en segundo plano.
 - Confirmar el `appId` de Android antes de firmar el primer APK.
 
 ## Alcance y estado de la primera entrega
@@ -293,7 +306,9 @@ se conserva íntegro en la definición y su primera incorporación corresponde a
 Ayuda, Aprende enseñando y Repaso ya tienen implementación manual local; sus integraciones
 pendientes y las pruebas reales se reflejan en [estado-del-proyecto.md](estado-del-proyecto.md).
 
-La papelera de 30 días, Gemini, programación de recordatorios y push pertenecen a entregas
-posteriores; no se consideran implementados por elegir SpacetimeDB para alojarlos. El SDK
-del cliente y del módulo está fijado en `2.12.0`, con bindings regenerados; la versión de CLI,
-las pruebas del runtime y las compilaciones se registran al verificar la entrega.
+La [tercera entrega](tercera-entrega.md) implementa localmente la papelera de 30 días,
+Gemini BYOK para guías/explicaciones, la programación de recordatorios y Web Push. Su
+activación y aceptación en dispositivos siguen pendientes de configuración y despliegue.
+Exámenes, generación de tarjetas de Repaso con IA y push nativo del APK no forman parte de
+esta implementación. El SDK del cliente y del módulo está fijado en `2.12.0`, con bindings
+regenerados; las pruebas y compilaciones se registran al verificar cada entrega.

@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching';
+import { pushDestination } from './pushRoute';
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -20,17 +21,20 @@ interface PushPayload {
   body?: string;
   /** Ruta dentro de la app, por ejemplo `#/m/mensajes`. */
   url?: string;
+  tag?: string;
 }
 
 // Los mensajes 1 a 1 llegan con texto genérico por defecto para no exponerlos en la pantalla
 // bloqueada; el backend decide el contenido según las preferencias del usuario.
 self.addEventListener('push', (event) => {
-  const data: PushPayload = event.data?.json() ?? {};
+  let data: PushPayload = {};
+  try { const parsed: unknown = event.data?.json(); if (typeof parsed === 'object' && parsed !== null) data = parsed; } catch { /* Un mensaje vacío sigue mostrando la bandeja. */ }
   event.waitUntil(
-    self.registration.showNotification(data.title ?? 'B20', {
-      body: data.body ?? 'Tienes novedades en el grupo.',
+    self.registration.showNotification(typeof data.title === 'string' ? data.title.slice(0, 100) : 'B20', {
+      body: typeof data.body === 'string' ? data.body.slice(0, 200) : 'Tienes novedades en el grupo.',
+      tag: typeof data.tag === 'string' && /^b20:\d{1,20}$/.test(data.tag) ? data.tag : undefined,
       icon: 'icons/icon.svg',
-      data: { url: data.url ?? './' },
+      data: { url: pushDestination(data.url, self.location.href) },
     }),
   );
 });
@@ -38,6 +42,11 @@ self.addEventListener('push', (event) => {
 // Al tocar el aviso se abre la app; la app vuelve a comprobar sesión y permisos.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = (event.notification.data as { url?: string } | undefined)?.url ?? './';
-  event.waitUntil(self.clients.openWindow(url));
+  const url = pushDestination((event.notification.data as { url?: string } | undefined)?.url, self.location.href);
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const existing = windows.find((client) => new URL(client.url).origin === self.location.origin);
+    if (existing) { await existing.navigate(url); await existing.focus(); }
+    else await self.clients.openWindow(url);
+  })());
 });

@@ -1,5 +1,6 @@
 import { SenderError } from 'spacetimedb/server';
 import { Identity } from 'spacetimedb';
+import { retentionBlocksRead } from './trashHandlers';
 import { activeMember, attachmentIds, isActive, messageText, readableMessage,
   requireGuide, requireSubject, requireText, type Ctx, type ViewDb } from './moduleContext';
 
@@ -22,6 +23,7 @@ function statusReadable(db: ViewDb, sender: Ctx['sender'], kind: string, id: big
 }
 export function canReadTarget(db: ViewDb, sender: Ctx['sender'], kind: string, id: bigint): boolean {
   if (!isActive(db, sender)) return false;
+  if (retentionBlocksRead(db, kind, id)) return false;
   if (kind === 'note') {
     const row = db.note.id.find(id);
     return !!row && (row.author.isEqual(sender) || row.visibility === 'group') && statusReadable(db, sender, kind, id);
@@ -177,8 +179,9 @@ export function sendChannelMessage(ctx: Ctx, input: { channelId: bigint; text: s
     const reply = ctx.db.channelMessage.id.find(input.replyToId);
     if (!reply || reply.channelId !== input.channelId || reply.deletedAt) throw new SenderError('La respuesta no pertenece a este canal.');
   }
-  ctx.db.channelMessage.insert({ id: 0n, ...input, replyToId: input.replyToId, text: messageText(ctx, input.text), sender: ctx.sender, sentAt: ctx.timestamp,
+  const message = ctx.db.channelMessage.insert({ id: 0n, ...input, replyToId: input.replyToId, text: messageText(ctx, input.text), sender: ctx.sender, sentAt: ctx.timestamp,
     editedAt: undefined, deletedAt: undefined, deletedBy: undefined });
+  return message.id;
 }
 export function markConversationRead(ctx: Ctx, input: { scope: string; conversationId: string; messageId: bigint }) {
   conversationAccess(ctx, input.scope, input.conversationId);

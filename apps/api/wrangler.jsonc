@@ -12,9 +12,13 @@
     "OIDC_AUDIENCE": "client_034jL0AHYYQ1bps8SupHU0",
     "OIDC_JWKS_URI": "https://auth.spacetimedb.com/oidc/jwks",
     "SPACETIMEDB_URI": "https://maincloud.spacetimedb.com",
-    "SPACETIMEDB_MODULE": "app-b20-34245"
+    "SPACETIMEDB_MODULE": "app-b20-34245",
+    "AI_ENABLED": "false",
+    "AI_MASTER_VERSION": "v1",
+    "GEMINI_MODEL": "",
+    "NOTIFICATIONS_ENABLED": "false"
   },
   "secrets": { "required": ["FILE_SERVICE_TOKEN"] },
   "r2_buckets": [{ "binding": "FILES", "bucket_name": "app-b20-files" }],
-  "triggers": { "crons": ["23 9 * * *"] }
+  "triggers": { "crons": ["* * * * *", "23 9 * * *"] }
 }

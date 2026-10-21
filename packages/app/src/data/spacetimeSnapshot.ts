@@ -4,9 +4,14 @@ import { enrichAcademicSnapshot } from './academicSnapshot';
 import { emptyDelivery2, enrichDelivery2Snapshot } from './delivery2Snapshot';
 import { emptyStudyRooms } from './roomTypes';
 import { enrichStudyRoomsSnapshot } from './roomsSnapshot';
+import { emptyNotifications } from './notificationTypes';
+import { enrichNotificationsSnapshot } from './notificationSnapshot';
+import { readTrashEntries } from './trashSnapshot';
 
 /** Solo vistas públicas del módulo; nunca tablas privadas ni SELECT * de toda la base. */
 export const PUBLIC_VIEWS = [
+  'my_notifications', 'my_notification_preferences', 'my_push_installations',
+  'my_trash_entries',
   'chat_channels', 'channel_messages', 'my_conversation_states', 'my_blocked_members', 'my_message_reports', 'member_profiles',
   'note_details', 'note_versions', 'guide_versions', 'question_comments', 'answer_usefulness', 'question_links', 'resource_versions', 'content_statuses', 'contribution_origins',
   'my_member', 'members', 'invitations', 'subjects', 'terms', 'calendar',
@@ -25,6 +30,8 @@ export const PUBLIC_VIEWS = [
 
 export function emptySnapshot(connection: Snapshot['connection'], connectionError?: string): Snapshot {
   return {
+    ...emptyNotifications(),
+    trashEntries: [],
     ...emptyStudyRooms(),
     ...emptyDelivery2(),
     connection,
@@ -123,7 +130,9 @@ export function readSnapshot(connection: Pick<DbConnection, 'db'>, identity: str
     createdAt: row.createdAt.toDate(), updatedAt: row.updatedAt.toDate(),
   }));
 
-  return enrichStudyRoomsSnapshot(connection, enrichDelivery2Snapshot(connection, enrichAcademicSnapshot(connection, {
+  const snapshot = enrichStudyRoomsSnapshot(connection, enrichDelivery2Snapshot(connection, enrichAcademicSnapshot(connection, {
+    ...emptyNotifications(),
+    trashEntries: [],
     ...emptyStudyRooms(),
     ...emptyDelivery2(),
     myProgress: [], workRevisions: [], workReviews: [], academicComments: [],
@@ -314,4 +323,5 @@ export function readSnapshot(connection: Pick<DbConnection, 'db'>, identity: str
     })),
     lastSeenAt: [...db.myLastSeen.iter()].find((row) => row.identity.toHexString() === identity)?.at.toDate(),
   }, identity), identity), identity);
+  return { ...enrichNotificationsSnapshot(connection, snapshot, identity), trashEntries: readTrashEntries(connection) };
 }

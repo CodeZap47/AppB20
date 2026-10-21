@@ -83,6 +83,20 @@ export class DemoKnowledgeStore {
     return { noteVersions, guideVersions, questionComments: this.comments, answerUsefulness: this.usefulness, questionLinks: this.links };
   }
 
+  purgeTargets(targets: ReadonlySet<string>): Set<Id> {
+    const keep = (kind: string, id: Id) => !targets.has(`${kind}:${id}`);
+    const sourceKinds: Record<string, string> = { nota: 'note', pregunta: 'question', trabajo: 'work', guia: 'guide', evidencia: 'evidence' };
+    this.noteHistory = this.noteHistory.filter((row) => keep('note', row.noteId)).map((row) => ({ ...row, questionIds: row.questionIds.filter((id) => keep('question', id)) }));
+    this.guideHistory = this.guideHistory.filter((row) => keep('guide', row.guideId)).map((row) => ({ ...row, sources: row.sources.filter((source) => keep(sourceKinds[source.kind] ?? source.kind, source.refId)) }));
+    this.comments = this.comments.filter((row) => keep('question', row.questionId) && (!row.answerId || keep('answer', row.answerId)));
+    this.usefulness = this.usefulness.filter((row) => keep('answer', row.answerId));
+    this.links = this.links.filter((row) => keep('question', row.questionId) && keep(row.targetKind, row.targetId));
+    const references = new Set([...this.noteHistory.flatMap((row) => row.attachmentIds), ...this.guideHistory.flatMap((row) => row.attachmentIds)]);
+    const bodies = [...this.ctx.state().notes.map((row) => row.body), ...this.noteHistory.map((row) => row.body), ...this.ctx.state().guides.flatMap((row) => row.sections), ...this.guideHistory.flatMap((row) => row.sections)];
+    for (const file of this.ctx.files()) if (bodies.some((body) => body.includes(`(resource:${file.id})`))) references.add(file.id);
+    return references;
+  }
+
   private fields(input: SaveNoteInput) {
     const state = this.ctx.state();
     if (!state.subjects.some((subject) => subject.id === input.subjectId)) throw new Error('La materia no existe.');

@@ -1,10 +1,10 @@
-import { computeContributionOrigins, type ContributionOriginInput } from '@b20/core';
+import { computeContributionOrigins, contributionFingerprint, type ComputedContributionOrigin, type ContributionOriginInput } from '@b20/core';
 import type { ResourceFile, Snapshot } from './types';
 
-type ContributionState = Pick<Snapshot, 'notes' | 'guides' | 'works' | 'evidences' | 'answers' | 'workFiles'>;
+export type ContributionState = Pick<Snapshot, 'notes' | 'guides' | 'works' | 'evidences' | 'answers' | 'workFiles'>;
 
 /** Calcula primero sobre el estado grupal completo y luego retira referencias no legibles. */
-export function buildDemoContributionOrigins(state: ContributionState, resources: ResourceFile[], visible: Snapshot) {
+export function collectDemoContributionInputs(state: ContributionState, resources: ResourceFile[]) {
   const rows: ContributionOriginInput[] = [];
   const at = (date: Date) => BigInt(date.getTime()) * 1000n;
   const files = (kind: string, id: string) => resources.filter((file) => file.targetKind === kind && file.targetId === id && !file.removedAt)
@@ -24,10 +24,22 @@ export function buildDemoContributionOrigins(state: ContributionState, resources
   // La regla es una respuesta por pregunta, con independencia de cómo se redacte.
   for (const answer of state.answers) rows.push({ kind: 'respuesta', refId: answer.id, memberId: answer.authorId,
     createdAt: at(answer.createdAt), context: [answer.questionId], content: ['respuesta'] });
+  return rows;
+}
+
+export interface DemoContributionTombstone { canonicalId: string; creditedAt: bigint }
+export function computeDemoContributionOrigins(rows: ContributionOriginInput[], tombstones: ReadonlyMap<string, DemoContributionTombstone> = new Map()): ComputedContributionOrigin[] {
+  return computeContributionOrigins(rows).map((origin, index) => {
+    const prior = tombstones.get(contributionFingerprint(rows[index]!));
+    return prior && prior.creditedAt <= origin.creditedAt ? { ...origin, creditedAt: prior.creditedAt, duplicateOf: origin.refId === prior.canonicalId ? undefined : prior.canonicalId } : origin;
+  });
+}
+
+export function buildDemoContributionOrigins(state: ContributionState, resources: ResourceFile[], visible: Snapshot, tombstones?: ReadonlyMap<string, DemoContributionTombstone>) {
   const visibleIds = {
     apunte: new Set(visible.notes.map((row) => row.id)), guia: new Set(visible.guides.map((row) => row.id)),
     trabajo: new Set(visible.works.map((row) => row.id)), evidencia: new Set(visible.evidences.map((row) => row.id)), respuesta: new Set(visible.answers.map((row) => row.id)),
   };
-  return computeContributionOrigins(rows).filter((origin) => visibleIds[origin.kind].has(origin.refId))
+  return computeDemoContributionOrigins(collectDemoContributionInputs(state, resources), tombstones).filter((origin) => visibleIds[origin.kind].has(origin.refId))
     .map((origin) => ({ ...origin, creditedAt: new Date(Number(origin.creditedAt / 1000n)) }));
 }

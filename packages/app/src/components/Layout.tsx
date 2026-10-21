@@ -9,7 +9,8 @@ const NAV_MODULES = navigableModules();
 
 export function Layout() {
   const platform = usePlatform();
-  const { me } = useSnapshot();
+  const { me, notifications } = useSnapshot();
+  const unread = notifications.filter((notification) => !notification.readAt).length;
   const simulated = useDataSource() instanceof DemoDataSource;
   const compact = platform === 'extension-panel';
   // Una ruta con `handle: { fill: true }` (el chat) usa todo el alto en vez de alargar la página.
@@ -23,6 +24,7 @@ export function Layout() {
           B20
         </NavLink>
         <div className="row">
+          <NavLink to="/m/avisos" className="topbar__link">Avisos{unread ? ` (${unread})` : ''}</NavLink>
           {me && (
             <NavLink to={`/perfil/${me.id}`} className="topbar__link">
               {simulated ? 'Perfil simulado' : 'Mi perfil'}

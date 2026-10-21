@@ -1,3 +1,5 @@
+import { sha256 } from '@noble/hashes/sha2.js';
+
 /** Orígenes de aportes: cálculo interno, sin guardar textos ni firmas en la salida. */
 export type OriginContributionKind = 'trabajo' | 'apunte' | 'evidencia' | 'guia' | 'respuesta';
 export type ContributionContent = string | readonly ContributionContent[];
@@ -35,6 +37,19 @@ function earlier(a: ContributionOriginInput, b: ContributionOriginInput): boolea
   return a.refId < b.refId;
 }
 
+/** Clave interna de igualdad. Contiene material y nunca debe persistirse o exponerse sin hash. */
+export function contributionEqualityKey(row: ContributionOriginInput): string {
+  const content = row.content.map(normalized);
+  const files = [...new Set(row.files ?? [])].sort();
+  const emptyId = !content.some(hasText) && !files.length ? row.refId : '';
+  return JSON.stringify([row.kind, row.memberId, row.context, content, files, emptyId]);
+}
+
+/** SHA256 privado: no retiene ni expone el texto utilizado para comparar aportes. */
+export function contributionFingerprint(row: ContributionOriginInput): string {
+  return Array.from(sha256(new TextEncoder().encode(contributionEqualityKey(row))), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
 /**
  * Dos pasadas lineales. El llamador incluye los aportes grupales retirados para que un clon
  * posterior no vuelva a sumar, y filtra la visibilidad solo después de calcular el origen.
@@ -42,10 +57,7 @@ function earlier(a: ContributionOriginInput, b: ContributionOriginInput): boolea
  */
 export function computeContributionOrigins(rows: readonly ContributionOriginInput[]): ComputedContributionOrigin[] {
   const keyed = rows.map((row) => {
-    const content = row.content.map(normalized);
-    const files = [...new Set(row.files ?? [])].sort();
-    const emptyId = !content.some(hasText) && !files.length ? row.refId : '';
-    return { row, key: JSON.stringify([row.kind, row.memberId, row.context, content, files, emptyId]) };
+    return { row, key: contributionEqualityKey(row) };
   });
   const first = new Map<string, ContributionOriginInput>();
   for (const { row, key } of keyed) {

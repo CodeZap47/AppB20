@@ -211,9 +211,12 @@ Para actualizar producción manualmente, ejecútalo desde `codex/pages-spacetime
 a tu cuenta de Cloudflare. Otras ramas generan vistas previas. El flujo habitual del proyecto
 es enviar los cambios a su rama de producción en GitHub.
 
-La web puede publicarse mientras se completan las funciones pendientes. La interfaz de IA/BYOK
-aún no conecta con la API; el alojamiento de la API, archivos y envío de notificaciones push
-requieren trabajo propio. Publicar la web en Pages no activa esos servicios automáticamente.
+La interfaz de IA/BYOK conecta con el Worker indicado por `VITE_API_URL`. Su habilitación
+requiere publicar el módulo y el Worker actualizados y configurar los secretos descritos en
+[gemini-byok.md](gemini-byok.md). Los archivos nuevos se transfieren directamente a SpacetimeDB;
+el Worker conserva las descargas heredadas de R2. Los recordatorios y Web Push se activan
+según [avisos-recordatorios.md](avisos-recordatorios.md). Publicar la web en Pages no activa
+esos servicios automáticamente.
 
 Fuentes oficiales consultadas el 20 de octubre de 2026; los enlaces de cada apartado respaldan
 las opciones y campos del servicio.
