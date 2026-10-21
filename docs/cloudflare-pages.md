@@ -1,13 +1,15 @@
 # B20 en Cloudflare Pages
 
 El proyecto **Pages `app-b20`** ya está creado y conectado al repositorio
-`CodeZap47/AppB20`. La web ya está publicada en **https://app-b20.pages.dev**: el despliegue
-`af0dd1ec-a2a9-4cf5-81c4-e27411ad5331`, correspondiente al commit `59d17a7`, terminó en
-**Success** el 20 de octubre de 2026 y muestra la pantalla real de acceso de B20. El acceso
-completo con una cuenta invitada aún requiere prueba. Los retornos de producción ya están
+`CodeZap47/AppB20`. La web está publicada en **https://app-b20.pages.dev**. El historial de
+**Deployments** identifica cada publicación y el commit que sirve el dominio estable. El acceso
+por enlace al correo aún requiere una prueba humana completa. La configuración temporal
+usa autenticación real y datos simulados, sin invitaciones ni conexiones a Maincloud. Los
+retornos de producción ya están
 guardados en SpacetimeAuth. La URL recomendada para entrar y compartir es siempre
 **https://app-b20.pages.dev**. SpacetimeDB ya está publicado en
-Maincloud como `app-b20-34245`; alojar la web no cambia esa base ni el acceso por invitación.
+Maincloud como `app-b20-34245`, reservado para el modo de datos reales con invitaciones;
+`VITE_DATA_MODE=demo` no se conecta a esa base.
 
 El subdominio `pages.dev` se entrega con HTTPS y no requiere comprar un dominio, configurar
 DNS ni entrar a **Custom Domains**. El nombre del proyecto define la URL asignada por
@@ -50,6 +52,7 @@ el cambio a la rama de producción. No hace falta duplicarlas en el panel.
 
 | Variable en `vars` | Valor |
 | --- | --- |
+| `VITE_DATA_MODE` | `demo` |
 | `VITE_WEB_ORIGIN` | `https://app-b20.pages.dev` |
 | `VITE_SPACETIME_URI` | `wss://maincloud.spacetimedb.com` |
 | `VITE_SPACETIME_DB` | `app-b20-34245` |
@@ -78,7 +81,8 @@ Si se abre un callback en otro origen con `code` o `state`, no se trasladan esos
 se vuelve al dominio estable y se inicia un acceso limpio.
 
 Las URLs de despliegues anteriores son inmutables: conservan el código compilado en su
-publicación y no reciben este ajuste automáticamente. Por compatibilidad con un enlace
+publicación y no reciben los ajustes posteriores, incluido el login obligatorio de la simulación.
+Por compatibilidad con un enlace
 ya compartido, se autorizó expresamente `https://af0dd1ec.app-b20.pages.dev`; usa el dominio
 estable para los próximos accesos.
 
@@ -87,9 +91,11 @@ resuelve el resto mediante su fallback de aplicación de una sola página. No ag
 global `/* /index.html 200`: Wrangler la rechaza como un bucle.
 [Fallback de Pages](https://developers.cloudflare.com/pages/configuration/serving-pages/).
 
-La compilación en modo `pages` rechaza URLs de producción que apunten a localhost y exige URI,
-nombre de base y Client ID. `.env.pages` sirve para probar o compilar localmente, pero está
-ignorado por Git y no llega a la compilación de Cloudflare.
+La compilación en modo `pages` rechaza URLs de producción que apunten a localhost.
+SpacetimeAuth debe estar configurado en ambos modos; en `spacetime` también se necesita URI y
+nombre de base. `VITE_DATA_MODE` admite `demo` o `spacetime`, con `demo` como predeterminado.
+`.env.pages` sirve para probar o compilar localmente, pero está ignorado por Git y no llega a
+la compilación de Cloudflare.
 
 ## Retornos ya guardados en SpacetimeAuth
 
@@ -108,11 +114,24 @@ No hace falta modificar `auth_config` por estos retornos del mismo cliente. Comp
 cada hash ni comodines. El error previo `invalid_redirect_uri` se debía a que únicamente
 estaban registrados los retornos de localhost; esa configuración ya se corrigió.
 
-El formulario ofrece acceso por correo. Google es opcional. La persona debe usar su correo
-invitado y verificado, y completar el registro para obtener membresía; crear una cuenta en
-SpacetimeAuth no concede acceso por sí solo. La primera invitación de administrador ya está
-guardada. La prueba completa con una cuenta invitada y las pruebas con dos cuentas siguen
-pendientes. Más información en [SpacetimeAuth y acceso por invitación](spacetimeauth.md).
+El formulario ofrece acceso por enlace al correo de SpacetimeAuth. En esta fase cualquier
+correo verificado puede entrar a la interfaz con datos simulados, sin una lista de invitación.
+Google es opcional. `AuthProvider` se utiliza siempre, también si la URL contiene `?demo`:
+la falta de configuración no abre una demo sin sesión.
+
+## Datos de la versión temporal
+
+`VITE_DATA_MODE=demo` está configurado para Pages. Después del login se crea una fuente de
+datos simulados para el `subject` autenticado; no se monta la conexión a Maincloud ni se
+realizan lecturas o escrituras contra esa base. La interfaz conserva los ejemplos actuales y
+el selector de perfiles y roles ficticios, identificados como simulación. **Ajustes** muestra
+por separado la cuenta real que inició sesión.
+
+Los cambios viven en memoria: renovar el token de la misma cuenta conserva la simulación;
+recargar, cerrar sesión o cambiar de identidad la reinicia. No se guardan datos simulados en
+`localStorage` ni se comparten entre personas. Para activar datos persistentes más adelante,
+se compilará con `VITE_DATA_MODE=spacetime` y se validarán conexión y membresía por invitación.
+Las cuentas de SpacetimeAuth se conservarán; la simulación no migra sus cambios automáticamente.
 
 ## Comprobar después de compilar
 
@@ -120,10 +139,16 @@ pendientes. Más información en [SpacetimeAuth y acceso por invitación](spacet
    la URL HTTPS estable.
 2. Abrir directamente `/auth/callback` y `/auth/logout`: deben cargar B20 y manejar la ruta,
    en lugar de mostrar un 404 del hosting.
-3. Iniciar sesión con el correo invitado, completar el perfil y recargar para comprobar la
-   persistencia en Maincloud. Probar también cierre de sesión y nuevo acceso.
-4. Verificar con una segunda cuenta que las invitaciones y la privacidad se mantienen; una
-   cuenta sin invitación no debe poder unirse ni leer datos del grupo.
+3. Entrar mediante el enlace enviado a un correo verificado, incluyendo uno sin invitación;
+   debe abrir la interfaz de simulación. La primera prueba humana completa sigue pendiente.
+4. Comprobar que **Ajustes** identifica la cuenta real y que el selector de perfiles ficticios
+   indica simulación. Cambiar de perfil de prueba no debe cambiar la cuenta autenticada.
+5. Modificar datos simulados, verificar que la renovación de sesión los conserva y que
+   recargar, salir o cambiar de cuenta los reinicia. No deben aparecer conexiones a Maincloud.
+
+Antes de cambiar a `VITE_DATA_MODE=spacetime`, probar con dos cuentas la persistencia,
+invitaciones, bajas y privacidad del grupo real. Más información en
+[SpacetimeAuth y modos de datos](spacetimeauth.md).
 
 ## Resolver los errores encontrados
 

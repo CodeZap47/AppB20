@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { createHashRouter, RouterProvider } from 'react-router';
 import { ErrorPage } from './components/ErrorPage';
 import { Layout } from './components/Layout';
@@ -32,7 +32,6 @@ import { config } from './config';
 import { PlatformContext } from './components/PlatformContext';
 import { DataProvider } from './data/DataContext';
 import { createDemoState, DemoDataSource } from './data/demo';
-import type { DataSource } from './data/types';
 import type { Platform } from './platform';
 
 /**
@@ -105,16 +104,8 @@ const router = createHashRouter([
   },
 ]);
 
-/**
- * La demo siempre se solicita expresamente. Una configuración de acceso ausente nunca
- * permite entrar con una identidad de prueba al flujo del grupo real.
- */
-function isDemoMode(): boolean {
-  return new URLSearchParams(window.location.search).has('demo');
-}
-
-export function App({ platform, source }: { platform: Platform; source?: DataSource }) {
-  const demo = source !== undefined || isDemoMode();
+/** La autenticación es obligatoria en ambos modos; la URL nunca permite omitirla. */
+export function App({ platform }: { platform: Platform }) {
   const clientId = platform === 'android'
     ? config.spacetimeAuthAndroidClientId || config.spacetimeAuthClientId
     : platform.startsWith('extension')
@@ -122,21 +113,20 @@ export function App({ platform, source }: { platform: Platform; source?: DataSou
       : config.spacetimeAuthClientId;
   return (
     <PlatformContext value={platform}>
-      {demo ? (
-        <DemoApp source={source} />
-      ) : (
-        <AuthProvider clientId={clientId} platform={platform}>
-          <SignedInGate />
-        </AuthProvider>
-      )}
+      <AuthProvider clientId={clientId} platform={platform}>
+        <SignedInGate />
+      </AuthProvider>
     </PlatformContext>
   );
 }
 
-/** La sesión de SpacetimeAuth abre una conexión propia, nunca una cuenta de demostración. */
+/** Una sesión real puede usar fixtures privados en memoria o el grupo real según configuración. */
 function SignedInGate() {
   const session = useSession();
   if (session?.status !== 'signedIn') return <SignInPage />;
+  if (config.dataMode === 'demo') {
+    return <DemoApp subject={session.profile.subject} key={session.profile.subject} />;
+  }
   return (
     <SpacetimeProvider token={session.token} key={session.token}>
       <MembershipGate />
@@ -175,16 +165,19 @@ function MembershipGate() {
   return <RouterProvider router={router} />;
 }
 
-function DemoApp({ source }: { source?: DataSource }) {
-  // Dependen de `createDemoState` a propósito: en desarrollo, cuando ese módulo se recarga en
-  // caliente (porque cambió la forma de los datos), se crean de nuevo. Si no, el estado en
-  // memoria conserva la forma anterior y las pantallas que esperan los campos nuevos fallan.
-  const data = useMemo(
-    () => source ?? new DemoDataSource(createDemoState(), 'demo-1'),
-    [source, createDemoState],
-  );
+function DemoApp({ subject }: { subject: string }) {
+  const [owned, setOwned] = useState<{ subject: string; data: DemoDataSource } | null>(null);
+  useEffect(() => {
+    // StrictMode ejecuta setup/cleanup/setup: cada setup debe poseer una fuente nueva.
+    const data = new DemoDataSource(createDemoState(), 'demo-1');
+    setOwned({ subject, data });
+    return () => data.dispose();
+  }, [subject, createDemoState]);
+  if (!owned || owned.subject !== subject) {
+    return <main className="signin"><h1>B20</h1><p>Preparando datos de prueba…</p></main>;
+  }
   return (
-    <DataProvider source={data}>
+    <DataProvider source={owned.data}>
       <RouterProvider router={router} />
     </DataProvider>
   );

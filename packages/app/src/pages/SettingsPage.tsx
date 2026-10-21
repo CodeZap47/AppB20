@@ -5,6 +5,8 @@ import { CalendarSettings } from '../components/CalendarSettings';
 import { MembershipSettings } from '../components/MembershipSettings';
 import { usePlatform } from '../components/PlatformContext';
 import { useSession, useSessionStore } from '../auth/AuthContext';
+import { useDataSource } from '../data/DataContext';
+import { DemoDataSource } from '../data/demo';
 
 export function SettingsPage() {
   const platform = usePlatform();
@@ -14,6 +16,7 @@ export function SettingsPage() {
   const support = platform === 'web' ? webPushSupport() : null;
   const session = useSession();
   const sessionStore = useSessionStore();
+  const simulated = useDataSource() instanceof DemoDataSource;
 
   return (
     <>
@@ -21,14 +24,24 @@ export function SettingsPage() {
 
       {session?.status === 'signedIn' && (
         <section>
-          <h2>Cuenta</h2>
+          <h2>Cuenta de acceso</h2>
           <p>
             Entraste como <strong>{session.profile.email}</strong>.
           </p>
-          <p className="muted">Sesión administrada por SpacetimeAuth. El acceso al grupo depende de tu invitación.</p>
+          <p className="muted">{simulated
+            ? 'Tu sesión es real y la administra SpacetimeAuth. Elegir un perfil simulado no cambia esta cuenta.'
+            : 'Sesión administrada por SpacetimeAuth. El acceso al grupo depende de tu invitación.'}</p>
           <button type="button" onClick={() => sessionStore?.signOut()}>
             Cerrar sesión
           </button>
+        </section>
+      )}
+
+      {simulated && (
+        <section>
+          <h2>Simulación</h2>
+          <p>El contenido, los integrantes y las invitaciones son datos de prueba. Los cambios no se guardan ni se comparten.</p>
+          <p className="muted">Para explorar esta versión basta un correo verificado. Las invitaciones solo forman parte de la simulación.</p>
         </section>
       )}
 

@@ -44,7 +44,9 @@ export function AuthProvider({ clientId, platform = 'web', children }: {
         settings.userStore = new ChromeSessionStateStore(chrome.storage.session, 'b20.oidc.user.');
         return { manager: new UserManager(settings, undefined, createChromeNavigator(chrome, true), createChromeNavigator(chrome, false)) };
       }
-      settings.stateStore = new WebStorageStateStore({ store: sessionStorage, prefix: 'b20.oidc.state.' });
+      // El enlace del correo puede devolver el login en otra pestaña del mismo navegador.
+      // Solo el estado temporal PKCE se comparte; la sesión de usuario sigue aislada por pestaña.
+      settings.stateStore = new WebStorageStateStore({ store: localStorage, prefix: 'b20.oidc.state.' });
       settings.userStore = new WebStorageStateStore({ store: sessionStorage, prefix: 'b20.oidc.user.' });
       return { manager: new UserManager(settings) };
     } catch (error) {
@@ -57,8 +59,7 @@ export function AuthProvider({ clientId, platform = 'web', children }: {
 
   if (!setup.manager) {
     return <main className="signin"><h1>B20</h1><p role="alert" className="error">{setup.error}</p>
-      <p>Configura SpacetimeAuth y las direcciones de retorno antes de usar cuentas reales.</p>
-      <a href="?demo">Ver la demo con datos de prueba</a></main>;
+      <p>Configura SpacetimeAuth y las direcciones de retorno para iniciar sesión.</p></main>;
   }
   return <OidcProvider userManager={setup.manager}
     skipSigninCallback={platform !== 'web'}
@@ -165,7 +166,7 @@ function SessionBridge({ manager, navigator, platform, children }: {
   return <AuthContext value={{ store, signIn, busy: auth.isLoading || !!auth.activeNavigator || signingOut }}>{children}</AuthContext>;
 }
 
-/** `null` solo cuando el usuario pidió explícitamente la demo. */
+/** `null` únicamente fuera del proveedor, por ejemplo al probar componentes aislados. */
 export function useSession(): SessionState | null {
   const value = useContext(AuthContext);
   return useSyncExternalStore(

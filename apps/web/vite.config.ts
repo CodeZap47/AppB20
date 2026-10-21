@@ -8,6 +8,9 @@ import { parsePagesOrigin } from './src/canonicalOrigin.ts';
 export default defineConfig(({ mode }) => {
   if (mode === 'pages') {
     const env = loadEnv(mode, '../..', 'VITE_');
+    if (env.VITE_DATA_MODE && !['demo', 'spacetime'].includes(env.VITE_DATA_MODE)) {
+      throw new Error('VITE_DATA_MODE debe ser demo o spacetime.');
+    }
     const required = ['VITE_WEB_ORIGIN', 'VITE_SPACETIME_URI', 'VITE_SPACETIME_DB', 'VITE_SPACETIMEAUTH_CLIENT_ID'];
     for (const key of required) {
       if (!env[key]?.trim()) {

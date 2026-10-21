@@ -125,6 +125,17 @@ interface State {
   lastSeen: Record<Id, Date>;
 }
 
+function emptyState(): State {
+  return {
+    invitations: [], members: [], subjects: [], terms: [], calendar: [], assignments: [],
+    works: [], workFiles: [], revisions: [], groupMessages: [], directConversations: [],
+    directMessages: [], reactions: [], stickerPacks: [], stickers: [], chatCommands: [],
+    birthdays: [], activities: [], evidences: [], notes: [], noteComments: [], questions: [],
+    answers: [], guides: [], guideSources: [], guideReviews: [], polls: [], pollVotes: [],
+    lastSeen: {},
+  };
+}
+
 const MAX_TEXT = 4000;
 
 /** Altas, bajas e invitaciones: solo creadores activos (`canManageMembership` en `@b20/core`). */
@@ -155,6 +166,8 @@ export class DemoDataSource implements DataSource {
   #listeners = new Set<() => void>();
   #snapshot: Snapshot | undefined;
   #now: () => Date;
+  #disposed = false;
+  #objectUrls = new Set<string>();
 
   constructor(state: State, viewerId: Id, now: () => Date = () => new Date()) {
     this.#state = state;
@@ -168,11 +181,13 @@ export class DemoDataSource implements DataSource {
 
   /** Solo en modo de prueba: ver la app como otro miembro para revisar permisos. */
   setViewer(id: Id) {
+    this.#assertAlive();
     this.#viewerId = id;
     this.#emit();
   }
 
   subscribe(listener: () => void) {
+    if (this.#disposed) return () => {};
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
   }
@@ -182,12 +197,31 @@ export class DemoDataSource implements DataSource {
     return this.#snapshot;
   }
 
+  /** La sesión propietaria descarta la simulación y todos sus recursos locales al salir. */
+  dispose(): void {
+    if (this.#disposed) return;
+    this.#disposed = true;
+    for (const url of this.#objectUrls) {
+      if (typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(url);
+    }
+    this.#objectUrls.clear();
+    this.#listeners.clear();
+    this.#state = emptyState();
+    this.#viewerId = '';
+    this.#snapshot = undefined;
+  }
+
+  #assertAlive(): void {
+    if (this.#disposed) throw new Error('La sesión de prueba ya terminó.');
+  }
+
   #buildSnapshot(): Snapshot {
     const s = this.#state;
     const me = s.members.find((m) => m.id === this.#viewerId);
     if (me?.status !== 'active') {
       return {
-        connection: 'ready',
+        connection: this.#disposed ? 'offline' : 'ready',
+        connectionError: this.#disposed ? 'La sesión de prueba ya terminó.' : undefined,
         me,
         members: [],
         invitations: [],
@@ -286,6 +320,7 @@ export class DemoDataSource implements DataSource {
   }
 
   #activeMember(): Member {
+    this.#assertAlive();
     const me = this.#state.members.find((m) => m.id === this.#viewerId);
     if (me?.status !== 'active') throw new Error('No eres miembro activo del grupo.');
     return me;
@@ -296,6 +331,7 @@ export class DemoDataSource implements DataSource {
   }
 
   joinGroup(displayName: string) {
+    this.#assertAlive();
     const me = this.#state.members.find((m) => m.id === this.#viewerId);
     if (me?.status === 'removed') throw new Error('Tu acceso fue dado de baja.');
     if (me) return;
@@ -541,6 +577,8 @@ export class DemoDataSource implements DataSource {
     const name = file.name.trim().slice(0, 200) || 'archivo';
     const problem = fileSizeError(name, file.size);
     if (problem) throw new Error(problem);
+    const url = typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : undefined;
+    if (url) this.#objectUrls.add(url);
     const entry: WorkFile = {
       id: this.#id(),
       workId,
@@ -549,7 +587,7 @@ export class DemoDataSource implements DataSource {
       contentType: file.type || 'application/octet-stream',
       uploadedBy: me.id,
       createdAt: this.#now(),
-      url: typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : undefined,
+      url,
     };
     this.#state.workFiles = [...this.#state.workFiles, entry];
     this.#emit();
@@ -564,7 +602,9 @@ export class DemoDataSource implements DataSource {
     if (!work || !canEditWork(me.id, work.authorIds)) {
       throw new Error('Solo el autor o los coautores quitan archivos de este trabajo.');
     }
-    if (entry.url && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(entry.url);
+    if (entry.url && this.#objectUrls.delete(entry.url) && typeof URL.revokeObjectURL === 'function') {
+      URL.revokeObjectURL(entry.url);
+    }
     this.#state.workFiles = this.#state.workFiles.filter((f) => f.id !== fileId);
     this.#emit();
   }
@@ -712,6 +752,8 @@ export class DemoDataSource implements DataSource {
     const stickers: Sticker[] = [];
     for (const file of files) {
       const bytes = new Uint8Array(await file.arrayBuffer());
+      // Leer un archivo puede terminar después de que el usuario cerró o cambió su sesión.
+      this.#assertAlive();
       const type = detectImageType(bytes);
       const problem = stickerFileError(file.name, file.size, type);
       if (problem || !type) throw new Error(problem);
@@ -793,6 +835,7 @@ export class DemoDataSource implements DataSource {
   }
 
   withdrawBirthday() {
+    this.#assertAlive();
     this.#state.birthdays = this.#state.birthdays.filter((b) => b.memberId !== this.#viewerId);
     this.#emit();
   }

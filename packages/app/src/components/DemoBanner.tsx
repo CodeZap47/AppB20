@@ -1,10 +1,12 @@
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import { DemoDataSource } from '../data/demo';
+import { useSession } from '../auth/AuthContext';
 
 /** Aviso visible mientras la app usa datos de prueba, o cuando se perdió la conexión. */
 export function DemoBanner() {
   const source = useDataSource();
   const { members, connection } = useSnapshot();
+  const session = useSession();
   if (connection === 'offline') {
     return (
       <div className="demo-banner" role="status">
@@ -16,9 +18,9 @@ export function DemoBanner() {
 
   return (
     <div className="demo-banner" role="status">
-      <span>Datos de prueba: lo que hagas aquí no se guarda.</span>
+      <span>{session?.status === 'signedIn' && 'Tu sesión es real. '}Estás usando datos de prueba: los cambios no se guardan ni se comparten.</span>
       <label>
-        Ver como{' '}
+        Perfil simulado{' '}
         <select value={source.viewerId} onChange={(e) => source.setViewer(e.target.value)}>
           {(members.length ? members : [{ id: source.viewerId, displayName: source.viewerId }]).map(
             (m) => (
@@ -29,6 +31,7 @@ export function DemoBanner() {
           )}
         </select>
       </label>
+      <span>Cambiar el perfil simulado no cambia tu cuenta de acceso.</span>
     </div>
   );
 }

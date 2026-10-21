@@ -32,35 +32,38 @@ módulo ya existen. El módulo B20 ya está publicado en esa base, con `auth_con
 para adoptar la base vacía ya se retiró. La web ya está publicada en
 https://app-b20.pages.dev; la API aún no está alojada.
 
-## Autenticación
+## Fase temporal: autenticación real y datos simulados
 
-**SpacetimeAuth con acceso por correo e invitación.** Google es un proveedor opcional. El cliente recibe un ID
-token de SpacetimeAuth, lo usa en la conexión a SpacetimeDB y lo envía como `Bearer` al backend.
-La base comprueba emisor, audiencias y correo verificado al unirse; sus vistas y acciones
-requieren membresía activa. El backend comprueba firma, emisor, audiencia y membresía mediante
-el reducer `assert_active_member`.
+**SpacetimeAuth por enlace al correo, con `VITE_DATA_MODE=demo`.** Cualquier correo verificado
+puede entrar a la interfaz temporal sin invitación. SpacetimeAuth se utiliza siempre, incluso
+con `?demo`; una configuración ausente muestra un error y no habilita acceso sin sesión.
+Google es opcional.
 
-La guía completa del panel, los callbacks de las tres presentaciones y la invitación inicial está
-en [`spacetimeauth.md`](spacetimeauth.md). La app solo recibe client IDs públicos. Si se habilita
-Google, su client secret se guarda únicamente en el proveedor de SpacetimeAuth.
+La simulación utiliza los ejemplos existentes, con perfiles y roles ficticios identificados
+como tales. Ajustes muestra la cuenta autenticada real por separado. Los datos viven en
+memoria por identidad: renovar la sesión los conserva; recargar, salir o cambiar de cuenta
+los reinicia. No se guardan datos simulados en `localStorage` ni se abre una conexión a Maincloud.
 
-## Pendientes para publicar el piloto
+El modo `VITE_DATA_MODE=spacetime` conserva SpacetimeProvider y MembershipGate para activar
+posteriormente los datos reales con invitaciones. La base y la API mantienen sus controles de
+membresía. Al migrar se conservarán las cuentas de SpacetimeAuth; los cambios de la simulación
+no se importan automáticamente. Los detalles están en [`spacetimeauth.md`](spacetimeauth.md).
 
-1. **Completar el acceso desde la web publicada.** La web ya está en https://app-b20.pages.dev.
-   Los callbacks locales, los del dominio estable y los del enlace anterior `af0dd1ec` ya están
-   guardados. La primera invitación de administrador también; completar el acceso con esa
-   cuenta sigue pendiente. Usa el dominio estable para entrar y compartir. Sigue la
-   [guía de Cloudflare Pages](cloudflare-pages.md).
-2. **Probar la base publicada.** `auth_config` ya tiene el emisor y client ID correctos. Faltan las
-   pruebas con dos usuarios, persistencia, privacidad, rechazo de no invitados y bajas.
-3. **Integrar y publicar la API de IA.** La interfaz de IA/BYOK todavía no conecta con la API.
-   Para habilitarla, configurar el servicio y Secret Manager en Cloud Run;
-   `SECRET_STORE=memory` pierde las claves cuando el proceso se reinicia. Los adjuntos y push
-   también requieren servicios pendientes. Ninguno bloquea alojar la web estática en Pages.
-4. **Probar las presentaciones reales.** HTTPS y PWA instalada, extensión con su ID definitivo
-   y APK firmado con retorno del navegador. Registrar todos sus client IDs en módulo y API.
+## Pendientes de la fase temporal
 
-La demo explícita permite revisar la interfaz con datos de prueba; no equivale al entorno real.
+1. **Completar la primera prueba humana por correo.** Los callbacks están guardados; probar
+   el enlace de SpacetimeAuth y el acceso de un correo verificado sin invitación en
+   https://app-b20.pages.dev. Sigue la [guía de Cloudflare Pages](cloudflare-pages.md).
+2. **Comprobar el aislamiento de la simulación.** Renovar la sesión conserva los cambios;
+   recargar, cerrar sesión o cambiar de identidad los reinicia. No deben producirse conexiones
+   ni escrituras a Maincloud. Las cuentas reales y los perfiles ficticios deben distinguirse.
+3. **Antes de activar datos reales**, probar persistencia, privacidad, invitaciones y bajas
+   con dos cuentas en `VITE_DATA_MODE=spacetime`. Esta restricción no se usa en la demo actual.
+4. **IA, archivos y notificaciones.** La interfaz de IA/BYOK aún no conecta con la API. Su
+   servicio, almacenamiento de claves, adjuntos y push requieren trabajo propio. No bloquean
+   publicar la interfaz temporal.
+5. **Otras presentaciones.** PWA instalada, extensión y APK necesitan pruebas en sus entornos
+   reales y sus retornos de autenticación registrados antes de distribuirse.
 
 ## Pasos
 
@@ -76,12 +79,13 @@ El proyecto y el cliente `client_034jL0AHYYQ1bps8SupHU0` ya existen. Ya están g
 retornos locales, `https://app-b20.pages.dev/auth/callback` y
 `https://app-b20.pages.dev/auth/logout`, más los del enlace anterior `af0dd1ec.app-b20.pages.dev`
 para conservar su acceso. Usa la URL estable; no registres cada hash nuevo ni comodines. El
-correo debe estar verificado e invitado para unirse a B20. Google es opcional para este piloto.
+correo debe estar verificado para la fase `demo`; la invitación solo se exige al activar
+`spacetime`. Google es opcional para este piloto.
 
 Sigue los detalles de [`spacetimeauth.md`](spacetimeauth.md). Si vas a distribuir la extensión o
 Android, registra también sus retornos y client IDs correspondientes.
 
-### 2. SpacetimeDB en Maincloud
+### 2. SpacetimeDB en Maincloud: preparado para la fase de datos reales
 
 ```sh
 npm run spacetime:publish:maincloud
@@ -99,9 +103,10 @@ los comandos con placeholders se conservan como referencia para otra instalació
 adopción de una base vacía existente se explica en [SpacetimeAuth](spacetimeauth.md#actualizar-una-base-vacía-que-ya-existía);
 la identidad propietaria de CLI es distinta a la identidad de base y al Client ID de auth.
 
-Si solo publicas la web, registra únicamente su client ID en la lista. Después entras a la web
-con ese correo, te unes al grupo y las demás invitaciones se hacen desde Ajustes. La identidad
-OIDC no es la identidad de la CLI que administra la base.
+Estos pasos no son necesarios para entrar a la simulación actual. Al activar
+`VITE_DATA_MODE=spacetime`, la lista debe contener los client IDs usados y la persona debe
+unirse con su correo invitado. Las demás invitaciones se administrarán desde Ajustes. La
+identidad OIDC no es la identidad de la CLI que administra la base.
 
 Variables del cliente: `VITE_SPACETIME_URI=wss://maincloud.spacetimedb.com` y
 `VITE_SPACETIME_DB=app-b20-34245`. Las audiencias del módulo deben coincidir con `OIDC_AUDIENCE` del
@@ -151,7 +156,7 @@ requiere DNS ni Custom Domains.
   conserva la versión anterior; no se fusiona automáticamente.
 - Raíz `/`, comando `npm run build:pages`, salida `apps/web/dist`, preset **None**.
 - Node.js `22` en `.nvmrc`.
-- Variables públicas en **`wrangler.jsonc → vars`**, ya incluidas desde el commit `59d17a7`.
+- Variables públicas en **`wrangler.jsonc → vars`**, incluyendo `VITE_DATA_MODE=demo`.
   Edita ese archivo y envía el commit; las variables `VITE_*` del panel no sustituyen el archivo.
 - `VITE_WEB_ORIGIN=https://app-b20.pages.dev` fija el dominio estable en modo `pages`; las
   nuevas compilaciones llevan los alias allí antes del login. Los callbacks permanecen vacíos

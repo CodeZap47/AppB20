@@ -1,5 +1,6 @@
 /** Configuración pública del cliente. Ningún secreto vive aquí (sección 2, protección técnica). */
 export const config = {
+  dataMode: import.meta.env.VITE_DATA_MODE === 'spacetime' ? 'spacetime' : 'demo',
   spacetimeUri: import.meta.env.VITE_SPACETIME_URI ?? 'ws://localhost:3000',
   spacetimeDb: import.meta.env.VITE_SPACETIME_DB ?? 'app-b20',
   apiUrl: import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:8787' : ''),

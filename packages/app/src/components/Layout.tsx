@@ -2,13 +2,15 @@ import { NavLink, Outlet, useMatches } from 'react-router';
 import { navigableModules } from '@b20/core';
 import { usePlatform } from './PlatformContext';
 import { DemoBanner } from './DemoBanner';
-import { useSnapshot } from '../data/DataContext';
+import { useDataSource, useSnapshot } from '../data/DataContext';
+import { DemoDataSource } from '../data/demo';
 
 const NAV_MODULES = navigableModules();
 
 export function Layout() {
   const platform = usePlatform();
   const { me } = useSnapshot();
+  const simulated = useDataSource() instanceof DemoDataSource;
   const compact = platform === 'extension-panel';
   // Una ruta con `handle: { fill: true }` (el chat) usa todo el alto en vez de alargar la página.
   const fill = useMatches().some((m) => (m.handle as { fill?: boolean } | undefined)?.fill);
@@ -23,7 +25,7 @@ export function Layout() {
         <div className="row">
           {me && (
             <NavLink to={`/perfil/${me.id}`} className="topbar__link">
-              Mi perfil
+              {simulated ? 'Perfil simulado' : 'Mi perfil'}
             </NavLink>
           )}
           <NavLink to="/ajustes" className="topbar__link">

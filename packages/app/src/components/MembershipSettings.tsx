@@ -3,6 +3,7 @@ import { CURRICULUM } from '@b20/core';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import { formatMediumDate } from '../lib/format';
 import { useAction } from './useAction';
+import { DemoDataSource } from '../data/demo';
 
 /** Altas, bajas, invitaciones y plan de estudios. Solo lo ven los creadores de la app. */
 export function MembershipSettings() {
@@ -19,6 +20,7 @@ export function MembershipSettings() {
 
 function InvitationsSection() {
   const source = useDataSource();
+  const simulated = source instanceof DemoDataSource;
   const { invitations } = useSnapshot();
   const { error, pending, run } = useAction();
   const [email, setEmail] = useState('');
@@ -36,9 +38,11 @@ function InvitationsSection() {
   const sorted = [...invitations].sort((a, b) => a.email.localeCompare(b.email));
   return (
     <section>
-      <h2>Invitaciones</h2>
+      <h2>{simulated ? 'Invitaciones simuladas' : 'Invitaciones'}</h2>
       <p className="muted">
-        Solo entran los correos de esta lista, con la cuenta de Google de ese correo.
+        {simulated
+          ? 'Este formulario modifica datos de prueba: no envía invitaciones ni controla quién puede iniciar sesión.'
+          : 'Solo entran los correos de esta lista, verificados por SpacetimeAuth.'}
       </p>
       <form className="form" onSubmit={submit}>
         <label className="field">
@@ -100,6 +104,7 @@ function InvitationsSection() {
 
 function MembersSection() {
   const source = useDataSource();
+  const simulated = source instanceof DemoDataSource;
   const { me, members } = useSnapshot();
   const { error, run } = useAction();
   const active = members
@@ -108,9 +113,11 @@ function MembersSection() {
 
   return (
     <section>
-      <h2>Integrantes</h2>
+      <h2>{simulated ? 'Integrantes simulados' : 'Integrantes'}</h2>
       <p className="muted">
-        Dar de baja quita el acceso; lo que la persona publicó se conserva con su nombre.
+        {simulated
+          ? 'Dar de baja solo cambia este perfil de prueba; no afecta ninguna cuenta real.'
+          : 'Dar de baja quita el acceso; lo que la persona publicó se conserva con su nombre.'}
       </p>
       {error && (
         <p className="error" role="alert">
@@ -129,7 +136,9 @@ function MembersSection() {
                 type="button"
                 className="link-button"
                 onClick={() =>
-                  window.confirm(`¿Dar de baja a ${m.displayName}? Ya no podrá entrar.`) &&
+                  window.confirm(simulated
+                    ? `¿Dar de baja a ${m.displayName} en esta simulación?`
+                    : `¿Dar de baja a ${m.displayName}? Ya no podrá entrar.`) &&
                   run(() => source.removeMember(m.id))
                 }
               >

@@ -1,37 +1,51 @@
-# SpacetimeAuth y acceso por invitación
+# SpacetimeAuth y modos de datos
 
-App B20 usa SpacetimeAuth como emisor OIDC. El cliente actual ofrece acceso por correo;
-Google puede habilitarse como proveedor opcional. Una cuenta
-creada en SpacetimeAuth no concede acceso al salón: `join_group` exige un correo verificado
-incluido en `invitation`, y las vistas y acciones requieren membresía activa. Los permisos de
-creador pertenecen al módulo, no a un rol que la persona pueda elegir en la pantalla de acceso.
+App B20 usa **SpacetimeAuth real por enlace al correo** y, temporalmente, **datos simulados**.
+Cualquier correo verificado puede iniciar sesión y entrar a la interfaz sin invitación.
+`VITE_DATA_MODE=demo` es el valor predeterminado y el configurado para Pages. Google puede
+habilitarse como proveedor opcional.
 
-El flujo web usa Authorization Code con PKCE y los scopes `openid profile email`. El ID token
-se entrega a SpacetimeDB y al backend. El servidor comprueba emisor y audiencia; el backend
-comprueba también la firma y la membresía en la base. El client ID es público. Ningún client
-secret de SpacetimeAuth o Google debe ponerse en una variable `VITE_*`.
+`AuthProvider` se monta siempre, incluso con `?demo`. Si falta su configuración se muestra el
+error correspondiente; no se abre una demo anónima. El flujo web usa Authorization Code con
+PKCE y los scopes `openid profile email`; la app requiere una sesión con correo verificado.
+
+Abre el enlace del correo en el mismo navegador y perfil desde el que solicitaste el acceso.
+Puede abrirse en otra pestaña: el estado temporal PKCE se comparte mediante `localStorage`,
+se consume al completar el retorno y se limpia cuando caduca. La sesión del usuario se mantiene
+en `sessionStorage`; los datos de la simulación solo viven en memoria. Un navegador o dispositivo
+distinto no dispone del verificador PKCE original y debe iniciar su propio acceso.
 
 ## Estado actual
 
-Al 20 de octubre de 2026, el módulo B20 está publicado en Maincloud como `app-b20-34245`,
-con la identidad de base original. Ya se guardaron el emisor de SpacetimeAuth, el cliente
-público `client_034jL0AHYYQ1bps8SupHU0` y la primera invitación de administrador. El propietario
-quedó persistido en `app_config` y la variable temporal de adopción ya se retiró.
+La web está publicada en **https://app-b20.pages.dev**, con integración Git desde la rama
+`codex/pages-spacetimeauth`. El login humano completo con el enlace del correo sigue pendiente
+de prueba. Los callbacks locales y de producción ya están guardados; también se conservó el
+enlace anterior `af0dd1ec.app-b20.pages.dev`. El error previo `invalid_redirect_uri` se debió
+a que únicamente estaban registrados los retornos locales; esa configuración ya se corrigió.
 
-Los callbacks locales y HTTPS de producción ya están guardados. También se conservó el
-retorno del enlace anterior `af0dd1ec.app-b20.pages.dev` para que continúe funcionando. El acceso completo con una cuenta invitada, la renovación y las
-pruebas con dos cuentas siguen pendientes. La web ya está publicada en
-https://app-b20.pages.dev; el despliegue de `59d17a7` terminó en **Success** y muestra el acceso
-real de B20. La API aún no está desplegada.
-
-El error previo `invalid_redirect_uri` se debía a que únicamente estaban registrados los
-retornos locales; ya se añadieron los de **https://app-b20.pages.dev** y del enlace anterior
-`https://af0dd1ec.app-b20.pages.dev`. El acceso completo con una persona sigue pendiente.
-Comparte y abre la URL estable. La nueva compilación de Pages usa
-`VITE_WEB_ORIGIN=https://app-b20.pages.dev` para llevar los alias al dominio estable antes del
-login; no traslada `code` ni `state` desde callbacks de otro origen. Los despliegues anteriores
-son inmutables. No registres cada hash futuro ni comodines.
+La compilación de Pages usa `VITE_WEB_ORIGIN=https://app-b20.pages.dev` para llevar los alias al
+dominio estable antes del login. No traslada `code` ni `state` desde callbacks de otro origen.
+Los despliegues anteriores son inmutables; no registres cada hash futuro ni comodines.
 Consulta la [guía de Cloudflare Pages](cloudflare-pages.md).
+
+## Cómo se conservan los datos temporales
+
+Tras autenticarse, la app crea `DemoDataSource` con los ejemplos actuales para el `subject`
+de esa cuenta. Una renovación del token de la misma identidad conserva los cambios en memoria.
+Cerrar sesión, cambiar de identidad o recargar reinicia la simulación. No se guardan datos
+simulados en `localStorage`, no se comparten entre cuentas y no hay conexión ni escrituras a
+Maincloud. El selector de perfiles y roles ficticios indica que son simulación; **Ajustes**
+muestra separadamente la cuenta real que inició sesión.
+
+`VITE_DATA_MODE=spacetime` conserva el flujo de datos reales con `SpacetimeProvider` y
+`MembershipGate`: ahí sí se exigen invitación y membresía activa. Ese modo está desactivado en
+la configuración actual de Pages. Al activarlo se reutilizarán las cuentas de SpacetimeAuth;
+los cambios de la simulación no se importarán automáticamente.
+
+La base `app-b20-34245` ya está publicada en Maincloud, con emisor, cliente
+`client_034jL0AHYYQ1bps8SupHU0` e invitación inicial de administrador guardados. El propietario
+está persistido en `app_config`. Esa base permanece preparada para el modo `spacetime`; la
+simulación no envía allí el token ni datos. La API aún no está desplegada.
 
 ## 1. Panel de SpacetimeDB
 
@@ -74,8 +88,9 @@ juntos el esquema de retorno del código nativo y su registro en SpacetimeAuth.
 
 El formulario actual permite entrar por correo mediante un enlace de acceso. Conserva ese
 método para el piloto; no hace falta habilitar Google. El correo del token debe estar
-verificado y coincidir con la invitación de B20. Si se desea Google, configúralo como proveedor
-opcional con el siguiente paso. El acceso anónimo no concede membresía del grupo.
+verificado. La fase `demo` no consulta invitaciones; la fase `spacetime` sí exige que el
+correo coincida con la invitación. Si se desea Google, configúralo como proveedor opcional con
+el siguiente paso. El acceso anónimo no abre la simulación ni concede membresía del grupo.
 
 ## 2. Google Cloud: proveedor opcional
 
@@ -99,6 +114,7 @@ Copia `.env.example` y completa los valores de tu entorno. Vite lee las variable
 del repositorio al iniciar o compilar; el backend necesita las suyas en su entorno de ejecución.
 
 ```dotenv
+VITE_DATA_MODE=demo
 VITE_SPACETIMEAUTH_AUTHORITY=https://auth.spacetimedb.com/oidc
 VITE_SPACETIMEAUTH_CLIENT_ID=<client-id-web-de-SpacetimeAuth>
 # Opcionales si las tres presentaciones comparten cliente y callbacks registrados:
@@ -116,9 +132,11 @@ SPACETIMEDB_URI=http://localhost:3000
 SPACETIMEDB_MODULE=app-b20
 ```
 
-El bloque anterior es local (`app-b20`). Para conectar a la base elegida de Maincloud usa:
+El bloque anterior configura autenticación y valores locales; con `demo` no se usan la base ni
+la API. Para activar posteriormente el modo real con la base elegida de Maincloud, usa:
 
 ```dotenv
+VITE_DATA_MODE=spacetime
 VITE_SPACETIME_URI=wss://maincloud.spacetimedb.com
 VITE_SPACETIME_DB=app-b20-34245
 SPACETIMEDB_URI=https://maincloud.spacetimedb.com
@@ -127,7 +145,8 @@ SPACETIMEDB_MODULE=app-b20-34245
 
 En Cloudflare Pages los valores públicos se configuran en `wrangler.jsonc → vars`; las
 variables `VITE_*` del panel no sustituyen ese archivo. Para compilar localmente usa
-`.env.pages.example` como base de `.env.pages`. `VITE_WEB_ORIGIN=https://app-b20.pages.dev`
+`.env.pages.example` como base de `.env.pages`. Mantén `VITE_DATA_MODE=demo` durante esta fase.
+`VITE_WEB_ORIGIN=https://app-b20.pages.dev`
 fija el origen estable en modo `pages`; deja ambos callbacks vacíos y la app añade
 `/auth/callback` o `/auth/logout`. Esas URLs HTTPS exactas ya están registradas en el cliente.
 Las variables Vite se fijan al compilar. Detalles en
@@ -143,9 +162,10 @@ SpacetimeAuth. Las variables de callback son solo para web; extensión usa `chro
 Android abre el navegador del sistema y recibe el enlace de retorno. Reinicia desarrollo o
 vuelve a compilar la web al cambiar sus variables.
 
-## 4. Configurar la confianza e invitar al primer creador
+## 4. Modo futuro `spacetime`: confianza e invitación inicial
 
-La identidad que publicó la base conserva la facultad de configurar la autenticación y
+Esta sección corresponde al modo de datos reales. No es un requisito de acceso para la
+simulación actual. La identidad que publicó la base conserva la facultad de configurar la autenticación y
 preparar el primer acceso. La cuenta autenticada en el navegador no es la identidad de la CLI.
 
 ```sh
@@ -208,27 +228,33 @@ un perfil de configuración y no sustituye este paso. `--env-only` no se combina
 Solo la identidad fijada por quien publica puede completar la fila faltante; nunca se concede
 control al primer visitante.
 
-## 5. Comprobaciones del piloto
+## 5. Comprobaciones de la fase temporal
 
-- Una cuenta invitada entra y conserva sus cambios después de recargar.
-- Otra cuenta sin invitación puede autenticarse, pero no unirse ni consultar datos del grupo.
-- Dos cuentas invitadas ven los mismos mensajes y solo los participantes ven sus mensajes 1 a 1.
-- Una cuenta dada de baja pierde el acceso al grupo y al backend.
-- El cierre de sesión y un nuevo acceso funcionan desde el dominio público, PWA instalada,
-  extensión con su ID definitivo y APK firmado.
-- En Android se ha ejecutado `npm run build:android` para sincronizar los plugins nativos de
-  navegador y retorno a la app antes de compilar el APK.
+- Completar el enlace por correo de SpacetimeAuth con una cuenta verificada sin invitación y
+  comprobar que abre la interfaz. Esta prueba humana completa sigue pendiente.
+- Una sesión ausente o un correo no verificado no deben abrir la simulación, incluso con
+  `?demo`; una configuración de autenticación ausente muestra el error correspondiente.
+- Ajustes muestra la cuenta real, separada de los perfiles y roles ficticios de prueba.
+- Renovar el token conserva los cambios simulados de la misma identidad; recargar, cerrar
+  sesión o cambiar de cuenta los reinicia. No hay datos simulados en `localStorage`.
+- No se abre conexión ni se realizan lecturas o escrituras a Maincloud en modo `demo`.
+- El cierre de sesión y un nuevo acceso funcionan desde el dominio estable.
 
-El módulo remoto, la invitación inicial y los callbacks locales y de producción ya están
-preparados. La web está publicada; falta completar el acceso y las pruebas con las cuentas
-del piloto. El backend requiere su propio despliegue y conectar la interfaz de IA/BYOK. Los flujos de extensión y Android requieren sus callbacks y validación en sus entornos reales
-antes de distribuirse. El retorno de Android usa el esquema anterior, no `capacitor://localhost`.
-Android usa un refresh token si el proveedor lo entrega; si no, al vencer el ID token pide
-entrar de nuevo. La renovación no abre el navegador sin una acción de la persona.
+Antes de activar `VITE_DATA_MODE=spacetime`, comprobar con dos cuentas invitadas persistencia,
+privacidad de mensajes, rechazo de no invitados, bajas y cierre de sesión. La invitación inicial
+está preparada, pero el modo real está desactivado ahora. La migración conserva las cuentas de
+SpacetimeAuth y necesita preparar los datos reales; la simulación no los crea automáticamente.
 
-Si la base ya contiene usuarios con identidad de Google directo, respalda los datos y prepara
-una migración de identidades antes de cambiar el emisor. El mismo correo puede recibir una
-identidad de SpacetimeDB distinta; esta implementación no fusiona cuentas automáticamente.
+La API requiere su propio despliegue y conectar la interfaz de IA/BYOK. Extensión y Android
+necesitan sus callbacks y validación en sus entornos reales antes de distribuirse. El retorno
+de Android usa el esquema indicado, no `capacitor://localhost`. Android usa un refresh token
+si el proveedor lo entrega; si no, al vencer el ID token pide entrar de nuevo. La renovación no
+abre el navegador sin una acción de la persona.
+
+Si otra instalación contiene usuarios con identidad de Google directo, una migración del
+emisor debe tratar sus identidades aparte; el mismo correo puede recibir otra identidad de
+SpacetimeDB y esta implementación no fusiona cuentas automáticamente. B20 conserva aquí sus
+cuentas de SpacetimeAuth al cambiar únicamente el modo de datos.
 
 ## Fuentes oficiales
 

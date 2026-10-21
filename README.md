@@ -14,9 +14,27 @@ La definición completa está en [`docs/definicion-del-proyecto.md`](docs/defini
 y la arquitectura en [`docs/arquitectura.md`](docs/arquitectura.md). Este repositorio es la base
 de la **Etapa 0** (prototipo técnico) y del **MVP** (Etapa 1).
 
+## Versión temporal para probar la interfaz
+
+La web usa **SpacetimeAuth real por enlace al correo** y **datos simulados**. Cualquier persona
+con correo verificado puede entrar sin invitación en esta fase. `VITE_DATA_MODE=demo` es el
+valor predeterminado y el configurado para Pages; no se conecta ni escribe en Maincloud.
+La prueba completa del acceso por correo todavía está pendiente.
+
+Los cambios de prueba viven en memoria por la cuenta autenticada: una renovación de sesión
+los conserva; recargar, cerrar sesión o cambiar de cuenta los reinicia. No se guardan datos
+simulados en `localStorage`. Los perfiles y roles ficticios del selector se identifican como
+simulación; **Ajustes** muestra por separado la cuenta real que inició sesión.
+
+El modo futuro `VITE_DATA_MODE=spacetime` conserva la conexión y la validación de invitaciones
+para los datos reales del grupo. Al activarlo se reutilizarán las cuentas de SpacetimeAuth;
+los cambios temporales de la simulación no se convierten automáticamente en datos reales.
+
+
 ## Qué es la app
 
-- **Acceso exclusivo para el grupo**, por invitación y validación de membresía. Perfiles,
+- **En el modo de datos reales, acceso exclusivo para el grupo** por invitación y validación
+  de membresía. Perfiles,
   trabajos y espacios de coordinación son visibles dentro del grupo, nunca públicos en internet.
 - **Transparencia interna:** trabajos publicados, conversaciones del grupo, revisiones y
   votaciones nominales son visibles para los compañeros. Los mensajes 1 a 1 solo los ven sus
@@ -141,7 +159,8 @@ interfaz recibe la presentación como `platform` para adaptarse (por ejemplo, na
 en el panel lateral).
 
 **Pila técnica:** React + TypeScript + Vite, SpacetimeDB para datos en tiempo real, inicio de
-sesión con SpacetimeAuth y lista de invitaciones, Google Cloud Storage
+sesión con SpacetimeAuth y datos simulados en esta fase; modo SpacetimeDB con invitaciones
+conservado para activar después, Google Cloud Storage
 para archivos (máximo 50 MB por archivo), backend con `@google/genai` y almacén de secretos para Gemini, Web Push y FCM para
 notificaciones.
 
@@ -180,22 +199,24 @@ trabajar con B20 usa `npm run dev`; para publicar, sigue la guía sobre el módu
 El módulo ya está publicado en esa base, con `auth_config` y la primera invitación de
 administrador preparados. Los callbacks locales, del dominio estable `app-b20.pages.dev` y
 del enlace anterior `af0dd1ec.app-b20.pages.dev` ya están registrados en el cliente
-`client_034jL0AHYYQ1bps8SupHU0`. El acceso completo con una cuenta invitada y las pruebas
-con dos cuentas siguen pendientes. La web ya está publicada en
+`client_034jL0AHYYQ1bps8SupHU0`. La primera prueba humana completa por correo y las
+pruebas con dos cuentas siguen pendientes. La versión temporal no requiere invitación.
+La web ya está publicada en
 https://app-b20.pages.dev; la API todavía no está desplegada.
 
 Para futuras actualizaciones del módulo, `npm run spacetime:publish:maincloud` apunta a
 `app-b20-34245` con `--delete-data=never`; `npm run spacetime:publish` conserva el destino local
 `app-b20`.
 
-Consulta los callbacks ya registrados del cliente de SpacetimeAuth en
-[`docs/spacetimeauth.md`](docs/spacetimeauth.md). En una instalación nueva, quien publica usa
-su identidad de la CLI para ejecutar `set_auth_config` y crear la primera invitación de creador
-con `invite_member`. Después entra con el correo invitado a través de SpacetimeAuth y completa el registro. Las demás invitaciones
-se administran desde Ajustes.
+Consulta los callbacks ya registrados y ambos modos en
+[`docs/spacetimeauth.md`](docs/spacetimeauth.md). Para esta fase basta SpacetimeAuth con correo
+verificado y `VITE_DATA_MODE=demo`. No se monta la conexión a Maincloud ni el control de
+invitaciones. La configuración de autenticación es obligatoria: si falta, aparece el error
+de configuración; ni siquiera `?demo` permite saltarse el inicio de sesión.
 
-El acceso real necesita las variables de SpacetimeAuth y la base publicada. La demo conserva
-datos de prueba en memoria y se utiliza de forma explícita, sin conceder acceso al grupo real.
+Cuando se active `VITE_DATA_MODE=spacetime`, quien administra la base conservará las
+invitaciones mediante `invite_member` y Ajustes. Ese modo exige membresía para consultar y
+modificar datos del grupo; las cuentas de autenticación se conservan.
 
 ## Publicar la web en Cloudflare Pages
 
@@ -210,7 +231,7 @@ npm run build:pages
 npm run pages:dev
 ```
 
-`build:pages` compila en modo `pages` con Maincloud y
+`build:pages` compila en modo `pages` con `VITE_DATA_MODE=demo` y
 `VITE_WEB_ORIGIN=https://app-b20.pages.dev` para usar el dominio estable. Las nuevas
 compilaciones llevan los alias a ese origen antes del login; no se trasladan parámetros de
 retorno de autenticación entre dominios. No publiques `.env`; el ZIP solo contiene la web.
@@ -236,11 +257,14 @@ autorizar cada alias de despliegue. El subdominio `pages.dev` no necesita DNS ni
 
 ## Reglas que el código ya respeta
 
-- Las tablas de SpacetimeDB son privadas; los clientes solo leen vistas que comprueban
+- En `VITE_DATA_MODE=spacetime`, las tablas de SpacetimeDB son privadas; los clientes leen
+  vistas que comprueban
   membresía activa. Los mensajes 1 a 1 solo los ven sus dos participantes.
-- Acceso por invitación: unirse requiere sesión de SpacetimeAuth con correo verificado en la
-  lista autorizada. Módulo y backend limitan la confianza al emisor y client IDs configurados;
-  las rutas protegidas requieren membresía activa.
+- El modo `demo` exige una sesión de SpacetimeAuth con correo verificado y permite entrar
+  sin invitación. Conserva los cambios simulados en memoria, separados por identidad, sin
+  conexiones ni escrituras a Maincloud.
+- El modo `spacetime` exige una invitación para unirse. Módulo y backend limitan la confianza
+  al emisor y client IDs configurados; sus rutas protegidas requieren membresía activa.
 - Ningún secreto vive en el cliente. Las claves de Gemini se guardan cifradas en el backend y
   solo se informa si existen.
 - Los cumpleaños guardan día y mes, nunca el año, y son voluntarios.
@@ -248,13 +272,14 @@ autorizar cada alias de despliegue. El subdominio `pages.dev` no necesita DNS ni
 
 ## Pendientes por validar
 
-- **SpacetimeAuth en el entorno real:** completar el acceso con la cuenta invitada; los
-  callbacks locales y de producción, emisor/audiencia y primera invitación ya están preparados. El formulario actual permite acceso por correo; Google es opcional.
-  Probar invitación, baja, renovación y cierre de sesión con dos cuentas. Extensión y Android
-  necesitan validar su flujo propio antes de distribuirse. Pasos en [`docs/spacetimeauth.md`](docs/spacetimeauth.md).
+- **SpacetimeAuth y simulación:** completar el enlace por correo, probar una cuenta verificada
+  sin invitación y comprobar renovación, cierre, cambio de cuenta y reinicio de los datos al
+  recargar. Los callbacks ya están guardados. Antes de activar `spacetime`, probar invitación,
+  baja, persistencia y privacidad con dos cuentas. Extensión y Android requieren sus pruebas
+  propias. Pasos en [`docs/spacetimeauth.md`](docs/spacetimeauth.md).
 - **IA y BYOK:** la interfaz aún no conecta con la API, que requiere despliegue y configuración
   propios. Confirmar los requisitos de edad antes de habilitar Gemini. Esto no impide publicar
-  la web y usar las funciones conectadas a SpacetimeDB.
+  la web y revisar la interfaz con datos simulados.
 - **Archivos:** falta el almacenamiento remoto para adjuntos y stickers.
 - **Costos y límites:** infraestructura, archivos, cuotas de API y presupuesto de cada clave.
 - **Instalación y push:** PWA en iPhone, APK firmado con FCM y avisos de la extensión, probados en
