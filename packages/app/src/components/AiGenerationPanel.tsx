@@ -17,7 +17,7 @@ export function AiGenerationPanel({ client, status, preparation, simulated }: { 
     const active = new AbortController(); controller.current = active;
     setGeneration(undefined); setPublished(undefined); setConfirmed(false); attempt.current = undefined;
     if (client && !simulated) void client.request<AiGeneration[]>('/ai/generations', 'GET', undefined, active.signal).then((rows) => {
-      if (!active.signal.aborted && Array.isArray(rows)) setHistory(rows);
+      if (!active.signal.aborted && Array.isArray(rows)) setHistory(rows.filter((row) => !row.preparation || row.preparation.config.purpose === 'guide' || row.preparation.config.purpose === 'explanation'));
     }).catch(() => {});
     return () => active.abort();
   }, [client, preparation?.id, simulated]);

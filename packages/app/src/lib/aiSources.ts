@@ -4,7 +4,7 @@ import type { Snapshot } from '../data/types';
 export type AiCandidateKind = AiSourceKind;
 export const AI_SOURCE_LABELS: Record<AiCandidateKind, string> = {
   note: 'Nota de clase', assignment: 'Tarea', activity: 'Actividad de clase',
-  work: 'Trabajo', evidence: 'Evidencia', guide: 'Guía de estudio',
+  work: 'Trabajo', evidence: 'Evidencia', guide: 'Guía de estudio', teaching: 'Tu explicación guardada',
 };
 
 /** Presentation candidates only. The server resolves permissions and actual content again. */

@@ -31,7 +31,7 @@ function store(key: string, initial: Row[] = []) {
 function setup() {
   const timestamp = new Timestamp(1_790_000_000_000_000n);
   const keys: Record<string, string> = { member: 'identity', aiKey: 'actor', aiConsent: 'actor', noteDetail: 'noteId',
-    assignmentDetail: 'assignmentId', workDetail: 'workId', evidenceDetail: 'evidenceId', contentStatus: 'key', aiPublication: 'generationId' };
+    assignmentDetail: 'assignmentId', workDetail: 'workId', evidenceDetail: 'evidenceId', contentStatus: 'key', aiPublication: 'generationId', aiStudyAcceptance: 'generationId', teachingPersonal: 'practiceId' };
   const initial: Record<string, Row[]> = {
     appConfig: [{ id: 0, owner }], authConfig: [{ id: 0, issuer: 'https://issuer.test', audiences: ['test'] }],
     member: [owner, alice, bob, removed].map((identity) => ({ identity, status: identity === removed ? 'removed' : 'active', isCreator: identity === owner })),
@@ -80,6 +80,85 @@ function setup() {
 }
 
 describe('EX1 IA: procedimientos reales y tablas privadas', () => {
+  function readyStudy(purpose: 'teaching_questions' | 'spaced_cards', personal = false) {
+    const s = setup(); s.configure(); s.configureKey();
+    s.insert('teachingPractice', { id: 70n, owner: alice, reviewer: bob, subjectId: 1n, topic: 'Ciclos', status: 'practicing',
+      concept: 'Un ciclo repite instrucciones.', example: 'for con contador.', limits: 'Termina con una condición falsa.', revisedConcept: '', revisedExample: '', revisedLimits: '', updatedAt: new Timestamp(1n) });
+    s.insert('teachingPersonal', { practiceId: 70n, reflection: 'REFLEXIÓN_PRIVADA_NO_ENVIAR', topicsToReview: 'TEMAS_PERSONALES_NO_ENVIAR' });
+    s.insert('spacedCollection', { id: 80n, subjectId: 1n, ownerId: alice, visibility: personal ? 'personal' : 'group', version: 1, archived: false });
+    const config = { purpose, questionCount: 3, types: ['single'], difficulty: 'basic' };
+    const preparation = s.call<AiPreparation>(ai_prepare, { id: uid(801), subjectId: '1', topics: ['Ciclos'], config, model: 'fake',
+      sources: [{ kind: purpose === 'teaching_questions' ? 'teaching' : 'note', refId: purpose === 'teaching_questions' ? '70' : personal ? '2' : '1', topics: ['Ciclos'], includeUnplaced: true }] });
+    const request = { id: uid(802), preparationId: preparation.id, fingerprint: preparation.fingerprint, config, model: 'fake', confirmed: true };
+    s.call(ai_authorize_generation, request); s.as(aiService); const claim = s.call(ai_claim_generation, { id: request.id, actor: alice.toHexString() });
+    const result = purpose === 'teaching_questions' ? { purpose, questions: [{ text: '¿Qué haría que no terminara?', citations: [preparation.fragments[0]!.id] }] }
+      : { purpose, title: 'Ciclos', cards: [{ question: '¿Qué es un ciclo?', explanation: 'Repite instrucciones.', hint: 'Repetición.', citations: [preparation.fragments[0]!.id] }] };
+    s.call(ai_finish_generation, { id: request.id, actor: alice.toHexString(), state: 'succeeded', result }); s.as(alice);
+    return { ...s, preparation, request, claim };
+  }
+  it('exige renovar el consentimiento anterior al añadir preguntas y tarjetas', () => {
+    const s = setup(); s.configure(); s.insert('aiConsent', { actor: alice, version: '2026-10-21', accepted: true });
+    expect(s.call(ai_status).consented).toBe(false);
+    expect(() => s.call(ai_authorize_key, { intentId: uid(901), keyId: uid(902), provider: 'gemini' })).toThrow('consentimiento vigente');
+  });
+  it('usa sólo la explicación guardada del autor y mantiene preguntas privadas hasta aceptar', () => {
+    const s = readyStudy('teaching_questions');
+    expect(JSON.stringify(s.claim)).not.toMatch(/REFLEXIÓN_PRIVADA|TEMAS_PERSONALES|reviewer|answer/);
+    expect(s.rows('teachingQuestion')).toHaveLength(0);
+    const acceptance = { id: s.request.id, reviewed: true, selection: [{ index: 0, text: '¿En qué caso el ciclo sería infinito?' }] };
+    const first = s.call(ai_publish_generation, acceptance); expect(s.call(ai_publish_generation, acceptance)).toEqual(first);
+    expect(s.rows('teachingQuestion')).toHaveLength(1); expect(s.rows('note')).toHaveLength(3);
+    expect(s.rows('teachingQuestion')[0]).toMatchObject({ practiceId: 70n, kind: 'guided', answer: '' });
+    expect(() => s.call(ai_publish_generation, { ...acceptance, selection: [{ index: 0, text: 'Otra pregunta' }] })).toThrow('otra selección');
+    s.as(bob); expect(() => s.call(ai_get_generation, { id: s.request.id })).toThrow('disponible');
+    expect(() => s.call(ai_prepare, { id: uid(803), subjectId: '1', topics: ['Ciclos'], config: s.preparation.config, model: 'fake', sources: [{ kind: 'teaching', refId: '70', topics: ['Ciclos'], includeUnplaced: true }] })).toThrow('Solo el autor');
+  });
+  it('invalida preguntas si cambia la explicación guardada y crea otra revisión concreta', () => {
+    const s = readyStudy('teaching_questions'); s.rows('teachingPractice')[0].concept = 'Un ciclo nuevo.';
+    expect(() => s.call(ai_get_generation, { id: s.request.id })).toThrow('cambió');
+    expect(() => s.call(ai_publish_generation, { id: s.request.id, reviewed: true, selection: [{ index: 0, text: '¿Por qué?' }] })).toThrow('cambió');
+    expect(s.rows('aiTeachingVersion').map((row) => row.version)).toEqual([1, 2]); expect(s.rows('teachingQuestion')).toHaveLength(0);
+  });
+  it('exige selección revisada explícita, sin generar preguntas automáticamente', () => {
+    const s = readyStudy('teaching_questions');
+    for (const input of [{}, { reviewed: false, selection: [{ index: 0, text: 'Pregunta' }] }, { reviewed: true, selection: [{ index: 999, text: 'Pregunta' }] }]) expect(() => s.call(ai_publish_generation, { id: s.request.id, ...input })).toThrow();
+    expect(s.rows('teachingQuestion')).toHaveLength(0);
+  });
+  it('acepta tarjetas corregidas una vez, con fuente/version y sin tocar avance ni historial', () => {
+    const s = readyStudy('spaced_cards'); const acceptance = { id: s.request.id, reviewed: true, collectionId: '80', expectedCollectionVersion: 1,
+      selection: [{ index: 0, question: '¿Qué repite un ciclo?', explanation: 'Repite instrucciones mientras se cumpla la condición.', hint: 'Instrucciones.' }] };
+    const result = s.call(ai_publish_generation, acceptance); expect(s.call(ai_publish_generation, acceptance)).toEqual(result);
+    expect(s.call(ai_get_generation, { id: s.request.id }).acceptance).toEqual(result);
+    expect(s.rows('spacedCard')).toHaveLength(1); expect(s.rows('spacedCard')[0]).toMatchObject({ sourceKind: 'note', sourceId: 1n, sourceVersion: 1, version: 1 });
+    expect(String(s.rows('spacedCard')[0].explanation)).toContain('note:1 v1'); expect(s.rows('spacedProgress')).toHaveLength(0); expect(s.rows('spacedReview')).toHaveLength(0);
+  });
+  it('valida el lote completo antes de insertar cuando la segunda tarjeta excede el tamaño con sus citas', () => {
+    const s = readyStudy('spaced_cards');
+    const stored = s.rows('aiPreparation').find((row) => row.id === s.preparation.id)!;
+    const prep = JSON.parse(String(stored.json)) as AiPreparation;
+    const original = prep.fragments[0]!;
+    prep.fragments.push({ id: 'many-citations', text: 'Texto repetido de un adjunto autorizado.', origins: Array.from({ length: 40 }, (_, index) => ({ ...original.origins[0]!, field: `Adjunto de texto ${'a'.repeat(120)}`, startLine: index + 1, endLine: index + 1 })) });
+    stored.json = JSON.stringify(prep);
+    const generation = s.rows('aiGeneration').find((row) => row.id === s.request.id)!;
+    generation.resultJson = JSON.stringify({ purpose: 'spaced_cards', title: 'Ciclos', cards: [
+      { question: 'Primera válida', explanation: 'Explicación breve.', hint: '', citations: [original.id] },
+      { question: 'Segunda demasiado grande con sus referencias', explanation: 'a'.repeat(18_000), hint: '', citations: ['many-citations'] },
+    ] });
+    const acceptance = { id: s.request.id, reviewed: true, collectionId: '80', expectedCollectionVersion: 1, selection: [
+      { index: 0, question: 'Primera válida', explanation: 'Explicación breve.', hint: '' },
+      { index: 1, question: 'Segunda demasiado grande con sus referencias', explanation: 'a'.repeat(18_000), hint: '' },
+    ] };
+    expect(() => s.call(ai_publish_generation, acceptance)).toThrow('tamaño');
+    expect(s.rows('spacedCard')).toHaveLength(0); expect(s.rows('aiStudyAcceptance')).toHaveLength(0);
+    expect(() => s.call(ai_publish_generation, acceptance)).toThrow('tamaño'); expect(s.rows('spacedCard')).toHaveLength(0);
+  });
+  it('prohíbe compartir tarjetas de fuentes personales y revalida fuentes antes de aceptar', () => {
+    const s = readyStudy('spaced_cards', true); const acceptance = { id: s.request.id, reviewed: true, collectionId: '80', expectedCollectionVersion: 1,
+      selection: [{ index: 0, question: '¿Qué es?', explanation: 'Una idea.', hint: '' }] };
+    s.rows('spacedCollection')[0].visibility = 'group'; expect(() => s.call(ai_publish_generation, acceptance)).toThrow('personales');
+    s.rows('spacedCollection')[0].visibility = 'personal'; s.rows('note')[1].version = 2;
+    expect(() => s.call(ai_publish_generation, acceptance)).toThrow('cambió'); expect(s.rows('spacedCard')).toHaveLength(0);
+  });
   it('extrae adjuntos UTF8 autorizados, registra omisiones y detecta su sustitución antes del envío', () => {
     const s = setup(); const bytes = new TextEncoder().encode('const ejemplo = 123;');
     s.insert('resourceFile', { id: 'text-file', targetKind: 'note', targetId: 1n, name: 'codigo.ts', size: BigInt(bytes.length), contentType: 'text/plain', storageKey: 'stdb:text-file', etag: 'a' });

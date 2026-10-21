@@ -3,7 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { contributionEntries } from '../lib/contributions';
 import { buildNews } from '../lib/whatsNew';
 import { createDemoState, DemoDataSource } from './demo';
-import type { Snapshot } from './types';
+import type { SaveTeachingPracticeInput, Snapshot } from './types';
+
+let teachingRequestSequence = 0;
+function saveTeaching(data: DemoDataSource, id: string, input: SaveTeachingPracticeInput) {
+  const expectedVersion = data.getSnapshot().teachingPractices.find((row) => row.id === id)?.version ?? 1;
+  const requestId = `00000000-0000-4000-8000-${String(++teachingRequestSequence).padStart(12, '0')}`;
+  return data.saveTeachingPractice(id, { ...input, expectedVersion, requestId });
+}
 
 const NOW = new Date('2026-10-21T17:00:00Z');
 const OWNER = 'demo-2';
@@ -91,12 +98,12 @@ describe('Salas junto con Ayuda, materiales y Aprende enseñando reales', () => 
       source: { kind: 'note', id: sourceNote.id }, initial: { ...EMPTY_TEACHING_EXPLANATION } });
     expect(data.getSnapshot().teachingPractices.find((row) => row.id === practiceId)?.initial)
       .toEqual(EMPTY_TEACHING_EXPLANATION);
-    data.saveTeachingPractice(practiceId, { initial: revised, revised: EMPTY_TEACHING_EXPLANATION,
+    saveTeaching(data, practiceId, { initial: revised, revised: EMPTY_TEACHING_EXPLANATION,
       reflection: '', topicsToReview: '' });
     data.startTeachingPractice(practiceId);
     const question = data.getSnapshot().teachingQuestions.find((row) => row.practiceId === practiceId)!;
     data.answerTeachingQuestion(question.id, 'Respuesta privada de la práctica');
-    data.saveTeachingPractice(practiceId, { initial: revised, revised,
+    saveTeaching(data, practiceId, { initial: revised, revised,
       reflection: 'Reflexión privada que no pertenece a la sala', topicsToReview: 'Pendientes privados' });
     data.completeTeachingPractice(practiceId);
     as(data, PEER);

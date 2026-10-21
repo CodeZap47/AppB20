@@ -20,3 +20,6 @@ export * from './ai';
 export * from './exam';
 export * from './aiStudyDraft';
 export * from './notifications';
+export * from './practice';
+export * from './community4';
+export * from './aiStudyModules';

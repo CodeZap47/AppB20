@@ -9,6 +9,9 @@ import { InstallPage } from './pages/InstallPage';
 import { DirectThread, GroupThread, ChannelThread, MessagesLayout, ThreadPlaceholder } from './pages/MessagesPage';
 import { RetiredContentPage } from './pages/RetiredContentPage';
 import { NotificationsPage } from './pages/NotificationsPage';
+import { ChallengesPage, ChallengeCreatePage, ChallengeDetailPage, CodeReviewsPage, CodeReviewCreatePage, CodeReviewDetailPage } from './pages/PracticePage';
+import { MuseumPage } from './pages/MuseumPage';
+import { OpportunitiesPage } from './pages/OpportunitiesPage';
 import { CommandsPage, StickersPage } from './pages/ChatToolsPage';
 import {
   AssignmentFormPage,
@@ -127,6 +130,14 @@ const router = createHashRouter([
           { path: 'm/votaciones/:pollId', element: <PollPage /> },
           { path: 'm/votaciones/:pollId/editar', element: <PollFormPage /> },
           { path: 'm/ayuda', element: <HelpPage /> },
+          { path: 'm/retos', element: <ChallengesPage /> },
+          { path: 'm/retos/nuevo', element: <ChallengeCreatePage /> },
+          { path: 'm/retos/:challengeId', element: <ChallengeDetailPage /> },
+          { path: 'm/revision-codigo', element: <CodeReviewsPage /> },
+          { path: 'm/revision-codigo/nueva', element: <CodeReviewCreatePage /> },
+          { path: 'm/revision-codigo/:reviewId', element: <CodeReviewDetailPage /> },
+          { path: 'm/museo-bugs', element: <MuseumPage /> },
+          { path: 'm/oportunidades', element: <OpportunitiesPage /> },
           { path: 'm/ayuda/nueva', element: <HelpFormPage /> },
           { path: 'm/ayuda/contactos', element: <HelpContactsPage /> },
           { path: 'm/ayuda/:postId', element: <HelpPostPage /> },

@@ -175,7 +175,7 @@ describe('pantallas de ayuda', () => {
     await fill(container.querySelector('textarea')!, 'Contenido duplicado');
     expect(button('Confirmar retirada').disabled).toBe(false);
     await submit(container.querySelector('form')!);
-    expect(actions.withdrawHelpPost).toHaveBeenCalledWith('offer', 'Contenido duplicado');
+    expect(actions.withdrawHelpPost).toHaveBeenCalledWith('offer', 'Contenido duplicado', 1);
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('No se pudo retirar.');
     expect(container.querySelector('form')).not.toBeNull();
     expect(container.textContent).not.toContain('La publicación fue retirada.');
@@ -186,7 +186,7 @@ describe('pantallas de ayuda', () => {
     actions.setHelpPostStatus.mockImplementationOnce(async (id, status) => { publish({ helpPosts: snapshot.helpPosts.map((entry) => entry.id === id ? { ...entry, status } : entry) }); });
     await render('/m/ayuda/offer');
     await click(button('Cerrar publicación'));
-    expect(actions.setHelpPostStatus).toHaveBeenCalledWith('offer', 'closed');
+    expect(actions.setHelpPostStatus).toHaveBeenCalledWith('offer', 'closed', 1);
     expect(container.querySelector('[role="status"]')?.textContent).toContain('Publicación cerrada');
     expect(button('Reabrir publicación')).toBeDefined();
   });

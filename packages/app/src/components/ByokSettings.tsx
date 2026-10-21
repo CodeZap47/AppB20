@@ -110,7 +110,7 @@ function ByokAccountSettings({ token, simulated, active }: { token?: string; sim
       </form>}
       {status && <fieldset disabled={busy || loading || !active || status.serviceConfigured === false} className="ai-consent">
         <legend>Consentimiento para usar IA · versión {status.consentVersion}</legend>
-        <label><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />Entiendo que, al confirmar una generación, el texto que revise y mi clave se usarán para solicitar guías o explicaciones a Google Gemini. Revisaré los fragmentos antes de enviarlos.</label>
+        <label><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />Entiendo que, al confirmar una generación, el texto que revise y mi clave se usarán para solicitar borradores de estudio, guías, explicaciones, preguntas clarificadoras o tarjetas a Google Gemini. Revisaré los fragmentos antes de enviarlos.</label>
         <p className="field__hint">Este consentimiento es individual. La administración debe confirmar por separado la elegibilidad del grupo y habilitar el servicio. La generación real comienza desactivada.</p>
         <button type="button" disabled={consent === status.consented} onClick={saveConsent}>{consent ? 'Guardar consentimiento' : 'Retirar consentimiento'}</button>
       </fieldset>}

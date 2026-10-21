@@ -150,6 +150,24 @@ export const AiServiceConfig = __t.object("AiServiceConfig", {
 });
 export type AiServiceConfig = __Infer<typeof AiServiceConfig>;
 
+export const AiStudyAcceptance = __t.object("AiStudyAcceptance", {
+  generationId: __t.string(),
+  actor: __t.identity(),
+  requestHash: __t.string(),
+  resultJson: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type AiStudyAcceptance = __Infer<typeof AiStudyAcceptance>;
+
+export const AiTeachingVersion = __t.object("AiTeachingVersion", {
+  id: __t.string(),
+  practiceId: __t.u64(),
+  version: __t.u32(),
+  fingerprint: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type AiTeachingVersion = __Infer<typeof AiTeachingVersion>;
+
 export const Answer = __t.object("Answer", {
   id: __t.u64(),
   questionId: __t.u64(),
@@ -229,6 +247,56 @@ export type Birthdays = __Infer<typeof Birthdays>;
 export const Calendar = __t.object("Calendar", {});
 export type Calendar = __Infer<typeof Calendar>;
 
+export const ChallengeComment = __t.object("ChallengeComment", {
+  id: __t.u64(),
+  challengeId: __t.u64(),
+  solutionId: __t.option(__t.u64()),
+  author: __t.identity(),
+  body: __t.string(),
+  requestId: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type ChallengeComment = __Infer<typeof ChallengeComment>;
+
+export const ChallengeComments = __t.object("ChallengeComments", {});
+export type ChallengeComments = __Infer<typeof ChallengeComments>;
+
+export const ChallengeHint = __t.object("ChallengeHint", {
+  key: __t.string(),
+  challengeId: __t.u64(),
+  number: __t.u32(),
+  body: __t.string(),
+});
+export type ChallengeHint = __Infer<typeof ChallengeHint>;
+
+export const ChallengeHints = __t.object("ChallengeHints", {});
+export type ChallengeHints = __Infer<typeof ChallengeHints>;
+
+export const ChallengeProgress = __t.object("ChallengeProgress", {
+  key: __t.string(),
+  challengeId: __t.u64(),
+  memberId: __t.identity(),
+  unlockedHints: __t.u32(),
+  updatedAt: __t.timestamp(),
+});
+export type ChallengeProgress = __Infer<typeof ChallengeProgress>;
+
+export const ChallengeSolution = __t.object("ChallengeSolution", {
+  id: __t.u64(),
+  challengeId: __t.u64(),
+  author: __t.identity(),
+  body: __t.string(),
+  explanation: __t.string(),
+  version: __t.u32(),
+  requestId: __t.string(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type ChallengeSolution = __Infer<typeof ChallengeSolution>;
+
+export const ChallengeSolutions = __t.object("ChallengeSolutions", {});
+export type ChallengeSolutions = __Infer<typeof ChallengeSolutions>;
+
 export const ChangeHistory = __t.object("ChangeHistory", {});
 export type ChangeHistory = __Infer<typeof ChangeHistory>;
 
@@ -281,6 +349,83 @@ export const ChatCommand = __t.object("ChatCommand", {
   createdAt: __t.timestamp(),
 });
 export type ChatCommand = __Infer<typeof ChatCommand>;
+
+export const CodeReview = __t.object("CodeReview", {
+  id: __t.u64(),
+  author: __t.identity(),
+  requestId: __t.string(),
+  subjectId: __t.u64(),
+  title: __t.string(),
+  language: __t.string(),
+  currentVersion: __t.u32(),
+  closed: __t.bool(),
+  version: __t.u32(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type CodeReview = __Infer<typeof CodeReview>;
+
+export const CodeReviewComment = __t.object("CodeReviewComment", {
+  id: __t.u64(),
+  reviewId: __t.u64(),
+  versionNumber: __t.u32(),
+  lineStart: __t.u32(),
+  lineEnd: __t.u32(),
+  kind: __t.string(),
+  author: __t.identity(),
+  body: __t.string(),
+  status: __t.string(),
+  resolution: __t.string(),
+  version: __t.u32(),
+  requestId: __t.string(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type CodeReviewComment = __Infer<typeof CodeReviewComment>;
+
+export const CodeReviewComments = __t.object("CodeReviewComments", {});
+export type CodeReviewComments = __Infer<typeof CodeReviewComments>;
+
+export const CodeReviewVersion = __t.object("CodeReviewVersion", {
+  key: __t.string(),
+  reviewId: __t.u64(),
+  number: __t.u32(),
+  code: __t.string(),
+  repositoryUrl: __t.string(),
+  summary: __t.string(),
+  requestId: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type CodeReviewVersion = __Infer<typeof CodeReviewVersion>;
+
+export const CodeReviewVersions = __t.object("CodeReviewVersions", {});
+export type CodeReviewVersions = __Infer<typeof CodeReviewVersions>;
+
+export const CodeReviews = __t.object("CodeReviews", {});
+export type CodeReviews = __Infer<typeof CodeReviews>;
+
+export const CodingChallenge = __t.object("CodingChallenge", {
+  id: __t.u64(),
+  author: __t.identity(),
+  requestId: __t.string(),
+  subjectId: __t.u64(),
+  title: __t.string(),
+  topic: __t.string(),
+  difficulty: __t.string(),
+  objective: __t.string(),
+  instructions: __t.string(),
+  examples: __t.string(),
+  hintCount: __t.u32(),
+  closed: __t.bool(),
+  closure: __t.string(),
+  version: __t.u32(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type CodingChallenge = __Infer<typeof CodingChallenge>;
+
+export const CodingChallenges = __t.object("CodingChallenges", {});
+export type CodingChallenges = __Infer<typeof CodingChallenges>;
 
 export const ContentRetention = __t.object("ContentRetention", {
   key: __t.string(),
@@ -493,6 +638,15 @@ export const HelpContactRequest = __t.object("HelpContactRequest", {
 });
 export type HelpContactRequest = __Infer<typeof HelpContactRequest>;
 
+export const HelpIntent = __t.object("HelpIntent", {
+  key: __t.string(),
+  actor: __t.identity(),
+  digest: __t.string(),
+  postId: __t.u64(),
+  version: __t.u32(),
+});
+export type HelpIntent = __Infer<typeof HelpIntent>;
+
 export const HelpPost = __t.object("HelpPost", {
   id: __t.u64(),
   kind: __t.string(),
@@ -512,8 +666,21 @@ export const HelpPost = __t.object("HelpPost", {
 });
 export type HelpPost = __Infer<typeof HelpPost>;
 
+export const HelpPostVersions = __t.object("HelpPostVersions", {});
+export type HelpPostVersions = __Infer<typeof HelpPostVersions>;
+
 export const HelpPosts = __t.object("HelpPosts", {});
 export type HelpPosts = __Infer<typeof HelpPosts>;
+
+export const HelpRevision = __t.object("HelpRevision", {
+  key: __t.string(),
+  postId: __t.u64(),
+  version: __t.u32(),
+  fields: __t.string(),
+  status: __t.string(),
+  at: __t.timestamp(),
+});
+export type HelpRevision = __Infer<typeof HelpRevision>;
 
 export const HelpRoomLink = __t.object("HelpRoomLink", {
   id: __t.u64(),
@@ -523,6 +690,12 @@ export const HelpRoomLink = __t.object("HelpRoomLink", {
   memberB: __t.identity(),
 });
 export type HelpRoomLink = __Infer<typeof HelpRoomLink>;
+
+export const HelpVersion = __t.object("HelpVersion", {
+  postId: __t.u64(),
+  version: __t.u32(),
+});
+export type HelpVersion = __Infer<typeof HelpVersion>;
 
 export const Invitation = __t.object("Invitation", {
   email: __t.string(),
@@ -615,8 +788,40 @@ export const MessageReport = __t.object("MessageReport", {
 });
 export type MessageReport = __Infer<typeof MessageReport>;
 
+export const MuseumEntries = __t.object("MuseumEntries", {});
+export type MuseumEntries = __Infer<typeof MuseumEntries>;
+
+export const MuseumEntry = __t.object("MuseumEntry", {
+  questionId: __t.u64(),
+  author: __t.identity(),
+  requestId: __t.string(),
+  creationRequestId: __t.string(),
+  fields: __t.string(),
+  version: __t.u32(),
+  updatedBy: __t.identity(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type MuseumEntry = __Infer<typeof MuseumEntry>;
+
+export const MuseumRevision = __t.object("MuseumRevision", {
+  id: __t.u64(),
+  questionId: __t.u64(),
+  fields: __t.string(),
+  version: __t.u32(),
+  updatedBy: __t.identity(),
+  createdAt: __t.timestamp(),
+});
+export type MuseumRevision = __Infer<typeof MuseumRevision>;
+
+export const MuseumRevisions = __t.object("MuseumRevisions", {});
+export type MuseumRevisions = __Infer<typeof MuseumRevisions>;
+
 export const MyBlockedMembers = __t.object("MyBlockedMembers", {});
 export type MyBlockedMembers = __Infer<typeof MyBlockedMembers>;
+
+export const MyChallengeProgress = __t.object("MyChallengeProgress", {});
+export type MyChallengeProgress = __Infer<typeof MyChallengeProgress>;
 
 export const MyChatCommands = __t.object("MyChatCommands", {});
 export type MyChatCommands = __Infer<typeof MyChatCommands>;
@@ -671,6 +876,9 @@ export type MySpacedReviews = __Infer<typeof MySpacedReviews>;
 
 export const MyTeachingPersonal = __t.object("MyTeachingPersonal", {});
 export type MyTeachingPersonal = __Infer<typeof MyTeachingPersonal>;
+
+export const MyTeachingVersions = __t.object("MyTeachingVersions", {});
+export type MyTeachingVersions = __Infer<typeof MyTeachingVersions>;
 
 export const MyTrashEntries = __t.object("MyTrashEntries", {});
 export type MyTrashEntries = __Infer<typeof MyTrashEntries>;
@@ -839,6 +1047,71 @@ export const NotificationServiceConfig = __t.object("NotificationServiceConfig",
   enabled: __t.bool(),
 });
 export type NotificationServiceConfig = __Infer<typeof NotificationServiceConfig>;
+
+export const Opportunities = __t.object("Opportunities", {});
+export type Opportunities = __Infer<typeof Opportunities>;
+
+export const Opportunity = __t.object("Opportunity", {
+  id: __t.u64(),
+  author: __t.identity(),
+  requestId: __t.string(),
+  fields: __t.string(),
+  withdrawn: __t.bool(),
+  withdrawalReason: __t.string(),
+  version: __t.u32(),
+  updatedBy: __t.identity(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type Opportunity = __Infer<typeof Opportunity>;
+
+export const OpportunityFeedback = __t.object("OpportunityFeedback", {});
+export type OpportunityFeedback = __Infer<typeof OpportunityFeedback>;
+
+export const OpportunityFeedbackEntry = __t.object("OpportunityFeedbackEntry", {
+  id: __t.u64(),
+  opportunityId: __t.u64(),
+  author: __t.identity(),
+  requestId: __t.string(),
+  kind: __t.string(),
+  text: __t.string(),
+  status: __t.string(),
+  resolution: __t.string(),
+  resolvedBy: __t.option(__t.identity()),
+  version: __t.u32(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type OpportunityFeedbackEntry = __Infer<typeof OpportunityFeedbackEntry>;
+
+export const OpportunityInterest = __t.object("OpportunityInterest", {
+  key: __t.string(),
+  opportunityId: __t.u64(),
+  memberId: __t.identity(),
+  interested: __t.bool(),
+  seekingTeam: __t.bool(),
+  shareContact: __t.bool(),
+  version: __t.u32(),
+  updatedAt: __t.timestamp(),
+});
+export type OpportunityInterest = __Infer<typeof OpportunityInterest>;
+
+export const OpportunityInterests = __t.object("OpportunityInterests", {});
+export type OpportunityInterests = __Infer<typeof OpportunityInterests>;
+
+export const OpportunityRevision = __t.object("OpportunityRevision", {
+  id: __t.u64(),
+  opportunityId: __t.u64(),
+  fields: __t.string(),
+  withdrawn: __t.bool(),
+  version: __t.u32(),
+  updatedBy: __t.identity(),
+  createdAt: __t.timestamp(),
+});
+export type OpportunityRevision = __Infer<typeof OpportunityRevision>;
+
+export const OpportunityRevisions = __t.object("OpportunityRevisions", {});
+export type OpportunityRevisions = __Infer<typeof OpportunityRevisions>;
 
 export const PageRevision = __t.object("PageRevision", {
   id: __t.u64(),
@@ -1461,6 +1734,21 @@ export type Subject = __Infer<typeof Subject>;
 export const Subjects = __t.object("Subjects", {});
 export type Subjects = __Infer<typeof Subjects>;
 
+export const TeachingHead = __t.object("TeachingHead", {
+  practiceId: __t.u64(),
+  version: __t.u32(),
+});
+export type TeachingHead = __Infer<typeof TeachingHead>;
+
+export const TeachingIntent = __t.object("TeachingIntent", {
+  key: __t.string(),
+  actor: __t.identity(),
+  digest: __t.string(),
+  practiceId: __t.u64(),
+  version: __t.u32(),
+});
+export type TeachingIntent = __Infer<typeof TeachingIntent>;
+
 export const TeachingPersonal = __t.object("TeachingPersonal", {
   practiceId: __t.u64(),
   reflection: __t.string(),
@@ -1507,6 +1795,16 @@ export type TeachingQuestion = __Infer<typeof TeachingQuestion>;
 
 export const TeachingQuestions = __t.object("TeachingQuestions", {});
 export type TeachingQuestions = __Infer<typeof TeachingQuestions>;
+
+export const TeachingRevision = __t.object("TeachingRevision", {
+  key: __t.string(),
+  practiceId: __t.u64(),
+  version: __t.u32(),
+  fields: __t.string(),
+  status: __t.string(),
+  at: __t.timestamp(),
+});
+export type TeachingRevision = __Infer<typeof TeachingRevision>;
 
 export const Term = __t.object("Term", {
   id: __t.u64(),

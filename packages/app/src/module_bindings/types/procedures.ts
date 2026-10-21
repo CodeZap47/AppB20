@@ -27,6 +27,8 @@ import * as GetFileUploadStatusProcedure from "../get_file_upload_status_procedu
 import * as GetResourceManifestProcedure from "../get_resource_manifest_procedure";
 import * as GetResourceUploadStatusProcedure from "../get_resource_upload_status_procedure";
 import * as GetTrashClockProcedure from "../get_trash_clock_procedure";
+import * as HelpMutateProcedure from "../help_mutate_procedure";
+import * as HelpReadHistoryProcedure from "../help_read_history_procedure";
 import * as NotificationCommitRemindersProcedure from "../notification_commit_reminders_procedure";
 import * as NotificationReminderContextProcedure from "../notification_reminder_context_procedure";
 import * as NotificationsAuthorizeProcedure from "../notifications_authorize_procedure";
@@ -37,6 +39,8 @@ import * as PurgeDueProcedure from "../purge_due_procedure";
 import * as ReadResourceChunkProcedure from "../read_resource_chunk_procedure";
 import * as ReadStickerBytesProcedure from "../read_sticker_bytes_procedure";
 import * as StudyRoomClockProcedure from "../study_room_clock_procedure";
+import * as TeachingReadHistoryProcedure from "../teaching_read_history_procedure";
+import * as TeachingSaveV2Procedure from "../teaching_save_v_2_procedure";
 
 export type AddStickerNativeArgs = __Infer<typeof AddStickerNativeProcedure.params>;
 export type AddStickerNativeResult = __Infer<typeof AddStickerNativeProcedure.returnType>;
@@ -80,6 +84,10 @@ export type GetResourceUploadStatusArgs = __Infer<typeof GetResourceUploadStatus
 export type GetResourceUploadStatusResult = __Infer<typeof GetResourceUploadStatusProcedure.returnType>;
 export type GetTrashClockArgs = __Infer<typeof GetTrashClockProcedure.params>;
 export type GetTrashClockResult = __Infer<typeof GetTrashClockProcedure.returnType>;
+export type HelpMutateArgs = __Infer<typeof HelpMutateProcedure.params>;
+export type HelpMutateResult = __Infer<typeof HelpMutateProcedure.returnType>;
+export type HelpReadHistoryArgs = __Infer<typeof HelpReadHistoryProcedure.params>;
+export type HelpReadHistoryResult = __Infer<typeof HelpReadHistoryProcedure.returnType>;
 export type NotificationCommitRemindersArgs = __Infer<typeof NotificationCommitRemindersProcedure.params>;
 export type NotificationCommitRemindersResult = __Infer<typeof NotificationCommitRemindersProcedure.returnType>;
 export type NotificationReminderContextArgs = __Infer<typeof NotificationReminderContextProcedure.params>;
@@ -100,3 +108,7 @@ export type ReadStickerBytesArgs = __Infer<typeof ReadStickerBytesProcedure.para
 export type ReadStickerBytesResult = __Infer<typeof ReadStickerBytesProcedure.returnType>;
 export type StudyRoomClockArgs = __Infer<typeof StudyRoomClockProcedure.params>;
 export type StudyRoomClockResult = __Infer<typeof StudyRoomClockProcedure.returnType>;
+export type TeachingReadHistoryArgs = __Infer<typeof TeachingReadHistoryProcedure.params>;
+export type TeachingReadHistoryResult = __Infer<typeof TeachingReadHistoryProcedure.returnType>;
+export type TeachingSaveV2Args = __Infer<typeof TeachingSaveV2Procedure.params>;
+export type TeachingSaveV2Result = __Infer<typeof TeachingSaveV2Procedure.returnType>;

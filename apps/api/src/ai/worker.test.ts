@@ -30,7 +30,10 @@ let revokeAfterProvider = false;
 
 function dto(value: unknown) { return MfResponse.json(JSON.stringify(value)); }
 function denied(code: string) { return new MfResponse(`${code}: backend-detail-must-stay-private ${personalKey}`, { status: 530 }); }
-function question(prep: AiPreparation) { if (config.purpose === 'guide' || config.purpose === 'explanation') return { purpose: config.purpose, title: 'Variables y ejemplos', sections: (config.purpose === 'guide' ? GUIDE_SECTIONS.map((section) => section.title) : ['Concepto y ejemplo']).map((heading) => ({ heading, text: 'Una variable almacena un valor. Ejemplo: contador = 1.', citations: [scenario === 'invalid-cite' ? 'unseen-fragment' : prep.fragments[0]!.id] })) }; return { questions: [{ id: 'q1', type: 'boolean', text: 'Una variable almacena un valor.',
+function question(prep: AiPreparation) {
+  if (config.purpose === 'teaching_questions') return { purpose: config.purpose, questions: [{ text: '¿Qué cambiaría tu ejemplo?', citations: [scenario === 'invalid-cite' ? 'unseen-fragment' : prep.fragments[0]!.id] }] };
+  if (config.purpose === 'spaced_cards') return { purpose: config.purpose, title: 'Variables', cards: [{ question: '¿Qué almacena una variable?', explanation: 'Un valor.', hint: 'Datos.', citations: [scenario === 'invalid-cite' ? 'unseen-fragment' : prep.fragments[0]!.id] }] };
+  if (config.purpose === 'guide' || config.purpose === 'explanation') return { purpose: config.purpose, title: 'Variables y ejemplos', sections: (config.purpose === 'guide' ? GUIDE_SECTIONS.map((section) => section.title) : ['Concepto y ejemplo']).map((heading) => ({ heading, text: 'Una variable almacena un valor. Ejemplo: contador = 1.', citations: [scenario === 'invalid-cite' ? 'unseen-fragment' : prep.fragments[0]!.id] })) }; return { questions: [{ id: 'q1', type: 'boolean', text: 'Una variable almacena un valor.',
   options: [{ id: 'yes', text: 'Verdadero' }, { id: 'no', text: 'Falso' }], correctOptionId: 'yes', explanation: 'El material explica cómo almacenar valores.',
   topic: 'Variables', citations: [scenario === 'invalid-cite' ? 'unseen-fragment' : prep.fragments[0]!.id] }] }; }
 
@@ -85,7 +88,7 @@ beforeAll(async () => {
       if (procedure === 'ai_prepare') {
         if (!access) return denied('unauthorized');
         lastPrepare = input;
-        const prep = buildAiPreparation(input, [{ kind: 'note', refId: '1', version: 1, subjectId: prepInput.subjectId,
+        const prep = buildAiPreparation(input, [{ kind: config.purpose === 'teaching_questions' ? 'teaching' : 'note', refId: '1', version: 1, subjectId: prepInput.subjectId,
           visibility: 'personal', title: 'Variables', fields: [{ name: 'content', text: 'Una variable almacena valores.' }] }], { id: String(input.id), model: String(input.model), now: Date.now() });
         preparations.set(prep.id, prep); return dto(prep);
       }
@@ -118,6 +121,7 @@ beforeAll(async () => {
         if (finishFailure === 'after') return new MfResponse('', { status: 503 });
         return dto(generation);
       }
+      if (procedure === 'ai_publish_generation') return dto({ ...input, targetKind: config.purpose === 'spaced_cards' ? 'spaced_collection' : 'teaching', targetId: input.collectionId ?? '1' });
       if (procedure === 'ai_get_generation') {
         if (!access) return denied('unauthorized');
         return dto(generations.get(String(input.id)) ?? null);
@@ -129,7 +133,7 @@ beforeAll(async () => {
 }, 30_000);
 afterAll(async () => { await mf?.dispose(); });
 beforeEach(() => { key = undefined; intentions.clear(); preparations.clear(); generations.clear(); consent = true; policy = true; active = true; access = true; quota = false;
-  providerCalls = 0; commits = 0; failCommitAfter = false; finishFailure = 'none'; scenario = 'ok'; lastPrepare = undefined; lastProviderBody = ''; revokeAfterProvider = false; delete config.purpose; });
+  providerCalls = 0; commits = 0; failCommitAfter = false; finishFailure = 'none'; scenario = 'ok'; lastPrepare = undefined; lastProviderBody = ''; revokeAfterProvider = false; prepInput.sources[0]!.kind = 'note'; delete config.purpose; });
 
 function api(path: string, method = 'GET', body?: unknown, bearer = token) {
   return mf.dispatchFetch(`https://api.example.test/ai/${path}`, { method, headers: { Authorization: `Bearer ${bearer}`, ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
@@ -193,6 +197,23 @@ describe('BYOK en runtime Cloudflare con Gemini interceptado localmente', () => 
     expect(saved.state).toBe('succeeded'); expect(saved.result).toEqual(question(prep));
     expect(lastProviderBody).toContain('sections'); expect(lastProviderBody).not.toContain('correctOptionId');
     if (purpose === 'guide') for (const section of GUIDE_SECTIONS) expect(lastProviderBody).toContain(section.title);
+  });
+  it.each(['teaching_questions', 'spaced_cards'] as const)('genera %s dentro del Worker con esquema específico y una sola llamada', async (purpose) => {
+    config.purpose = purpose; if (purpose === 'teaching_questions') prepInput.sources[0]!.kind = 'teaching';
+    const prep = await ready(); const request = generationRequest(prep);
+    const response = await api('generations', 'POST', request);
+    expect(response.status, await response.clone().text()).toBe(200);
+    const saved = await response.json() as AiGeneration; expect(saved.state).toBe('succeeded'); expect(saved.result).toEqual(question(prep));
+    expect(lastProviderBody).toContain(purpose); expect(lastProviderBody).not.toContain('correctOptionId');
+    expect(lastProviderBody).not.toContain(personalKey);
+    await api('generations', 'POST', request); expect(providerCalls).toBe(1);
+  });
+  it('proyecta aceptación revisada sin permitir sustituir el ID de ruta o añadir identidad', async () => {
+    const generationId = crypto.randomUUID();
+    const response = await api(`generations/${generationId}/publish`, 'POST', { id: 'otro', actor: 'otra-persona', reviewed: true,
+      collectionId: '80', expectedCollectionVersion: 1, selection: [{ index: 0, question: 'Corregida', explanation: 'Texto', hint: '' }] });
+    expect(response.status).toBe(200); const result = await response.json(); expect(result).toMatchObject({ id: generationId, reviewed: true, collectionId: '80' });
+    expect(JSON.stringify(result).includes('otra-persona')).toBe(false);
   });
   it('retirar acceso durante la inferencia impide entregar el borrador terminado', async () => {
     config.purpose = 'explanation'; const prep = await ready(); revokeAfterProvider = true;

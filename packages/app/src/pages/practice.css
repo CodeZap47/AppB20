@@ -1,0 +1,10 @@
+.practice-fields { border: 0; padding: 0; margin: 0; display: grid; gap: 1rem; min-width: 0; }
+.practice-content { margin-block: 1rem; overflow-wrap: anywhere; }
+.practice-content > :first-child { margin-top: 0; }
+.practice-code, .practice-code-input { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; tab-size: 2; }
+.practice-code { white-space: pre-wrap; overflow-x: auto; padding: 1rem; background: var(--surface, #f5f5f5); border-radius: .5rem; color: var(--text, #1c2028); }
+.practice-code-lines { overflow-x: auto; border: 1px solid var(--border, #ddd); border-radius: .5rem; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; tab-size: 2; }
+.practice-code-lines ol { margin: 0; padding: 1rem 1rem 1rem 4rem; min-width: max-content; }
+.practice-code-lines li { white-space: pre; padding-left: .75rem; }
+.practice-code-lines li::marker { color: var(--muted, #707782); }
+.practice-filters { align-items: end; flex-wrap: wrap; }

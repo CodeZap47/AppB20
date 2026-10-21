@@ -104,6 +104,7 @@ import type {
   TeachingQuestion,
   CreateTeachingPracticeInput,
   SaveTeachingPracticeInput,
+  TeachingRevision,
   ProgressTargetKind,
   ProgressStatus,
   ResourceTargetKind,
@@ -134,6 +135,12 @@ import { saveDemoMemberProfile } from './communityDemo';
 import { emptyDelivery2 } from './delivery2Snapshot';
 import { DemoTrashStore } from './demoTrash';
 import { DemoNotificationsStore } from './demoNotifications';
+import { DemoPracticeStore } from './demoPractice';
+import { emptyPractice, type PracticeActions } from './practiceTypes';
+import { DemoCommunity4Store } from './community4Demo';
+import { DemoHelpVersions } from './demoHelpVersions';
+import { DemoTeachingVersions } from './demoTeachingVersions';
+import { emptyCommunity4, type Community4Actions } from './community4Types';
 import { emptyNotifications, type NotificationActions, type NotificationKind } from './notificationTypes';
 import { DemoRoomsStore, demoRoomExamples } from './demoRooms';
 import { emptyStudyRooms, type StudyRoomActions, type StudyRoomsSnapshot } from './roomTypes';
@@ -251,6 +258,10 @@ export class DemoDataSource implements DataSource {
   #rooms: DemoRoomsStore;
   #trash: DemoTrashStore;
   #notifications: DemoNotificationsStore;
+  #practice: DemoPracticeStore;
+  #community4: DemoCommunity4Store;
+  #helpVersions: DemoHelpVersions;
+  #teachingVersions: DemoTeachingVersions;
   #batchDepth = 0;
   #batchChanged = false;
   #profiles: MemberProfile[] = [];
@@ -264,6 +275,8 @@ export class DemoDataSource implements DataSource {
     this.#withdrawals = sharedDemoWithdrawals.get(state) ?? new Map<string, DemoWithdrawal>();
     sharedDemoWithdrawals.set(state, this.#withdrawals);
     this.#viewerId = viewerId;
+    this.#helpVersions = new DemoHelpVersions(() => this.#state);
+    this.#teachingVersions = new DemoTeachingVersions(() => this.#state);
     this.#now = now;
     this.#presentations = new DemoPresentationStore({ state: () => this.#state, active: () => this.#activeMember(),
       id: () => this.#id(), now: () => this.#now(), emit: () => this.#emit(),
@@ -278,8 +291,10 @@ export class DemoDataSource implements DataSource {
     this.#chat = new DemoChatStore({ state: () => this.#state, active: () => this.#activeMember(), id: () => this.#id(), now: () => this.#now(), emit: () => this.#emit(), validateText: (text, me) => this.#messageText(text, me) });
     this.#knowledge = new DemoKnowledgeStore({ state: () => this.#state, active: () => this.#activeMember(), id: () => this.#id(), now: () => this.#now(), emit: () => this.#emit(),
       files: () => this.#academic.resources(), restoreFiles: (kind, id, ids) => this.#academic.restoreFiles(kind, id, ids), copyFiles: (from, to) => this.#academic.copyFiles(from, to) });
+    this.#practice = new DemoPracticeStore({ state: () => this.#state, active: () => this.#activeMember(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit() });
+    this.#community4 = new DemoCommunity4Store({ state: () => this.#state, active: () => this.#activeMember(), current: () => this.getSnapshot(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit(), createQuestion: (input) => this.askQuestion(input) });
     this.#trash = new DemoTrashStore({ state: () => this.#state, active: () => this.#activeMember(), now: () => this.#now(), emit: () => this.#emit(), resources: () => this.#academic.resources(),
-      purgePrivate: (targets) => { const references = this.#knowledge.purgeTargets(targets); this.#academic.purgeTargets(targets, references); } });
+      purgePrivate: (targets) => { const references = this.#knowledge.purgeTargets(targets); this.#academic.purgeTargets(targets, references); for (const key of targets) { const separator = key.indexOf(':'); this.#community4.purgeMuseum(key.slice(0, separator), key.slice(separator + 1)); } } });
     this.#notifications = new DemoNotificationsStore({ state: () => this.#state, active: () => this.#activeMember(), current: () => this.getSnapshot(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit() });
     this.#rooms = new DemoRoomsStore({ state: () => this.#state, active: () => this.#activeMember(), id: () => this.#id(), now: () => this.#now(), emit: () => this.#emit(),
       sourceAvailable: (kind, sourceId) => !this.#withdrawals.get(`${kind}:${sourceId}`)?.withdrawnAt });
@@ -288,6 +303,25 @@ export class DemoDataSource implements DataSource {
   get viewerId(): Id {
     return this.#viewerId;
   }
+
+  createCodingChallenge = (...args: Parameters<PracticeActions['createCodingChallenge']>) => this.#practice.createCodingChallenge(...args);
+  unlockChallengeHint = (...args: Parameters<PracticeActions['unlockChallengeHint']>) => this.#practice.unlockChallengeHint(...args);
+  saveChallengeSolution = (...args: Parameters<PracticeActions['saveChallengeSolution']>) => this.#practice.saveChallengeSolution(...args);
+  addChallengeComment = (...args: Parameters<PracticeActions['addChallengeComment']>) => this.#practice.addChallengeComment(...args);
+  closeCodingChallenge = (...args: Parameters<PracticeActions['closeCodingChallenge']>) => this.#practice.closeCodingChallenge(...args);
+  createCodeReview = (...args: Parameters<PracticeActions['createCodeReview']>) => this.#practice.createCodeReview(...args);
+  addCodeReviewVersion = (...args: Parameters<PracticeActions['addCodeReviewVersion']>) => this.#practice.addCodeReviewVersion(...args);
+  addCodeReviewComment = (...args: Parameters<PracticeActions['addCodeReviewComment']>) => this.#practice.addCodeReviewComment(...args);
+  resolveCodeReviewComment = (...args: Parameters<PracticeActions['resolveCodeReviewComment']>) => this.#practice.resolveCodeReviewComment(...args);
+  closeCodeReview = (...args: Parameters<PracticeActions['closeCodeReview']>) => this.#practice.closeCodeReview(...args);
+  createMuseum = (...args: Parameters<Community4Actions['createMuseum']>) => this.#batch(() => this.#community4.createMuseum(...args));
+  saveMuseum = (...args: Parameters<Community4Actions['saveMuseum']>) => this.#community4.saveMuseum(...args);
+  createOpportunity = (...args: Parameters<Community4Actions['createOpportunity']>) => this.#community4.createOpportunity(...args);
+  updateOpportunity = (...args: Parameters<Community4Actions['updateOpportunity']>) => this.#community4.updateOpportunity(...args);
+  withdrawOpportunity = (...args: Parameters<Community4Actions['withdrawOpportunity']>) => this.#community4.withdrawOpportunity(...args);
+  setOpportunityInterest = (...args: Parameters<Community4Actions['setOpportunityInterest']>) => this.#community4.setOpportunityInterest(...args);
+  sendOpportunityFeedback = (...args: Parameters<Community4Actions['sendOpportunityFeedback']>) => this.#community4.sendOpportunityFeedback(...args);
+  resolveOpportunityFeedback = (...args: Parameters<Community4Actions['resolveOpportunityFeedback']>) => this.#community4.resolveOpportunityFeedback(...args);
 
   saveNotificationPreferences = (...args: Parameters<NotificationActions['saveNotificationPreferences']>) => this.#notifications.saveNotificationPreferences(...args);
   markNotificationRead = (...args: Parameters<NotificationActions['markNotificationRead']>) => this.#notifications.markNotificationRead(...args);
@@ -369,6 +403,8 @@ export class DemoDataSource implements DataSource {
       return {
         ...emptyNotifications(),
         trashEntries: [],
+        ...emptyPractice(),
+        ...emptyCommunity4(),
         ...emptyPresentationsSnapshot(),
         ...emptyStudyRooms(),
         ...emptyDelivery2(),
@@ -420,7 +456,7 @@ export class DemoDataSource implements DataSource {
     const teachingPractices = s.teachingPractices.filter((practice) =>
       this.#isActive(practice.ownerId) &&
       (practice.ownerId === me.id || practice.reviewerId === me.id),
-    );
+    ).map((practice) => ({ ...practice, version: practice.ownerId === me.id ? practice.version ?? 1 : 1 }));
     const visiblePractices = new Set(teachingPractices.map((practice) => practice.id));
     const ownPractices = new Set(teachingPractices.filter((practice) => practice.ownerId === me.id).map((practice) => practice.id));
     const visibleNotes = new Set(notes.map((n) => n.id));
@@ -446,6 +482,8 @@ export class DemoDataSource implements DataSource {
     const base: Snapshot = {
       ...emptyNotifications(),
       trashEntries: [],
+      ...emptyPractice(),
+      ...emptyCommunity4(),
       ...emptyStudyRooms(),
       ...emptyDelivery2(),
       ...this.#presentations.snapshot(me.id),
@@ -522,7 +560,7 @@ export class DemoDataSource implements DataSource {
     combined.contributionOrigins = this.#trash.contributionOrigins(this.#academic.resources(), combined);
     combined.trashEntries = this.#trash.snapshot(me.id);
     const result = { ...combined, ...this.#rooms.snapshot(me.id) };
-    return { ...result, ...this.#notifications.snapshot(result) };
+    return { ...result, ...this.#notifications.snapshot(result), ...this.#practice.snapshot(), ...this.#community4.snapshot(result) };
   }
 
   #emit() {
@@ -677,35 +715,52 @@ export class DemoDataSource implements DataSource {
 
   saveHelpPost(input: HelpPostInput): Id {
     const me = this.#activeMember();
+    const replay = this.#helpVersions.replay(me.id, input.requestId, input); if (replay) return replay;
     const existing = input.id === undefined ? undefined : this.#ownHelpPost(input.id);
+    if (existing && input.expectedVersion !== undefined && input.expectedVersion !== (existing.version ?? 1)) throw new Error('La publicación cambió. Recarga sus datos antes de guardar.');
     if (existing && existing.kind !== input.kind) throw new Error('El tipo de publicación no se puede cambiar.');
     this.#requireSubject(input.subjectId);
     const fields = cleanHelpPost(input);
-    const post: HelpPost = existing ? { ...existing, ...fields, updatedAt: this.#now() }
-      : { ...fields, id: this.#id(), authorId: me.id, status: 'open', createdAt: this.#now(), updatedAt: this.#now() };
+    if (existing) this.#helpVersions.capture(existing);
+    const post: HelpPost = existing ? { ...existing, ...fields, version: (existing.version ?? 1) + 1, updatedAt: this.#now() }
+      : { ...fields, id: this.#id(), authorId: me.id, status: 'open', version: 1, createdAt: this.#now(), updatedAt: this.#now() };
     this.#state.helpPosts = existing ? this.#state.helpPosts.map((p) => p.id === existing.id ? post : p) : [...this.#state.helpPosts, post];
+    this.#helpVersions.capture(post); this.#helpVersions.remember(me.id, input.requestId, input, post.id);
     this.#emit();
     return post.id;
   }
 
-  setHelpPostStatus(postId: Id, status: 'open' | 'closed') {
+  setHelpPostStatus(postId: Id, status: 'open' | 'closed', expectedVersion?: number) {
     const post = this.#ownHelpPost(postId);
+    if (expectedVersion !== undefined && expectedVersion !== (post.version ?? 1)) throw new Error('La publicación cambió. Recarga sus datos antes de guardar.');
     if (status !== 'open' && status !== 'closed') throw new Error('El estado de la publicación no es válido.');
-    this.#state.helpPosts = this.#state.helpPosts.map((p) => p.id === post.id ? { ...p, status, updatedAt: this.#now() } : p);
+    if (post.status === status) return;
+    this.#helpVersions.capture(post);
+    this.#state.helpPosts = this.#state.helpPosts.map((p) => p.id === post.id ? { ...p, status, version: (p.version ?? 1) + 1, updatedAt: this.#now() } : p);
+    this.#helpVersions.capture(this.#helpPost(postId));
     if (status === 'closed') this.#closePendingHelpContacts(postId, 'post_closed');
     this.#emit();
   }
 
-  withdrawHelpPost(postId: Id, reason = '') {
+  withdrawHelpPost(postId: Id, reason = '', expectedVersion?: number) {
     const me = this.#activeMember();
     const post = this.#helpPost(postId);
+    if (expectedVersion !== undefined && expectedVersion !== (post.version ?? 1)) throw new Error('La publicación cambió. Recarga sus datos antes de guardar.');
     if (post.status === 'withdrawn') throw new Error('La publicación no está disponible.');
     if (post.authorId !== me.id && !me.isCreator) throw new Error('Solo el autor o un administrador pueden retirar esta publicación.');
     const withdrawalReason = helpText(reason, 'El motivo', HELP_LIMITS.reason, post.authorId === me.id);
+    this.#helpVersions.capture(post);
     this.#state.helpPosts = this.#state.helpPosts.map((p) => p.id === postId
-      ? { ...p, status: 'withdrawn', withdrawnBy: me.id, withdrawalReason, updatedAt: this.#now() } : p);
+      ? { ...p, status: 'withdrawn', version: (p.version ?? 1) + 1, withdrawnBy: me.id, withdrawalReason, updatedAt: this.#now() } : p);
+    this.#helpVersions.capture(this.#helpPost(postId));
     this.#closePendingHelpContacts(postId, 'post_withdrawn');
     this.#emit();
+  }
+
+  getHelpPostHistory(postId: Id) {
+    const me = this.#activeMember(); const post = this.#helpPost(postId);
+    if (post.authorId !== me.id) throw new Error('Solo el autor consulta las versiones de su publicación.');
+    return this.#helpVersions.history(post);
   }
 
   sendHelpContact(postId: Id, message = ''): Id {
@@ -1844,7 +1899,7 @@ export class DemoDataSource implements DataSource {
     const practice: TeachingPractice = {
       id: this.#id(), ownerId: me.id, subjectId: input.subjectId, topic,
       initial: normalizeTeachingExplanation(input.initial), revised: { ...EMPTY_TEACHING_EXPLANATION },
-      status: 'draft', createdAt: now, updatedAt: now,
+      status: 'draft', version: 1, createdAt: now, updatedAt: now,
     };
     this.#state.teachingPractices = [...this.#state.teachingPractices, practice];
     this.#state.teachingPersonal = [...this.#state.teachingPersonal, {
@@ -1855,28 +1910,62 @@ export class DemoDataSource implements DataSource {
     return practice.id;
   }
 
-  saveTeachingPractice(practiceId: Id, input: SaveTeachingPracticeInput) {
+  saveTeachingPractice(practiceId: Id, input: SaveTeachingPracticeInput): number {
     const practice = this.#ownTeachingPractice(practiceId);
-    if (practice.status === 'completed') throw new Error('Reabre la práctica para seguir trabajando.');
+    if (!Number.isSafeInteger(input.expectedVersion) || (input.expectedVersion ?? 0) < 1 || !input.requestId) {
+      throw new Error('Actualiza la aplicación: indica la versión y el identificador de guardado.');
+    }
     for (const explanation of [input.initial, input.revised]) {
       const problem = teachingExplanationError(explanation);
       if (problem) throw new Error(problem);
     }
     const initial = normalizeTeachingExplanation(input.initial);
     const revised = normalizeTeachingExplanation(input.revised);
-    if (practice.status !== 'draft' &&
-      (initial.concept !== practice.initial.concept || initial.example !== practice.initial.example || initial.limits !== practice.initial.limits)) {
-      throw new Error('La explicación inicial se conserva al comenzar la práctica.');
-    }
     const reflection = input.reflection.trim();
     const topicsToReview = input.topicsToReview.trim();
     if (reflection.length > MAX_TEACHING_TEXT_LENGTH) throw new Error(`La reflexión excede ${MAX_TEACHING_TEXT_LENGTH} caracteres.`);
     if (topicsToReview.length > MAX_TEACHING_QUESTION_LENGTH) throw new Error(`Los temas para repasar exceden ${MAX_TEACHING_QUESTION_LENGTH} caracteres.`);
+    const intent = { practiceId, expectedVersion: input.expectedVersion, initial, revised, reflection, topicsToReview };
+    const replay = this.#teachingVersions.replay(practice.ownerId, input.requestId, intent);
+    if (replay !== undefined) return replay;
+    if (practice.status === 'completed') throw new Error('Reabre la práctica para seguir trabajando.');
+    if ((practice.version ?? 1) !== input.expectedVersion) throw new Error('Mi práctica cambió. Recarga la versión actual antes de guardar.');
+    if (practice.status !== 'draft' &&
+      (initial.concept !== practice.initial.concept || initial.example !== practice.initial.example || initial.limits !== practice.initial.limits)) {
+      throw new Error('La explicación inicial se conserva al comenzar la práctica.');
+    }
+    const personal = this.#teachingPersonal(practiceId);
+    const changed = JSON.stringify({ initial: practice.initial, revised: practice.revised, reflection: personal.reflection, topicsToReview: personal.topicsToReview }) !==
+      JSON.stringify({ initial, revised, reflection, topicsToReview });
+    if (!changed) {
+      const version = practice.version ?? 1;
+      this.#teachingVersions.remember(practice.ownerId, input.requestId!, intent, version);
+      return version;
+    }
+    this.#teachingVersions.capture(practice, personal);
+    const next = { ...practice, initial, revised, version: (practice.version ?? 1) + 1, updatedAt: this.#now() };
+    const nextPersonal = { ...personal, reflection, topicsToReview };
     this.#state.teachingPractices = this.#state.teachingPractices.map((item) => item.id === practiceId
-      ? { ...item, initial, revised, updatedAt: this.#now() } : item);
+      ? next : item);
     this.#state.teachingPersonal = this.#state.teachingPersonal.map((item) => item.practiceId === practiceId
-      ? { ...item, reflection, topicsToReview } : item);
+      ? nextPersonal : item);
+    this.#teachingVersions.capture(next, nextPersonal);
+    this.#teachingVersions.remember(practice.ownerId, input.requestId!, intent, next.version);
     this.#emit();
+    return next.version;
+  }
+
+  getTeachingHistory(practiceId: Id): TeachingRevision[] {
+    const practice = this.#ownTeachingPractice(practiceId);
+    return this.#teachingVersions.history(practice, this.#teachingPersonal(practiceId));
+  }
+
+  #changeTeachingStatus(practice: TeachingPractice, status: TeachingPractice['status'], now = this.#now()) {
+    const personal = this.#teachingPersonal(practice.id);
+    this.#teachingVersions.capture(practice, personal);
+    const next = { ...practice, status, version: (practice.version ?? 1) + 1, updatedAt: now };
+    this.#state.teachingPractices = this.#state.teachingPractices.map((item) => item.id === practice.id ? next : item);
+    this.#teachingVersions.capture(next, personal);
   }
 
   startTeachingPractice(practiceId: Id) {
@@ -1886,8 +1975,7 @@ export class DemoDataSource implements DataSource {
     const problem = teachingExplanationError(practice.initial, true);
     if (problem) throw new Error(problem);
     const now = this.#now();
-    this.#state.teachingPractices = this.#state.teachingPractices.map((item) => item.id === practiceId
-      ? { ...item, status: 'practicing', updatedAt: now } : item);
+    this.#changeTeachingStatus(practice, 'practicing', now);
     this.#state.teachingQuestions = [...this.#state.teachingQuestions, ...TEACHING_PROMPTS.map((text): TeachingQuestion => ({
       id: this.#id(), practiceId, authorId: practice.ownerId, kind: 'guided', text, answer: '', createdAt: now,
     }))];
@@ -1902,16 +1990,14 @@ export class DemoDataSource implements DataSource {
     const answered = this.#state.teachingQuestions.filter((question) => question.practiceId === practiceId && question.answer.trim()).length;
     const problem = teachingCompletionError(practice.revised, personal.reflection, answered);
     if (problem) throw new Error(problem);
-    this.#state.teachingPractices = this.#state.teachingPractices.map((item) => item.id === practiceId
-      ? { ...item, status: 'completed', updatedAt: this.#now() } : item);
+    this.#changeTeachingStatus(practice, 'completed');
     this.#emit();
   }
 
   reopenTeachingPractice(practiceId: Id) {
     const practice = this.#ownTeachingPractice(practiceId);
     if (practice.status !== 'completed') throw new Error('Solo se reabre una práctica completada.');
-    this.#state.teachingPractices = this.#state.teachingPractices.map((item) => item.id === practiceId
-      ? { ...item, status: 'practicing', updatedAt: this.#now() } : item);
+    this.#changeTeachingStatus(practice, 'practicing');
     this.#emit();
   }
 

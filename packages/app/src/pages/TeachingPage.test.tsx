@@ -30,6 +30,7 @@ function makeActions() {
   return {
     createTeachingPractice: vi.fn().mockResolvedValue('created'),
     saveTeachingPractice: vi.fn().mockResolvedValue(undefined),
+    getTeachingHistory: vi.fn().mockResolvedValue([]),
     startTeachingPractice: vi.fn().mockResolvedValue(undefined),
     completeTeachingPractice: vi.fn().mockResolvedValue(undefined),
     reopenTeachingPractice: vi.fn().mockResolvedValue(undefined),
@@ -193,10 +194,60 @@ describe('Aprende enseñando', () => {
     expect(input('Tu respuesta').value).toBe('Respuesta todavía en edición');
     expect(input('Concepto con tus palabras').value).toBe('Revisión local');
     await click('Guardar y completar práctica');
-    expect(actions.saveTeachingPractice).toHaveBeenCalledWith('practice-1', { initial: explanation, revised: { ...revised, concept: 'Revisión local' }, reflection: 'Lo entendí mejor', topicsToReview: 'Temas secretos' });
+    expect(actions.saveTeachingPractice).toHaveBeenCalledWith('practice-1', expect.objectContaining({ initial: explanation, revised: { ...revised, concept: 'Revisión local' }, reflection: 'Lo entendí mejor', topicsToReview: 'Temas secretos', expectedVersion: 1, requestId: expect.any(String) }));
     expect(actions.completeTeachingPractice).toHaveBeenCalledWith('practice-1');
   });
 
+  it('detecta otro guardado, conserva la edición local y exige cargar la versión actual', async () => {
+    await mount(); await change(input('Concepto con tus palabras'), 'Mi edición local sin guardar');
+    await update({ teachingPractices: [practice({ version: 2, revised: { ...revised, concept: 'Guardado desde otra pestaña' } })] });
+    expect(input('Concepto con tus palabras').value).toBe('Mi edición local sin guardar');
+    expect(button('Guardar cambios').disabled).toBe(true); expect(container.textContent).toContain('Tu edición local se conserva');
+    await click('Guardar cambios'); expect(actions.saveTeachingPractice).not.toHaveBeenCalled();
+    await click('Cargar versión actual'); expect(input('Concepto con tus palabras').value).toBe('Guardado desde otra pestaña');
+    await click('Guardar cambios'); expect(actions.saveTeachingPractice).toHaveBeenCalledWith('practice-1', expect.objectContaining({ expectedVersion: 2 }));
+  });
+  it('actualiza la etapa capturada al comenzar desde esta misma pantalla', async () => {
+    snapshot.teachingPractices = [practice({ status: 'draft', version: 1 })];
+    actions.startTeachingPractice.mockImplementation(async () => { snapshot = { ...snapshot, teachingPractices: [practice({ status: 'practicing', version: 2 })] }; for (const listener of listeners) listener(); });
+    await mount(); await click('Guardar y comenzar práctica');
+    expect(container.textContent).toContain('Mejora tu explicación'); expect(container.textContent).not.toContain('Tu edición local se conserva');
+    await click('Guardar cambios'); expect(actions.saveTeachingPractice).toHaveBeenLastCalledWith('practice-1', expect.objectContaining({ expectedVersion: 2 }));
+  });
+  it('permite completar, reabrir y editar inmediatamente desde la propia pantalla', async () => {
+    actions.saveTeachingPractice.mockImplementation(async (_id, input) => {
+      const version = (input.expectedVersion ?? 1) + 1;
+      snapshot = { ...snapshot, teachingPractices: [practice({ ...snapshot.teachingPractices[0], version, initial: input.initial, revised: input.revised })] };
+      for (const listener of listeners) listener(); return version;
+    });
+    actions.completeTeachingPractice.mockImplementation(async () => { snapshot = { ...snapshot, teachingPractices: [practice({ version: 3, status: 'completed' })] }; for (const listener of listeners) listener(); });
+    actions.reopenTeachingPractice.mockImplementation(async () => { snapshot = { ...snapshot, teachingPractices: [practice({ version: 4, status: 'practicing' })] }; for (const listener of listeners) listener(); });
+    await mount(); await click('Guardar y completar práctica'); expect(container.textContent).toContain('Explicación revisada guardada');
+    await click('Reabrir práctica'); expect(container.textContent).toContain('Mejora tu explicación');
+    expect(container.textContent).not.toContain('Tu edición local se conserva'); expect(button('Guardar cambios').disabled).toBe(false);
+    await change(input('Concepto con tus palabras'), 'Revisión después de reabrir'); await click('Guardar cambios');
+    expect(actions.saveTeachingPractice).toHaveBeenLastCalledWith('practice-1', expect.objectContaining({ expectedVersion: 4, revised: { ...revised, concept: 'Revisión después de reabrir' } }));
+  });
+  it.each(['practicing', 'completed'] as const)('conserva una edición de borrador si otra sesión cambia el estado a %s', async (status) => {
+    snapshot.teachingPractices = [practice({ status: 'draft', version: 1 })];
+    await mount(); await change(input('Concepto con tus palabras'), 'BORRADOR_LOCAL_ANTE_CAMBIO_ESTADO');
+    await update({ teachingPractices: [practice({ status, version: 2 })] });
+    expect(input('Concepto con tus palabras').value).toBe('BORRADOR_LOCAL_ANTE_CAMBIO_ESTADO');
+    expect(button('Guardar cambios').disabled).toBe(true); expect(container.textContent).toContain('Tu edición local se conserva');
+    expect(actions.saveTeachingPractice).not.toHaveBeenCalled();
+  });
+  it('reutiliza el UUID si se pierde la confirmación sin cambiar el texto', async () => {
+    actions.saveTeachingPractice.mockRejectedValueOnce(new Error('Confirmación perdida')).mockResolvedValue(undefined);
+    await mount(); await click('Guardar cambios'); await click('Guardar cambios');
+    expect(actions.saveTeachingPractice.mock.calls[0]![1].requestId).toBe(actions.saveTeachingPractice.mock.calls[1]![1].requestId);
+  });
+  it('consulta versiones y reflexión históricas sólo en la pantalla del autor', async () => {
+    actions.getTeachingHistory.mockResolvedValue([{ version: 1, initial: explanation, revised, reflection: 'REFLEXIÓN_HISTÓRICA_SOLO_OWNER', topicsToReview: 'Pendientes anteriores', status: 'practicing', at: now }]);
+    await mount(); expect(actions.getTeachingHistory).not.toHaveBeenCalled();
+    await click('Consultar versiones guardadas'); expect(container.textContent).toContain('REFLEXIÓN_HISTÓRICA_SOLO_OWNER');
+    await update({ me: reviewer }); expect(container.textContent).not.toContain('REFLEXIÓN_HISTÓRICA_SOLO_OWNER');
+    expect([...container.querySelectorAll('button')].some((item) => item.textContent === 'Consultar versiones guardadas')).toBe(false);
+  });
   it('el compañero puede preguntar sin recibir controles ni información personal y pierde la pantalla al revocarse', async () => {
     snapshot.me = reviewer;
     await mount();

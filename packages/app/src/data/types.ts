@@ -24,6 +24,10 @@ import type {
 } from '@b20/core';
 
 import type { PresentationActions, PresentationsSnapshot } from './presentationTypes';
+import type { PracticeActions, PracticeSnapshot } from './practiceTypes';
+import type { Community4Actions, Community4Snapshot } from './community4Types';
+export type * from './practiceTypes';
+export type * from './community4Types';
 export type * from './presentationTypes';
 
 export type Id = string;
@@ -137,6 +141,7 @@ export interface SpacedReviewInput {
 
 export interface TeachingPractice {
   id: Id;
+  version?: number;
   ownerId: Id;
   reviewerId?: Id;
   subjectId: Id;
@@ -177,7 +182,13 @@ export interface CreateTeachingPracticeInput {
   source?: { kind: TeachingSourceKind; id: Id };
 }
 
+export interface TeachingRevision {
+  version: number; initial: TeachingExplanation; revised: TeachingExplanation; reflection: string; topicsToReview: string; status: TeachingStatus; at: Date;
+}
+
 export interface SaveTeachingPracticeInput {
+  expectedVersion?: number;
+  requestId?: string;
   initial: TeachingExplanation;
   revised: TeachingExplanation;
   reflection: string;
@@ -186,6 +197,7 @@ export interface SaveTeachingPracticeInput {
 
 export interface HelpPost extends HelpPostFields {
   id: Id;
+  version?: number;
   authorId: Id;
   status: HelpPostStatus;
   createdAt: Date;
@@ -212,7 +224,8 @@ export interface HelpContactRequest {
   closeReason?: string;
 }
 
-export interface HelpPostInput extends HelpPostFields { id?: Id; }
+export interface HelpPostInput extends HelpPostFields { id?: Id; expectedVersion?: number; requestId?: string; }
+export interface HelpPostHistory { version: number; status: HelpPostStatus; fields: HelpPostFields; at: Date; }
 
 export interface Member {
   id: Id;
@@ -690,7 +703,7 @@ export interface PollVote {
 }
 
 /** Lo que el usuario actual puede ver, igual que las vistas del servidor. */
-export interface Snapshot extends StudyRoomsSnapshot, NotificationsSnapshot, PresentationsSnapshot {
+export interface Snapshot extends StudyRoomsSnapshot, NotificationsSnapshot, PresentationsSnapshot, PracticeSnapshot, Community4Snapshot {
   trashEntries: TrashEntry[];
   contributionOrigins: { kind: OriginContributionKind; refId: Id; memberId: Id; creditedAt: Date; duplicateOf?: Id }[];
   chatChannels: ChatChannel[];
@@ -800,7 +813,7 @@ export interface PublishWorkInput {
 export type MaybePromise<T> = T | Promise<T>;
 
 /** Acciones: corresponden uno a uno con los reducers del módulo. */
-export interface Actions extends Delivery2Actions, StudyRoomActions, NotificationActions, TrashActions, PresentationActions {
+export interface Actions extends Delivery2Actions, StudyRoomActions, NotificationActions, TrashActions, PresentationActions, PracticeActions, Community4Actions {
   replaceSpacedCardSource(cardId: Id, expectedVersion: number, sourceKind: SpacedSourceKind, sourceId: Id): MaybePromise<void>;
   saveSpacedCollection(input: SpacedCollectionInput): MaybePromise<Id>;
   publishSpacedCollection(collectionId: Id, expectedVersion: number): MaybePromise<void>;
@@ -810,7 +823,8 @@ export interface Actions extends Delivery2Actions, StudyRoomActions, Notificatio
   setSpacedEnrollment(collectionId: Id, active: boolean): MaybePromise<void>;
   reviewSpacedCard(input: SpacedReviewInput): MaybePromise<void>;
   createTeachingPractice(input: CreateTeachingPracticeInput): MaybePromise<Id>;
-  saveTeachingPractice(practiceId: Id, input: SaveTeachingPracticeInput): MaybePromise<void>;
+  saveTeachingPractice(practiceId: Id, input: SaveTeachingPracticeInput): MaybePromise<number | void>;
+  getTeachingHistory(practiceId: Id): MaybePromise<TeachingRevision[]>;
   startTeachingPractice(practiceId: Id): MaybePromise<void>;
   completeTeachingPractice(practiceId: Id): MaybePromise<void>;
   reopenTeachingPractice(practiceId: Id): MaybePromise<void>;
@@ -819,8 +833,9 @@ export interface Actions extends Delivery2Actions, StudyRoomActions, Notificatio
   answerTeachingQuestion(questionId: Id, answer: string): MaybePromise<void>;
   publishTeachingExplanation(practiceId: Id): MaybePromise<Id>;
   saveHelpPost(input: HelpPostInput): MaybePromise<Id>;
-  setHelpPostStatus(postId: Id, status: 'open' | 'closed'): MaybePromise<void>;
-  withdrawHelpPost(postId: Id, reason?: string): MaybePromise<void>;
+  setHelpPostStatus(postId: Id, status: 'open' | 'closed', expectedVersion?: number): MaybePromise<void>;
+  withdrawHelpPost(postId: Id, reason?: string, expectedVersion?: number): MaybePromise<void>;
+  getHelpPostHistory(postId: Id): MaybePromise<HelpPostHistory[]>;
   sendHelpContact(postId: Id, message?: string): MaybePromise<Id>;
   respondHelpContact(requestId: Id, decision: 'accepted' | 'rejected'): MaybePromise<void>;
   cancelHelpContact(requestId: Id): MaybePromise<void>;

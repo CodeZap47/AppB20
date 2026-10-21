@@ -568,7 +568,7 @@ function AnswerCard({
 export function QuestionPage() {
   const { questionId = '' } = useParams();
   const source = useDataSource();
-  const { me, questions, answers, members, subjects, notes } = useSnapshot();
+  const { me, questions, answers, members, subjects, notes, museumEntries } = useSnapshot();
   const { error, run } = useAction();
   const [answer, setAnswer] = useState('');
   const question = questions.find((q) => q.id === questionId);
@@ -625,6 +625,7 @@ export function QuestionPage() {
       <Link to="/m/preguntas" className="back with-icon">
         <Icon name="back" size={16} /> Preguntas y respuestas
       </Link>
+      {museumEntries.some((entry) => entry.questionId === question.id) && <p className="panel">Esta pregunta pertenece al <Link to="/m/museo-bugs">Museo de bugs</Link>. Consulta allí la ficha corregida y su historial; este hilo conserva el enunciado original y la discusión.</p>}
       <header className="page-header">
         <div>
           <p className="eyebrow">

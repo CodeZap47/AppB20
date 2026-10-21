@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   EMPTY_TEACHING_EXPLANATION,
@@ -10,13 +10,14 @@ import {
   teachingNoteBody,
   type TeachingExplanation,
 } from '@b20/core';
+import { AiStudyModulePanel } from '../components/AiStudyModulePanel';
 import { Empty } from '../components/Empty';
 import { Icon } from '../components/Icon';
 import { RichText } from '../components/RichText';
 import { SubjectSelect } from '../components/SubjectSelect';
 import { useAction } from '../components/useAction';
 import { useDataSource, useSnapshot } from '../data/DataContext';
-import type { Snapshot, TeachingPersonal, TeachingPractice, TeachingQuestion } from '../data/types';
+import type { Snapshot, TeachingPersonal, TeachingPractice, TeachingQuestion, TeachingRevision } from '../data/types';
 import { formatTime, memberName } from '../lib/format';
 import { matches } from '../lib/search';
 
@@ -168,8 +169,11 @@ export function TeachingPracticePage() {
   return <PracticeDetail key={`${data.me.id}:${practice.id}`} practice={practice} personal={personal} data={data} />;
 }
 
+interface TeachingOwnTransition { fromVersion: number; version: number; stage: 'practicing' }
+
 function PracticeDetail({ practice, personal, data }: { practice: TeachingPractice; personal?: TeachingPersonal; data: Snapshot }) {
   const owner = practice.ownerId === data.me?.id;
+  const [ownTransition, setOwnTransition] = useState<TeachingOwnTransition>();
   const questions = data.teachingQuestions.filter((q) => q.practiceId === practice.id);
   return <>
     <Link to={BASE} className="back with-icon"><Icon name="back" size={16} /> Aprende enseñando</Link>
@@ -179,7 +183,7 @@ function PracticeDetail({ practice, personal, data }: { practice: TeachingPracti
     </div><span className={`badge badge--${practice.status === 'completed' ? 'resolved' : 'open'}`}>{STATUS_LABEL[practice.status]}</span></header>
     <div className="detail teaching-detail">
       <div className="detail__main">
-        {owner && practice.status === 'draft' ? <OwnerExplanationEditor key="draft" practice={practice} personal={personal} questions={questions} /> : <section className="panel">
+        {owner ? <OwnerExplanationEditor key="owner-editor" practice={practice} personal={personal} questions={questions} ownTransition={ownTransition} /> : <section className="panel">
           <h2>Explicación inicial</h2><p className="muted">La conservamos para que puedas ver cómo cambió tu comprensión.</p><Explanation value={practice.initial} />
         </section>}
         {practice.status === 'draft' && !owner && <p className="placeholder">El autor está preparando su explicación. Podrás preguntar cuando comience la práctica.</p>}
@@ -192,10 +196,11 @@ function PracticeDetail({ practice, personal, data }: { practice: TeachingPracti
           </li>)}</ol>
           {!owner && practice.status === 'practicing' && <PeerQuestion practiceId={practice.id} />}
         </section>}
-        {practice.status !== 'draft' && (owner && practice.status === 'practicing' ? <OwnerExplanationEditor key="practicing" practice={practice} personal={personal} questions={questions} /> : <section className="panel">
+        {practice.status !== 'draft' && !owner && <section className="panel">
           <h2>Explicación revisada</h2><Explanation value={practice.revised} />
-        </section>)}
-        {owner && practice.status === 'completed' && <CompletedPractice practice={practice} personal={personal} />}
+        </section>}
+        {owner && practice.status === 'practicing' && <AiStudyModulePanel practice={practice} />}
+        {owner && practice.status === 'completed' && <CompletedPractice practice={practice} personal={personal} onReopened={(fromVersion, version) => setOwnTransition({ fromVersion, version, stage: 'practicing' })} />}
       </div>
       <aside className="detail__side">
         <section className="panel"><h2 className="label">Participación privada</h2><p className="teaching-privacy with-icon"><Icon name="lock" size={16} /> Solo el autor y su compañero invitado.</p>
@@ -208,36 +213,83 @@ function PracticeDetail({ practice, personal, data }: { practice: TeachingPracti
   </>;
 }
 
-function OwnerExplanationEditor({ practice, personal, questions }: { practice: TeachingPractice; personal?: TeachingPersonal; questions: TeachingQuestion[] }) {
+function OwnerExplanationEditor({ practice, personal, questions, ownTransition }: { practice: TeachingPractice; personal?: TeachingPersonal; questions: TeachingQuestion[]; ownTransition?: TeachingOwnTransition }) {
   const source = useDataSource();
   const [initial, setInitial] = useState({ ...practice.initial });
   const [revised, setRevised] = useState({ ...practice.revised });
   const [reflection, setReflection] = useState(personal?.reflection ?? '');
   const [topicsToReview, setTopicsToReview] = useState(personal?.topicsToReview ?? '');
   const [saved, setSaved] = useState(false);
+  const [expectedVersion, setExpectedVersion] = useState(practice.version ?? 1);
+  const [editingStage, setEditingStage] = useState(practice.status);
+  const handledTransition = useRef<TeachingOwnTransition | undefined>(undefined);
+  useEffect(() => {
+    if (!ownTransition || handledTransition.current === ownTransition) return;
+    handledTransition.current = ownTransition;
+    // Only a confirmed transition from the editor's own version can advance it.
+    // A stale local draft from another session still requires an explicit reload.
+    if (editingStage === 'completed' && expectedVersion === ownTransition.fromVersion) {
+      setEditingStage(ownTransition.stage); setExpectedVersion(ownTransition.version);
+    }
+  }, [ownTransition, editingStage, expectedVersion]);
+  const intent = useRef<{ signature: string; id: string } | undefined>(undefined);
   const { error, pending, run } = useAction();
-  const draft = practice.status === 'draft';
+  const stale = (practice.version ?? 1) !== expectedVersion;
+  const draft = editingStage === 'draft';
+  const completed = editingStage === 'completed';
   const validation = draft ? teachingExplanationError(initial, true) : teachingCompletionError(revised, reflection, questions.filter((q) => q.answer.trim()).length);
-  const save = () => source.saveTeachingPractice(practice.id, { initial, revised, reflection, topicsToReview });
+  const save = async () => {
+    const fields = { initial, revised, reflection, topicsToReview, expectedVersion };
+    const signature = JSON.stringify(fields);
+    if (intent.current?.signature !== signature) intent.current = { signature, id: crypto.randomUUID() };
+    const version = await source.saveTeachingPractice(practice.id, { ...fields, requestId: intent.current.id });
+    const confirmed = typeof version === 'number' ? version : source.getSnapshot().teachingPractices.find((row) => row.id === practice.id)?.version ?? expectedVersion;
+    setExpectedVersion(confirmed);
+    intent.current = undefined;
+    return confirmed;
+  };
   const act = async (next = false) => {
-    if (pending) return;
-    const success = await run(async () => { await save(); if (next) { if (draft) await source.startTeachingPractice(practice.id); else await source.completeTeachingPractice(practice.id); } return true; });
+    if (pending || stale || completed) return;
+    const success = await run(async () => {
+      const confirmed = await save();
+      if (next) {
+        if (draft) await source.startTeachingPractice(practice.id); else await source.completeTeachingPractice(practice.id);
+        setEditingStage(draft ? 'practicing' : 'completed');
+        const observed = source.getSnapshot().teachingPractices.find((row) => row.id === practice.id)?.version ?? 0;
+        setExpectedVersion(Math.max(observed, confirmed + 1));
+      }
+      return true;
+    });
     if (success) setSaved(true);
   };
   return <form className="form panel teaching-editor" onSubmit={(e) => { e.preventDefault(); void act(); }} aria-busy={pending} onChange={() => setSaved(false)}>
-    <h2>{draft ? 'Tu primera explicación' : 'Mejora tu explicación'}</h2>
+    <h2>{draft ? 'Tu primera explicación' : completed ? 'Explicación revisada guardada' : 'Mejora tu explicación'}</h2>
     <p className="muted">{draft ? 'Puedes guardar lo que lleves. Completa los tres campos para comenzar las preguntas.' : 'Integra lo que aprendiste al responder; tu explicación inicial se conserva.'}</p>
-    <ExplanationFields value={draft ? initial : revised} onChange={draft ? setInitial : setRevised} disabled={pending} />
-    {!draft && <section className="form__section teaching-personal"><h2 className="with-icon"><Icon name="lock" size={16} /> Solo para ti</h2>
+    {completed ? <Explanation value={revised} /> : <ExplanationFields value={draft ? initial : revised} onChange={draft ? setInitial : setRevised} disabled={pending} />}
+    {!draft && <details><summary>Explicación inicial conservada</summary><Explanation value={initial} /></details>}
+    {!draft && !completed && <section className="form__section teaching-personal"><h2 className="with-icon"><Icon name="lock" size={16} /> Solo para ti</h2>
       <label className="field"><span className="field__label">Reflexión personal</span><textarea value={reflection} onChange={(e) => setReflection(e.target.value)} rows={4} maxLength={MAX_TEACHING_TEXT_LENGTH} disabled={pending} /><span className="field__hint">¿Qué entendiste mejor y qué cambió en tu explicación?</span></label>
       <label className="field"><span className="field__label">Temas para repasar <span className="field__optional">opcional</span></span><textarea value={topicsToReview} onChange={(e) => setTopicsToReview(e.target.value)} rows={3} maxLength={MAX_TEACHING_QUESTION_LENGTH} disabled={pending} /></label>
     </section>}
+    {stale && <div className="teaching-privacy" role="alert"><p>La práctica cambió en otra sesión. Tu edición local se conserva; revisa el historial o carga la versión actual antes de guardar.</p>
+      <button type="button" className="secondary" disabled={pending} onClick={() => { setInitial({ ...practice.initial }); setRevised({ ...practice.revised }); setReflection(personal?.reflection ?? ''); setTopicsToReview(personal?.topicsToReview ?? ''); setExpectedVersion(practice.version ?? 1); setEditingStage(practice.status); intent.current = undefined; setSaved(false); }}>Cargar versión actual</button></div>}
+    <TeachingHistory practiceId={practice.id} />
     {error && <p className="error" role="alert">{error}</p>}
     {saved && <p className="muted" role="status">Cambios guardados.</p>}
-    {validation && <p className="field__hint">{validation}</p>}
-    <div className="form__actions"><button type="submit" className="secondary" disabled={pending}>{pending ? 'Guardando…' : 'Guardar cambios'}</button>
-      <button type="button" disabled={pending || Boolean(validation)} onClick={() => void act(true)}>{draft ? 'Guardar y comenzar práctica' : 'Guardar y completar práctica'}</button></div>
+    {!completed && validation && <p className="field__hint">{validation}</p>}
+    {!completed && <div className="form__actions"><button type="submit" className="secondary" disabled={pending || stale}>{pending ? 'Guardando…' : 'Guardar cambios'}</button>
+      <button type="button" disabled={pending || stale || Boolean(validation)} onClick={() => void act(true)}>{draft ? 'Guardar y comenzar práctica' : 'Guardar y completar práctica'}</button></div>}
   </form>;
+}
+
+function TeachingHistory({ practiceId }: { practiceId: string }) {
+  const source = useDataSource();
+  const [history, setHistory] = useState<TeachingRevision[]>([]);
+  const { error, pending, run } = useAction();
+  return <section className="teaching-history"><button type="button" className="secondary" disabled={pending} onClick={() => void run(async () => { setHistory(await source.getTeachingHistory(practiceId)); })}>Consultar versiones guardadas</button>
+    {history.length > 0 && <details open><summary>Historial privado de la práctica ({history.length})</summary>{history.map((entry) => <article key={entry.version}><h3>Versión {entry.version} · {formatTime(entry.at)}</h3><h4>Explicación inicial</h4><Explanation value={entry.initial} /><h4>Explicación revisada</h4><Explanation value={entry.revised} /><h4>Reflexión personal</h4><RichText text={entry.reflection} /><h4>Temas para repasar</h4><RichText text={entry.topicsToReview} /></article>)}</details>}
+    {error && <p className="error" role="alert">{error}</p>}
+  </section>;
 }
 
 function ReviewerForm({ practice, data }: { practice: TeachingPractice; data: Snapshot }) {
@@ -301,7 +353,7 @@ function PeerQuestion({ practiceId }: { practiceId: string }) {
   </form>;
 }
 
-function CompletedPractice({ practice, personal }: { practice: TeachingPractice; personal?: TeachingPersonal }) {
+function CompletedPractice({ practice, personal, onReopened }: { practice: TeachingPractice; personal?: TeachingPersonal; onReopened(fromVersion: number, version: number): void }) {
   const source = useDataSource();
   const { error, pending, run } = useAction();
   const [publishedId, setPublishedId] = useState(personal?.publishedNoteId);
@@ -314,7 +366,12 @@ function CompletedPractice({ practice, personal }: { practice: TeachingPractice;
   return <>
     <section className="panel teaching-personal"><h2 className="with-icon"><Icon name="lock" size={16} /> Tu reflexión personal</h2><RichText text={personal?.reflection ?? ''} />
       {personal?.topicsToReview && <><h3>Temas para repasar</h3><RichText text={personal.topicsToReview} /></>}
-      <button type="button" className="secondary" disabled={pending} onClick={() => void run(() => source.reopenTeachingPractice(practice.id))}>Reabrir práctica</button>
+      <button type="button" className="secondary" disabled={pending} onClick={() => void run(async () => {
+        await source.reopenTeachingPractice(practice.id);
+        const previous = practice.version ?? 1;
+        const observed = source.getSnapshot().teachingPractices.find((row) => row.id === practice.id)?.version ?? 0;
+        onReopened(previous, Math.max(observed, previous + 1));
+      })}>Reabrir práctica</button>
       {error && <p className="error" role="alert">{error}</p>}
     </section>
     <section className="panel"><h2>Compartir lo que aprendiste</h2>

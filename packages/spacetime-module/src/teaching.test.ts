@@ -50,7 +50,7 @@ import {
   answer_teaching_question, ask_teaching_question, complete_teaching_practice,
   create_teaching_practice, my_teaching_personal, notes, publish_teaching_explanation,
   reopen_teaching_practice, save_teaching_practice, set_teaching_reviewer,
-  start_teaching_practice, teaching_practices, teaching_questions,
+  start_teaching_practice, teaching_practices, teaching_questions, teaching_save_v2,
 } from './index';
 
 function setup() {
@@ -74,6 +74,7 @@ function setup() {
       { id: 104n, author: owner, subjectId: 2n, visibility: 'group', version: 4 },
     ]),
     studyGuide: tableStore('id', [{ id: 201n, subjectId: 1n, version: 5 }, { id: 202n, subjectId: 2n, version: 1 }]),
+    teachingHead: tableStore('practiceId'), teachingRevision: tableStore('key'), teachingIntent: tableStore('key'),
     teachingPractice: tableStore('id'),
     teachingPersonal: tableStore('practiceId'),
     teachingQuestion: tableStore('id'),
@@ -102,11 +103,14 @@ function setup() {
   };
   const save = (practiceId: bigint, input: Partial<Parameters<typeof save_teaching_practice>[1]> = {}) => {
     const row = db.teachingPractice.rows.get(String(practiceId))!;
-    save_teaching_practice(ctx, {
-      practiceId, concept: row.concept as string, example: row.example as string, limits: row.limits as string,
+    const fields = { practiceId, concept: row.concept as string, example: row.example as string, limits: row.limits as string,
       revisedConcept: 'Concepto mejorado', revisedExample: 'Ejemplo mejorado', revisedLimits: 'Límites mejorados',
-      reflection: 'Mi reflexión secreta', topicsToReview: 'Mi pendiente secreto', ...input,
-    });
+      reflection: 'Mi reflexión secreta', topicsToReview: 'Mi pendiente secreto', ...input };
+    const result = JSON.parse(teaching_save_v2({ withTx: (fn: (tx: typeof ctx) => string) => fn(ctx) } as unknown as Parameters<typeof teaching_save_v2>[0], { payload: JSON.stringify({ practiceId: String(practiceId),
+      expectedVersion: db.teachingHead.rows.get(String(practiceId))?.version ?? 1, requestId: crypto.randomUUID(), initial: { concept: fields.concept, example: fields.example, limits: fields.limits },
+      revised: { concept: fields.revisedConcept, example: fields.revisedExample, limits: fields.revisedLimits }, reflection: fields.reflection, topicsToReview: fields.topicsToReview }) }));
+    if (!result.ok) throw new Error(result.message);
+
   };
   const begin = () => {
     const practiceId = create();

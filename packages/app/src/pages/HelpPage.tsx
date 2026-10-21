@@ -9,7 +9,7 @@ import {
   HELP_POST_STATUS_LABEL,
   periodLabel,
 } from '@b20/core';
-import type { HelpContactRequest, HelpPost, Member, Subject } from '../data/types';
+import type { HelpContactRequest, HelpPost, HelpPostHistory, Member, Subject } from '../data/types';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import { Avatar } from '../components/Avatar';
 import { Empty } from '../components/Empty';
@@ -179,6 +179,8 @@ function HelpForm({ post, subjects }: { post?: HelpPost; subjects: Subject[] }) 
   const source = useDataSource();
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  const [expectedVersion] = useState(post?.version ?? 1);
+  const [requestId] = useState(() => crypto.randomUUID());
   const { error, pending, run } = useAction();
   const presetSubject = subjects.find((subject) => subject.id === params.get('materia'));
   const [kind, setKind] = useState<HelpPost['kind']>(post?.kind ?? (params.get('tipo') === 'request' ? 'request' : 'offer'));
@@ -193,7 +195,7 @@ function HelpForm({ post, subjects }: { post?: HelpPost; subjects: Subject[] }) 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (pending || !level || !modality) return;
-    const id = await run(() => source.saveHelpPost({ id: post?.id, kind, subjectId, title: title.trim(), topic: topic.trim(), description: description.trim(), level, modality, availability: availability.trim() }));
+    const id = await run(() => source.saveHelpPost({ id: post?.id, expectedVersion: post ? expectedVersion : undefined, requestId, kind, subjectId, title: title.trim(), topic: topic.trim(), description: description.trim(), level, modality, availability: availability.trim() }));
     if (id) void navigate(`/m/ayuda/${id}`, { replace: true });
   };
   return (
@@ -260,13 +262,13 @@ export function HelpPostPage() {
   const changeStatus = async () => {
     if (pending) return;
     const next = post.status === 'open' ? 'closed' : 'open';
-    const succeeded = await run(async () => { await source.setHelpPostStatus(post.id, next); return true; });
+    const succeeded = await run(async () => { await source.setHelpPostStatus(post.id, next, post.version ?? 1); return true; });
     if (succeeded) setNotice(next === 'closed' ? 'Publicación cerrada. Los contactos pendientes se cerraron; las conversaciones aceptadas siguen disponibles.' : 'Publicación abierta de nuevo.');
   };
   const withdraw = async (event: FormEvent) => {
     event.preventDefault();
     if (pending) return;
-    const succeeded = await run(async () => { await source.withdrawHelpPost(post.id, reason.trim()); return true; });
+    const succeeded = await run(async () => { await source.withdrawHelpPost(post.id, reason.trim(), post.version ?? 1); return true; });
     if (succeeded) { setWithdrawing(false); setNotice('La publicación fue retirada. El historial de contactos se conserva en privado.'); }
   };
   return (
@@ -278,6 +280,7 @@ export function HelpPostPage() {
       <div className="detail">
         <div className="detail__main">
           <section className="panel help-description"><header className="help-author"><Avatar member={author} size={36} /><div><Link to={`/perfil/${post.authorId}`}>{isAuthor ? 'Tú' : author?.displayName ?? 'Integrante del grupo'}</Link><span className="muted">Publicado el {formatDate(post.createdAt)}</span></div></header><RichText text={post.description} /></section>
+          {isAuthor && <HelpHistory key={`${me.id}:${post.id}`} post={post} />}
           {post.status === 'withdrawn' && <section className="panel"><h2 className="label">Publicación retirada</h2><p className="muted">Solo tú puedes consultar esta publicación. Sus contactos anteriores siguen en «Mis contactos». No se puede volver a publicar.</p>{post.withdrawalReason && <p className="prewrap help-withdrawal-reason"><strong>Motivo de la retirada:</strong> {post.withdrawalReason}</p>}</section>}
           {existing && <section className="panel help-contact-summary"><h2 className="label">Tu solicitud de contacto</h2><p><span className={`badge help-status help-status--${existing.status}`}>{HELP_CONTACT_STATUS_LABEL[existing.status]}</span></p><p className="muted">{existing.status === 'pending' ? 'La otra persona decidirá si acepta. La solicitud solo la ven ustedes dos.' : existing.status === 'accepted' ? 'Ya pueden coordinar el horario y los detalles por mensaje privado.' : 'Esta solicitud quedó en el historial. Puedes revisar sus detalles en «Mis contactos».'}</p><div className="row">{existing.conversationId && <Link to={`/m/mensajes/directos/${existing.conversationId}`} className="button with-icon"><Icon name="chat" size={16} /> Abrir conversación</Link>}<Link to="/m/ayuda/contactos?pestana=enviados" className="button secondary">Ver mis contactos</Link></div></section>}
           {canRequest && (asking ? <form className="panel form" onSubmit={send} aria-busy={pending}><h2>Solicitar contacto</h2><p className="field__hint">Solo tú y {author.displayName} verán esta solicitud. Al aceptarla podrán abrir su conversación privada.</p><label className="field"><span className="field__label">Mensaje inicial <span className="field__optional">opcional</span></span><textarea value={message} onChange={(event) => setMessage(event.target.value)} maxLength={HELP_LIMITS.message} rows={4} disabled={pending} autoFocus /></label><div className="form__actions"><button type="button" className="secondary" disabled={pending} onClick={() => setAsking(false)}>Cancelar</button><button type="submit" disabled={pending}>{pending ? 'Enviando…' : 'Enviar solicitud'}</button></div></form> : <section className="panel"><h2>{post.kind === 'offer' ? '¿Te serviría esta ayuda?' : '¿Puedes ayudar con este tema?'}</h2><p className="muted">Envía una solicitud privada para que puedan coordinarse.</p><button type="button" className="with-icon" disabled={pending} onClick={() => { setAsking(true); setNotice(''); }}><Icon name="send" size={16} />{post.kind === 'offer' ? 'Pedir ayuda' : 'Ofrecer ayuda'}</button></section>)}
@@ -344,4 +347,18 @@ export function HelpContactsPage() {
       {shown.length ? <ul className="help-contact-list">{shown.map((request) => <HelpContactCard key={request.id} request={request} me={me} members={members} subjects={subjects} posts={helpPosts} />)}</ul> : <Empty icon="lock" title={sent ? 'Todavía no has enviado solicitudes' : 'No tienes solicitudes recibidas'} action={<Link to="/m/ayuda" className="button secondary">Explorar el tablón</Link>}>{sent ? 'Abre una publicación y pide u ofrece ayuda para ponerte en contacto.' : 'Cuando alguien quiera coordinarse contigo, podrás aceptar o rechazar su solicitud aquí.'}</Empty>}
     </>
   );
+}
+
+
+function HelpHistory({ post }: { post: HelpPost }) {
+  const source = useDataSource(); const [rows, setRows] = useState<HelpPostHistory[]>();
+  const { error, pending, run } = useAction();
+  const load = async () => { const result = await run(() => source.getHelpPostHistory(post.id)); if (result) setRows(result); };
+  return <section className="panel"><h2>Mis versiones de la publicación</h2>
+    <p className="muted">La versión actual es {post.version ?? 1}. El historial conserva las ediciones realizadas desde esta actualización y solo lo puedes consultar tú.</p>
+    <button type="button" disabled={pending} onClick={() => void load()}>Consultar mis versiones</button>
+    {error && <p className="error" role="alert">{error}</p>}
+    {rows?.map(row => <details key={row.version}><summary>Versión {row.version} · {formatDate(row.at)} · {HELP_POST_STATUS_LABEL[row.status]}</summary>
+      <h3>{row.fields.title}</h3><p>{row.fields.topic}</p><RichText text={row.fields.description} /></details>)}
+  </section>;
 }

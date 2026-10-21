@@ -37,12 +37,12 @@ const input = (fields: Partial<HelpPostInput> = {}): HelpPostInput => ({
 });
 
 /** Empty tables remain available as other modules add permission-filtered views. */
-function setup(initial: Record<string, unknown[]> = {}, reducers: Record<string, unknown> = {}) {
+function setup(initial: Record<string, unknown[]> = {}, reducers: Record<string, unknown> = {}, procedures: Record<string, unknown> = {}) {
   const rows = { myMember: [member()], members: [member(), member(OTHER), member(THIRD)], ...initial };
   const db = new Proxy({}, {
     get: (_target, name: string) => ({ iter: () => (rows[name as keyof typeof rows] ?? []).values() }),
   });
-  const connection = { db, reducers } as unknown as DbConnection;
+  const connection = { db, reducers, procedures } as unknown as DbConnection;
   return { rows: rows as Record<string, unknown[]>, connection,
     actions: createSpacetimeActions(() => connection, () => SELF) };
 }
@@ -58,7 +58,7 @@ describe('ayuda: adaptación de vistas de SpacetimeDB', () => {
     expect(data.helpPosts[0]).toEqual({
       id: HIGH.toString(), kind: 'offer', subjectId: SUBJECT.toString(), title: 'Ciclos', topic: 'Bucles',
       description: 'Repasamos con ejemplos.', level: 'initial', modality: 'messages',
-      availability: 'Martes después de clase', status: 'withdrawn', authorId: SELF,
+      availability: 'Martes después de clase', status: 'withdrawn', authorId: SELF, version: 1,
       createdAt: at, updatedAt: at, withdrawnBy: THIRD, withdrawalReason: 'Motivo para el autor',
     });
     expect(data.helpContacts[0]).toMatchObject({
@@ -118,49 +118,30 @@ describe('ayuda: adaptación de vistas de SpacetimeDB', () => {
 });
 
 describe('ayuda: acciones de SpacetimeDB', () => {
-  it('conecta edición y todos los cambios de estado con IDs u64 y campos opcionales correctos', async () => {
-    const reducers = {
-      saveHelpPost: vi.fn(async () => {}), setHelpPostStatus: vi.fn(async () => {}),
-      withdrawHelpPost: vi.fn(async () => {}), respondHelpContact: vi.fn(async () => {}),
-      cancelHelpContact: vi.fn(async () => {}), closeHelpContact: vi.fn(async () => {}),
-    };
-    const { actions } = setup({}, reducers);
-    await expect(actions.saveHelpPost(input({ id: HIGH.toString() }))).resolves.toBe(HIGH.toString());
-    expect(reducers.saveHelpPost).toHaveBeenCalledWith({ ...input(), id: HIGH, subjectId: SUBJECT });
+  const success = (id = HIGH.toString(), version = 1) => JSON.stringify({ ok: true, data: { id, version } });
+  it('envía IDs sin pérdida, versión esperada e intención a los procedimientos autorizados', async () => {
+    const helpMutate = vi.fn(async (_input: { payload: string }) => success());
+    const reducers = { respondHelpContact: vi.fn(async () => {}), cancelHelpContact: vi.fn(async () => {}), closeHelpContact: vi.fn(async () => {}) };
+    const { actions } = setup({ helpPostVersions: [{ postId: HIGH, version: 7 }] }, reducers, { helpMutate });
+    await expect(actions.saveHelpPost(input({ id: HIGH.toString(), expectedVersion: 6, requestId: 'edit' }))).resolves.toBe(HIGH.toString());
+    expect(JSON.parse(helpMutate.mock.calls[0]![0].payload)).toEqual({ action: 'save', id: HIGH.toString(), expectedVersion: 6, requestId: 'edit', fields: input() });
     await actions.setHelpPostStatus(HIGH.toString(), 'closed');
-    await actions.setHelpPostStatus(HIGH.toString(), 'open');
-    expect(reducers.setHelpPostStatus.mock.calls).toEqual([
-      [{ postId: HIGH, status: 'closed' }], [{ postId: HIGH, status: 'open' }],
+    await actions.setHelpPostStatus(HIGH.toString(), 'open', 8);
+    await actions.withdrawHelpPost(HIGH.toString(), 'Motivo privado', 9);
+    expect(helpMutate.mock.calls.slice(1).map(call => JSON.parse(call[0].payload))).toMatchObject([
+      { action: 'status', id: HIGH.toString(), status: 'closed', expectedVersion: 7 },
+      { action: 'status', id: HIGH.toString(), status: 'open', expectedVersion: 8 },
+      { action: 'withdraw', id: HIGH.toString(), reason: 'Motivo privado', expectedVersion: 9 },
     ]);
-    await actions.withdrawHelpPost(HIGH.toString());
-    await actions.withdrawHelpPost(HIGH.toString(), 'Motivo privado');
-    expect(reducers.withdrawHelpPost.mock.calls).toEqual([
-      [{ postId: HIGH, reason: '' }], [{ postId: HIGH, reason: 'Motivo privado' }],
-    ]);
-    await actions.respondHelpContact(HIGH.toString(), 'accepted');
-    await actions.respondHelpContact(HIGH.toString(), 'rejected');
-    expect(reducers.respondHelpContact.mock.calls).toEqual([
-      [{ requestId: HIGH, decision: 'accepted' }], [{ requestId: HIGH, decision: 'rejected' }],
-    ]);
-    await actions.cancelHelpContact(HIGH.toString());
-    await actions.closeHelpContact(HIGH.toString());
-    expect(reducers.cancelHelpContact).toHaveBeenCalledWith({ requestId: HIGH });
-    expect(reducers.closeHelpContact).toHaveBeenCalledWith({ requestId: HIGH });
+    await actions.respondHelpContact(HIGH.toString(), 'accepted'); await actions.cancelHelpContact(HIGH.toString()); await actions.closeHelpContact(HIGH.toString());
+    expect(reducers.respondHelpContact).toHaveBeenCalledWith({ requestId: HIGH, decision: 'accepted' });
+    expect(reducers.cancelHelpContact).toHaveBeenCalledWith({ requestId: HIGH }); expect(reducers.closeHelpContact).toHaveBeenCalledWith({ requestId: HIGH });
   });
-
-  it('recupera el alta propia entre publicaciones concurrentes sin confundir autor, materia o tipo', async () => {
-    const saveHelpPost = vi.fn(async () => {
-      rows.helpPosts!.push(post({ id: HIGH - 4n, author: person(OTHER) }));
-      rows.helpPosts!.push(post({ id: HIGH - 3n, author: person(), subjectId: 99n }));
-      rows.helpPosts!.push(post({ id: HIGH - 2n, author: person(), kind: 'request' }));
-      rows.helpPosts!.push(post({ id: HIGH - 1n, author: person(), title: 'Otro tema' }));
-      rows.helpPosts!.push(post({ id: HIGH, author: person() }));
-    });
-    const { actions, rows } = setup({ helpPosts: [post({ id: 1n, author: person() })] }, { saveHelpPost });
-    await expect(actions.saveHelpPost(input())).resolves.toBe(HIGH.toString());
-    expect(saveHelpPost).toHaveBeenCalledWith({ ...input(), id: undefined, subjectId: SUBJECT });
+  it('usa el recibo de la transacción sin inferir el alta entre otras publicaciones en caché', async () => {
+    const helpMutate = vi.fn(async () => success());
+    const { actions } = setup({ helpPosts: [post(), post({ id: 1n, author: person() })] }, {}, { helpMutate });
+    await expect(actions.saveHelpPost(input({ requestId: 'create' }))).resolves.toBe(HIGH.toString());
   });
-
   it('identifica el contacto enviado por la cuenta actual y preserva mensaje vacío o explícito', async () => {
     const sendHelpContact = vi.fn(async ({ postId }: { postId: bigint; message: string }) => {
       rows.myHelpContactRequests!.push(contact({ id: HIGH - 1n, postId, sender: person(OTHER), recipient: person() }));
@@ -168,40 +149,28 @@ describe('ayuda: acciones de SpacetimeDB', () => {
     });
     const { actions, rows } = setup({ myHelpContactRequests: [] }, { sendHelpContact });
     await expect(actions.sendHelpContact(HIGH.toString())).resolves.toBe(HIGH.toString());
-    expect(sendHelpContact).toHaveBeenCalledWith({ postId: HIGH, message: '' });
-    rows.myHelpContactRequests = [];
+    expect(sendHelpContact).toHaveBeenCalledWith({ postId: HIGH, message: '' }); rows.myHelpContactRequests = [];
     await expect(actions.sendHelpContact(SUBJECT.toString(), '¿Repasamos?')).resolves.toBe(HIGH.toString());
     expect(sendHelpContact).toHaveBeenLastCalledWith({ postId: SUBJECT, message: '¿Repasamos?' });
   });
-
-  it('no devuelve un alta ajena ni una ambigua, y conserva utilizable la cola tras fallar', async () => {
-    let attempt = 0;
-    const saveHelpPost = vi.fn(async () => {
-      attempt += 1;
-      if (attempt === 1) rows.helpPosts!.push(post({ id: 1n }));
-      if (attempt === 2) rows.helpPosts!.push(post({ id: 2n, author: person() }), post({ id: 3n, author: person() }));
-      if (attempt === 3) throw new Error('Acceso revocado');
-      if (attempt === 4) rows.helpPosts!.push(post({ id: HIGH, author: person() }));
-    });
-    const { actions, rows } = setup({ helpPosts: [] }, { saveHelpPost });
-    await expect(actions.saveHelpPost(input())).rejects.toThrow('identificar');
-    await expect(actions.saveHelpPost(input())).rejects.toThrow('identificar');
-    await expect(actions.saveHelpPost(input())).rejects.toThrow('Acceso revocado');
-    await expect(actions.saveHelpPost(input())).resolves.toBe(HIGH.toString());
+  it('conserva el mensaje de conflicto y permite reintentar la misma intención después de un error', async () => {
+    const helpMutate = vi.fn().mockResolvedValueOnce(JSON.stringify({ ok: false, message: 'La publicación cambió.' })).mockRejectedValueOnce(new Error('Sin conexión')).mockResolvedValue(success());
+    const { actions } = setup({}, {}, { helpMutate }); const data = input({ requestId: 'same-intent' });
+    await expect(actions.saveHelpPost(data)).rejects.toThrow('cambió'); await expect(actions.saveHelpPost(data)).rejects.toThrow('Sin conexión');
+    await expect(actions.saveHelpPost(data)).resolves.toBe(HIGH.toString());
+    expect(new Set(helpMutate.mock.calls.map(call => JSON.parse(call[0].payload).requestId))).toEqual(new Set(['same-intent']));
   });
-
-  it('serializa dos publicaciones propias para asociar cada resultado con su solicitud', async () => {
-    let finish: (() => void) | undefined;
-    const saveHelpPost = vi.fn(async ({ title }: { title: string }) => {
-      if (title === 'Primera') await new Promise<void>((resolve) => { finish = resolve; });
-      rows.helpPosts!.push(post({ id: HIGH - BigInt(rows.helpPosts!.length), author: person(), title }));
+  it('asocia respuestas fuera de orden a su intención y transforma fechas del historial privado', async () => {
+    let finish: ((value: string) => void) | undefined;
+    const helpMutate = vi.fn(async ({ payload }: { payload: string }) => {
+      const value = JSON.parse(payload) as { requestId: string }; if (value.requestId === 'first') return new Promise<string>(resolve => { finish = resolve; }); return success((HIGH - 1n).toString());
     });
-    const { actions, rows } = setup({ helpPosts: [] }, { saveHelpPost });
-    const first = actions.saveHelpPost(input({ title: 'Primera' }));
-    const second = actions.saveHelpPost(input({ title: 'Segunda' }));
-    await vi.waitFor(() => expect(saveHelpPost).toHaveBeenCalledTimes(1));
-    finish?.();
+    const helpReadHistory = vi.fn(async () => JSON.stringify({ ok: true, data: [{ version: 7, status: 'open', fields: input(), at: at.getTime() }] }));
+    const { actions } = setup({}, {}, { helpMutate, helpReadHistory });
+    const first = actions.saveHelpPost(input({ requestId: 'first' }));
+    await expect(actions.saveHelpPost(input({ requestId: 'second' }))).resolves.toBe((HIGH - 1n).toString()); finish!(success());
     await expect(first).resolves.toBe(HIGH.toString());
-    await expect(second).resolves.toBe((HIGH - 1n).toString());
+    await expect(actions.getHelpPostHistory(HIGH.toString())).resolves.toMatchObject([{ version: 7, at }]);
+    expect(helpReadHistory).toHaveBeenCalledWith({ postId: HIGH });
   });
 });

@@ -9,6 +9,7 @@ import {
   aiHash, aiSourceFingerprint, sanitizeAiText, validateAiPrepareInput, type AiPreparation, type AiPrepareInput, type AiSourceSnapshot,
 } from '../../core/src/ai';
 import { validateAiQuestionDraft } from '../../core/src/exam';
+import { validateAiModuleDraft } from '../../core/src/aiStudyModules';
 import { validateAiStudyDraft } from '../../core/src/aiStudyDraft';
 import { captureGuide, captureNote } from './delivery2Handlers';
 
@@ -138,10 +139,32 @@ export function aiDeleteKey(ctx: Ctx) {
   return { configured: false };
 }
 
+/** Only the owner's saved explanation is sent. Personal notes, answers, peer identity and reflection are never read. */
+function resolveTeachingSource(ctx: Ctx, id: bigint, actor: Identity): AiSourceSnapshot {
+  const row = ctx.db.teachingPractice.id.find(id);
+  if (!row?.owner.isEqual(actor) || row.status !== 'practicing') fail('source_unavailable', 'Solo el autor puede usar la explicación guardada de una práctica en curso.');
+  const revised = [row.revisedConcept, row.revisedExample, row.revisedLimits].every((field) => field.trim());
+  const fields = [{ name: 'Concepto guardado', text: revised ? row.revisedConcept : row.concept },
+    { name: 'Ejemplo guardado', text: revised ? row.revisedExample : row.example },
+    { name: 'Límites guardados', text: revised ? row.revisedLimits : row.limits }];
+  if (fields.some((field) => !field.text.trim())) fail('invalid_request', 'Guarda una explicación completa antes de preparar preguntas.');
+  const fingerprint = aiHash({ fields, topic: row.topic, subjectId: String(row.subjectId) });
+  const key = `${id}:${fingerprint}`;
+  let revision = ctx.db.aiTeachingVersion.id.find(key);
+  if (!revision) {
+    const prior = [...ctx.db.aiTeachingVersion.practiceId.filter(id)];
+    revision = ctx.db.aiTeachingVersion.insert({ id: key, practiceId: id,
+      version: prior.reduce((max, entry) => Math.max(max, entry.version), 0) + 1, fingerprint, createdAt: ctx.timestamp });
+  }
+  return { kind: 'teaching', refId: String(id), subjectId: String(row.subjectId), version: revision.version,
+    title: row.topic, visibility: 'personal', fields, context: fingerprint,
+    omissions: ['Solo se envía la explicación guardada; se excluyen reflexión, temas personales, respuestas, historial y datos del compañero.'] };
+}
 /** Resolve only academic record fields. No client-supplied text reaches the provider. */
 export function resolveAiSource(ctx: Ctx, kind: string, refId: string, actor = ctx.sender): AiSourceSnapshot {
   if (!/^[1-9][0-9]*$/.test(refId) || BigInt(refId) > 18_446_744_073_709_551_615n) fail('invalid_request', 'Referencia inválida.');
   const id = BigInt(refId);
+  if (kind === 'teaching') return resolveTeachingSource(ctx, id, actor);
   if (!canReadTarget(ctx.db, actor, kind, id) || withdrawn(ctx.db, kind, id)) fail('source_unavailable', 'Una fuente no existe o ya no está disponible.');
   let snapshot: AiSourceSnapshot;
   if (kind === 'note') {
@@ -280,9 +303,12 @@ function validPreparation(ctx: Ctx, id: string, actor: Identity, checkExpiry: bo
 }
 type GenerationRow = NonNullable<ReturnType<Ctx['db']['aiGeneration']['id']['find']>>;
 function generationDto(ctx: Ctx, row: GenerationRow) {
+  const acceptance = ctx.db.aiStudyAcceptance.generationId.find(row.id);
   return { id: row.id, state: row.status === 'queued' ? 'prepared' : row.status,
     preparationId: row.preparationId, createdAt: date(row.createdAt), updatedAt: date(row.claimedAt ?? row.createdAt),
-    ...(row.resultJson ? { result: JSON.parse(row.resultJson) as unknown, preparation: JSON.parse(ctx.db.aiPreparation.id.find(row.preparationId)!.json) as AiPreparation } : {}),
+    preparation: JSON.parse(ctx.db.aiPreparation.id.find(row.preparationId)!.json) as AiPreparation,
+    ...(row.resultJson ? { result: JSON.parse(row.resultJson) as unknown } : {}),
+    ...(acceptance ? { acceptance: JSON.parse(acceptance.resultJson) as unknown } : {}),
     ...(row.errorCode ? { error: `${row.errorCode}:${row.errorMessage}` } : {}),
     ...(row.inputTokens !== undefined && row.outputTokens !== undefined ? { usage: { inputTokens: row.inputTokens, outputTokens: row.outputTokens } } : {}),
     estimatedTokens: ctx.db.aiReservation.id.find(row.id)?.estimatedTokens ?? 0 };
@@ -365,7 +391,7 @@ export function aiFinishGeneration(ctx: Ctx, input: Record<string, unknown>) {
   if (!savedPreparation) fail('unavailable', 'El material preparado ya no está disponible.');
   const preparation = JSON.parse(savedPreparation.json) as AiPreparation;
   const config = validateAiGenerationConfig(JSON.parse(previous.configJson));
-  const resultJson = state === 'succeeded' ? JSON.stringify(config.purpose && config.purpose !== 'questions' ? validateAiStudyDraft(input.result, preparation, config) : validateAiQuestionDraft(input.result, preparation, config)) : '';
+  const resultJson = state === 'succeeded' ? JSON.stringify(config.purpose === 'teaching_questions' || config.purpose === 'spaced_cards' ? validateAiModuleDraft(input.result, preparation, config) : config.purpose && config.purpose !== 'questions' ? validateAiStudyDraft(input.result, preparation, config) : validateAiQuestionDraft(input.result, preparation, config)) : '';
   if (resultJson.length > 128_000) fail('request_too_large', 'La respuesta excede el límite.');
   if (previous.status !== 'running') {
     if (previous.status === state && previous.resultJson === resultJson) return generationDto(ctx, previous);
@@ -407,11 +433,12 @@ export function aiPublishGeneration(ctx: Ctx, input: Record<string, unknown>) {
   activeMember(ctx); const id = uuid(input.id, 'El borrador');
   const generation = ctx.db.aiGeneration.id.find(id);
   if (!generation?.actor.isEqual(ctx.sender) || generation.status !== 'succeeded') fail('unavailable', 'El borrador no está disponible.');
+  const config = validateAiGenerationConfig(JSON.parse(generation.configJson));
+  if (config.purpose === 'teaching_questions' || config.purpose === 'spaced_cards') return acceptStudyDraft(ctx, generation, input);
   const prior = ctx.db.aiPublication.generationId.find(id);
   if (prior) return { targetKind: prior.targetKind, targetId: String(prior.targetId) };
   const { prep } = validPreparation(ctx, generation.preparationId, ctx.sender, false);
   if (prep.sources.some((source) => source.visibility !== 'group')) fail('forbidden', 'Comparte expresamente las fuentes personales antes de publicar un borrador para el grupo.');
-  const config = validateAiGenerationConfig(JSON.parse(generation.configJson));
   const draft = validateAiStudyDraft(JSON.parse(generation.resultJson), prep, config);
   const usedSources = new Set(draft.sections.flatMap((section) => section.citations.flatMap((citation) => prep.fragments.find((entry) => entry.id === citation)!.origins.map((origin) => `${origin.kind}:${origin.refId}`))));
   const citedSources = prep.sources.filter((source) => usedSources.has(`${source.kind}:${source.refId}`));
@@ -456,6 +483,69 @@ export function aiPublishGeneration(ctx: Ctx, input: Record<string, unknown>) {
   }
   ctx.db.aiPublication.insert({ generationId: id, actor: ctx.sender, targetKind, targetId, createdAt: ctx.timestamp });
   return { targetKind, targetId: String(targetId) };
+}
+
+/** Explicit, atomic acceptance only; never publishes an explanation or changes review scheduling. */
+function acceptStudyDraft(ctx: Ctx, generation: GenerationRow, input: Record<string, unknown>) {
+  const { prep } = validPreparation(ctx, generation.preparationId, ctx.sender, false);
+  const config = validateAiGenerationConfig(JSON.parse(generation.configJson));
+  const draft = validateAiModuleDraft(JSON.parse(generation.resultJson), prep, config);
+  if (input.reviewed !== true || !Array.isArray(input.selection) || !input.selection.length || input.selection.length > 20) fail('invalid_request', 'Revisa y selecciona expresamente los elementos que quieres incorporar.');
+  const entries = input.selection.map((value) => obj(value));
+  const items = draft.purpose === 'teaching_questions' ? draft.questions : draft.cards;
+  if (entries.some((entry) => !Number.isInteger(entry.index) || Number(entry.index) < 0 || Number(entry.index) >= items.length)
+    || new Set(entries.map((entry) => entry.index)).size !== entries.length) fail('invalid_request', 'La selección contiene elementos inválidos o repetidos.');
+  // Persist exact reviewed edits in the receipt so an uncertain retry cannot insert a second batch.
+  const requestHash = aiHash({ reviewed: true, selection: input.selection, collectionId: input.collectionId,
+    expectedCollectionVersion: input.expectedCollectionVersion });
+  const prior = ctx.db.aiStudyAcceptance.generationId.find(generation.id);
+  if (prior) {
+    if (!prior.actor.isEqual(ctx.sender) || prior.requestHash !== requestHash) fail('conflict', 'Este borrador ya se incorporó con otra selección.');
+    return JSON.parse(prior.resultJson) as unknown;
+  }
+  let result: { targetKind: string; targetId: string; acceptedIds: string[] };
+  if (draft.purpose === 'teaching_questions') {
+    const source = prep.sources.find((entry) => entry.kind === 'teaching');
+    if (!source) fail('invalid_request', 'Falta la explicación guardada.');
+    const practiceId = BigInt(source.refId);
+    const practice = ctx.db.teachingPractice.id.find(practiceId);
+    if (!practice?.owner.isEqual(ctx.sender) || practice.status !== 'practicing') fail('forbidden', 'La práctica ya no admite preguntas.');
+    const reviewed = entries.map((entry) => ({ ...draft.questions[Number(entry.index)]!, text: text(entry.text, 'La pregunta revisada', 3900) }));
+    validateAiModuleDraft({ purpose: draft.purpose, questions: reviewed }, prep, config);
+    const acceptedIds = reviewed.map((question) => String(ctx.db.teachingQuestion.insert({ id: 0n, practiceId,
+      author: ctx.sender, kind: 'guided', text: `Gemini · revisada por su autor: ${question.text}`, answer: '',
+      createdAt: ctx.timestamp, answeredAt: undefined }).id));
+    ctx.db.teachingPractice.id.update({ ...practice, updatedAt: ctx.timestamp });
+    result = { targetKind: 'teaching', targetId: String(practiceId), acceptedIds };
+  } else {
+    const collectionId = text(input.collectionId, 'La colección', 20);
+    if (!/^[1-9][0-9]*$/.test(collectionId) || BigInt(collectionId) > 18_446_744_073_709_551_615n) fail('invalid_request', 'Colección inválida.');
+    const collection = ctx.db.spacedCollection.id.find(BigInt(collectionId));
+    if (!collection || collection.archived || (collection.visibility !== 'group' && !collection.ownerId.isEqual(ctx.sender))) fail('forbidden', 'La colección ya no está disponible.');
+    if (collection.subjectId !== BigInt(prep.subjectId) || collection.version !== input.expectedCollectionVersion) fail('conflict', 'La colección cambió o pertenece a otra materia.');
+    if (collection.visibility === 'group' && prep.sources.some((source) => source.visibility !== 'group')) fail('forbidden', 'Las fuentes personales solo pueden usarse en colecciones personales.');
+    if (entries.some((entry) => typeof entry.hint !== 'string')) fail('invalid_request', 'La pista revisada debe ser texto.');
+    const reviewed = entries.map((entry) => ({ ...draft.cards[Number(entry.index)]!, question: text(entry.question, 'La pregunta revisada', 1000),
+      explanation: text(entry.explanation, 'La explicación revisada', 18_000), hint: typeof entry.hint === 'string' ? entry.hint.trim() : '' }));
+    const validated = validateAiModuleDraft({ purpose: draft.purpose, title: draft.title, cards: reviewed }, prep, config);
+    if (validated.purpose !== 'spaced_cards') fail('invalid_request', 'Tipo de borrador inválido.');
+    // Validate the complete batch before inserting any card: aiResponse returns recoverable errors as data.
+    const pendingCards = validated.cards.map((card) => {
+      const fragment = prep.fragments.find((entry) => entry.id === card.citations[0])!;
+      const origin = fragment.origins[0]!;
+      const references = card.citations.map((citation) => prep.fragments.find((entry) => entry.id === citation)!.origins
+        .map((entry) => `${entry.kind}:${entry.refId} v${entry.version} · ${entry.field} líneas ${entry.startLine}–${entry.endLine}`).join(', ')).join('; ');
+      const explanation = `${card.explanation}\n\nBorrador de Gemini revisado por su solicitante. Referencias: ${references}.`;
+      if (explanation.length > 20_000) fail('invalid_request', 'La explicación con referencias excede el tamaño de una tarjeta. Reduce el texto revisado.');
+      return { id: 0n, collectionId: collection.id, question: card.question, explanation, hint: card.hint,
+        sourceKind: origin.kind, sourceId: BigInt(origin.refId), sourceVersion: origin.version,
+        version: 1, archived: false, createdBy: ctx.sender, updatedBy: ctx.sender, createdAt: ctx.timestamp, updatedAt: ctx.timestamp };
+    });
+    const acceptedIds = pendingCards.map((card) => String(ctx.db.spacedCard.insert(card).id));
+    result = { targetKind: 'spaced_collection', targetId: collectionId, acceptedIds };
+  }
+  ctx.db.aiStudyAcceptance.insert({ generationId: generation.id, actor: ctx.sender, requestHash, resultJson: JSON.stringify(result), createdAt: ctx.timestamp });
+  return result;
 }
 
 /** Called by retention before deleting an original; no copied private text survives its purge. */

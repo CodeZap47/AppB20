@@ -1,4 +1,4 @@
-/** Práctica personal de explicar un concepto; la IA es opcional y no interviene en esta versión. */
+/** Práctica personal de explicar un concepto, con preguntas de IA opcionales y revisadas. */
 export type TeachingStatus = 'draft' | 'practicing' | 'completed';
 export type TeachingSourceKind = 'note' | 'guide';
 

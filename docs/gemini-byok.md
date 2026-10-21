@@ -10,6 +10,10 @@ bases de datos ni servidores.
 La generación comienza desactivada. Esta implementación y sus pruebas locales no
 habilitan facturación ni publican servicios.
 
+La [cuarta entrega](gemini-estudio.md) amplía este mismo servicio con preguntas clarificadoras
+y tarjetas de Repaso, manteniendo los borradores privados y la aceptación manual. El
+consentimiento vigente incluye esas finalidades.
+
 ## Configuración del operador
 
 El Worker existente de `apps/api` utiliza estos valores:

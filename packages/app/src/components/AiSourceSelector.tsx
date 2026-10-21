@@ -22,7 +22,7 @@ export function AiSourceSelector({ candidates, topics, value, maxSources, disabl
     <div className="ai-scope">
       <label className="field"><span>Buscar material</span><input type="search" value={filter} onChange={(e) => setFilter(e.target.value)} /></label>
       <label className="field"><span>Tipo de fuente</span><select value={kind} onChange={(e) => setKind(e.target.value as AiCandidateKind | '')}>
-        <option value="">Todos los tipos</option>{Object.entries(AI_SOURCE_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+        <option value="">Todos los tipos</option>{Object.entries(AI_SOURCE_LABELS).filter(([id]) => id !== 'teaching').map(([id, label]) => <option key={id} value={id}>{label}</option>)}
       </select></label>
     </div>
     {!visible.length && <p className="muted">No hay material visible para esta selección.</p>}

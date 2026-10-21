@@ -8,10 +8,10 @@ const SELF = '00000000000000000000000000000000000000000000000000000000000000aa';
 const OTHER = '00000000000000000000000000000000000000000000000000000000000000bb';
 const person = (value = SELF) => Identity.fromString(value);
 
-function setup(reducers: Record<string, unknown>, initial: Record<string, unknown[]> = {}) {
+function setup(reducers: Record<string, unknown>, initial: Record<string, unknown[]> = {}, procedures: Record<string, unknown> = {}) {
   const rows = { ...initial };
   const db = new Proxy({}, { get: (_target, key: string) => ({ iter: () => (rows[key] ?? []).values() }) });
-  const connection = { db, reducers } as unknown as DbConnection;
+  const connection = { db, reducers, procedures } as unknown as DbConnection;
   return { rows, connection, actions: createSpacetimeActions(() => connection, () => SELF) };
 }
 
@@ -170,17 +170,18 @@ describe('acciones conectadas a SpacetimeDB', () => {
       rows.teachingPractices!.push({ id: 91n, owner: person(OTHER), subjectId: 7n, topic: 'Tema' });
       rows.teachingPractices!.push({ id: 92n, owner: person(), subjectId: 7n, topic: 'Tema' });
     });
-    const saveTeachingPractice = vi.fn(async () => {});
+    const teachingSaveV2 = vi.fn(async (_input: { payload: string }) => JSON.stringify({ ok: true, data: { id: '92', version: 2 } }));
     const setTeachingReviewer = vi.fn(async () => {});
-    const { actions, rows } = setup({ createTeachingPractice, saveTeachingPractice, setTeachingReviewer }, { teachingPractices: [] });
+    const { actions, rows } = setup({ createTeachingPractice, setTeachingReviewer }, { teachingPractices: [] }, { teachingSaveV2 });
     const initial = { concept: 'Concepto', example: 'Ejemplo', limits: 'Límites' };
     await expect(actions.createTeachingPractice({ subjectId: '7', topic: ' Tema ', initial,
       source: { kind: 'note', id: '9007199254740993' } })).resolves.toBe('92');
     expect(createTeachingPractice).toHaveBeenCalledWith({ subjectId: 7n, topic: ' Tema ', ...initial,
       sourceKind: 'note', sourceId: 9007199254740993n });
-    await actions.saveTeachingPractice('92', { initial, revised: initial, reflection: 'Privado', topicsToReview: 'Privados' });
-    expect(saveTeachingPractice).toHaveBeenCalledWith({ practiceId: 92n, ...initial,
-      revisedConcept: 'Concepto', revisedExample: 'Ejemplo', revisedLimits: 'Límites', reflection: 'Privado', topicsToReview: 'Privados' });
+    await actions.saveTeachingPractice('92', { initial, revised: initial, reflection: 'Privado', topicsToReview: 'Privados', expectedVersion: 1, requestId: '10000000-0000-4000-8000-000000000001' });
+    expect(JSON.parse(teachingSaveV2.mock.calls[0]![0].payload)).toEqual({ practiceId: '92', initial, revised: initial,
+      reflection: 'Privado', topicsToReview: 'Privados', expectedVersion: 1, requestId: '10000000-0000-4000-8000-000000000001' });
+    await expect(actions.saveTeachingPractice('92', { initial, revised: initial, reflection: '', topicsToReview: '' })).rejects.toThrow('versión');
     await actions.setTeachingReviewer('92', OTHER);
     expect(setTeachingReviewer).toHaveBeenLastCalledWith({ practiceId: 92n, reviewer: person(OTHER) });
     await actions.setTeachingReviewer('92');

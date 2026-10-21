@@ -27,9 +27,21 @@ restauración y purga de datos dependientes. Los servicios externos comienzan de
 
 Las comprobaciones locales con servidor real aislado usan identidades y claves sintéticas.
 No se han publicado estos cambios en Maincloud o Cloudflare ni se ha activado facturación.
-Los formatos binarios no admitidos para IA permanecen como omisiones explícitas. Las tarjetas
-de Repaso con Gemini, Exámenes y otras integraciones de IA siguen para entregas posteriores;
-el módulo 3.11 conserva su entrega 5 y el push nativo del APK permanece pendiente.
+Los formatos binarios no admitidos para IA permanecen como omisiones explícitas. La cuarta
+entrega añade tarjetas de Repaso y preguntas de Aprende enseñando con Gemini; Exámenes
+sigue pendiente. El módulo 3.11 conserva su entrega 5 y el push nativo del APK permanece pendiente.
+
+## Cuarta entrega: implementación local
+
+El [índice de la cuarta entrega](cuarta-entrega.md) reúne Retos, Revisión de código, Museo,
+Oportunidades, las versiones de Ayuda y la IA opcional de estudio. Se conservan Salas y sus
+permisos; los nuevos borradores requieren consentimiento actualizado y aceptación expresa.
+Los recorridos locales usan identidades sintéticas, sin publicar datos ni llamar a Gemini real.
+
+Validación conjunta del 21 de octubre de 2026: **1.210 pruebas aprobadas**, tipos correctos,
+compilaciones de web/PWA, Pages, extensión y Worker de prueba, cuatro recorridos nuevos
+contra SpacetimeDB local y regresión de Salas. El [registro de comprobaciones](cuarta-entrega.md#comprobación-local)
+detalla los resultados y las condiciones de ejecución.
 
 ## Módulos base (sección 3)
 
@@ -62,17 +74,17 @@ publicación en Maincloud ni una prueba de aceptación con el grupo.
 | Sección | Estado del código local | Trabajo pendiente según el alcance | Entrega siguiente |
 | --- | --- | --- | --- |
 | 7.1 ¿Qué me perdí? | Novedades de guías, votaciones abiertas, ayuda y colecciones grupales; excluye retirados y contenido personal. Lectura de conversaciones separada del inicio. | Validación con el grupo; el resumen BYOK opcional de novedades sigue pendiente. La IA actual genera guías y explicaciones. | Posterior: resumen opcional |
-| 7.2 Salas de estudio | [Implementado sin IA](salas-de-estudio.md): salas abiertas/privadas, agenda, cupo, invitaciones, materiales, chat, temporizador compartido y resumen con publicación voluntaria. Demo y SpacetimeDB preparados y probados localmente. | Validación con el grupo y activación real fuera de esta entrega; videollamadas y editor en vivo fuera de alcance. | 4: validación |
-| 7.3 Ayuda | Manual local: publicaciones y contactos privados con conversación aceptada; «Organizar sesión» integrado con Salas. | Validación con el grupo y activación real. | 4: validación |
-| 7.4 Retos | Pendiente. | Temas, dificultad, pistas, soluciones explicadas y revisión colectiva. | 4 |
-| 7.5 Revisión de código | Pendiente. | Fragmentos/versiones, comentarios por línea y resolución de observaciones. | 4 |
+| 7.2 Salas de estudio | [Implementado sin IA](salas-de-estudio.md): salas abiertas/privadas, agenda, cupo, invitaciones, materiales, chat, temporizador compartido y resumen con publicación voluntaria. Despliegue previo registrado en Maincloud/Pages y regresión local de esta entrega. | Aceptación con varias cuentas reales del grupo; videollamadas y editor en vivo fuera de alcance. | 4: validación |
+| 7.3 Ayuda | Ofertas y solicitudes, filtros, contactos privados y conversión de encuentros aceptados en Salas. La cuarta entrega añade edición con versión esperada, reintentos idempotentes e historial propio. | Validación con cuentas reales del grupo y publicación compatible. | 4: validación |
+| 7.4 Retos | [Implementación local](retos-revision.md): temas/dificultad, ejemplos, pistas progresivas privadas, soluciones explicadas, comentarios y cierre colectivo. | Recorrido humano y publicación compatible. No ejecuta código. | 4: validación |
+| 7.5 Revisión de código | [Implementación local](retos-revision.md): código/enlaces HTTPS, versiones inmutables, observaciones por líneas, resolución por el autor con explicación. | Recorrido humano; revisión opcional con IA en una integración posterior. | 4: validación |
 | 7.6 Microproyectos | Pendiente. | Propuestas, ingreso, responsabilidades, tablero, demostración y cierre. | 5 |
-| 7.7 Museo de bugs | Pendiente; se integrará en Preguntas. | Plantilla, etiquetas y referencias. | 4 |
-| 7.8 Aprende enseñando | Manual local: explicación, invitado, preguntas, reflexión privada y publicación de nota. | Validación real; preguntas con IA todavía pendientes de su integración específica. | 4 |
-| 7.9 Repaso espaciado | Manual local: colecciones, tarjetas, cola e historial privados; recordatorios integrados en la tercera entrega. | Validación real y borradores de tarjetas con Gemini en una entrega posterior. Mantener intervalos de 1/3/7/14/30/60/120 días. | 4 |
+| 7.7 Museo de bugs | [Implementación local](museo-oportunidades.md): plantilla/versiones sobre Preguntas, etiquetas, referencias y discusión reutilizada; retiro y purga del origen. | Recorrido con casos aportados por el grupo. | 4: validación |
+| 7.8 Aprende enseñando | Práctica manual con control de concurrencia/historial exclusivo del autor y [preguntas Gemini BYOK](gemini-estudio.md) desde explicación guardada/versionada, borrador privado y aceptación expresa. La publicación de nota sigue siendo voluntaria. | Activar Gemini y validar con claves/cuentas reales. | 4: validación |
+| 7.9 Repaso espaciado | Colecciones, tarjetas, cola e historial privados, recordatorios y [borradores Gemini revisables](gemini-estudio.md) con fuente/versiones y aceptación atómica. Intervalos 1/3/7/14/30/60/120 preservados. | Activación y validación real. Exámenes no está incluido. | 4: validación |
 | 7.10 Exposiciones | Texto manual: ensayos versionados, preguntas, observaciones privadas y revisor voluntario; ver [reglas](exposiciones.md). | Audio y generación con Gemini quedan para sus integraciones. La publicación se verifica por separado. | 5 |
 | 7.11 Préstamos | Pendiente. | Catálogo, acuerdo privado, reserva, entrega y devolución sin doble préstamo. | 5 |
-| 7.12 Oportunidades | Pendiente. | Fichas manuales, filtros, plazos, fuente, búsqueda de equipo y reportes. | 4 |
+| 7.12 Oportunidades | [Implementación local](museo-oportunidades.md): fichas manuales con fuente, filtros/vencimientos, interés privado, contacto explícito, correcciones y reportes resolubles. | Recorrido humano y publicación compatible. | 4: validación |
 
 ## Requisitos compartidos (secciones 2, 4, 5 y 8)
 
@@ -80,7 +92,7 @@ publicación en Maincloud ni una prueba de aceptación con el grupo.
 | --- | --- |
 | Acceso, permisos y membresía | Código de invitaciones, vistas y acciones existente. Verificar tres identidades, bajas, caducidad y lectura/descarga privada en datos reales. |
 | Datos académicos y versiones | Preservar referencias y migraciones aditivas; no reiniciar base ni importar ejemplos de la demo. Restaurar sin perder archivos históricos. |
-| BYOK y Gemini | [Implementación local](gemini-byok.md): AES-GCM por persona, maestra en Cloudflare Secrets, consentimiento, presupuesto, fuentes/versiones y publicación expresa. Generación desactivada hasta configurar y habilitar; Exámenes e IA específica de Repaso siguen pendientes. |
+| BYOK y Gemini | [Implementación local](gemini-byok.md): AES-GCM por persona, maestra en Cloudflare Secrets, consentimiento, presupuesto, fuentes/versiones y publicación expresa. Generación desactivada hasta configurar y habilitar; la cuarta entrega añade IA específica de Repaso/Aprende enseñando. Exámenes sigue pendiente. |
 | Avisos y programación | [Implementación local](avisos-recordatorios.md): bandeja y preferencias privadas, descanso, cola persistente, reintentos, deduplicación y Web Push. Falta configurar secretos/VAPID y comprobar entrega real en dispositivos. |
 | Papelera y conservación | [Implementación local](tercera-entrega-retencion.md): recuperación antes de 30 días, vencimiento según reloj del servidor, purga programada y mantenimiento de respaldo. Limpia dependencias y copias privadas de IA; conserva publicaciones independientes y bytes aún referenciados. |
 | Moderación y retiro | Completar según cada módulo, con autor, motivo y permisos; no publicar conversaciones privadas al reportar sin selección de evidencia. |

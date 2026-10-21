@@ -36,4 +36,11 @@ export const aiReservation = table({ name: 'ai_reservation' }, {
 export const aiPublication = table({ name: 'ai_publication' }, {
   generationId: t.string().primaryKey(), actor: t.identity(), targetKind: t.string(), targetId: t.u64(), createdAt: t.timestamp(),
 });
-export const aiTables = { aiPublication, aiServiceConfig, aiKey, aiKeyIntent, aiConsent, aiPreparation, aiGeneration, aiReservation };
+/** Version and acceptance receipts stay private; neither explanation history nor drafts are subscribed. */
+export const aiTeachingVersion = table({ name: 'ai_teaching_version' }, {
+  id: t.string().primaryKey(), practiceId: t.u64().index('btree'), version: t.u32(), fingerprint: t.string(), createdAt: t.timestamp(),
+});
+export const aiStudyAcceptance = table({ name: 'ai_study_acceptance' }, {
+  generationId: t.string().primaryKey(), actor: t.identity(), requestHash: t.string(), resultJson: t.string(), createdAt: t.timestamp(),
+});
+export const aiTables = { aiTeachingVersion, aiStudyAcceptance, aiPublication, aiServiceConfig, aiKey, aiKeyIntent, aiConsent, aiPreparation, aiGeneration, aiReservation };

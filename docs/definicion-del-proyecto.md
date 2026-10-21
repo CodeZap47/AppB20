@@ -590,6 +590,8 @@ Las siguientes doce ideas quedan incorporadas al alcance ampliado. Algunas será
 
 ### 7.4. Retos cortos de programación
 
+**Implementación local de la cuarta entrega:** publicación manual de retos, pistas progresivas privadas, soluciones explicadas, discusión y cierre. Véase [Retos y revisión](retos-revision.md).
+
 **Propósito:** fomentar la práctica frecuente mediante problemas pequeños y discusiones sobre distintas soluciones.
 
 **Funciones propuestas**
@@ -608,6 +610,8 @@ Las siguientes doce ideas quedan incorporadas al alcance ampliado. Algunas será
 **Criterio de aceptación:** un participante comprende el reto, comparte su solución y puede revisar otros enfoques con sus explicaciones.
 
 ### 7.5. Revisión de código entre compañeros
+
+**Implementación local de la cuarta entrega:** fragmentos y enlaces, versiones inmutables, observaciones por líneas y resolución del autor. La revisión opcional con IA queda para otra integración. Véase [Retos y revisión](retos-revision.md).
 
 **Propósito:** practicar la lectura de código, la comunicación técnica y la mejora conjunta de soluciones.
 
@@ -647,6 +651,8 @@ Las siguientes doce ideas quedan incorporadas al alcance ampliado. Algunas será
 
 ### 7.7. «Museo de bugs»
 
+**Implementación local de la cuarta entrega:** ficha versionada sobre Preguntas, con su misma discusión y permisos; retirada/restauración y purga siguen al origen. Véase [Museo y oportunidades](museo-oportunidades.md).
+
 **Propósito:** convertir errores reales en explicaciones reutilizables para otros estudiantes.
 
 **Funciones propuestas**
@@ -665,6 +671,8 @@ Las siguientes doce ideas quedan incorporadas al alcance ampliado. Algunas será
 **Criterio de aceptación:** otro estudiante entiende cómo se detectó el error y por qué la corrección propuesta funciona en ese contexto.
 
 ### 7.8. Modo «Aprende enseñando»
+
+**Ampliación local de la cuarta entrega:** preguntas clarificadoras con Gemini BYOK desde explicaciones guardadas/versionadas, borradores privados y aceptación manual. No se envía la reflexión ni se publica automáticamente. Véase [Gemini para estudio](gemini-estudio.md).
 
 **Propósito:** ayudar a detectar vacíos de comprensión al explicar un concepto con palabras propias.
 
@@ -703,6 +711,8 @@ La práctica privada no suma puntos ni aparece en el historial público. El modo
 mantiene el mismo aviso de datos temporales y reinicio al recargar.
 
 ### 7.9. Repaso espaciado
+
+**Ampliación local de la cuarta entrega:** borradores de tarjetas con Gemini BYOK desde notas o guías autorizadas, con revisión, citas y aceptación expresa. Los intervalos y el historial personal se conservan. Véase [Gemini para estudio](gemini-estudio.md).
 
 **Propósito:** facilitar la revisión periódica de conceptos mediante tarjetas de preguntas y respuestas.
 
@@ -746,7 +756,7 @@ reinicia su aprendizaje, conservando el historial anterior. Archivar no borra el
 Las inscripciones, resultados e historial solo son consultables por el alumno, también frente
 a administradores. Estudiar y autoevaluarse no suma puntos ni genera novedades comunitarias.
 El modo de demostración aplica las mismas reglas con datos temporales en memoria. La
-generación de borradores con Gemini queda pendiente de su integración general.
+generación de borradores con Gemini se incorpora localmente en la cuarta entrega, con revisión y aceptación explícitas.
 
 ### 7.10. Simulador de exposiciones y preguntas
 
@@ -790,6 +800,8 @@ sus integraciones posteriores.
 **Criterio de aceptación:** un mismo objeto no puede tener dos préstamos activos y ambos participantes pueden consultar su acuerdo.
 
 ### 7.12. Radar de oportunidades
+
+**Implementación local de la cuarta entrega:** fichas manuales, filtros, plazos, interés privado, contacto autorizado y reportes con resolución. Véase [Museo y oportunidades](museo-oportunidades.md).
 
 **Propósito:** compartir oportunidades y formar equipos para aprovecharlas juntos.
 

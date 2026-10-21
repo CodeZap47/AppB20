@@ -9,11 +9,18 @@ import { enrichStudyRoomsSnapshot } from './roomsSnapshot';
 import { emptyNotifications } from './notificationTypes';
 import { enrichNotificationsSnapshot } from './notificationSnapshot';
 import { readTrashEntries } from './trashSnapshot';
+import { emptyPractice } from './practiceTypes';
+import { PRACTICE_VIEWS, readPracticeSnapshot } from './practiceSnapshot';
+import { emptyCommunity4 } from './community4Types';
+import { readCommunity4Snapshot } from './community4Snapshot';
 
 /** Solo vistas públicas del módulo; nunca tablas privadas ni SELECT * de toda la base. */
 export const PUBLIC_VIEWS = [
+  ...PRACTICE_VIEWS,
+  'museum_entries', 'museum_revisions', 'opportunities', 'opportunity_revisions', 'opportunity_interests', 'opportunity_feedback',
   'my_notifications', 'my_notification_preferences', 'my_push_installations',
   'my_trash_entries',
+  'help_post_versions',
   ...PRESENTATION_VIEWS,
   'chat_channels', 'channel_messages', 'my_conversation_states', 'my_blocked_members', 'my_message_reports', 'member_profiles',
   'note_details', 'note_versions', 'guide_versions', 'question_comments', 'answer_usefulness', 'question_links', 'resource_versions', 'content_statuses', 'contribution_origins',
@@ -27,7 +34,7 @@ export const PUBLIC_VIEWS = [
   'study_guides', 'guide_sources', 'guide_reviews', 'polls', 'poll_votes',
   'help_posts', 'my_help_contact_requests',
   'study_rooms', 'room_members', 'room_materials', 'room_entries', 'room_timers', 'room_summaries', 'my_help_room_links',
-  'teaching_practices', 'my_teaching_personal', 'teaching_questions',
+  'teaching_practices', 'my_teaching_personal', 'teaching_questions', 'my_teaching_versions',
   'spaced_collections', 'spaced_cards', 'spaced_unavailable_cards', 'my_spaced_enrollments', 'my_spaced_progress', 'my_spaced_reviews',
 ] as const;
 
@@ -35,6 +42,8 @@ export function emptySnapshot(connection: Snapshot['connection'], connectionErro
   return {
     ...emptyNotifications(),
     trashEntries: [],
+    ...emptyPractice(),
+    ...emptyCommunity4(),
     ...emptyPresentationsSnapshot(),
     ...emptyStudyRooms(),
     ...emptyDelivery2(),
@@ -98,11 +107,13 @@ export function readSnapshot(connection: Pick<DbConnection, 'db'>, identity: str
 
   // También filtra la caché mientras se propagan una revocación o una baja de integrantes.
   const activeMembers = new Set(members.filter((member) => member.status === 'active').map((member) => member.id));
+  const teachingHeads = new Map([...(db.myTeachingVersions?.iter() ?? [])].map((row) => [row.practiceId.toString(), row.version]));
   const teachingPractices = [...db.teachingPractices.iter()].filter((row) =>
     activeMembers.has(row.owner.toHexString()) &&
     (row.owner.toHexString() === identity || row.reviewer?.toHexString() === identity),
   ).map((row) => ({
     id: row.id.toString(), ownerId: row.owner.toHexString(), reviewerId: row.reviewer?.toHexString(),
+    version: teachingHeads.get(row.id.toString()) ?? 1,
     subjectId: row.subjectId.toString(), topic: row.topic,
     initial: { concept: row.concept, example: row.example, limits: row.limits },
     revised: { concept: row.revisedConcept, example: row.revisedExample, limits: row.revisedLimits },
@@ -137,6 +148,8 @@ export function readSnapshot(connection: Pick<DbConnection, 'db'>, identity: str
   const snapshot = enrichStudyRoomsSnapshot(connection, enrichDelivery2Snapshot(connection, enrichAcademicSnapshot(connection, {
     ...emptyNotifications(),
     trashEntries: [],
+    ...emptyPractice(),
+    ...emptyCommunity4(),
     ...emptyStudyRooms(),
     ...emptyDelivery2(),
     myProgress: [], workRevisions: [], workReviews: [], academicComments: [],
@@ -165,6 +178,7 @@ export function readSnapshot(connection: Pick<DbConnection, 'db'>, identity: str
       .filter((row) => row.author.toHexString() === identity || (row.status !== 'withdrawn' && members.some((m) => m.id === row.author.toHexString() && m.status === 'active')))
       .map((row) => ({
         id: row.id.toString(), kind: enumValue(row.kind, ['offer', 'request']), subjectId: row.subjectId.toString(),
+        version: [...(db.helpPostVersions?.iter() ?? [])].find(version => version.postId === row.id)?.version ?? 1,
         title: row.title, topic: row.topic, description: row.description,
         level: enumValue(row.level, ['initial', 'basics', 'advanced']),
         modality: enumValue(row.modality, ['messages', 'video', 'in_person', 'flexible']), availability: row.availability,
@@ -328,5 +342,6 @@ export function readSnapshot(connection: Pick<DbConnection, 'db'>, identity: str
     })),
     lastSeenAt: [...db.myLastSeen.iter()].find((row) => row.identity.toHexString() === identity)?.at.toDate(),
   }, identity), identity), identity);
-  return { ...enrichNotificationsSnapshot(connection, snapshot, identity), trashEntries: readTrashEntries(connection) };
+  return { ...enrichNotificationsSnapshot(connection, snapshot, identity), trashEntries: readTrashEntries(connection),
+    ...readPracticeSnapshot(connection, identity, members), ...readCommunity4Snapshot(connection, snapshot, identity) };
 }

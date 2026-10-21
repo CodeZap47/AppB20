@@ -10,7 +10,14 @@ import { candidateSources, describeSource, guideStatus } from '../lib/guides';
 import { spacedCardsForCollection, spacedQueue, spacedSource, spacedUpcoming } from '../lib/spaced';
 import { buildNews } from '../lib/whatsNew';
 import { createDemoState, DemoDataSource } from './demo';
-import type { CreateTeachingPracticeInput, Snapshot } from './types';
+import type { CreateTeachingPracticeInput, SaveTeachingPracticeInput, Snapshot } from './types';
+
+let teachingRequestSequence = 0;
+function saveTeaching(data: DemoDataSource, id: string, input: SaveTeachingPracticeInput) {
+  const expectedVersion = data.getSnapshot().teachingPractices.find((row) => row.id === id)?.version ?? 1;
+  const requestId = `00000000-0000-4000-8000-${String(++teachingRequestSequence).padStart(12, '0')}`;
+  return data.saveTeachingPractice(id, { ...input, expectedVersion, requestId });
+}
 
 const SUBJECT = 'IDSE-05010103';
 const OWNER = 'demo-3';
@@ -60,7 +67,7 @@ function completePractice(data: DemoDataSource, source: NonNullable<CreateTeachi
   });
   expect(data.getSnapshot().teachingPractices.find((practice) => practice.id === id)?.initial)
     .toEqual(EMPTY_TEACHING_EXPLANATION);
-  data.saveTeachingPractice(id, { initial: INITIAL, revised: EMPTY_TEACHING_EXPLANATION,
+  saveTeaching(data, id, { initial: INITIAL, revised: EMPTY_TEACHING_EXPLANATION,
     reflection: '', topicsToReview: '' });
   data.startTeachingPractice(id);
   data.setTeachingReviewer(id, REVIEWER);
@@ -70,7 +77,7 @@ function completePractice(data: DemoDataSource, source: NonNullable<CreateTeachi
   const peerId = data.askTeachingQuestion(id, 'Pregunta privada sobre el ejemplo');
   data.setViewer(OWNER);
   data.answerTeachingQuestion(peerId, 'Respuesta reservada al compañero');
-  data.saveTeachingPractice(id, { initial: INITIAL, revised: REVISED,
+  saveTeaching(data, id, { initial: INITIAL, revised: REVISED,
     reflection: REFLECTION, topicsToReview: TOPICS });
   data.completeTeachingPractice(id);
   return id;
@@ -157,7 +164,7 @@ describe('Aprende enseñando junto con los demás módulos', () => {
       data.setViewer(OWNER);
       data.reopenTeachingPractice(practiceId);
       const changed = { ...REVISED, concept: 'Nueva explicación que sigo trabajando en privado' };
-      data.saveTeachingPractice(practiceId, { initial: INITIAL, revised: changed,
+      saveTeaching(data, practiceId, { initial: INITIAL, revised: changed,
         reflection: REFLECTION, topicsToReview: TOPICS });
       expect(data.publishTeachingExplanation(practiceId)).toBe(noteId);
       expect(data.getSnapshot().notes.find((item) => item.id === noteId)).toEqual(note);

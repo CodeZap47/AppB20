@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { Timestamp } from 'spacetimedb';
 
 // Ejecutamos los reducers y vistas reales; el registro del SDK depende del runtime del servidor.
 vi.mock('spacetimedb/server', () => {
@@ -14,9 +15,22 @@ vi.mock('spacetimedb/server', () => {
 
 import {
   cancel_help_contact, close_help_contact, help_posts, my_help_contact_requests,
-  respond_help_contact, save_help_post, send_help_contact, set_help_post_status,
-  withdraw_help_post,
+  respond_help_contact, save_help_post as legacy_save_help_post, send_help_contact, set_help_post_status as legacy_set_help_post_status,
+  withdraw_help_post as legacy_withdraw_help_post,
 } from './index';
+import type { Ctx } from './index';
+import { mutateHelp } from './helpVersioning';
+
+let requestSequence = 0;
+function modern(ctx: Ctx, input: Record<string, unknown>) {
+  return mutateHelp(ctx, JSON.stringify({ ...input, requestId: `help-test-${++requestSequence}` }));
+}
+function set_help_post_status(ctx: Ctx, input: { postId: bigint; status: string }) {
+  return modern(ctx, { action: 'status', id: input.postId.toString(), status: input.status, expectedVersion: ctx.db.helpVersion.postId.find(input.postId)?.version ?? 1 });
+}
+function withdraw_help_post(ctx: Ctx, input: { postId: bigint; reason: string }) {
+  return modern(ctx, { action: 'withdraw', id: input.postId.toString(), reason: input.reason, expectedVersion: ctx.db.helpVersion.postId.find(input.postId)?.version ?? 1 });
+}
 
 const identity = (hex: string) => ({
   toHexString: () => hex,
@@ -43,8 +57,9 @@ function tableStore(key: string, initial: Row[] = []) {
       return update(row);
     },
     id: primary,
+    key: primary,
     identity: primary,
-    postId: { filter: filter('postId') },
+    postId: { filter: filter('postId'), find: (value: unknown) => [...rows.values()].find((row) => rowKey(row.postId) === rowKey(value)), update },
     sender: { filter: filter('sender') },
     recipient: { filter: filter('recipient') },
     userA: { filter: filter('userA') },
@@ -66,6 +81,9 @@ function setup() {
     }))),
     subject: tableStore('id', [{ id: 1n, name: 'Programación' }]),
     helpPost: tableStore('id'),
+    helpVersion: tableStore('postId'),
+    helpRevision: tableStore('key'),
+    helpIntent: tableStore('key'),
     helpContactRequest: tableStore('id'),
     directConversation: tableStore('id'),
     directMessage: { insert: vi.fn() },
@@ -76,15 +94,20 @@ function setup() {
     senderAuth: { jwt: { issuer, audience: ['b20'], fullPayload: { email: 'alumno@example.com', email_verified: true } } },
     db,
     env: { B20_BOOTSTRAP_OWNER_IDENTITY: undefined },
-    timestamp: 123n,
+    timestamp: new Timestamp(123n),
   };
-  const ctx = mutableCtx as unknown as Parameters<typeof save_help_post>[0] & Parameters<typeof help_posts>[0];
-  const as = (person: Identity) => { mutableCtx.sender = person; mutableCtx.timestamp += 1n; };
-  const save = (fields: Partial<Parameters<typeof save_help_post>[1]> = {}) => save_help_post(ctx, {
+  const ctx = mutableCtx as unknown as Parameters<typeof legacy_save_help_post>[0] & Parameters<typeof help_posts>[0];
+  const as = (person: Identity) => { mutableCtx.sender = person; mutableCtx.timestamp = new Timestamp(mutableCtx.timestamp.microsSinceUnixEpoch + 1n); };
+  const save = (fields: Partial<Parameters<typeof legacy_save_help_post>[1]> = {}) => {
+    const input = {
     id: undefined, kind: 'offer', subjectId: 1n, title: ' Te ayudo con ciclos ', topic: ' Ciclos ',
     description: ' Practicamos con ejemplos. ', level: 'initial', modality: 'messages', availability: ' ',
     ...fields,
-  });
+    };
+    if (input.id === undefined) return legacy_save_help_post(ctx, input);
+    const { id, ...values } = input;
+    return modern(ctx, { action: 'save', id: id.toString(), expectedVersion: db.helpVersion.postId.find(id)?.version ?? 1, fields: { ...values, subjectId: values.subjectId.toString() } });
+  };
   const contact = (person = sender, postId = 1n) => {
     as(person);
     send_help_contact(ctx, { postId, message: ' ¿Me ayudas con este ejercicio? ' });
@@ -97,6 +120,17 @@ function setup() {
 }
 
 describe('Puedo ayudarte / necesito ayuda: servidor', () => {
+  it('rechaza edición, estado y retirada antiguos incluso sobre una publicación legada aún sin fila de versión', () => {
+    const { ctx, db, save } = setup(); save(); expect(db.helpVersion.rows.size).toBe(0);
+    const original = { ...db.helpPost.id.find(1n)! };
+    expect(() => legacy_save_help_post(ctx, { id: 1n, kind: 'offer', subjectId: 1n, title: 'Edición antigua', topic: 'Ciclos', description: 'Sobrescritura antigua', level: 'initial', modality: 'messages', availability: '' })).toThrow(/Actualiza/);
+    expect(() => legacy_set_help_post_status(ctx, { postId: 1n, status: 'closed' })).toThrow(/Actualiza/);
+    expect(() => legacy_withdraw_help_post(ctx, { postId: 1n, reason: '' })).toThrow(/Actualiza/);
+    expect(db.helpPost.id.find(1n)).toEqual(original); expect(db.helpVersion.rows.size).toBe(0);
+    // El primer cambio moderno exige la versión 1 legada y conserva su estado anterior.
+    save({ id: 1n, title: 'Primera edición moderna' }); expect(db.helpVersion.postId.find(1n)?.version).toBe(2); expect(db.helpRevision.rows.size).toBe(2);
+  });
+
   it('publica ambos tipos con campos validados y permite editar solo al autor sin cambiar el tipo', () => {
     const { ctx, db, save, as, sender } = setup();
     save();
@@ -283,7 +317,7 @@ describe('Puedo ayudarte / necesito ayuda: servidor', () => {
     const { ctx, db, author, sender, admin, as, save } = setup();
     save();
     as(sender);
-    expect(() => withdraw_help_post(ctx, { postId: 1n, reason: 'No corresponde' })).toThrow(/creadores/);
+    expect(() => withdraw_help_post(ctx, { postId: 1n, reason: 'No corresponde' })).toThrow(/autor/);
     as(admin);
     expect(() => withdraw_help_post(ctx, { postId: 1n, reason: ' ' })).toThrow(/motivo/);
     expect(() => withdraw_help_post(ctx, { postId: 1n, reason: 'x'.repeat(501) })).toThrow(/500/);

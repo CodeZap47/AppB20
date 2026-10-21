@@ -1,7 +1,7 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 
-export const AI_CONSENT_VERSION = '2026-10-21';
-export const AI_SOURCE_KINDS = ['note', 'assignment', 'activity', 'work', 'evidence', 'guide'] as const;
+export const AI_CONSENT_VERSION = '2026-10-21.2';
+export const AI_SOURCE_KINDS = ['note', 'assignment', 'activity', 'work', 'evidence', 'guide', 'teaching'] as const;
 export type AiSourceKind = typeof AI_SOURCE_KINDS[number];
 export const AI_LIMITS = Object.freeze({ maxSources: 10, maxCharacters: 40_000, maxQuestions: 20,
   maxOutputTokens: 8_000, maxConcurrent: 1, requestsPerHour: 5, requestsPerDay: 10,
@@ -40,12 +40,12 @@ export interface AiStatus {
   limits: AiLimits; consentVersion: string; consented: boolean; serviceConfigured?: boolean;
 }
 export type AiGenerationState = 'prepared' | 'running' | 'succeeded' | 'failed' | 'unknown';
-export interface AiGenerationConfig { purpose?: 'guide' | 'explanation' | 'questions'; questionCount: number; types: ('single' | 'boolean')[]; difficulty: 'basic' | 'intermediate' | 'advanced' }
+export interface AiGenerationConfig { purpose?: 'guide' | 'explanation' | 'questions' | 'teaching_questions' | 'spaced_cards'; questionCount: number; types: ('single' | 'boolean')[]; difficulty: 'basic' | 'intermediate' | 'advanced' }
 export const AI_DEFAULT_GENERATION_CONFIG: AiGenerationConfig = { questionCount: 10, types: ['single', 'boolean'], difficulty: 'intermediate' };
 export interface AiGenerationRequest { id: string; preparationId: string; fingerprint: string; config: AiGenerationConfig; confirmed: boolean; acknowledgeUnknown?: boolean }
 export interface AiGeneration {
   id: string; state: AiGenerationState; preparationId: string; createdAt: number; updatedAt?: number;
-  result?: unknown; preparation?: AiPreparation; error?: string; estimatedTokens?: number; usage?: { inputTokens: number; outputTokens: number };
+  result?: unknown; preparation?: AiPreparation; acceptance?: { targetKind: string; targetId: string; acceptedIds: string[] }; error?: string; estimatedTokens?: number; usage?: { inputTokens: number; outputTokens: number };
 }
 export const aiSourceKey = (source: Pick<AiSourceOrigin, 'kind' | 'refId'>) => `${source.kind}:${source.refId}`;
 export function aiCanonical(value: unknown): string {
@@ -83,8 +83,12 @@ export function validateAiPrepareInput(value: unknown): AiPrepareInput {
     return { kind: source.kind as AiSourceKind, refId: source.refId, topics: [...new Set(source.topics as string[])], includeUnplaced: source.includeUnplaced };
   });
   if (new Set(sources.map(aiSourceKey)).size !== sources.length) throw new AiError('invalid', 'No repitas fuentes.');
+  const config = validateAiGenerationConfig(value.config ?? AI_DEFAULT_GENERATION_CONFIG);
+  if (config.purpose === 'teaching_questions' && (sources.filter((source) => source.kind === 'teaching').length !== 1 || sources.some((source) => !['teaching', 'note', 'guide'].includes(source.kind)))) throw new AiError('invalid', 'Elige una explicación guardada y, opcionalmente, notas o guías de contexto.');
+  if (config.purpose === 'spaced_cards' && sources.some((source) => !['note', 'guide'].includes(source.kind))) throw new AiError('invalid', 'Las tarjetas solo se generan desde notas y guías.');
+  if (config.purpose !== 'teaching_questions' && sources.some((source) => source.kind === 'teaching')) throw new AiError('invalid', 'La explicación privada solo se usa para preguntas de tu práctica.');
   return { subjectId: value.subjectId, ...(value.termId ? { termId: value.termId } : {}), topics, sources,
-    config: validateAiGenerationConfig(value.config ?? AI_DEFAULT_GENERATION_CONFIG) };
+    config };
 }
 /** Redacción conservadora; la vista previa permite revisar lo que los patrones no detectan. */
 export function sanitizeAiText(text: string): string {
@@ -153,6 +157,6 @@ export function validateAiGenerationConfig(value: unknown): AiGenerationConfig {
   if (!aiRecord(value) || !Number.isInteger(value.questionCount) || Number(value.questionCount) < 1 || Number(value.questionCount) > AI_LIMITS.maxQuestions ||
     !Array.isArray(value.types) || !value.types.length || value.types.length > 2 || value.types.some((t) => t !== 'single' && t !== 'boolean') ||
     !['basic', 'intermediate', 'advanced'].includes(String(value.difficulty))) throw new AiError('invalid', 'La configuración de preguntas no es válida.');
-  if (value.purpose !== undefined && !['guide', 'explanation', 'questions'].includes(String(value.purpose))) throw new AiError('invalid', 'El tipo de borrador no es válido.');
+  if (value.purpose !== undefined && !['guide', 'explanation', 'questions', 'teaching_questions', 'spaced_cards'].includes(String(value.purpose))) throw new AiError('invalid', 'El tipo de borrador no es válido.');
   return { ...(value.purpose ? { purpose: value.purpose as AiGenerationConfig['purpose'] } : {}), questionCount: Number(value.questionCount), types: [...new Set(value.types as ('single' | 'boolean')[])], difficulty: value.difficulty as AiGenerationConfig['difficulty'] };
 }

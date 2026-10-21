@@ -122,6 +122,7 @@ export const MODULES: readonly ModuleInfo[] = [
     summary: 'Retos cortos vinculados a materias.',
     stage: 2,
     worksWithoutAi: true,
+    ready: true,
   },
   {
     id: 'revision-codigo',
@@ -130,6 +131,7 @@ export const MODULES: readonly ModuleInfo[] = [
     summary: 'Fragmentos y comentarios entre compañeros.',
     stage: 2,
     worksWithoutAi: true,
+    ready: true,
   },
   {
     id: 'museo-bugs',
@@ -138,6 +140,7 @@ export const MODULES: readonly ModuleInfo[] = [
     summary: 'Errores documentados con plantilla y etiquetas.',
     stage: 2,
     worksWithoutAi: true,
+    ready: true,
   },
   {
     id: 'aprende-ensenando',
@@ -164,6 +167,7 @@ export const MODULES: readonly ModuleInfo[] = [
     summary: 'Publicaciones del grupo y búsqueda de equipo.',
     stage: 2,
     worksWithoutAi: true,
+    ready: true,
   },
   {
     id: 'leaderboard',

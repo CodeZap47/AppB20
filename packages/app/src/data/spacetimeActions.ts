@@ -3,12 +3,15 @@ import { createPresentationActions } from './presentationActions';
 import { createStudyRoomActions } from './roomsActions';
 import { createTrashActions } from './trashSnapshot';
 import { createNotificationActions } from './notificationActions';
+import { createPracticeActions } from './practiceActions';
+import { createCommunity4Actions } from './community4Actions';
+import { helpResponse } from './helpResponse';
 import { Identity, Timestamp } from 'spacetimedb';
 import type { DbConnection } from '../module_bindings';
 import type { ResourceTargetKind } from './types';
 import type { ResourceTransport } from './resourceTransport';
 import { StickerTransport } from './stickerTransport';
-import type { HelpPostInput } from './types';
+import type { TeachingRevision, HelpPostInput, HelpPostHistory } from './types';
 import type { Actions, AssignmentInput, CreateActivityInput, GuideInput, GuideSourceRef, PollInput, CreateTeachingPracticeInput, SaveTeachingPracticeInput } from './types';
 
 const id = (value: string): bigint => BigInt(value);
@@ -27,9 +30,8 @@ const teaching = (input: CreateTeachingPracticeInput) => ({ subjectId: id(input.
   concept: input.initial.concept, example: input.initial.example, limits: input.initial.limits,
   sourceKind: input.source?.kind, sourceId: optionalId(input.source?.id) });
 const teachingUpdate = (input: SaveTeachingPracticeInput) => ({
-  concept: input.initial.concept, example: input.initial.example, limits: input.initial.limits,
-  revisedConcept: input.revised.concept, revisedExample: input.revised.example, revisedLimits: input.revised.limits,
-  reflection: input.reflection, topicsToReview: input.topicsToReview,
+  initial: input.initial, revised: input.revised, reflection: input.reflection, topicsToReview: input.topicsToReview,
+  expectedVersion: input.expectedVersion, requestId: input.requestId ?? crypto.randomUUID(),
 });
 
 /** Los reducers confirman los permisos en el servidor; nunca se modifica la caché de forma optimista. */
@@ -102,6 +104,8 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
   };
 
   return {
+    ...createPracticeActions(getConnection, identity),
+    ...createCommunity4Actions(getConnection),
     ...createPresentationActions(getConnection, identity),
     ...createStudyRoomActions(getConnection, identity),
     ...createTrashActions(getConnection),
@@ -161,13 +165,18 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
     setSpacedEnrollment: (collectionId, active) => getConnection().reducers.setSpacedEnrollment({ collectionId: id(collectionId), active }),
     reviewSpacedCard: (input) => getConnection().reducers.reviewSpacedCard({ ...input, cardId: id(input.cardId) }),
     saveHelpPost: (input: HelpPostInput) => {
-      const fields = { ...input, id: optionalId(input.id), subjectId: id(input.subjectId) };
-      return input.id !== undefined ? getConnection().reducers.saveHelpPost(fields).then(() => input.id!)
-        : create((c) => c.db.helpPosts.iter(), (c) => c.reducers.saveHelpPost(fields),
-          (row, author) => own(row.author, author) && row.subjectId === id(input.subjectId) && row.kind === input.kind && row.title === input.title.trim());
+      const { id: postId, expectedVersion, requestId, ...fields } = input;
+      const version = postId ? [...getConnection().db.helpPostVersions.iter()].find(row => row.postId === id(postId))?.version ?? 1 : undefined;
+      return getConnection().procedures.helpMutate({ payload: JSON.stringify({ action: 'save', id: postId, expectedVersion: expectedVersion ?? version, requestId: requestId ?? crypto.randomUUID(), fields }) }).then(result => {
+        const value = helpResponse(result); if (!value || typeof value !== 'object' || !('id' in value) || typeof value.id !== 'string' || !/^\d+$/.test(value.id)) throw new Error('La publicación se guardó; actualiza el tablón.'); return value.id;
+      });
     },
-    setHelpPostStatus: (postId, status) => getConnection().reducers.setHelpPostStatus({ postId: id(postId), status }),
-    withdrawHelpPost: (postId, reason = '') => getConnection().reducers.withdrawHelpPost({ postId: id(postId), reason }),
+    setHelpPostStatus: (postId, status, expectedVersion) => getConnection().procedures.helpMutate({ payload: JSON.stringify({ action: 'status', id: postId, status, expectedVersion: expectedVersion ?? [...getConnection().db.helpPostVersions.iter()].find(row => row.postId === id(postId))?.version ?? 1, requestId: crypto.randomUUID() }) }).then(result => { helpResponse(result); }),
+    withdrawHelpPost: (postId, reason = '', expectedVersion) => getConnection().procedures.helpMutate({ payload: JSON.stringify({ action: 'withdraw', id: postId, reason, expectedVersion: expectedVersion ?? [...getConnection().db.helpPostVersions.iter()].find(row => row.postId === id(postId))?.version ?? 1, requestId: crypto.randomUUID() }) }).then(result => { helpResponse(result); }),
+    getHelpPostHistory: (postId) => getConnection().procedures.helpReadHistory({ postId: id(postId) }).then(value => {
+      const rows = helpResponse(value) as Array<Omit<HelpPostHistory, 'at'> & { at: number }>;
+      return rows.map(row => ({ ...row, at: new Date(row.at) }));
+    }),
     sendHelpContact: (postId, message = '') => create((c) => c.db.myHelpContactRequests.iter(),
       (c) => c.reducers.sendHelpContact({ postId: id(postId), message }),
       (row, author) => own(row.sender, author) && row.postId === id(postId)),
@@ -177,7 +186,15 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
     createTeachingPractice: (input) => create((c) => c.db.teachingPractices.iter(),
       (c) => c.reducers.createTeachingPractice(teaching(input)),
       (row, author) => own(row.owner, author) && row.subjectId === id(input.subjectId) && row.topic === input.topic.trim()),
-    saveTeachingPractice: (practiceId, input) => getConnection().reducers.saveTeachingPractice({ practiceId: id(practiceId), ...teachingUpdate(input) }),
+    saveTeachingPractice: async (practiceId, input) => {
+      if (!Number.isInteger(input.expectedVersion)) throw new Error('Actualiza la aplicación: indica la versión y el identificador de guardado.');
+      const result = helpResponse(await getConnection().procedures.teachingSaveV2({ payload: JSON.stringify({ practiceId, ...teachingUpdate(input) }) })) as { version: number };
+      return result.version;
+    },
+    getTeachingHistory: async (practiceId) => {
+      const rows = helpResponse(await getConnection().procedures.teachingReadHistory({ practiceId: id(practiceId) })) as (Omit<TeachingRevision, 'at'> & { at: number })[];
+      return rows.map((row) => ({ ...row, at: new Date(row.at) }));
+    },
     startTeachingPractice: (practiceId) => getConnection().reducers.startTeachingPractice({ practiceId: id(practiceId) }),
     completeTeachingPractice: (practiceId) => getConnection().reducers.completeTeachingPractice({ practiceId: id(practiceId) }),
     reopenTeachingPractice: (practiceId) => getConnection().reducers.reopenTeachingPractice({ practiceId: id(practiceId) }),

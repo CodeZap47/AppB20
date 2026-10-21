@@ -202,7 +202,8 @@ El autor decide cerrar y puede reabrir una publicación cerrada. Cerrar o retira
 contactos pendientes y conserva los aceptados y sus conversaciones. Retirar oculta la
 publicación al grupo y no permite reabrirla. El autor puede retirarla; un administrador que
 retire una ajena debe registrar un motivo que el autor puede consultar. Los encuentros se
-coordinan por mensajes; convertirlos en salas de estudio queda para una entrega posterior.
+coordinan por mensajes; un contacto aceptado de tipo encuentro permite crear una sala de
+estudio vinculada, con invitación y aceptación separadas de la conversación privada.
 
 La demo aplica las mismas reglas en memoria y contiene ejemplos ficticios. Su implementación
 de SpacetimeDB y bindings están incluidos, sin cambiar el modo demo ni publicar en Maincloud.
@@ -322,3 +323,25 @@ concluidos; `my_presentation_personal` es exclusiva del autor, sin excepción ad
 Las versiones y los identificadores de petición evitan sobrescrituras y duplicados. Las
 preguntas locales y la validación se comparten entre demo y servidor mediante `@b20/core`.
 No hay puntos ni novedades comunitarias por ensayar. Ver [reglas](exposiciones.md).
+
+
+## Cuarta entrega: colaboración y estudio
+
+Retos, Revisión de código y Oportunidades añaden tablas privadas y vistas autorizadas; el
+Museo conserva su `questionId` y reutiliza Preguntas, comentarios, permisos y retención.
+La purga de una pregunta elimina también la ficha y las versiones del Museo. Los clientes
+reales y demo comparten los contratos nuevos; las tablas de pistas/progreso e intereses se
+filtran antes de entregarlas al cliente.
+
+Ayuda añade `help_version`, `help_revision` y `help_intent` sin alterar `help_post`. Los
+procedimientos modernos comprueban versión e intención y revierten toda la transacción ante
+un rechazo; las operaciones antiguas de edición/estado/retirada piden actualizar el cliente.
+El historial sólo lo consulta el autor, sin suscripción de cuerpos históricos.
+
+Los propósitos `teaching_questions` y `spaced_cards` reutilizan el Worker BYOK. La explicación
+guardada tiene versión privada y la aceptación de preguntas/tarjetas guarda su recibo en
+la misma transacción que los elementos elegidos. La IA no recibe respuestas, reflexiones ni
+historial de estudio; las tarjetas del grupo requieren fuentes del grupo. El consentimiento
+se actualiza a `2026-10-21.2` y la generación permanece desactivada por defecto.
+
+Véase [cuarta-entrega.md](cuarta-entrega.md) para contratos, validación y límites operativos.

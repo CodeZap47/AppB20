@@ -1,6 +1,15 @@
 import { EMPTY_TEACHING_EXPLANATION, MAX_TEACHING_TEXT_LENGTH, MAX_TEACHING_QUESTION_LENGTH, TEACHING_PROMPTS, teachingNoteBody } from '@b20/core';
 import { describe, expect, it } from 'vitest';
 import { createDemoState, DemoDataSource } from './demo';
+import type { SaveTeachingPracticeInput } from './types';
+
+let teachingRequestSequence = 0;
+function saveTeaching(data: DemoDataSource, id: string, input: SaveTeachingPracticeInput) {
+  const expectedVersion = data.getSnapshot().teachingPractices.find((row) => row.id === id)?.version ?? 1;
+  const requestId = `00000000-0000-4000-8000-${String(++teachingRequestSequence).padStart(12, '0')}`;
+  return data.saveTeachingPractice(id, { ...input, expectedVersion, requestId });
+}
+
 
 const SUBJECT = 'IDSE-05010103';
 const initial = { concept: 'Explicación inicial privada', example: 'Ejemplo inicial privado', limits: 'Límites iniciales privados' };
@@ -15,7 +24,7 @@ function practice(data: DemoDataSource) {
 }
 function complete(data: DemoDataSource, id: string) {
   data.startTeachingPractice(id);
-  data.saveTeachingPractice(id, saveInput);
+  saveTeaching(data, id, saveInput);
   const question = data.getSnapshot().teachingQuestions.find((question) => question.practiceId === id)!;
   data.answerTeachingQuestion(question.id, 'Respuesta privada');
   data.completeTeachingPractice(id);
@@ -58,8 +67,8 @@ describe('Aprende enseñando en la demo', () => {
     expect(data.getSnapshot().teachingQuestions.filter((item) => item.practiceId === id).map((item) => item.text)).toEqual(TEACHING_PROMPTS);
     data.startTeachingPractice(id);
     expect(data.getSnapshot().teachingQuestions.filter((item) => item.practiceId === id)).toHaveLength(3);
-    expect(() => data.saveTeachingPractice(id, { ...saveInput, initial: { ...initial, concept: 'Cambio' } })).toThrow('inicial se conserva');
-    data.saveTeachingPractice(id, { ...saveInput, initial: { ...initial, concept: ` ${initial.concept} ` } });
+    expect(() => saveTeaching(data, id, { ...saveInput, initial: { ...initial, concept: 'Cambio' } })).toThrow('inicial se conserva');
+    saveTeaching(data, id, { ...saveInput, initial: { ...initial, concept: ` ${initial.concept} ` } });
     expect(data.getSnapshot().teachingPractices.find((item) => item.id === id)?.initial).toEqual(initial);
   });
 
@@ -82,18 +91,18 @@ describe('Aprende enseñando en la demo', () => {
     const id = practice(data);
     data.startTeachingPractice(id);
     expect(() => data.completeTeachingPractice(id)).toThrow('explicación');
-    data.saveTeachingPractice(id, { ...saveInput, reflection: '' });
+    saveTeaching(data, id, { ...saveInput, reflection: '' });
     expect(() => data.completeTeachingPractice(id)).toThrow('reflexión');
-    data.saveTeachingPractice(id, saveInput);
+    saveTeaching(data, id, saveInput);
     expect(() => data.completeTeachingPractice(id)).toThrow('al menos una pregunta');
     const question = data.getSnapshot().teachingQuestions.find((item) => item.practiceId === id)!;
     data.answerTeachingQuestion(question.id, 'Mi respuesta');
     data.completeTeachingPractice(id);
     expect(data.getSnapshot().teachingPractices.find((item) => item.id === id)?.status).toBe('completed');
-    expect(() => data.saveTeachingPractice(id, saveInput)).toThrow('Reabre');
+    expect(() => saveTeaching(data, id, saveInput)).toThrow('Reabre');
     expect(() => data.answerTeachingQuestion(question.id, 'Otra respuesta')).toThrow('en curso');
     data.reopenTeachingPractice(id);
-    data.saveTeachingPractice(id, saveInput);
+    saveTeaching(data, id, saveInput);
     expect(data.getSnapshot().teachingQuestions.filter((item) => item.practiceId === id)).toHaveLength(3);
   });
 
@@ -102,7 +111,7 @@ describe('Aprende enseñando en la demo', () => {
     const id = data.createTeachingPractice({ subjectId: 'IDSE-05010104', topic: 'Ciclos', initial,
       source: { kind: 'note', id: 'n2' } });
     data.startTeachingPractice(id);
-    data.saveTeachingPractice(id, saveInput);
+    saveTeaching(data, id, saveInput);
     data.setTeachingReviewer(id, 'demo-2');
     data.setViewer('demo-2');
     expect(data.getSnapshot().teachingPractices.find((item) => item.id === id)).toMatchObject({ initial, revised });
@@ -112,7 +121,7 @@ describe('Aprende enseñando en la demo', () => {
     expect(data.getSnapshot().notes.find((note) => note.id === 'n2')).toBeUndefined();
     const questionId = data.askTeachingQuestion(id, '¿Por qué termina el ciclo?');
     expect(() => data.answerTeachingQuestion(questionId, 'Me respondo')).toThrow('no tienes acceso');
-    expect(() => data.saveTeachingPractice(id, saveInput)).toThrow('no tienes acceso');
+    expect(() => saveTeaching(data, id, saveInput)).toThrow('no tienes acceso');
     expect(() => data.setTeachingReviewer(id)).toThrow('no tienes acceso');
     expect(() => data.publishTeachingExplanation(id)).toThrow('no tienes acceso');
     data.setViewer('demo-3');
@@ -206,7 +215,7 @@ describe('Aprende enseñando en la demo', () => {
       expect(JSON.stringify(note)).not.toContain(secret);
     }
     data.reopenTeachingPractice(id);
-    data.saveTeachingPractice(id, { ...saveInput, revised: { ...revised, concept: 'Nueva revisión privada' } });
+    saveTeaching(data, id, { ...saveInput, revised: { ...revised, concept: 'Nueva revisión privada' } });
     expect(data.publishTeachingExplanation(id)).toBe(noteId);
     expect(data.getSnapshot().notes.find((item) => item.id === noteId)?.body).toBe(teachingNoteBody(revised));
     data.saveNote({ ...note, id: noteId, body: 'Edición independiente en Notas' });
@@ -218,8 +227,8 @@ describe('Aprende enseñando en la demo', () => {
     const data = source();
     expect(() => data.createTeachingPractice({ subjectId: SUBJECT, topic: ' ', initial })).toThrow('tema');
     const id = practice(data);
-    expect(() => data.saveTeachingPractice(id, { ...saveInput, reflection: 'x'.repeat(MAX_TEACHING_TEXT_LENGTH + 1) })).toThrow('caracteres');
-    expect(() => data.saveTeachingPractice(id, { ...saveInput, topicsToReview: 'x'.repeat(MAX_TEACHING_QUESTION_LENGTH + 1) })).toThrow('caracteres');
+    expect(() => saveTeaching(data, id, { ...saveInput, reflection: 'x'.repeat(MAX_TEACHING_TEXT_LENGTH + 1) })).toThrow('caracteres');
+    expect(() => saveTeaching(data, id, { ...saveInput, topicsToReview: 'x'.repeat(MAX_TEACHING_QUESTION_LENGTH + 1) })).toThrow('caracteres');
     expect(data.getSnapshot().teachingPractices.find((item) => item.id === id)?.revised).toEqual(EMPTY_TEACHING_EXPLANATION);
     data.startTeachingPractice(id);
     const questionId = data.getSnapshot().teachingQuestions.find((item) => item.practiceId === id)!.id;

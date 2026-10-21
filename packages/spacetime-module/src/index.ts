@@ -35,6 +35,14 @@ import { notificationTables, notification, notificationPreference } from './noti
 import * as notifications from './notificationHandlers';
 import { trashTables } from './trashTables';
 import * as trash from './trashHandlers';
+import { practiceTables, codingChallenge, challengeHint, challengeProgress, challengeSolution, challengeComment, codeReview, codeReviewVersion, codeReviewComment } from './practiceTables';
+import * as practice from './practiceHandlers';
+import { community4Tables, museumEntry, museumRevision, opportunity, opportunityRevision, opportunityInterest, opportunityFeedback } from './community4Tables';
+import * as community4 from './community4Handlers';
+import { teachingVersionTables, teachingHead } from './teachingVersioning';
+import * as teachingVersions from './teachingVersioning';
+import { helpVersionTables, helpVersion } from './helpVersioning';
+import * as helpVersioning from './helpVersioning';
 
 // ---------------------------------------------------------------------------
 // Tablas
@@ -781,6 +789,10 @@ const retentionExpiry = table({ name: 'retention_expiry' }, {
 });
 
 const spacetimedb = schema({
+  ...practiceTables,
+  ...community4Tables,
+  ...helpVersionTables,
+  ...teachingVersionTables,
   ...aiTables,
   ...notificationTables,
   ...trashTables,
@@ -2530,6 +2542,7 @@ export const save_help_post = spacetimedb.reducer(
   (ctx, { id, ...input }) => {
     activeMember(ctx);
     const existing = id === undefined ? undefined : requireOwnHelpPost(ctx, id);
+    if (existing) helpVersioning.assertLegacyHelpEditable(ctx, existing.id);
     requireSubject(ctx, input.subjectId);
     if (!['offer', 'request'].includes(input.kind)) throw new SenderError('El tipo de ayuda no existe.');
     if (!['initial', 'basics', 'advanced'].includes(input.level)) {
@@ -2572,6 +2585,7 @@ export const set_help_post_status = spacetimedb.reducer(
   (ctx, { postId, status }) => {
     activeMember(ctx);
     const post = requireOwnHelpPost(ctx, postId);
+    helpVersioning.assertLegacyHelpEditable(ctx, postId);
     if (status !== 'open' && status !== 'closed') throw new SenderError('Estado de publicación inválido.');
     if (post.status === status) return;
     ctx.db.helpPost.id.update({ ...post, status, updatedAt: ctx.timestamp });
@@ -2586,6 +2600,7 @@ export const withdraw_help_post = spacetimedb.reducer(
     activeMember(ctx);
     const post = requireHelpPost(ctx, postId);
     if (post.status === 'withdrawn') throw new SenderError('La publicación ya fue retirada.');
+    helpVersioning.assertLegacyHelpEditable(ctx, postId);
     const own = post.author.isEqual(ctx.sender);
     if (!own) requireCreator(ctx);
     const withdrawalReason = optionalHelpText(reason, 'El motivo', 500);
@@ -4017,32 +4032,7 @@ export const save_teaching_practice = spacetimedb.reducer(
     revisedConcept: t.string(), revisedExample: t.string(), revisedLimits: t.string(),
     reflection: t.string(), topicsToReview: t.string(),
   },
-  (ctx, { practiceId, reflection, topicsToReview, ...input }) => {
-    const row = ownTeachingPractice(ctx, practiceId);
-    if (row.status === 'completed') throw new SenderError('Reabre la práctica para seguir editando.');
-    const personal = teachingPersonalRow(ctx, practiceId);
-    const initial = {
-      concept: teachingText(input.concept, 'El concepto'),
-      example: teachingText(input.example, 'El ejemplo'),
-      limits: teachingText(input.limits, 'Dónde aplica'),
-    };
-    if (row.status !== 'draft' && (row.concept !== initial.concept
-      || row.example !== initial.example || row.limits !== initial.limits)) {
-      throw new SenderError('La explicación inicial se conserva al comenzar la práctica.');
-    }
-    const revised = {
-      revisedConcept: teachingText(input.revisedConcept, 'El concepto revisado'),
-      revisedExample: teachingText(input.revisedExample, 'El ejemplo revisado'),
-      revisedLimits: teachingText(input.revisedLimits, 'Dónde aplica la revisión'),
-    };
-    const nextPersonal = {
-      ...personal,
-      reflection: teachingText(reflection, 'La reflexión'),
-      topicsToReview: teachingText(topicsToReview, 'Los temas por repasar', 4000),
-    };
-    ctx.db.teachingPractice.id.update({ ...row, ...initial, ...revised, updatedAt: ctx.timestamp });
-    ctx.db.teachingPersonal.practiceId.update(nextPersonal);
-  },
+  (_ctx, _input) => { throw new SenderError('Actualiza la aplicación para guardar con versión e historial.'); },
 );
 
 export const start_teaching_practice = spacetimedb.reducer(
@@ -4060,7 +4050,9 @@ export const start_teaching_practice = spacetimedb.reducer(
         createdAt: ctx.timestamp, answeredAt: undefined,
       });
     }
-    ctx.db.teachingPractice.id.update({ ...row, status: 'practicing', updatedAt: ctx.timestamp });
+    const next = { ...row, status: 'practicing', updatedAt: ctx.timestamp };
+    teachingVersions.captureTeachingTransition(ctx, row, next);
+    ctx.db.teachingPractice.id.update(next);
   },
 );
 
@@ -4078,7 +4070,9 @@ export const complete_teaching_practice = spacetimedb.reducer(
     if (![...ctx.db.teachingQuestion.practiceId.filter(practiceId)].some((q) => q.answer.trim())) {
       throw new SenderError('Responde al menos una pregunta antes de completar la práctica.');
     }
-    ctx.db.teachingPractice.id.update({ ...row, status: 'completed', updatedAt: ctx.timestamp });
+    const next = { ...row, status: 'completed', updatedAt: ctx.timestamp };
+    teachingVersions.captureTeachingTransition(ctx, row, next);
+    ctx.db.teachingPractice.id.update(next);
   },
 );
 
@@ -4087,7 +4081,9 @@ export const reopen_teaching_practice = spacetimedb.reducer(
   (ctx, { practiceId }) => {
     const row = ownTeachingPractice(ctx, practiceId);
     if (row.status !== 'completed') throw new SenderError('Solo puedes reabrir una práctica completada.');
-    ctx.db.teachingPractice.id.update({ ...row, status: 'practicing', updatedAt: ctx.timestamp });
+    const next = { ...row, status: 'practicing', updatedAt: ctx.timestamp };
+    teachingVersions.captureTeachingTransition(ctx, row, next);
+    ctx.db.teachingPractice.id.update(next);
   },
 );
 
@@ -4852,3 +4848,48 @@ export const notification_reminder_context = spacetimedb.procedure({ payload: t.
 export const notification_commit_reminders = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => {
   const input = notificationPayload(payload); return JSON.stringify(notifications.commitReminders(tx, { memberId: notificationText(input, 'memberId'), day: notificationText(input, 'day'), startAt: notificationNumber(input, 'startAt', 0, Number.MAX_SAFE_INTEGER), endAt: notificationNumber(input, 'endAt', 0, Number.MAX_SAFE_INTEGER) }));
 }));
+
+// Cuarta entrega: retos y revisión de código.
+export const practice_create_challenge = spacetimedb.reducer({ payload: t.string() }, (ctx, {payload}) => practice.createChallenge(ctx, practice.decodePractice(payload)));
+export const practice_unlock_hint = spacetimedb.reducer({ payload: t.string() }, (ctx, {payload}) => practice.unlockChallengeHint(ctx, practice.decodePractice(payload)));
+export const practice_save_solution = spacetimedb.reducer({ payload: t.string() }, (ctx, {payload}) => practice.saveChallengeSolution(ctx, practice.decodePractice(payload)));
+export const practice_add_challenge_comment = spacetimedb.reducer({ payload: t.string() }, (ctx, {payload}) => practice.addChallengeComment(ctx, practice.decodePractice(payload)));
+export const practice_close_challenge = spacetimedb.reducer({ payload: t.string() }, (ctx, {payload}) => practice.closeChallenge(ctx, practice.decodePractice(payload)));
+export const practice_create_code_review = spacetimedb.reducer({ payload: t.string() }, (ctx, {payload}) => practice.createCodeReview(ctx, practice.decodePractice(payload)));
+export const practice_add_code_version = spacetimedb.reducer({ payload: t.string() }, (ctx, {payload}) => practice.addCodeReviewVersion(ctx, practice.decodePractice(payload)));
+export const practice_add_code_comment = spacetimedb.reducer({ payload: t.string() }, (ctx, {payload}) => practice.addCodeReviewComment(ctx, practice.decodePractice(payload)));
+export const practice_resolve_code_comment = spacetimedb.reducer({ payload: t.string() }, (ctx, {payload}) => practice.resolveCodeReviewComment(ctx, practice.decodePractice(payload)));
+export const practice_close_code_review = spacetimedb.reducer({ payload: t.string() }, (ctx, {payload}) => practice.closeCodeReview(ctx, practice.decodePractice(payload)));
+export const coding_challenges = spacetimedb.view({ name:'coding_challenges', public:true }, t.array(codingChallenge.rowType), ctx => practice.practiceVisible(ctx.db, ctx.sender) ? [...ctx.db.codingChallenge.iter()] : []);
+export const challenge_hints = spacetimedb.view({ name:'challenge_hints', public:true }, t.array(challengeHint.rowType), ctx => practice.visibleChallengeHints(ctx.db, ctx.sender));
+export const my_challenge_progress = spacetimedb.view({ name:'my_challenge_progress', public:true }, t.array(challengeProgress.rowType), ctx => practice.visibleChallengeProgress(ctx.db, ctx.sender));
+export const challenge_solutions = spacetimedb.view({ name:'challenge_solutions', public:true }, t.array(challengeSolution.rowType), ctx => practice.practiceVisible(ctx.db, ctx.sender) ? [...ctx.db.challengeSolution.iter()] : []);
+export const challenge_comments = spacetimedb.view({ name:'challenge_comments', public:true }, t.array(challengeComment.rowType), ctx => practice.practiceVisible(ctx.db, ctx.sender) ? [...ctx.db.challengeComment.iter()] : []);
+export const code_reviews = spacetimedb.view({ name:'code_reviews', public:true }, t.array(codeReview.rowType), ctx => practice.practiceVisible(ctx.db, ctx.sender) ? [...ctx.db.codeReview.iter()] : []);
+export const code_review_versions = spacetimedb.view({ name:'code_review_versions', public:true }, t.array(codeReviewVersion.rowType), ctx => practice.practiceVisible(ctx.db, ctx.sender) ? [...ctx.db.codeReviewVersion.iter()] : []);
+export const code_review_comments = spacetimedb.view({ name:'code_review_comments', public:true }, t.array(codeReviewComment.rowType), ctx => practice.practiceVisible(ctx.db, ctx.sender) ? [...ctx.db.codeReviewComment.iter()] : []);
+
+// Cuarta entrega: Museo en Preguntas y oportunidades manuales.
+export const create_museum = spacetimedb.reducer({ subjectId: t.u64(), title: t.string(), fields: t.string(), requestId: t.string() }, community4.createMuseum);
+export const save_museum = spacetimedb.reducer({ questionId: t.u64(), expectedVersion: t.u32(), fields: t.string(), requestId: t.string() }, community4.saveMuseum);
+export const create_opportunity = spacetimedb.reducer({ fields: t.string(), requestId: t.string() }, community4.createOpportunity);
+export const update_opportunity = spacetimedb.reducer({ opportunityId: t.u64(), expectedVersion: t.u32(), fields: t.string() }, community4.updateOpportunity);
+export const withdraw_opportunity = spacetimedb.reducer({ opportunityId: t.u64(), expectedVersion: t.u32(), withdrawn: t.bool(), reason: t.string() }, community4.withdrawOpportunity);
+export const set_opportunity_interest = spacetimedb.reducer({ opportunityId: t.u64(), interested: t.bool(), seekingTeam: t.bool(), shareContact: t.bool(), expectedVersion: t.u32() }, community4.setOpportunityInterest);
+export const send_opportunity_feedback = spacetimedb.reducer({ opportunityId: t.u64(), kind: t.string(), text: t.string(), requestId: t.string() }, community4.sendOpportunityFeedback);
+export const resolve_opportunity_feedback = spacetimedb.reducer({ feedbackId: t.u64(), expectedVersion: t.u32(), resolution: t.string() }, community4.resolveOpportunityFeedback);
+export const museum_entries = spacetimedb.view({ name: 'museum_entries', public: true }, t.array(museumEntry.rowType), ctx => [...ctx.db.museumEntry.iter()].filter(row => community4.museumReadable(ctx.db, ctx.sender, row.questionId)));
+export const museum_revisions = spacetimedb.view({ name: 'museum_revisions', public: true }, t.array(museumRevision.rowType), ctx => [...ctx.db.museumRevision.iter()].filter(row => community4.museumReadable(ctx.db, ctx.sender, row.questionId)));
+export const opportunities = spacetimedb.view({ name: 'opportunities', public: true }, t.array(opportunity.rowType), ctx => [...ctx.db.opportunity.iter()].filter(row => community4.opportunityReadable(ctx.db, ctx.sender, row.id)));
+export const opportunity_revisions = spacetimedb.view({ name: 'opportunity_revisions', public: true }, t.array(opportunityRevision.rowType), ctx => [...ctx.db.opportunityRevision.iter()].filter(row => community4.opportunityReadable(ctx.db, ctx.sender, row.opportunityId)));
+export const opportunity_interests = spacetimedb.view({ name: 'opportunity_interests', public: true }, t.array(opportunityInterest.rowType), ctx => [...ctx.db.opportunityInterest.iter()].filter(row => community4.interestReadable(ctx.db, ctx.sender, row)));
+export const opportunity_feedback = spacetimedb.view({ name: 'opportunity_feedback', public: true }, t.array(opportunityFeedback.rowType), ctx => [...ctx.db.opportunityFeedback.iter()].filter(row => community4.opportunityReadable(ctx.db, ctx.sender, row.opportunityId)));
+
+// Ayuda: migración aditiva para versiones, historia propia e intenciones idempotentes.
+export const help_mutate = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => helpVersioning.helpResponse(() => ctx.withTx(tx => helpVersioning.mutateHelp(tx, payload))));
+export const help_read_history = spacetimedb.procedure({ postId: t.u64() }, t.string(), (ctx, { postId }) => helpVersioning.helpResponse(() => ctx.withTx(tx => helpVersioning.readHelpHistory(tx, postId))));
+export const help_post_versions = spacetimedb.view({ name: 'help_post_versions', public: true }, t.array(helpVersion.rowType), ctx => helpVersioning.visibleHelpVersions(ctx.db, ctx.sender));
+
+export const teaching_save_v2 = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => teachingVersions.teachingResponse(() => ctx.withTx(tx => teachingVersions.saveTeachingVersion(tx, payload))));
+export const teaching_read_history = spacetimedb.procedure({ practiceId: t.u64() }, t.string(), (ctx, { practiceId }) => teachingVersions.teachingResponse(() => ctx.withTx(tx => teachingVersions.readTeachingHistory(tx, practiceId))));
+export const my_teaching_versions = spacetimedb.view({ name: 'my_teaching_versions', public: true }, t.array(teachingHead.rowType), (ctx) => teachingVersions.myTeachingVersions(ctx.db, ctx.sender));
