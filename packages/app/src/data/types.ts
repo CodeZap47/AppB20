@@ -20,12 +20,18 @@ import type {
   SpacedRating,
   SpacedSourceKind,
   SpacedVisibility,
+  OriginContributionKind,
 } from '@b20/core';
 
 import type { PresentationActions, PresentationsSnapshot } from './presentationTypes';
 export type * from './presentationTypes';
 
 export type Id = string;
+import type { Delivery2Actions, ChatChannel, ChannelMessage, ConversationState, BlockedMember, MessageReport,
+  MemberProfile, NoteVersion, GuideVersion, QuestionComment, AnswerUsefulness, QuestionLink } from './delivery2Types';
+export type * from './delivery2Types';
+import type { StudyRoomActions, StudyRoomsSnapshot } from './roomTypes';
+export type * from './roomTypes';
 
 export interface SpacedCollection {
   id: Id;
@@ -264,6 +270,8 @@ export interface Assignment {
 
 /** Trabajo que subió un alumno o un equipo para una página principal. */
 export interface Work {
+  withdrawnAt?: Date;
+  withdrawnBy?: Id;
   id: Id;
   assignmentId: Id;
   /** Tema o título propio; vacío si basta con el de la tarea. */
@@ -314,7 +322,7 @@ export type ProgressTargetKind = 'assignment' | 'activity';
 export type ProgressStatus = 'pending' | 'in_progress' | 'done';
 export type WorkPublicationStatus = 'draft' | 'final';
 export type WorkStatus = WorkPublicationStatus | 'reviewed';
-export type ResourceTargetKind = ProgressTargetKind | 'work' | 'evidence';
+export type ResourceTargetKind = ProgressTargetKind | 'work' | 'evidence' | 'note' | 'guide' | 'question' | 'answer' | 'profile' | 'group_message' | 'direct_message' | 'channel_message';
 
 /** Se obtiene exclusivamente a través de la vista privada del alumno. */
 export interface AcademicProgress {
@@ -417,6 +425,7 @@ export interface PageSnapshot {
 
 /** Campos comunes de un mensaje del grupo o de un 1 a 1. */
 export interface MessageFields {
+  version?: number;
   id: Id;
   senderId: Id;
   /** Texto con referencias `[[tipo:id]]` a otros módulos; vacío si se eliminó. */
@@ -433,7 +442,7 @@ export interface MessageFields {
 export type GroupMessage = MessageFields;
 
 /** Dónde vive un mensaje: el canal del salón o una conversación 1 a 1. */
-export type MessageScope = 'group' | 'direct';
+export type MessageScope = 'group' | 'direct' | 'channel';
 
 /** Una persona, una reacción por mensaje; reaccionar con otra la cambia. */
 export interface MessageReaction {
@@ -512,6 +521,8 @@ export interface Activity {
 
 /** Evidencia de un equipo o persona; cada una es independiente y no sobrescribe a otra. */
 export interface Evidence {
+  withdrawnAt?: Date;
+  withdrawnBy?: Id;
   id: Id;
   activityId: Id;
   authorId: Id;
@@ -526,6 +537,15 @@ export type NoteVisibility = 'personal' | 'group';
 export type NoteSource = 'student' | 'teacher' | 'ai';
 
 export interface Note {
+  withdrawnAt?: Date;
+  withdrawnBy?: Id;
+  termId?: Id;
+  session?: string;
+  assignmentIds?: Id[];
+  activityIds?: Id[];
+  questionIds?: Id[];
+  publishedFromId?: Id;
+  publishedFromVersion?: number;
   id: Id;
   subjectId: Id;
   topic: string;
@@ -550,6 +570,9 @@ export interface NoteComment {
 }
 
 export interface Question {
+  withdrawnAt?: Date;
+  withdrawnBy?: Id;
+  version?: number;
   id: Id;
   subjectId: Id;
   topic: string;
@@ -567,6 +590,8 @@ export interface Question {
  * edita y cada edición sube la versión.
  */
 export interface StudyGuide {
+  withdrawnAt?: Date;
+  withdrawnBy?: Id;
   id: Id;
   subjectId: Id;
   termId?: Id;
@@ -610,6 +635,9 @@ export interface GuideReview {
 }
 
 export interface Answer {
+  withdrawnAt?: Date;
+  withdrawnBy?: Id;
+  version?: number;
   id: Id;
   questionId: Id;
   authorId: Id;
@@ -658,7 +686,19 @@ export interface PollVote {
 }
 
 /** Lo que el usuario actual puede ver, igual que las vistas del servidor. */
-export interface Snapshot extends PresentationsSnapshot {
+export interface Snapshot extends StudyRoomsSnapshot, PresentationsSnapshot {
+  contributionOrigins: { kind: OriginContributionKind; refId: Id; memberId: Id; creditedAt: Date; duplicateOf?: Id }[];
+  chatChannels: ChatChannel[];
+  channelMessages: ChannelMessage[];
+  conversationStates: ConversationState[];
+  blockedMembers: BlockedMember[];
+  messageReports: MessageReport[];
+  memberProfiles: MemberProfile[];
+  noteVersions: NoteVersion[];
+  guideVersions: GuideVersion[];
+  questionComments: QuestionComment[];
+  answerUsefulness: AnswerUsefulness[];
+  questionLinks: QuestionLink[];
   spacedUnavailableCards: SpacedUnavailableCard[];
   spacedCollections: SpacedCollection[];
   spacedCards: SpacedCard[];
@@ -755,7 +795,7 @@ export interface PublishWorkInput {
 export type MaybePromise<T> = T | Promise<T>;
 
 /** Acciones: corresponden uno a uno con los reducers del módulo. */
-export interface Actions extends PresentationActions {
+export interface Actions extends Delivery2Actions, StudyRoomActions, PresentationActions {
   replaceSpacedCardSource(cardId: Id, expectedVersion: number, sourceKind: SpacedSourceKind, sourceId: Id): MaybePromise<void>;
   saveSpacedCollection(input: SpacedCollectionInput): MaybePromise<Id>;
   publishSpacedCollection(collectionId: Id, expectedVersion: number): MaybePromise<void>;
@@ -861,7 +901,7 @@ export interface Actions extends PresentationActions {
   /** Crea la guía con sus fuentes iniciales, todas pendientes hasta que alguien las procese. */
   createGuide(input: GuideInput, sources: GuideSourceRef[]): MaybePromise<Id>;
   /** Como en un wiki: cualquier miembro activo edita y la versión sube. */
-  updateGuide(guideId: Id, input: GuideInput): MaybePromise<void>;
+  updateGuide(guideId: Id, input: GuideInput, expectedVersion?: number): MaybePromise<void>;
   addGuideSources(guideId: Id, sources: GuideSourceRef[]): MaybePromise<void>;
   /** Marca una fuente como procesada o pendiente (con razón) y qué temas cubre. */
   updateGuideSource(sourceId: Id, update: GuideSourceUpdate): MaybePromise<void>;
@@ -931,6 +971,12 @@ export interface CreateActivityInput {
 }
 
 export interface SaveNoteInput {
+  expectedVersion?: number;
+  termId?: Id;
+  session?: string;
+  assignmentIds?: Id[];
+  activityIds?: Id[];
+  questionIds?: Id[];
   /** Sin id se crea una nota nueva; con id se edita (solo su autor). */
   id?: Id;
   subjectId: Id;

@@ -14,7 +14,7 @@ export interface PresentationDemoState extends PresentationsSnapshot {
   presentationRequests: { actorId: Id; kind: string; requestId: string; fingerprint: string; resultId: Id }[];
 }
 interface State extends PresentationDemoState { members: Member[]; subjects: Subject[]; terms: Term[]; notes: Note[]; guides: StudyGuide[]; }
-interface Context { state(): State; active(): Member; id(): Id; now(): Date; emit(): void; }
+interface Context { state(): State; active(): Member; id(): Id; now(): Date; emit(): void; sourceAvailable(kind: PresentationSourceKind, id: Id): boolean; }
 export function emptyPresentationsSnapshot(): PresentationsSnapshot {
   return { presentationPractices: [], presentationAttempts: [], presentationPersonal: [], presentationQuestions: [], presentationFeedback: [] };
 }
@@ -52,7 +52,7 @@ export class DemoPresentationStore implements PresentationActions {
     const state = this.ctx.state();
     const source = input.kind === 'note' ? state.notes.find((note) => note.id === input.id &&
       (note.visibility === 'group' || note.authorId === ownerId)) : input.kind === 'guide' ? state.guides.find((guide) => guide.id === input.id) : undefined;
-    if (!source) throw new Error('La fuente no está disponible.');
+    if (!source || source.withdrawnAt || !this.ctx.sourceAvailable(input.kind, input.id)) throw new Error('La fuente no está disponible.');
     if (source.subjectId !== subjectId) throw new Error('La fuente debe pertenecer a la misma materia.');
     return { sourceKind: input.kind, sourceId: input.id, sourceVersion: source.version };
   }
@@ -101,8 +101,9 @@ export class DemoPresentationStore implements PresentationActions {
     };
   }
   private readableSource(kind: PresentationSourceKind, id: Id, viewer: Id, subjectId: Id) {
-    return kind === 'guide' ? this.ctx.state().guides.some((row) => row.id === id && row.subjectId === subjectId) :
-      this.ctx.state().notes.some((row) => row.id === id && row.subjectId === subjectId && (row.visibility === 'group' || row.authorId === viewer));
+    if (!this.ctx.sourceAvailable(kind, id)) return false;
+    return kind === 'guide' ? this.ctx.state().guides.some((row) => row.id === id && row.subjectId === subjectId && !row.withdrawnAt) :
+      this.ctx.state().notes.some((row) => row.id === id && row.subjectId === subjectId && !row.withdrawnAt && (row.visibility === 'group' || row.authorId === viewer));
   }
 
   savePresentationPractice(input: PresentationPracticeInput): Id {
@@ -137,6 +138,10 @@ export class DemoPresentationStore implements PresentationActions {
     const fingerprint = JSON.stringify({ practiceId, expectedVersion });
     const prior = this.prior('attempt', requestId, fingerprint); if (prior) return prior;
     version(row.version, expectedVersion);
+    if (row.sourceKind && row.sourceId && (!this.ctx.sourceAvailable(row.sourceKind, row.sourceId) ||
+      (row.sourceKind === 'note' ? this.ctx.state().notes : this.ctx.state().guides).some((source) => source.id === row.sourceId && source.withdrawnAt))) {
+      throw new Error('La fuente fue retirada. Configura otra fuente o continúa sin referencia antes de crear un intento.');
+    }
     const state = this.ctx.state(); const attempts = state.presentationAttempts.filter((attempt) => attempt.practiceId === practiceId);
     if (attempts.some((attempt) => attempt.status === 'draft')) throw new Error('Ya tienes un intento en borrador.');
     if (attempts.length >= 100) throw new Error('Puedes guardar hasta 100 intentos por exposición.');

@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import { Avatar } from '../components/Avatar';
 import { Empty } from '../components/Empty';
-import { fire } from '../components/useAction';
+import { useAction } from '../components/useAction';
 import { Icon } from '../components/Icon';
 import { formatClock, formatDayLabel, memberName, peopleList } from '../lib/format';
 import {
@@ -48,6 +48,7 @@ function byDay(items: NewsItem[]) {
 /** Pantalla de inicio: lo que pasó en el grupo desde tu última visita (7.1), sin IA. */
 export function WhatsNewPage() {
   const source = useDataSource();
+  const { error, pending: marking, run } = useAction();
   const snapshot = useSnapshot();
   const { me, members, subjects, lastSeenAt, assignments, birthdays } = snapshot;
   const [params, setParams] = useSearchParams();
@@ -107,16 +108,17 @@ export function WhatsNewPage() {
           <button
             type="button"
             className="secondary with-icon"
-            onClick={() => {
-              fire(source.markSeen());
-              update({ ver: '' });
+            onClick={async () => {
+              if (await run(async () => { await source.markSeen(); return true; })) update({ ver: '' });
             }}
-            disabled={!pending.length}
+            disabled={!pending.length || marking}
           >
             <Icon name="check" size={16} /> Marcar todo como visto
           </button>
         </div>
       </header>
+      {error && <p className="error" role="alert">{error}</p>}
+      <p className="muted">Las novedades y la lectura de cada chat se marcan por separado. Aquí solo se resume contenido compartido con el grupo.</p>
 
       <div className="detail">
         <div className="detail__main">
@@ -232,7 +234,7 @@ export function WhatsNewPage() {
                                 {NEWS_LABEL[n.kind]}
                               </span>
                               <span>
-                                {subject?.name ?? 'Sin materia'} ·{' '}
+                                {subject?.name ?? 'Grupo'} ·{' '}
                                 <time dateTime={n.at.toISOString()}>{formatClock(n.at)}</time>
                               </span>
                             </span>
@@ -277,7 +279,8 @@ export function WhatsNewPage() {
 
           <section className="panel">
             <h2 className="label">Mensajes nuevos</h2>
-            {messages.group === 0 && messages.direct.length === 0 ? (
+            <p className="muted">Solo tus conversaciones. No se muestra el contenido de los mensajes.</p>
+            {messages.group === 0 && messages.direct.length === 0 && messages.channels.length === 0 ? (
               <p className="muted">No tienes mensajes nuevos.</p>
             ) : (
               <ul className="links">
@@ -298,6 +301,15 @@ export function WhatsNewPage() {
                       <Avatar member={members.find((m) => m.id === d.otherId)} size={28} />
                       <span className="news-link__text">{memberName(members, d.otherId)}</span>
                       <span className="news-count">{d.count}</span>
+                    </Link>
+                  </li>
+                ))}
+                {messages.channels.map(({ channel, count }) => (
+                  <li key={channel.id}>
+                    <Link to={`/m/mensajes/canales/${channel.id}`} className="news-link">
+                      <Icon name="chat" size={18} />
+                      <span className="news-link__text">{channel.name}</span>
+                      <span className="news-count">{count}</span>
                     </Link>
                   </li>
                 ))}

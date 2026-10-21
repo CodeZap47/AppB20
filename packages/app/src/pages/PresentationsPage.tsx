@@ -115,8 +115,8 @@ function ConfigurationForm({ practice, data, sourceKey }: { practice?: Presentat
   const source = useDataSource();
   const navigate = useNavigate();
   const initialSource = practice?.sourceKind && practice.sourceId ? `${practice.sourceKind}:${practice.sourceId}` : sourceKey;
-  const note = initialSource.startsWith('note:') ? data.notes.find((item) => `note:${item.id}` === initialSource) : undefined;
-  const guide = initialSource.startsWith('guide:') ? data.guides.find((item) => `guide:${item.id}` === initialSource) : undefined;
+  const note = initialSource.startsWith('note:') ? data.notes.find((item) => `note:${item.id}` === initialSource && !item.withdrawnAt) : undefined;
+  const guide = initialSource.startsWith('guide:') ? data.guides.find((item) => `guide:${item.id}` === initialSource && !item.withdrawnAt) : undefined;
   const [subjectId, setSubjectId] = useState(practice?.subjectId ?? note?.subjectId ?? guide?.subjectId ?? data.subjects[0]?.id ?? '');
   const [termId, setTermId] = useState(practice?.termId ?? guide?.termId ?? '');
   const [title, setTitle] = useState(practice?.title ?? note?.title ?? guide?.title ?? '');
@@ -129,8 +129,8 @@ function ConfigurationForm({ practice, data, sourceKey }: { practice?: Presentat
   const [token] = useState(requestId);
   const { error, pending, run } = useAction();
   const busy = useRef(false);
-  const notes = data.notes.filter((item) => item.subjectId === subjectId && (item.visibility === 'group' || item.authorId === data.me?.id));
-  const guides = data.guides.filter((item) => item.subjectId === subjectId);
+  const notes = data.notes.filter((item) => item.subjectId === subjectId && !item.withdrawnAt && (item.visibility === 'group' || item.authorId === data.me?.id));
+  const guides = data.guides.filter((item) => item.subjectId === subjectId && !item.withdrawnAt);
   const accessible = !selectedSource || notes.some((item) => `note:${item.id}` === selectedSource) || guides.some((item) => `guide:${item.id}` === selectedSource);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -174,7 +174,7 @@ function ConfigurationForm({ practice, data, sourceKey }: { practice?: Presentat
 function SourceReference({ value, data }: { value: Pick<PresentationPractice, 'sourceKind' | 'sourceId' | 'sourceVersion' | 'subjectId'>; data: Snapshot }) {
   if (!value.sourceKind || !value.sourceId) return <p className="muted">Sin nota o guía de referencia.</p>;
   const item = value.sourceKind === 'note' ? data.notes.find((note) => note.id === value.sourceId && (note.visibility === 'group' || note.authorId === data.me?.id)) : data.guides.find((guide) => guide.id === value.sourceId);
-  if (!item || item.subjectId !== value.subjectId) return <p className="muted">La referencia ya no está accesible. El ensayo se conserva y puedes configurar otra fuente para un intento futuro.</p>;
+  if (!item || item.withdrawnAt || item.subjectId !== value.subjectId) return <p className="muted">La referencia ya no está accesible. El ensayo se conserva y puedes configurar otra fuente para un intento futuro.</p>;
   return <><p><Link to={`/m/${value.sourceKind === 'note' ? 'notas' : 'guias'}/${item.id}`}>{item.title}</Link> · versión de origen {value.sourceVersion}</p>
     {item.version !== value.sourceVersion && <p className="presentation-notice" role="status">La fuente cambió a la versión {item.version}. Tu ensayo conserva la referencia original; no reemplazamos su contenido.</p>}</>;
 }

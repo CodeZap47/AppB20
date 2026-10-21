@@ -69,6 +69,7 @@ function setup() {
     studyGuide: tableStore('id', [{ id: 201n, subjectId: 1n, version: 5 }]),
     spacedCollection: tableStore('id'), spacedCard: tableStore('id'), spacedEnrollment: tableStore('key'),
     spacedProgress: tableStore('key'), spacedReview: tableStore('id'), changeLog: { insert: vi.fn() },
+    contentStatus: tableStore('key'),
   };
   const mutableCtx = {
     sender: owner, db, timestamp: new Timestamp(1_800_000_000_000_123n), env: {},

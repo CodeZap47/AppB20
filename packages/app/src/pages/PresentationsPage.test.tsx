@@ -248,6 +248,15 @@ describe('Exposiciones', () => {
     expect(container.querySelector('.page-header .eyebrow')?.textContent).toContain('Programación · Primer parcial');
     expect(container.textContent).not.toContain('La referencia ya no está accesible');
   });
+  it('no permite elegir una fuente retirada y conserva el ensayo previo sin enlace', async () => {
+    snapshot.notes = snapshot.notes.map((note) => ({ ...note, withdrawnAt: now }));
+    snapshot.presentationAttempts = [attempt({ sourceKind: 'note', sourceId: 'private-note', sourceVersion: 2 })];
+    await mount('/m/exposiciones/nueva?nota=private-note');
+    expect(input('Título').value).toBe(''); expect(input('Nota o guía').textContent).not.toContain('Nota personal');
+    expect(container.textContent).toContain('Ya no puedes usar esta fuente');
+    await mount(); expect(container.querySelector('a[href="/m/notas/private-note"]')).toBeNull();
+    expect(container.textContent).toContain('La referencia ya no está accesible'); expect(input('Explicación').value).toBe('La recursión usa un caso base.');
+  });
   it('presenta la estimación como orientativa y no ofrece audio o IA inactivos', async () => {
     await mount(); expect(container.textContent).toContain('120 palabras/minuto'); expect(container.textContent).toContain('no mide una exposición oral real');
     expect([...container.querySelectorAll('button')].map((item) => item.textContent).join(' ')).not.toMatch(/Audio|Grabar|Gemini|IA/);

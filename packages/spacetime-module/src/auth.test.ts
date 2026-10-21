@@ -51,6 +51,8 @@ function setup() {
     member: tableStore('identity'),
     invitation: tableStore('email'),
     subject: tableStore('id', [{ id: 1, name: 'Privado del grupo' }]),
+    studyRoom: { iter: () => [] },
+    roomMember: { memberId: { filter: () => [] } },
     changeLog: { insert: vi.fn() },
   };
   const mutableCtx = {

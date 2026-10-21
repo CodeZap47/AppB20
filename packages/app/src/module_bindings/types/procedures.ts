@@ -6,15 +6,23 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all procedure arg schemas
+import * as AddStickerNativeProcedure from "../add_sticker_native_procedure";
 import * as AuthorizeFileUploadProcedure from "../authorize_file_upload_procedure";
+import * as CreateStickerPackNativeProcedure from "../create_sticker_pack_native_procedure";
 import * as GetFileDownloadAccessProcedure from "../get_file_download_access_procedure";
 import * as GetFileUploadStatusProcedure from "../get_file_upload_status_procedure";
 import * as GetResourceManifestProcedure from "../get_resource_manifest_procedure";
 import * as GetResourceUploadStatusProcedure from "../get_resource_upload_status_procedure";
 import * as ReadResourceChunkProcedure from "../read_resource_chunk_procedure";
+import * as ReadStickerBytesProcedure from "../read_sticker_bytes_procedure";
+import * as StudyRoomClockProcedure from "../study_room_clock_procedure";
 
+export type AddStickerNativeArgs = __Infer<typeof AddStickerNativeProcedure.params>;
+export type AddStickerNativeResult = __Infer<typeof AddStickerNativeProcedure.returnType>;
 export type AuthorizeFileUploadArgs = __Infer<typeof AuthorizeFileUploadProcedure.params>;
 export type AuthorizeFileUploadResult = __Infer<typeof AuthorizeFileUploadProcedure.returnType>;
+export type CreateStickerPackNativeArgs = __Infer<typeof CreateStickerPackNativeProcedure.params>;
+export type CreateStickerPackNativeResult = __Infer<typeof CreateStickerPackNativeProcedure.returnType>;
 export type GetFileDownloadAccessArgs = __Infer<typeof GetFileDownloadAccessProcedure.params>;
 export type GetFileDownloadAccessResult = __Infer<typeof GetFileDownloadAccessProcedure.returnType>;
 export type GetFileUploadStatusArgs = __Infer<typeof GetFileUploadStatusProcedure.params>;
@@ -25,4 +33,8 @@ export type GetResourceUploadStatusArgs = __Infer<typeof GetResourceUploadStatus
 export type GetResourceUploadStatusResult = __Infer<typeof GetResourceUploadStatusProcedure.returnType>;
 export type ReadResourceChunkArgs = __Infer<typeof ReadResourceChunkProcedure.params>;
 export type ReadResourceChunkResult = __Infer<typeof ReadResourceChunkProcedure.returnType>;
+export type ReadStickerBytesArgs = __Infer<typeof ReadStickerBytesProcedure.params>;
+export type ReadStickerBytesResult = __Infer<typeof ReadStickerBytesProcedure.returnType>;
+export type StudyRoomClockArgs = __Infer<typeof StudyRoomClockProcedure.params>;
+export type StudyRoomClockResult = __Infer<typeof StudyRoomClockProcedure.returnType>;
 

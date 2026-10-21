@@ -19,30 +19,37 @@ Aprende enseñando y Repaso se conserva como trabajo existente.
 
 ## Módulos base (sección 3)
 
+La segunda entrega tiene un [registro de alcance y pruebas](segunda-entrega.md). El
+recorrido del servidor real aislado terminó correctamente el 21 de octubre de 2026 con
+tres identidades sintéticas y un reinicio: notas personales y su publicación explícita,
+adjuntos privados en directos, reportes selectivos, canales y lectura, perfiles con foto,
+aclaraciones, guías y retirada/restauración sin duplicar puntos. Esto no constituye una
+publicación en Maincloud ni una prueba de aceptación con el grupo.
+
 «Parcial» significa que falta parte del alcance, de la integración o de su validación real.
 «Manual local» indica una versión sin Gemini cuya publicación debe comprobarse por separado.
 
 | Sección | Estado del código local | Trabajo pendiente según el alcance | Entrega siguiente |
 | --- | --- | --- | --- |
-| 3.1 Mensajes y stickers | Parcial: canal, directos, reacciones y herramientas de stickers. | Canales por materia/proyecto, adjuntos con bytes reales, lectura por conversación, menciones, silenciado, bloqueo y reportes. | 2 |
+| 3.1 Mensajes y stickers | Canales de materia/tema/proyecto, directos con archivos privados, menciones, lectura individual, silencio, bloqueo y reportes con evidencia seleccionada. Importación nativa idempotente de stickers y descarga privada bajo demanda. | Validación con el grupo y avisos externos de la entrega 3. | 2: validación; 3: avisos |
 | 3.2 Tareas y Actividades | Parcial con avance privado, estados, revisión y versiones académicas. | Validación completa de permisos, coautorías e historial con archivos reales; cerrar huecos del recorrido del grupo. | 1–2 |
 | 3.3 Actividades de clase | Integradas en Tareas; evidencias, comentarios, vínculos y recuperación de adjuntos retirados por su autor. | Verificar archivos reales, versiones y permisos por equipo. La recuperación de adjuntos no implica historial completo del texto. | 1–2 |
-| 3.4 Notas de clase | Parcial: notas personales/de grupo, revisiones y comentarios. | Editor con tablas/imágenes, clasificación por sesión y restauración completa; publicación voluntaria. | 2 |
-| 3.5 Guías integrales | Manual local: fuentes, cobertura, revisiones y compendio. | Historial recuperable, extracción de archivos, generación BYOK y borradores privados con fuentes versionadas. | 2–3 |
-| 3.6 Contribuciones | Desglose calculado con reglas y límites locales. | Validación con el grupo y pruebas contra duplicados, retirada y restauración. | 2 |
-| 3.7 Preguntas | Parcial: dudas, respuestas, aceptación, reapertura y similares. | Adjuntos, aclaraciones separadas, señales de utilidad y referencias a materiales. | 2 |
-| 3.8 Votaciones | Implementación nominal local con elegibles y reglas de cierre. | Integración de novedades/avisos y validación con datos reales. | 2–3 |
-| 3.9 Perfiles | Parcial: identidad y archivo de trabajos compartidos. | Foto real, presentación, intereses, habilidades, portafolio y pestañas de guías/proyectos/contribuciones. | 2 |
-| 3.10 Cumpleaños | Parcial: día/mes voluntarios y próximos cumpleaños. | Vista anual y recordatorios efectivos con preferencias y control de duplicados. | 2–3 |
+| 3.4 Notas de clase | Editor estructurado con listas/tablas/código e imágenes privadas bajo demanda, sesión/parcial, vínculos y versiones completas. Publicar una nota personal crea una copia independiente. | Recorrido de aceptación con el grupo. | 2: validación |
+| 3.5 Guías integrales | Manual: fuentes versionadas, cobertura, revisiones, compendio e historial recuperable que conserva autoría y fecha originales de fuentes. | Extracción de archivos, generación BYOK y borradores privados con fuentes. | 3 |
+| 3.6 Contribuciones | Desglose verificable; excluye borradores y retirados, copias idénticas del mismo autor/contexto y registros repetidos. Conserva el primer crédito y su fecha aunque el original esté retirado; mantiene límites entre periodos y recupera puntos al restaurar. | Ajustar los puntos mediante una prueba con el grupo; registrar la validación real. | 2: validación |
+| 3.7 Preguntas | Adjuntos privados, aclaraciones separadas, utilidad por integrante y referencias a notas/guías compartidas; aceptación y reapertura preservadas. | Recorrido de aceptación con el grupo. | 2: validación |
+| 3.8 Votaciones | Nominales con elegibles y cierre; las abiertas aparecen en novedades. | Avisos y validación con datos reales. | 3 |
+| 3.9 Perfiles | Presentación voluntaria, foto privada en SpacetimeDB bajo demanda, intereses, conocimientos, portafolio HTTPS, materias, guías, equipo y contribuciones. Archivo con filtros por parcial, tema, fecha y tipo. | Recorrido con nombres, fotos y trabajos aportados por cada alumno; microproyectos cuando exista 7.6. | 2: validación; 5: microproyectos |
+| 3.10 Cumpleaños | Día/mes voluntarios, calendario mensual y anual, próximos cumpleaños y tratamiento del 29 de febrero. | Recordatorios efectivos, zona y preferencias de avisos con control de duplicados; validación real. | 3 |
 | 3.11 Lenguaje de señales | Pendiente: catálogo etapa 3, sin pantalla propia. | Diccionario/versiones para tres medios, constructor, ejercicios, parejas, historial privado y fichas con fuentes. | 5 |
 
 ## Funciones adicionales (sección 7)
 
 | Sección | Estado del código local | Trabajo pendiente según el alcance | Entrega siguiente |
 | --- | --- | --- | --- |
-| 7.1 ¿Qué me perdí? | Parcial: novedades y última visita. | Votaciones, guías y nuevos tipos; excluir actividad privada y separar lectura de chats. | 2 |
-| 7.2 Salas de estudio | Pendiente. | Horario, objetivo, cupo, inscripción, materiales, resultados y temporizador. | 4 |
-| 7.3 Ayuda | Manual local: publicaciones y contactos privados con conversación aceptada. | Validación real y conversión en sala cuando exista 7.2. | 4 |
+| 7.1 ¿Qué me perdí? | Novedades de guías, votaciones abiertas, ayuda y colecciones grupales; excluye retirados y contenido personal. Lectura de conversaciones separada del inicio. | Validación con el grupo; resumen BYOK opcional corresponde a entrega 3. | 2: validación; 3: IA |
+| 7.2 Salas de estudio | [Implementado sin IA](salas-de-estudio.md): salas abiertas/privadas, agenda, cupo, invitaciones, materiales, chat, temporizador compartido y resumen con publicación voluntaria. Demo y SpacetimeDB preparados y probados localmente. | Validación con el grupo y activación real fuera de esta entrega; videollamadas y editor en vivo fuera de alcance. | 4: validación |
+| 7.3 Ayuda | Manual local: publicaciones y contactos privados con conversación aceptada; «Organizar sesión» integrado con Salas. | Validación con el grupo y activación real. | 4: validación |
 | 7.4 Retos | Pendiente. | Temas, dificultad, pistas, soluciones explicadas y revisión colectiva. | 4 |
 | 7.5 Revisión de código | Pendiente. | Fragmentos/versiones, comentarios por línea y resolución de observaciones. | 4 |
 | 7.6 Microproyectos | Pendiente. | Propuestas, ingreso, responsabilidades, tablero, demostración y cierre. | 5 |
@@ -86,6 +93,27 @@ Aprende enseñando y Repaso se conserva como trabajo existente.
 La API Node de desarrollo ya no registra Google Secret Manager; BYOK de producción sigue
 pendiente de la entrega 3. El Worker R2 anterior se conserva para compatibilidad, sin crear
 recursos nuevos ni activar facturación.
+
+### Segunda entrega y coordinación con Salas — 2026-10-21
+
+- La suite conjunta terminó con **814 pruebas aprobadas**: app 463, core 72,
+  módulo SpacetimeDB 184, API 50 y web 45. Incluye las regresiones que impiden
+  usar fuentes retiradas en Aprende enseñando, tanto en la demo como en la interfaz.
+- Bindings regenerados con CLI/SDK `2.12.0`; comprobación global de tipos correcta.
+- Compilaciones finales de web/PWA, extensión y Cloudflare Pages correctas; el Worker
+  heredado pasó `wrangler deploy --dry-run`. `git diff --check` terminó sin errores.
+- El recorrido real aislado de la segunda entrega pasó con tres identidades y un
+  reinicio: publicación explícita y privada de archivos, canales, lectura, bloqueos,
+  reportes selectivos, perfiles, preguntas, historial y retirada/restauración.
+- La importación nativa de stickers comprobó reintentos idempotentes y aislamiento de
+  los bytes de un directo. Las copias idénticas de aportes no sumaron puntos aunque
+  el original estuviera retirado; restaurarlo recuperó solo su crédito original.
+- El recorrido de archivos volvió a confirmar 50 MiB y SHA-256, reanudación, reserva,
+  persistencia y revocación. Salas pasó su recorrido real aislado con invitaciones,
+  cupo concurrente, temporizador compartido, publicación única y revocación.
+- Se conserva la separación entre implementación local y despliegue: estas pruebas
+  no publican la segunda entrega ni Salas en Maincloud o Cloudflare Pages.
+
 
 ## Registro de validación en producción
 

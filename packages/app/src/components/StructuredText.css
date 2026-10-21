@@ -1,0 +1,12 @@
+.structured-toolbar { flex-wrap: wrap; gap: .35rem; }
+.structured-toolbar button { padding: .35rem .55rem; font-size: .85rem; }
+.structured-preview { padding: 1rem; border: 1px solid var(--border, #ddd); border-radius: .5rem; min-height: 8rem; }
+.structured-text ul, .structured-text ol { padding-left: 1.5rem; }
+.structured-table { overflow-x: auto; margin: 1rem 0; }
+.structured-table table { border-collapse: collapse; width: 100%; }
+.structured-table th, .structured-table td { border: 1px solid var(--border, #ccc); padding: .5rem; text-align: left; }
+.structured-image { margin: 1rem 0; }
+.structured-image img { max-width: 100%; max-height: 40rem; object-fit: contain; }
+.structured-image figcaption { color: var(--muted, #666); font-size: .85rem; }
+.structured-text blockquote { border-left: 3px solid var(--border, #ccc); padding-left: 1rem; margin-left: 0; }
+.structured-text code { white-space: pre-wrap; overflow-wrap: anywhere; }

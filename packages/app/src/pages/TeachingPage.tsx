@@ -107,21 +107,24 @@ export function TeachingFormPage() {
   const data = useSnapshot();
   const [params] = useSearchParams();
   const sourceKey = params.get('nota') ? `note:${params.get('nota')}` : params.get('guia') ? `guide:${params.get('guia')}` : '';
-  return <CreatePractice key={`${data.me?.id}:${sourceKey}`} data={data} sourceKey={sourceKey} />;
+  const roomId = params.get('sala') ?? '';
+  const room = data.studyRooms?.find((candidate) => candidate.id === roomId && data.roomMembers.some((member) => member.roomId === candidate.id && member.memberId === data.me?.id && member.status === 'joined'));
+  if (roomId && !room) return <Empty icon="lock" title="La sala no está disponible" action={<Link to="/m/salas" className="button">Ver salas</Link>}>Tu acceso cambió. Puedes empezar otra práctica desde Aprende enseñando.</Empty>;
+  return <CreatePractice key={`${data.me?.id}:${roomId}:${sourceKey}`} data={data} sourceKey={sourceKey} room={room} />;
 }
 
-function CreatePractice({ data, sourceKey }: { data: Snapshot; sourceKey: string }) {
+function CreatePractice({ data, sourceKey, room }: { data: Snapshot; sourceKey: string; room?: { id: string; subjectId: string; topic: string; title: string } }) {
   const source = useDataSource();
   const navigate = useNavigate();
-  const sourceNote = sourceKey.startsWith('note:') ? data.notes.find((n) => `note:${n.id}` === sourceKey) : undefined;
-  const sourceGuide = sourceKey.startsWith('guide:') ? data.guides.find((g) => `guide:${g.id}` === sourceKey) : undefined;
-  const [subjectId, setSubjectId] = useState(sourceNote?.subjectId ?? sourceGuide?.subjectId ?? data.subjects[0]?.id ?? '');
-  const [topic, setTopic] = useState(sourceNote?.topic || sourceNote?.title || sourceGuide?.title || '');
+  const sourceNote = sourceKey.startsWith('note:') ? data.notes.find((n) => `note:${n.id}` === sourceKey && !n.withdrawnAt) : undefined;
+  const sourceGuide = sourceKey.startsWith('guide:') ? data.guides.find((g) => `guide:${g.id}` === sourceKey && !g.withdrawnAt) : undefined;
+  const [subjectId, setSubjectId] = useState(room?.subjectId ?? sourceNote?.subjectId ?? sourceGuide?.subjectId ?? data.subjects[0]?.id ?? '');
+  const [topic, setTopic] = useState(room?.topic || sourceNote?.topic || sourceNote?.title || sourceGuide?.title || '');
   const [selectedSource, setSelectedSource] = useState(sourceKey);
   const [initial, setInitial] = useState<TeachingExplanation>({ ...EMPTY_TEACHING_EXPLANATION });
   const { error, pending, run } = useAction();
-  const notes = data.notes.filter((n) => n.subjectId === subjectId && (n.visibility === 'group' || n.authorId === data.me?.id));
-  const guides = data.guides.filter((g) => g.subjectId === subjectId);
+  const notes = data.notes.filter((n) => !n.withdrawnAt && n.subjectId === subjectId && (n.visibility === 'group' || n.authorId === data.me?.id));
+  const guides = data.guides.filter((g) => !g.withdrawnAt && g.subjectId === subjectId);
   const accessible = !selectedSource || notes.some((n) => `note:${n.id}` === selectedSource) || guides.some((g) => `guide:${g.id}` === selectedSource);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -134,6 +137,7 @@ function CreatePractice({ data, sourceKey }: { data: Snapshot; sourceKey: string
   return <>
     <Link to={BASE} className="back with-icon"><Icon name="back" size={16} /> Aprende enseñando</Link>
     <header className="page-header"><div><h1>Nueva práctica</h1><p className="muted">Elige un tema y empieza a explicarlo. No necesitas terminar para guardar.</p></div></header>
+    {room && <p className="teaching-privacy with-icon"><Icon name="lock" size={16} /> Desde «{room.title}». Esta práctica no se comparte con la sala. Puedes publicar tu explicación revisada como nota cuando quieras compartirla.</p>}
     {!data.subjects.length ? <Empty icon="folder" title="Primero necesitas una materia">Agrega una materia desde Tareas y Actividades para organizar tus prácticas.</Empty> : <form className="form form--wide panel" onSubmit={submit} aria-busy={pending}>
       <fieldset className="teaching-fields" disabled={pending}>
         <div className="form__grid"><SubjectSelect subjects={data.subjects} value={subjectId} onChange={(value) => { setSubjectId(value); setSelectedSource(''); }} />

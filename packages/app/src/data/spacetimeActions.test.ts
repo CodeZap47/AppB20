@@ -154,13 +154,13 @@ describe('acciones conectadas a SpacetimeDB', () => {
     expect(openDirectConversation).toHaveBeenCalledWith({ other: person(OTHER) });
   });
 
-  it('no simula subidas ni registra archivos o stickers sin almacenamiento', async () => {
+  it('no simula subidas ni registra archivos inválidos como stickers', async () => {
     const attachWorkFile = vi.fn(async () => {});
     const createStickerPack = vi.fn(async () => {});
     const { actions } = setup({ attachWorkFile, createStickerPack });
-    const file = { name: 'tarea.pdf', size: 120 } as File;
+    const file = new File(['contenido PDF'], 'tarea.pdf', { type: 'application/pdf' });
     await expect(actions.attachWorkFile('1', file)).rejects.toThrow('almacenamiento');
-    await expect(actions.importStickers('Paquete', [file])).rejects.toThrow('almacenamiento');
+    await expect(actions.importStickers('Paquete', [file])).rejects.toThrow('no es una imagen');
     expect(attachWorkFile).not.toHaveBeenCalled();
     expect(createStickerPack).not.toHaveBeenCalled();
   });

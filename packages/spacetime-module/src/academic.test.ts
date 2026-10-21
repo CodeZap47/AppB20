@@ -585,8 +585,8 @@ describe('adjuntos retirados de evidencias', () => {
     remove_resource_file(ctx, { fileId: otherId, expectedVersion: 2 });
     db.evidence.id.delete(40n);
     expect(() => restore_resource_file(ctx, { fileId: otherId, expectedVersion: 3 })).toThrow('evidencia no existe');
-    expect(() => get_resource_manifest(proc, { fileId: otherId })).toThrow('evidencia no existe');
-    expect(() => read_resource_chunk(proc, { fileId: otherId, index: 0 })).toThrow('evidencia no existe');
+    expect(() => get_resource_manifest(proc, { fileId: otherId })).toThrow('acceso');
+    expect(() => read_resource_chunk(proc, { fileId: otherId, index: 0 })).toThrow('acceso');
   });
 
   it('recupera también la referencia anterior R2 sin cambiar ID o ubicación', () => {

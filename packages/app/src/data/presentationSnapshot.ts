@@ -21,9 +21,10 @@ export function readPresentationsSnapshot(connection: Pick<DbConnection, 'db'>, 
   const ownPracticeIds = new Set(visiblePractices.filter((row) => row.ownerId.toHexString() === identity).map((row) => row.id));
   const ownAttempts = new Set(attempts.filter((row) => ownPracticeIds.has(row.practiceId)).map((row) => row.id));
   const attemptIds = new Set(attempts.map((row) => row.id));
-  const readableSource = (subjectId: bigint, kind?: string, id?: bigint) => kind === 'note'
+  const withdrawn = new Set(rows(db.contentStatuses).filter((row) => row.withdrawnAt).map((row) => `${row.kind}:${row.targetId}`));
+  const readableSource = (subjectId: bigint, kind?: string, id?: bigint) => !withdrawn.has(`${kind}:${id}`) && (kind === 'note'
     ? rows(db.notes).some((row) => row.id === id && row.subjectId === subjectId && (row.visibility === 'group' || row.author.toHexString() === identity))
-    : kind === 'guide' && rows(db.studyGuides).some((row) => row.id === id && row.subjectId === subjectId);
+    : kind === 'guide' && rows(db.studyGuides).some((row) => row.id === id && row.subjectId === subjectId));
   const source = (row: { subjectId: bigint; sourceKind?: string; sourceId?: bigint; sourceVersion?: number }, own: boolean) =>
     own || readableSource(row.subjectId, row.sourceKind, row.sourceId) ? {
       sourceKind: row.sourceKind ? checked(row.sourceKind, ['note', 'guide']) : undefined,

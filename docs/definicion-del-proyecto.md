@@ -553,6 +553,8 @@ Las siguientes doce ideas quedan incorporadas al alcance ampliado. Algunas será
 
 ### 7.2. Salas de estudio y programación en pareja
 
+**Implementación local:** Salas ya está disponible sin Gemini en demo y preparada para SpacetimeDB, con acceso abierto o por invitación, materiales de Notas/Guías, integración con Ayuda y prácticas privadas de Aprende enseñando. Incluye conversación propia, temporizador compartido, resumen con control de versiones y publicación voluntaria como nota. El comportamiento, los permisos y las verificaciones están documentados en [salas-de-estudio.md](salas-de-estudio.md). Videollamadas y editor de código en vivo quedan fuera de esta entrega.
+
 **Propósito:** facilitar sesiones de trabajo entre compañeros con un objetivo concreto.
 
 **Funciones propuestas**

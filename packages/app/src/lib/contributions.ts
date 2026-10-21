@@ -23,15 +23,39 @@ export interface ContributionEntry extends ContributionEvent {
 
 export type ScoredEntry = ScoredEvent & ContributionEntry;
 
+/** Comparación exacta: conserva mayúsculas, espacios internos y código. */
+const contributionText = (value: string) => value.replace(/\r\n?/g, '\n').trim();
+function contentSignature(kind: string, context: unknown[], content: unknown[], files: unknown[], fallback: Id): string {
+  // Sin texto ni adjuntos identificables no suponemos que dos trabajos vacíos son iguales.
+  const hasContent = content.some((part) => typeof part === 'string' ? Boolean(part) : Array.isArray(part) && part.some(Boolean));
+  return JSON.stringify([kind, context, content, files, !hasContent && !files.length ? fallback : '']);
+}
+
 /**
  * Todos los aportes que el usuario puede ver, sacados de los registros del grupo. No incluye
  * mensajes, preguntas ni apuntes personales: no suman (ver `NOT_SCORED`).
  */
 export function contributionEntries(data: Snapshot): ContributionEntry[] {
   const entries: ContributionEntry[] = [];
+  // Las firmas completas solo viven durante este cálculo. El desglose recibe una clave
+  // opaca local y nunca duplica cuerpos de notas/guías en campos de puntuación.
+  const copies = new Map<string, string>();
+  const contentKey = (...args: Parameters<typeof contentSignature>) => {
+    const signature = contentSignature(...args);
+    let key = copies.get(signature);
+    if (!key) { key = `copy:${copies.size}`; copies.set(signature, key); }
+    return key;
+  };
   const assignmentTitle = (id: Id) => data.assignments.find((a) => a.id === id)?.title ?? 'Tarea';
+  const filesFor = (kind: string, id: Id) => {
+    const files = data.resourceFiles.filter((file) => file.targetKind === kind && file.targetId === id && !file.removedAt)
+      .map((file) => [file.id, file.name, file.size, file.contentType]);
+    if (kind === 'work' && !files.length) files.push(...data.workFiles.filter((file) => file.workId === id).map((file) => [file.id, file.name, file.size, file.contentType]));
+    return files.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+  };
 
   for (const work of data.works) {
+    if (work.withdrawnAt || work.status === 'draft') continue;
     const title = work.title || assignmentTitle(work.assignmentId);
     for (const memberId of new Set(work.authorIds)) {
       entries.push({
@@ -39,6 +63,7 @@ export function contributionEntries(data: Snapshot): ContributionEntry[] {
         memberId,
         at: work.createdAt,
         refId: work.id,
+        limitKey: contentKey('work', [work.assignmentId], [contributionText(work.title), contributionText(work.description), contributionText(work.topic ?? '')], filesFor('work', work.id), work.id),
         title,
         link: `/m/tareas/${work.assignmentId}?trabajo=${work.id}`,
       });
@@ -46,12 +71,13 @@ export function contributionEntries(data: Snapshot): ContributionEntry[] {
   }
 
   for (const note of data.notes) {
-    if (note.visibility !== 'group') continue;
+    if (note.visibility !== 'group' || note.withdrawnAt) continue;
     entries.push({
       kind: 'apunte',
       memberId: note.authorId,
       at: note.createdAt,
       refId: note.id,
+      limitKey: contentKey('note', [note.subjectId, note.termId ?? ''], [contributionText(note.title), contributionText(note.body), contributionText(note.topic)], filesFor('note', note.id), note.id),
       title: note.title,
       link: `/m/notas/${note.id}`,
     });
@@ -59,7 +85,7 @@ export function contributionEntries(data: Snapshot): ContributionEntry[] {
 
   for (const comment of data.noteComments) {
     const note = data.notes.find((n) => n.id === comment.noteId);
-    if (!note || note.visibility !== 'group') continue;
+    if (!note || note.visibility !== 'group' || note.withdrawnAt) continue;
     entries.push({
       kind: 'comentario',
       memberId: comment.authorId,
@@ -75,7 +101,7 @@ export function contributionEntries(data: Snapshot): ContributionEntry[] {
 
   for (const answer of data.answers) {
     const question = data.questions.find((q) => q.id === answer.questionId);
-    if (!question) continue;
+    if (!question || question.withdrawnAt || answer.withdrawnAt) continue;
     const own = question.authorId === answer.authorId;
     const link = `/m/preguntas/${question.id}`;
     entries.push({
@@ -105,7 +131,7 @@ export function contributionEntries(data: Snapshot): ContributionEntry[] {
       kind: 'pagina',
       memberId: assignment.createdBy,
       at: assignment.createdAt,
-      refId: assignment.id,
+      refId: `assignment:${assignment.id}`,
       title: assignment.title,
       link: `/m/tareas/${assignment.id}`,
     });
@@ -116,7 +142,7 @@ export function contributionEntries(data: Snapshot): ContributionEntry[] {
       kind: 'pagina',
       memberId: activity.createdBy,
       at: activity.createdAt,
-      refId: activity.id,
+      refId: `activity:${activity.id}`,
       title: activity.title,
       link: `/m/actividades/${activity.id}`,
     });
@@ -138,6 +164,7 @@ export function contributionEntries(data: Snapshot): ContributionEntry[] {
   }
 
   for (const evidence of data.evidences) {
+    if (evidence.withdrawnAt) continue;
     const activity = data.activities.find((a) => a.id === evidence.activityId);
     for (const memberId of new Set([evidence.authorId, ...evidence.participantIds])) {
       entries.push({
@@ -145,6 +172,7 @@ export function contributionEntries(data: Snapshot): ContributionEntry[] {
         memberId,
         at: evidence.createdAt,
         refId: evidence.id,
+        limitKey: contentKey('evidence', [evidence.activityId], [contributionText(evidence.content)], filesFor('evidence', evidence.id), evidence.id),
         title: activity?.title ?? 'Actividad de clase',
         link: `/m/actividades/${evidence.activityId}`,
       });
@@ -152,11 +180,13 @@ export function contributionEntries(data: Snapshot): ContributionEntry[] {
   }
 
   for (const guide of data.guides) {
+    if (guide.withdrawnAt) continue;
     entries.push({
       kind: 'guia',
       memberId: guide.createdBy,
       at: guide.createdAt,
       refId: guide.id,
+      limitKey: contentKey('guide', [guide.subjectId, guide.termId ?? ''], [contributionText(guide.title), guide.topics.map(contributionText), guide.sections.map(contributionText)], filesFor('guide', guide.id), guide.id),
       title: guide.title,
       link: `/m/guias/${guide.id}`,
     });
@@ -164,12 +194,13 @@ export function contributionEntries(data: Snapshot): ContributionEntry[] {
 
   for (const source of data.guideSources) {
     const guide = data.guides.find((g) => g.id === source.guideId);
-    if (!guide || source.status !== 'processed') continue;
+    if (!guide || guide.withdrawnAt || source.status !== 'processed') continue;
     entries.push({
       kind: 'fuente',
       memberId: source.addedBy,
       at: source.addedAt,
       refId: source.id,
+      limitKey: `${source.guideId}:${source.kind}:${source.refId}`,
       title: guide.title,
       link: `/m/guias/${guide.id}`,
     });
@@ -177,18 +208,28 @@ export function contributionEntries(data: Snapshot): ContributionEntry[] {
 
   for (const review of data.guideReviews) {
     const guide = data.guides.find((g) => g.id === review.guideId);
-    if (!guide) continue;
+    if (!guide || guide.withdrawnAt) continue;
     entries.push({
       kind: 'revision-guia',
       memberId: review.reviewerId,
       at: review.createdAt,
       refId: review.id,
+      limitKey: `${review.guideId}:${review.guideVersion}`,
       title: `${guide.title} (versión ${review.guideVersion})`,
       link: `/m/guias/${guide.id}`,
     });
   }
 
-  return entries;
+  // El servidor conserva el origen incluso si el primer registro fue retirado y ya no
+  // puede leerse. Solo publica fecha y referencia del aporte actual, nunca su contenido.
+  const origins = new Map((data.contributionOrigins ?? []).map((origin) => [
+    JSON.stringify([origin.kind, origin.refId, origin.memberId]), origin,
+  ]));
+  return entries.map((entry) => {
+    const origin = origins.get(JSON.stringify([entry.kind, entry.refId, entry.memberId]));
+    return origin ? { ...entry, at: origin.creditedAt, excluded: entry.excluded || (origin.duplicateOf
+      ? 'Es una copia idéntica de un aporte anterior del mismo autor y contexto.' : undefined) } : entry;
+  });
 }
 
 export function scoreEntries(

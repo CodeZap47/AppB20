@@ -12,6 +12,7 @@ import type { Id, Member, Snapshot, Subject } from '../data/types';
 import { Avatar } from '../components/Avatar';
 import { AvatarStack } from '../components/AvatarStack';
 import { BirthdayForm } from '../components/BirthdayForm';
+import { ProfilePhoto, ProfilePresentationEditor } from '../components/ProfilePresentation';
 import { Empty } from '../components/Empty';
 import { Icon } from '../components/Icon';
 import { useAction } from '../components/useAction';
@@ -19,15 +20,16 @@ import { formatDate, formatDayMonth, formatMonth, parseDay } from '../lib/format
 import { previewText } from '../lib/messages';
 import { matches } from '../lib/search';
 import { authorsLabel, bySubject, NO_TERM } from '../lib/works';
+import { buildLeaderboard, standingSummary } from '../lib/contributions';
 
 /** Lo que cada quien ha aportado al grupo, para las tarjetas y el encabezado del perfil. */
 function contributionsOf(memberId: Id, data: Snapshot) {
-  const works = data.works.filter((w) => w.authorIds.includes(memberId));
-  const notes = data.notes.filter((n) => n.authorId === memberId);
-  const answers = data.answers.filter((a) => a.authorId === memberId);
+  const works = data.works.filter((w) => w.authorIds.includes(memberId) && !w.withdrawnAt && w.status !== 'draft');
+  const notes = data.notes.filter((n) => n.authorId === memberId && !n.withdrawnAt && n.visibility === 'group');
+  const answers = data.answers.filter((a) => a.authorId === memberId && !a.withdrawnAt && data.questions.some((q) => q.id === a.questionId && !q.withdrawnAt));
   const helpful = answers.filter((a) => data.questions.some((q) => q.acceptedAnswerId === a.id));
-  const questions = data.questions.filter((q) => q.authorId === memberId);
-  const evidences = data.evidences.filter((e) => e.participantIds.includes(memberId));
+  const questions = data.questions.filter((q) => q.authorId === memberId && !q.withdrawnAt);
+  const evidences = data.evidences.filter((e) => (e.authorId === memberId || e.participantIds.includes(memberId)) && !e.withdrawnAt);
   const helpPosts = data.helpPosts.filter(
     (post) => post.authorId === memberId && post.status !== 'withdrawn',
   );
@@ -71,7 +73,10 @@ export function ProfilesPage() {
         Number(b.id === me?.id) - Number(a.id === me?.id) ||
         a.displayName.localeCompare(b.displayName, 'es'),
     );
-  const shown = active.filter((m) => matches(query, m.displayName));
+  const shown = active.filter((m) => {
+    const profile = data.memberProfiles.find((entry) => entry.memberId === m.id);
+    return matches(query, m.displayName, profile?.preferredName ?? '', profile?.bio ?? '', ...(profile?.interests ?? []), ...(profile?.skills ?? []));
+  });
 
   return (
     <>
@@ -97,7 +102,7 @@ export function ProfilesPage() {
           <Icon name="search" size={18} />
           <input
             type="search"
-            placeholder="Buscar por nombre"
+            placeholder="Buscar por nombre, intereses o conocimientos"
             aria-label="Buscar integrantes"
             value={query}
             onChange={(e) =>
@@ -200,8 +205,10 @@ function EditName({ current, onDone }: { current: string; onDone: () => void }) 
 
 const TABS = [
   { id: '', label: 'Trabajos' },
-  { id: 'notas', label: 'Notas' },
+  { id: 'notas', label: 'Notas y guías' },
+  { id: 'proyectos', label: 'Proyectos' },
   { id: 'colaboracion', label: 'Colaboración' },
+  { id: 'contribuciones', label: 'Contribuciones' },
 ] as const;
 type Tab = (typeof TABS)[number]['id'];
 const isTab = (value: string | null): value is Tab => TABS.some((t) => t.id === value);
@@ -218,16 +225,24 @@ function WorksTab({
 }) {
   const data = useSnapshot();
   const { me, members, assignments, workFiles, subjects, terms } = data;
+  const [termFilter, setTermFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+  const [topicFilter, setTopicFilter] = useState('');
+  const [fromDate, setFromDate] = useState('');
   const { works } = contributionsOf(member.id, data);
   const isMe = member.id === me?.id;
   const rows = works
     .map((work) => ({ work, assignment: assignments.find((a) => a.id === work.assignmentId) }))
+    .filter(({ work, assignment }) => (!termFilter || assignment?.termId === termFilter)
+      && (!typeFilter || assignment?.kind === typeFilter)
+      && matches(topicFilter, work.topic ?? '', assignment?.topic ?? '', work.title)
+      && (!fromDate || work.createdAt >= parseDay(fromDate)))
     .sort((a, b) => b.work.updatedAt.getTime() - a.work.updatedAt.getTime());
   const bySubjectId = (id: string) => rows.filter((r) => r.assignment?.subjectId === id);
   const subjectList = subjects.filter((s) => bySubjectId(s.id).length > 0).sort(bySubject);
   const shownSubjects = subjectList.filter((s) => !subjectId || s.id === subjectId);
 
-  if (rows.length === 0) {
+  if (works.length === 0) {
     return (
       <Empty
         icon="folder"
@@ -249,6 +264,14 @@ function WorksTab({
 
   return (
     <>
+      <div className="toolbar">
+        <label className="field"><span className="field__label">Parcial</span><select value={termFilter} onChange={(event) => setTermFilter(event.target.value)}><option value="">Todos</option>{terms.filter((term) => !subjectId || term.subjectId === subjectId).map((term) => <option key={term.id} value={term.id}>{subjects.find((subject) => subject.id === term.subjectId)?.name} · {term.name}</option>)}</select></label>
+        <label className="field"><span className="field__label">Tipo</span><select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}><option value="">Todos</option>{Object.entries(WORK_KIND_LABEL).map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}</select></label>
+        <label className="field"><span className="field__label">Tema o título</span><input value={topicFilter} onChange={(event) => setTopicFilter(event.target.value)} /></label>
+        <label className="field"><span className="field__label">Publicado desde</span><input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} /></label>
+        {isMe && <Link to="/m/tareas" className="button secondary">Publicar un trabajo</Link>}
+      </div>
+      {!shownSubjects.length && <p className="muted">No hay trabajos con estos filtros.</p>}
       {subjectList.length > 1 && (
         <div className="chips chips--small chips--scroll" role="group" aria-label="Materia">
           <button
@@ -361,7 +384,8 @@ function NotesTab({ member }: { member: Member }) {
   const isMe = member.id === me?.id;
   const sorted = [...notes].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 
-  if (sorted.length === 0) {
+  const guides = data.guides.filter((guide) => !guide.withdrawnAt && (guide.createdBy === member.id || guide.updatedBy === member.id || data.guideSources.some((source) => source.guideId === guide.id && source.addedBy === member.id) || data.guideReviews.some((review) => review.guideId === guide.id && review.reviewerId === member.id)));
+  if (sorted.length === 0 && guides.length === 0) {
     return (
       <Empty
         icon="file"
@@ -382,7 +406,7 @@ function NotesTab({ member }: { member: Member }) {
   }
 
   return (
-    <ul className="work-grid">
+    <><h2>Notas compartidas</h2><ul className="work-grid">
       {sorted.map((n) => {
         const excerpt = previewText(n.body);
         return (
@@ -410,7 +434,7 @@ function NotesTab({ member }: { member: Member }) {
           </li>
         );
       })}
-    </ul>
+    </ul><h2>Guías en las que colaboró</h2>{guides.length ? <ul className="work-grid">{guides.map((guide) => <li key={guide.id}><Link className="work-card" to={`/m/guias/${guide.id}`}><strong>{guide.title}</strong><span className="muted">Versión {guide.version} · {subjects.find((subject) => subject.id === guide.subjectId)?.name}</span></Link></li>)}</ul> : <p className="muted">Sin guías compartidas todavía.</p>}</>
   );
 }
 
@@ -525,6 +549,20 @@ function CollaborationTab({ member }: { member: Member }) {
   );
 }
 
+function ProjectsTab({ member }: { member: Member }) {
+  const data = useSnapshot();
+  const projects = contributionsOf(member.id, data).works.filter((work) => new Set(work.authorIds).size > 1);
+  return <section><h2>Trabajos de equipo</h2><p className="muted">Referencias al mismo trabajo compartido con sus autores. Las versiones y los archivos se consultan en el registro original.</p>
+    {projects.length ? <ul className="work-grid">{projects.map((work) => <li key={work.id}><Link className="work-card" to={`/m/tareas/${work.assignmentId}?trabajo=${work.id}`}><strong>{work.title || data.assignments.find((assignment) => assignment.id === work.assignmentId)?.title}</strong><span>{authorsLabel(work.authorIds, data.members)}</span><span className="muted">Versión {work.version} · {formatDate(work.updatedAt)}</span></Link></li>)}</ul> : <p className="muted">Todavía no ha compartido trabajos de equipo.</p>}
+  </section>;
+}
+
+function ContributionsTab({ member }: { member: Member }) {
+  const data = useSnapshot();
+  const standing = buildLeaderboard(data, {}).find((entry) => entry.memberId === member.id);
+  return <section className="panel"><h2>Contribuciones al grupo</h2><p>{standing?.points ?? 0} puntos{standing?.rank ? ` · lugar ${standing.rank}` : ''}</p><p className="muted">{standing && standingSummary(standing, 5) || 'Todavía no hay aportes reconocidos.'}</p><Link to={`/m/leaderboard/${member.id}?periodo=todo`}>Ver cada aporte y las reglas de puntuación</Link></section>;
+}
+
 /** Perfil de un integrante: quién es, su archivo de trabajos y lo que ha aportado (3.9). */
 export function ProfilePage() {
   const { memberId = '' } = useParams();
@@ -534,8 +572,10 @@ export function ProfilePage() {
   const { me, members, birthdays, subjects } = data;
   const { error, run } = useAction();
   const [editing, setEditing] = useState(false);
+  const [editingPresentation, setEditingPresentation] = useState(false);
   const [params, setParams] = useSearchParams();
   const member = members.find((m) => m.id === memberId);
+  const profile = data.memberProfiles.find((entry) => entry.memberId === memberId);
 
   if (!member) {
     return (
@@ -575,7 +615,9 @@ export function ProfilePage() {
   const memberSubjects = subjects.filter((s) => c.subjectIds.has(s.id)).sort(bySubject);
   const counts: Record<Tab, number> = {
     '': c.works.length,
-    notas: c.notes.length,
+    notas: c.notes.length + data.guides.filter((guide) => !guide.withdrawnAt && (guide.createdBy === member.id || guide.updatedBy === member.id || data.guideSources.some((source) => source.guideId === guide.id && source.addedBy === member.id) || data.guideReviews.some((review) => review.guideId === guide.id && review.reviewerId === member.id))).length,
+    proyectos: c.works.filter((work) => new Set(work.authorIds).size > 1).length,
+    contribuciones: buildLeaderboard(data, {}).find((entry) => entry.memberId === member.id)?.points ?? 0,
     colaboracion:
       new Set(c.answers.map((a) => a.questionId)).size +
       c.questions.length +
@@ -595,16 +637,17 @@ export function ProfilePage() {
       </Link>
 
       <header className="profile-hero">
-        <Avatar member={member} size={88} />
+        <ProfilePhoto member={member} profile={profile} />
         <div className="profile-hero__body">
           {editing ? (
             <EditName current={member.displayName} onDone={() => setEditing(false)} />
           ) : (
             <>
               <h1>
-                {member.displayName}
+                {profile?.preferredName || member.displayName}
                 {isMe && <span className="muted"> (tú)</span>}
               </h1>
+              {profile?.preferredName && <p>{member.displayName}</p>}
               <p className="muted">
                 {member.isCreator && <span className="badge badge--admin">Administra la app</span>}{' '}
                 En el grupo desde {formatMonth(member.joinedAt).toLowerCase()}
@@ -633,13 +676,13 @@ export function ProfilePage() {
         {!editing && (
           <div className="row profile-hero__actions">
             {isMe ? (
-              <button
+              <><button
                 type="button"
                 className="secondary with-icon"
                 onClick={() => setEditing(true)}
               >
                 <Icon name="edit" size={16} /> Editar nombre
-              </button>
+              </button><button type="button" className="secondary" onClick={() => setEditingPresentation((current) => !current)}>Editar presentación y foto</button></>
             ) : (
               <button type="button" className="with-icon" onClick={message}>
                 <Icon name="send" size={16} /> Enviar mensaje
@@ -653,6 +696,19 @@ export function ProfilePage() {
           {error}
         </p>
       )}
+      {editingPresentation && isMe && <ProfilePresentationEditor profile={profile} onDone={() => setEditingPresentation(false)} />}
+      {profile && <section className="panel">
+        <h2>Presentación</h2>
+        {profile.bio && <p style={{ whiteSpace: 'pre-wrap' }}>{profile.bio}</p>}
+        <dl className="facts">
+          {profile.interests.length > 0 && <><dt>Intereses</dt><dd>{profile.interests.join(', ')}</dd></>}
+          {profile.learningGoals && <><dt>Objetivos de aprendizaje</dt><dd>{profile.learningGoals}</dd></>}
+          {profile.skills.length > 0 && <><dt>Puede explicar</dt><dd>{profile.skills.join(', ')}</dd></>}
+          {profile.helpTopics.length > 0 && <><dt>Busca apoyo en</dt><dd>{profile.helpTopics.join(', ')}</dd></>}
+          {profile.subjectIds.length > 0 && <><dt>Materias que cursa</dt><dd>{profile.subjectIds.map((id) => subjects.find((subject) => subject.id === id)?.name).filter(Boolean).join(', ')}</dd></>}
+        </dl>
+        {profile.portfolioLinks.length > 0 && <><h3>Portafolio</h3><ul className="links">{profile.portfolioLinks.map((url) => <li key={url}><a href={url} target="_blank" rel="noopener noreferrer">{url}</a></li>)}</ul></>}
+      </section>}
 
       <div className="detail">
         <div className="detail__main">
@@ -676,7 +732,9 @@ export function ProfilePage() {
             />
           )}
           {tab === 'notas' && <NotesTab member={member} />}
+          {tab === 'proyectos' && <ProjectsTab member={member} />}
           {tab === 'colaboracion' && <CollaborationTab member={member} />}
+          {tab === 'contribuciones' && <ContributionsTab member={member} />}
         </div>
 
         <aside className="detail__side">

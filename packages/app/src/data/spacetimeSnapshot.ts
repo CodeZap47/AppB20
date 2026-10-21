@@ -3,10 +3,15 @@ import type { Snapshot } from './types';
 import { enrichAcademicSnapshot } from './academicSnapshot';
 import { emptyPresentationsSnapshot } from './presentationDemo';
 import { readPresentationsSnapshot, PRESENTATION_VIEWS } from './presentationSnapshot';
+import { emptyDelivery2, enrichDelivery2Snapshot } from './delivery2Snapshot';
+import { emptyStudyRooms } from './roomTypes';
+import { enrichStudyRoomsSnapshot } from './roomsSnapshot';
 
 /** Solo vistas públicas del módulo; nunca tablas privadas ni SELECT * de toda la base. */
 export const PUBLIC_VIEWS = [
   ...PRESENTATION_VIEWS,
+  'chat_channels', 'channel_messages', 'my_conversation_states', 'my_blocked_members', 'my_message_reports', 'member_profiles',
+  'note_details', 'note_versions', 'guide_versions', 'question_comments', 'answer_usefulness', 'question_links', 'resource_versions', 'content_statuses', 'contribution_origins',
   'my_member', 'members', 'invitations', 'subjects', 'terms', 'calendar',
   'assignments', 'page_revisions', 'works', 'work_authors', 'work_files',
   'assignment_details', 'my_progress', 'work_details', 'work_revisions', 'work_reviews',
@@ -16,6 +21,7 @@ export const PUBLIC_VIEWS = [
   'notes', 'note_comments', 'questions', 'answers', 'my_last_seen',
   'study_guides', 'guide_sources', 'guide_reviews', 'polls', 'poll_votes',
   'help_posts', 'my_help_contact_requests',
+  'study_rooms', 'room_members', 'room_materials', 'room_entries', 'room_timers', 'room_summaries', 'my_help_room_links',
   'teaching_practices', 'my_teaching_personal', 'teaching_questions',
   'spaced_collections', 'spaced_cards', 'spaced_unavailable_cards', 'my_spaced_enrollments', 'my_spaced_progress', 'my_spaced_reviews',
 ] as const;
@@ -23,6 +29,8 @@ export const PUBLIC_VIEWS = [
 export function emptySnapshot(connection: Snapshot['connection'], connectionError?: string): Snapshot {
   return {
     ...emptyPresentationsSnapshot(),
+    ...emptyStudyRooms(),
+    ...emptyDelivery2(),
     connection,
     ...(connectionError ? { connectionError } : {}),
     me: undefined,
@@ -119,7 +127,9 @@ export function readSnapshot(connection: Pick<DbConnection, 'db'>, identity: str
     createdAt: row.createdAt.toDate(), updatedAt: row.updatedAt.toDate(),
   }));
 
-  return enrichAcademicSnapshot(connection, {
+  return enrichStudyRoomsSnapshot(connection, enrichDelivery2Snapshot(connection, enrichAcademicSnapshot(connection, {
+    ...emptyStudyRooms(),
+    ...emptyDelivery2(),
     myProgress: [], workRevisions: [], workReviews: [], academicComments: [],
     resourceFiles: [], activityLinks: [], pageSnapshots: [],
     ...readPresentationsSnapshot(connection, identity, members),
@@ -236,7 +246,7 @@ export function readSnapshot(connection: Pick<DbConnection, 'db'>, identity: str
       shared: row.shared, createdAt: row.createdAt.toDate(),
     })),
     stickers: [...db.stickers.iter()].map((row) => ({
-      id: row.id.toString(), packId: row.packId.toString(), url: '', contentType: row.contentType,
+      id: row.id.toString(), packId: row.packId.toString(), url: row.storageKey.startsWith('native:') ? row.storageKey : '', contentType: row.contentType,
       size: fileSize(row.size), animated: row.animated, createdAt: row.createdAt.toDate(),
     })),
     chatCommands: [...db.myChatCommands.iter()].map((row) => ({
@@ -308,5 +318,5 @@ export function readSnapshot(connection: Pick<DbConnection, 'db'>, identity: str
       votedAt: row.votedAt.toDate(), changedAt: row.changedAt?.toDate(),
     })),
     lastSeenAt: [...db.myLastSeen.iter()].find((row) => row.identity.toHexString() === identity)?.at.toDate(),
-  }, identity);
+  }, identity), identity), identity);
 }

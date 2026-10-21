@@ -1,6 +1,7 @@
 import { celebrationDate } from '@b20/core';
 import type { Assignment, Birthday, Id, Snapshot } from '../data/types';
 import { formatDate, parseDay } from './format';
+import { unreadMessages as unreadChatMessages } from './chat';
 
 export type NewsKind =
   | 'tarea'
@@ -11,7 +12,11 @@ export type NewsKind =
   | 'evidencia'
   | 'pregunta'
   | 'respuesta'
-  | 'resuelta';
+  | 'resuelta'
+  | 'guia'
+  | 'votacion'
+  | 'ayuda'
+  | 'repaso';
 
 export interface NewsItem {
   key: string;
@@ -33,13 +38,18 @@ export const NEWS_LABEL: Record<NewsKind, string> = {
   pregunta: 'Preguntas',
   respuesta: 'Respuestas',
   resuelta: 'Resueltas',
+  guia: 'Guías',
+  votacion: 'Votaciones abiertas',
+  ayuda: 'Ayuda entre compañeros',
+  repaso: 'Colecciones de repaso',
 };
 
 /**
  * Novedades del grupo para «¿Qué me perdí?» (7.1), sin IA. Solo usa lo que el snapshot ya
  * permite ver (las notas personales ajenas nunca llegan) y omite lo que hizo el propio usuario.
  */
-export function buildNews(snapshot: Snapshot): NewsItem[] {
+export function buildNews(snapshot: Snapshot, now = new Date()): NewsItem[] {
+  if (!snapshot.me || snapshot.me.status !== 'active') return [];
   const meId = snapshot.me?.id;
   const assignmentOf = (id: Id) => snapshot.assignments.find((a) => a.id === id);
   const questionOf = (id: Id) => snapshot.questions.find((q) => q.id === id);
@@ -74,7 +84,7 @@ export function buildNews(snapshot: Snapshot): NewsItem[] {
         link: `/m/tareas/${a.id}`,
         at: a.updatedAt,
       })),
-    ...snapshot.works.map((w) => {
+    ...snapshot.works.filter((work) => !work.withdrawnAt && work.status !== 'draft').map((w) => {
       const assignment = assignmentOf(w.assignmentId);
       return {
         key: `w${w.id}`,
@@ -87,7 +97,7 @@ export function buildNews(snapshot: Snapshot): NewsItem[] {
       };
     }),
     ...snapshot.notes
-      .filter((n) => n.visibility === 'group')
+      .filter((n) => n.visibility === 'group' && !n.withdrawnAt)
       .map((n) => ({
         key: `n${n.id}`,
         kind: 'nota' as const,
@@ -107,7 +117,7 @@ export function buildNews(snapshot: Snapshot): NewsItem[] {
       link: `/m/actividades/${a.id}`,
       at: a.createdAt,
     })),
-    ...snapshot.evidences.map((e) => ({
+    ...snapshot.evidences.filter((evidence) => !evidence.withdrawnAt).map((e) => ({
       key: `e${e.id}`,
       kind: 'evidencia' as const,
       subjectId: activityOf(e.activityId)?.subjectId,
@@ -116,7 +126,7 @@ export function buildNews(snapshot: Snapshot): NewsItem[] {
       link: `/m/actividades/${e.activityId}`,
       at: e.createdAt,
     })),
-    ...snapshot.questions.map((q) => ({
+    ...snapshot.questions.filter((question) => !question.withdrawnAt).map((q) => ({
       key: `q${q.id}`,
       kind: 'pregunta' as const,
       subjectId: q.subjectId,
@@ -125,7 +135,7 @@ export function buildNews(snapshot: Snapshot): NewsItem[] {
       link: `/m/preguntas/${q.id}`,
       at: q.createdAt,
     })),
-    ...snapshot.answers.map((r) => ({
+    ...snapshot.answers.filter((answer) => !answer.withdrawnAt && questionOf(answer.questionId) && !questionOf(answer.questionId)!.withdrawnAt).map((r) => ({
       key: `r${r.id}`,
       kind: 'respuesta' as const,
       subjectId: questionOf(r.questionId)?.subjectId,
@@ -135,7 +145,7 @@ export function buildNews(snapshot: Snapshot): NewsItem[] {
       at: r.createdAt,
     })),
     ...snapshot.questions
-      .filter((q) => q.status === 'resolved' && q.resolvedAt)
+      .filter((q) => q.status === 'resolved' && q.resolvedAt && !q.withdrawnAt)
       .map((q) => ({
         key: `s${q.id}`,
         kind: 'resuelta' as const,
@@ -145,9 +155,52 @@ export function buildNews(snapshot: Snapshot): NewsItem[] {
         link: `/m/preguntas/${q.id}`,
         at: q.resolvedAt!,
       })),
+    ...snapshot.guides.filter((guide) => !guide.withdrawnAt).map((guide) => ({
+      key: `g${guide.id}`,
+      kind: 'guia' as const,
+      subjectId: guide.subjectId,
+      actorId: guide.updatedBy,
+      text: `${guide.version > 1 ? 'actualizó' : 'publicó'} la guía «${guide.title}»`,
+      link: `/m/guias/${guide.id}`,
+      at: guide.updatedAt,
+    })),
+    ...snapshot.polls
+      .filter((poll) => !poll.cancelledAt && poll.closesAt > now)
+      .map((poll) => ({
+        key: `p${poll.id}`,
+        kind: 'votacion' as const,
+        subjectId: undefined,
+        actorId: poll.createdBy,
+        text: `abrió la votación «${poll.title}»`,
+        link: `/m/votaciones/${poll.id}`,
+        at: poll.updatedAt,
+      })),
+    ...snapshot.helpPosts
+      .filter((post) => post.status === 'open')
+      .map((post) => ({
+        key: `h${post.id}`,
+        kind: 'ayuda' as const,
+        subjectId: post.subjectId,
+        actorId: post.authorId,
+        text: `publicó «${post.title}» en ayuda entre compañeros`,
+        link: `/m/ayuda/${post.id}`,
+        at: post.updatedAt,
+      })),
+    ...snapshot.spacedCollections
+      .filter((collection) => collection.visibility === 'group' && !collection.archived)
+      .map((collection) => ({
+        key: `srs${collection.id}`,
+        kind: 'repaso' as const,
+        subjectId: collection.subjectId,
+        actorId: collection.updatedBy,
+        text: `${collection.version > 1 ? 'actualizó' : 'compartió'} la colección «${collection.title}»`,
+        link: `/m/repaso/colecciones/${collection.id}`,
+        at: collection.updatedAt,
+      })),
   ];
 
-  return items.filter((i) => i.actorId !== meId).sort((a, b) => b.at.getTime() - a.at.getTime());
+  return [...new Map(items.filter((i) => i.actorId && i.actorId !== meId).map((i) => [i.key, i])).values()]
+    .sort((a, b) => b.at.getTime() - a.at.getTime() || a.key.localeCompare(b.key));
 }
 
 /** Versiones de tareas que movieron o quitaron la fecha de entrega respecto a la anterior. */
@@ -178,6 +231,10 @@ const NOUNS: Record<NewsKind, [string, string]> = {
   pregunta: ['pregunta', 'preguntas'],
   respuesta: ['respuesta', 'respuestas'],
   resuelta: ['pregunta resuelta', 'preguntas resueltas'],
+  guia: ['guía nueva o editada', 'guías nuevas o editadas'],
+  votacion: ['votación abierta', 'votaciones abiertas'],
+  ayuda: ['publicación de ayuda', 'publicaciones de ayuda'],
+  repaso: ['colección de repaso', 'colecciones de repaso'],
 };
 
 const listFormat = new Intl.ListFormat('es-MX', { style: 'long', type: 'conjunction' });
@@ -199,19 +256,25 @@ export function summarizeNews(items: NewsItem[]): string {
 }
 
 /** Mensajes de otros desde `since` en el canal del salón y en tus conversaciones 1 a 1. */
-export function unreadMessages(snapshot: Snapshot, since: Date | undefined) {
+export function unreadMessages(snapshot: Snapshot, _since?: Date) {
   const meId = snapshot.me?.id;
-  const isNew = (m: { senderId: Id; sentAt: Date }) =>
-    m.senderId !== meId && (!since || m.sentAt > since);
-  const group = snapshot.groupMessages.filter(isNew);
+  if (!meId) return { group: 0, direct: [], channels: [] };
+  const stateOf = (scope: 'group' | 'direct' | 'channel', id: Id) =>
+    (snapshot.conversationStates ?? []).find((state) => state.scope === scope && state.conversationId === id);
+  const group = unreadChatMessages(snapshot.groupMessages, meId, stateOf('group', 'general')?.readThroughId);
   const direct = snapshot.directConversations
+    .filter((c) => Boolean(meId && c.participantIds.includes(meId)))
     .map((c) => ({
       conversation: c,
       otherId: c.participantIds.find((id) => id !== meId) ?? c.participantIds[0],
-      count: snapshot.directMessages.filter((m) => m.conversationId === c.id && isNew(m)).length,
+      count: unreadChatMessages(snapshot.directMessages.filter((m) => m.conversationId === c.id), meId, stateOf('direct', c.id)?.readThroughId).length,
     }))
     .filter((c) => c.count > 0);
-  return { group: group.length, direct };
+  const channels = (snapshot.chatChannels ?? []).filter((channel) => !channel.archivedAt).map((channel) => ({
+    channel,
+    count: unreadChatMessages((snapshot.channelMessages ?? []).filter((message) => message.channelId === channel.id), meId, stateOf('channel', channel.id)?.readThroughId).length,
+  })).filter((entry) => entry.count > 0);
+  return { group: group.length, direct, channels };
 }
 
 const DAY_MS = 86_400_000;

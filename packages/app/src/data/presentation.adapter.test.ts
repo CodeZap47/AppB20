@@ -83,6 +83,17 @@ describe('adaptadores de Exposiciones', () => {
     expect(readSnapshot(connection, SELF).presentationAttempts[0]?.sourceVersion).toBe(1);
     rows.presentationQuestions = [question({ kind: 'future' })]; expect(() => readSnapshot(connection, SELF)).toThrow('actualización');
   });
+  it.each(['note', 'guide'])('retira metadatos de una fuente %s retirada incluso si su fila sigue en caché', (kind) => {
+    const source = { sourceKind: kind, sourceId: 5n, sourceVersion: 1 };
+    const cachedSource = kind === 'note' ? { id: 5n, subjectId: SUBJECT, title: 'Nota retirada', topic: '', body: '', tags: [], visibility: 'group', source: 'student', author: person(OTHER), version: 1, createdAt: timestamp, updatedAt: timestamp }
+      : { id: 5n, subjectId: SUBJECT, title: 'Guía retirada', topics: [], sections: [], createdBy: person(OTHER), updatedBy: person(OTHER), version: 1, createdAt: timestamp, updatedAt: timestamp };
+    const { connection } = setup({ presentationPractices: [practice({ ownerId: person(OTHER), reviewerId: person(SELF), ...source })],
+      presentationAttempts: [attempt(source)], [kind === 'note' ? 'notes' : 'studyGuides']: [cachedSource],
+      contentStatuses: [{ key: `${kind}:5`, kind, targetId: 5n, withdrawnAt: timestamp, withdrawnBy: person(OTHER), reason: '' }] });
+    const snapshot = readSnapshot(connection, SELF);
+    expect(snapshot.presentationPractices[0]).not.toHaveProperty('sourceId'); expect(snapshot.presentationAttempts[0]).not.toHaveProperty('sourceId');
+    expect(snapshot.presentationAttempts[0]?.body).toBe('Explicación');
+  });
   it('resuelve altas concurrentes e idempotentes por autor+requestId sin depender de una fila nueva', async () => {
     const savePresentationPractice = vi.fn(async () => {
       rows.presentationPractices = [practice({ ownerId: person(OTHER) }), practice({ id: 5n, requestId: 'otro' }), practice()];

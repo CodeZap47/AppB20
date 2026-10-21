@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useMatch, useNavigate, useParams } from 'react-router';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import { Avatar } from '../components/Avatar';
@@ -11,6 +11,9 @@ import { formatListTime, memberName } from '../lib/format';
 import type { ChatMessage } from '../lib/messages';
 import { messagePreview } from '../lib/references';
 import { matches } from '../lib/search';
+import { chatTarget, mentionedMembers, unreadMessages } from '../lib/chat';
+import { ConversationMute, MessageReportsPanel, ReportMessageForm } from '../components/ChatControls';
+import '../chat.css';
 
 const GROUP_NAME = 'Canal del salón';
 
@@ -46,6 +49,9 @@ function ConversationRow({
   name,
   last,
   preview,
+  unread = 0,
+  mentions = 0,
+  muted = false,
 }: {
   to: string;
   end?: boolean;
@@ -53,6 +59,9 @@ function ConversationRow({
   name: string;
   last: ChatMessage | undefined;
   preview: string;
+  unread?: number;
+  mentions?: number;
+  muted?: boolean;
 }) {
   return (
     <li>
@@ -67,8 +76,10 @@ function ConversationRow({
               </time>
             )}
           </span>
-          <span className="conv__preview">{preview}</span>
+          <span className="conv__preview">{muted && <span aria-label="Conversación silenciada">Silenciada · </span>}{preview}</span>
         </span>
+        {unread > 0 && <span className="chat-unread" aria-label={`${unread} mensajes sin leer`}>{unread}</span>}
+        {mentions > 0 && <span className="chat-mentions" aria-label={`${mentions} menciones sin leer`}>@</span>}
       </NavLink>
     </li>
   );
@@ -77,10 +88,14 @@ function ConversationRow({
 function ConversationList() {
   const source = useDataSource();
   const navigate = useNavigate();
-  const { me, members, groupMessages, directConversations, directMessages } = useSnapshot();
+  const { me, members, groupMessages, directConversations, directMessages, chatChannels, channelMessages, conversationStates, subjects } = useSnapshot();
   const { error, run } = useAction();
   const [query, setQuery] = useState('');
   const [picking, setPicking] = useState(false);
+  const [creatingChannel, setCreatingChannel] = useState(false);
+  const [channelName, setChannelName] = useState('');
+  const [channelKind, setChannelKind] = useState<'subject' | 'topic' | 'project'>('topic');
+  const [subjectId, setSubjectId] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
 
   const directs = useMemo(
@@ -107,6 +122,12 @@ function ConversationList() {
   };
 
   const lastGroup = groupMessages.at(-1);
+  const indicators = (scope: MessageScope, conversationId: string, messages: ChatMessage[]) => {
+    const state = conversationStates.find((row) => row.scope === scope && row.conversationId === conversationId);
+    const unread = unreadMessages(messages, me?.id, state?.readThroughId);
+    return { unread: unread.length, mentions: unread.filter((message) => me && mentionedMembers(message.text).includes(me.id)).length, muted: state?.muted };
+  };
+  const shownChannels = chatChannels.filter((channel) => matches(query, channel.name, channel.kind));
   const showGroup = matches(query, GROUP_NAME, 'grupo');
   const shownDirects = directs.filter((d) => matches(query, d.name));
   const newPeople = members.filter(
@@ -117,7 +138,7 @@ function ConversationList() {
       matches(query, m.displayName),
   );
   const showPeople = (picking || query.trim() !== '') && newPeople.length > 0;
-  const nothing = !showGroup && !shownDirects.length && !showPeople;
+  const nothing = !showGroup && !shownDirects.length && !showPeople && !shownChannels.length;
 
   const start = async (memberId: string) => {
     const id = await run(() => source.openDirectConversation(memberId));
@@ -172,9 +193,27 @@ function ConversationList() {
               name={GROUP_NAME}
               last={lastGroup}
               preview={previewOf(lastGroup, true)}
+              {...indicators('group', 'general', groupMessages)}
             />
           </ul>
         )}
+        <div className="chat-channel-heading"><h2 className="chat__list-title">Canales</h2><button type="button" className="link-button" onClick={() => setCreatingChannel(!creatingChannel)}>{creatingChannel ? 'Cerrar' : 'Crear canal'}</button></div>
+        {creatingChannel && <form className="form chat-channel-form" onSubmit={(event) => {
+          event.preventDefault(); void run(async () => {
+            const id = await source.createChatChannel({ name: channelName, kind: channelKind, subjectId: channelKind === 'subject' ? subjectId : undefined });
+            setCreatingChannel(false); setChannelName(''); setSubjectId(''); void navigate(`/m/mensajes/canales/${id}`);
+          });
+        }}>
+          <label className="field"><span className="field__label">Nombre del canal</span><input value={channelName} maxLength={80} required onChange={(event) => setChannelName(event.target.value)} /></label>
+          <label className="field"><span className="field__label">Tipo de canal</span><select value={channelKind} onChange={(event) => setChannelKind(event.target.value as typeof channelKind)}><option value="subject">Materia</option><option value="topic">Tema</option><option value="project">Proyecto</option></select></label>
+          {channelKind === 'subject' && <label className="field"><span className="field__label">Materia</span><select value={subjectId} required onChange={(event) => setSubjectId(event.target.value)}><option value="">Elige una materia</option>{subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}</select></label>}
+          <p className="field__hint">Todos los integrantes activos del salón pueden leer el canal.</p><button type="submit">Crear canal</button>
+        </form>}
+        {shownChannels.length > 0 && <ul className="convs">{shownChannels.map((channel) => {
+          const messages = channelMessages.filter((message) => message.channelId === channel.id);
+          const last = messages.at(-1);
+          return <ConversationRow key={channel.id} to={`/m/mensajes/canales/${channel.id}`} avatar={<GroupAvatar />} name={`${channel.name}${channel.archivedAt ? ' · Archivado' : ''}`} last={last} preview={previewOf(last, true)} {...indicators('channel', channel.id, messages)} />;
+        })}</ul>}
 
         {(shownDirects.length > 0 || (!query && !picking)) && (
           <>
@@ -189,6 +228,7 @@ function ConversationList() {
                     name={d.name}
                     last={d.last}
                     preview={previewOf(d.last, false)}
+                    {...indicators('direct', d.id, directMessages.filter((message) => message.conversationId === d.id))}
                   />
                 ))}
               </ul>
@@ -230,6 +270,7 @@ function ConversationList() {
         )}
       </div>
       <ChatToolsLinks />
+      <MessageReportsPanel />
     </aside>
   );
 }
@@ -280,11 +321,32 @@ function ThreadNotice({ title, children }: { title: string; children: ReactNode 
  * Estado de una conversación: a qué mensaje respondes o cuál editas, y las acciones de cada
  * mensaje. Enviar respeta ese modo: responde, guarda la edición o manda un mensaje nuevo.
  */
-function useThread(scope: MessageScope, sendNew: (text: string, replyToId?: string) => unknown) {
+function useThread(scope: MessageScope, conversationId: string, sendNew: (text: string, replyToId?: string) => string | Promise<string>) {
   const source = useDataSource();
-  const { me, members } = useSnapshot();
+  const { me, members, conversationStates } = useSnapshot();
   const { error, run } = useAction();
+  const readAction = useAction();
   const [mode, setMode] = useState<ComposerMode | undefined>();
+  const [report, setReport] = useState<ChatMessage | null>(null);
+  const [progress, setProgress] = useState<{ name: string; done: number; total: number } | null>(null);
+  const [retryingAttachments, setRetryingAttachments] = useState(false);
+  const upload = useRef<{ id: string; files: File[]; next: number; version: number } | null>(null);
+  const controller = useRef<AbortController | null>(null);
+  useEffect(() => () => controller.current?.abort(), []);
+  useEffect(() => {
+    controller.current?.abort(); upload.current = null; setMode(undefined); setReport(null); setRetryingAttachments(false); setProgress(null);
+  }, [scope, conversationId]);
+  const lastRead = conversationStates.find((row) => row.scope === scope && row.conversationId === conversationId)?.readThroughId;
+  const requestedRead = useRef<string | undefined>(undefined);
+  useEffect(() => { requestedRead.current = undefined; }, [scope, conversationId]);
+  const onReadThrough = useCallback((messageId: string) => {
+    if (messageId === lastRead || messageId === requestedRead.current) return;
+    requestedRead.current = messageId;
+    void readAction.run(async () => {
+      try { await source.markConversationRead(scope, conversationId, messageId); }
+      catch (failure) { requestedRead.current = undefined; throw failure; }
+    });
+  }, [source, scope, conversationId, lastRead]);
 
   const handlers: MessageHandlers = {
     onReply: (message) =>
@@ -299,26 +361,80 @@ function useThread(scope: MessageScope, sendNew: (text: string, replyToId?: stri
       if (mode?.message.id === message.id) setMode(undefined);
     },
     onReact: (message, emoji) => run(() => source.toggleReaction(scope, message.id, emoji)),
+    onReport: setReport,
   };
 
-  const onSend = async (text: string) => {
+  const onSend = async (text: string, files: File[] = []) => {
     const ok =
       (await run(async () => {
         if (mode?.kind === 'edit') await source.editMessage(scope, mode.message.id, text);
-        else await sendNew(text, mode?.kind === 'reply' ? mode.message.id : undefined);
+        else {
+          if (!upload.current) {
+            const id = await sendNew(text || 'Archivo adjunto', mode?.kind === 'reply' ? mode.message.id : undefined);
+            if (files.length) upload.current = { id, files, next: 0, version: 1 };
+          }
+          if (upload.current) {
+            const current = new AbortController(); controller.current = current;
+            try {
+              const pending = upload.current;
+              for (; pending.next < pending.files.length; pending.next++) {
+                const file = pending.files[pending.next]!;
+                setProgress({ name: file.name, done: 0, total: file.size });
+                await source.attachResourceFile(chatTarget(scope), pending.id, file, pending.version, { signal: current.signal,
+                  onProgress: (done, total) => setProgress({ name: file.name, done, total }) });
+                pending.version++;
+              }
+              upload.current = null; setRetryingAttachments(false);
+            } catch (failure) {
+              if (current.signal.aborted) { upload.current = null; setRetryingAttachments(false); }
+              else { setRetryingAttachments(true); throw failure; }
+            } finally { controller.current = null; setProgress(null); }
+          }
+        }
         return true;
       })) ?? false;
     if (ok) setMode(undefined);
     return ok;
   };
 
-  return { error, handlers, mode, onSend, cancel: () => setMode(undefined) };
+  const extras = <>
+    {progress && <p className="chat-transfer" role="status">Subiendo {progress.name}: {Math.round(progress.done / progress.total * 100)} % <button type="button" className="link-button" onClick={() => controller.current?.abort()}>Cancelar subida</button></p>}
+    {retryingAttachments && <p className="chat-transfer" role="status">El mensaje ya se envió. Pulsa «Reintentar adjuntos» para continuar la misma subida sin duplicarlo.</p>}
+    {report && <ReportMessageForm scope={scope} message={report} onClose={() => setReport(null)} />}
+  </>;
+  return { error: error ?? readAction.error, handlers, mode, onSend, onReadThrough, retryingAttachments, extras, cancel: () => setMode(undefined) };
+}
+
+export function ChannelThread() {
+  const { channelId = '' } = useParams();
+  const source = useDataSource();
+  const { me, members, chatChannels, channelMessages, subjects } = useSnapshot();
+  const { error, pending, run } = useAction();
+  const thread = useThread('channel', channelId, (text, replyToId) => source.sendChannelMessage(channelId, text, replyToId));
+  const channel = chatChannels.find((row) => row.id === channelId);
+  const messages = useMemo(() => channelMessages.filter((message) => message.channelId === channelId), [channelMessages, channelId]);
+  if (!channel) return <ThreadNotice title="Canal no disponible">No existe o no tienes acceso. <Link to="/m/mensajes/directos">Volver a las conversaciones</Link></ThreadNotice>;
+  const label = channel.kind === 'subject' ? subjects.find((subject) => subject.id === channel.subjectId)?.name ?? 'Materia' : channel.kind === 'project' ? 'Proyecto' : 'Tema';
+  const canArchive = me?.id === channel.createdBy || me?.isCreator;
+  return <>
+    <ThreadHeader avatar={<GroupAvatar />} title={channel.name} subtitle={`${label} · lo ve todo el grupo${channel.archivedAt ? ' · Archivado' : ''}`} action={<div className="chat-thread-controls">
+      <ConversationMute scope="channel" conversationId={channel.id} />
+      {canArchive && <button type="button" className="button secondary" disabled={pending} onClick={() => void run(() => source.setChatChannelArchived(channel.id, !channel.archivedAt))}>{channel.archivedAt ? 'Reabrir canal' : 'Archivar canal'}</button>}
+    </div>} />
+    <MessageList key={channel.id} messages={messages} members={members} meId={me?.id} showSenders scope="channel" handlers={thread.handlers} onReadThrough={thread.onReadThrough}
+      empty={<ThreadNotice title="El canal está en silencio">Comparte el primer mensaje sobre {channel.name}.</ThreadNotice>} />
+    {error && <p className="error" role="alert">{error}</p>}
+    {thread.extras}
+    {channel.archivedAt && <p className="chat-transfer">Canal archivado. Puedes consultar el historial y descargar sus adjuntos.</p>}
+    <Composer key={`${me?.id}:canal:${channel.id}`} draftKey={`${me?.id}:canal:${channel.id}`} placeholder={`Escribe en ${channel.name}`} error={thread.error} onSend={thread.onSend} mode={thread.mode} onCancelMode={thread.cancel}
+      attachments retryingAttachments={thread.retryingAttachments} disabled={Boolean(channel.archivedAt)} mentionMemberIds={members.filter((member) => member.status === 'active').map((member) => member.id)} />
+  </>;
 }
 
 export function GroupThread() {
   const source = useDataSource();
   const { me, members, groupMessages } = useSnapshot();
-  const thread = useThread('group', (text, replyToId) => source.sendGroupMessage(text, replyToId));
+  const thread = useThread('group', 'general', (text, replyToId) => source.sendGroupMessage(text, replyToId));
   const count = members.filter((m) => m.status === 'active').length;
 
   return (
@@ -327,6 +443,7 @@ export function GroupThread() {
         avatar={<GroupAvatar />}
         title={GROUP_NAME}
         subtitle={`${count} ${count === 1 ? 'integrante' : 'integrantes'} · lo ve todo el grupo`}
+        action={<ConversationMute scope="group" conversationId="general" />}
       />
       <MessageList
         messages={groupMessages}
@@ -335,12 +452,14 @@ export function GroupThread() {
         showSenders
         scope="group"
         handlers={thread.handlers}
+        onReadThrough={thread.onReadThrough}
         empty={
           <ThreadNotice title="El canal está en silencio">
             Escribe el primer mensaje para todo el salón.
           </ThreadNotice>
         }
       />
+      {thread.extras}
       <Composer
         key={me?.id}
         draftKey={`${me?.id}:grupo`}
@@ -349,6 +468,9 @@ export function GroupThread() {
         onSend={thread.onSend}
         mode={thread.mode}
         onCancelMode={thread.cancel}
+        attachments
+        retryingAttachments={thread.retryingAttachments}
+        mentionMemberIds={members.filter((member) => member.status === 'active').map((member) => member.id)}
       />
     </>
   );
@@ -366,8 +488,9 @@ export function ThreadPlaceholder() {
 export function DirectThread() {
   const { conversationId = '' } = useParams();
   const source = useDataSource();
-  const { me, members, directConversations, directMessages } = useSnapshot();
-  const thread = useThread('direct', (text, replyToId) =>
+  const { me, members, directConversations, directMessages, blockedMembers } = useSnapshot();
+  const { error, pending, run } = useAction();
+  const thread = useThread('direct', conversationId, (text, replyToId) =>
     source.sendDirectMessage(conversationId, text, replyToId),
   );
   const conversation = directConversations.find((c) => c.id === conversationId);
@@ -390,6 +513,7 @@ export function DirectThread() {
   const other = members.find((m) => m.id === otherId);
   const name = memberName(members, otherId);
   const draftKey = `${me?.id}:${conversation.id}`;
+  const blocked = blockedMembers.some((row) => row.memberId === otherId);
 
   return (
     <>
@@ -402,9 +526,10 @@ export function DirectThread() {
           </>
         }
         action={
-          <Link to={`/perfil/${otherId}`} className="button secondary thread__action">
-            Ver perfil
-          </Link>
+          <div className="chat-thread-controls">
+            <ConversationMute scope="direct" conversationId={conversation.id} />
+            <button type="button" className="button secondary" disabled={pending} aria-pressed={blocked} onClick={() => void run(() => source.setMemberBlocked(otherId, !blocked))}>{blocked ? 'Desbloquear' : 'Bloquear'}</button>
+          </div>
         }
       />
       <MessageList
@@ -415,12 +540,16 @@ export function DirectThread() {
         showSenders={false}
         scope="direct"
         handlers={thread.handlers}
+        onReadThrough={thread.onReadThrough}
         empty={
           <ThreadNotice title={`Saluda a ${name}`}>
             Todavía no se han escrito. Lo que envíes aquí queda entre ustedes dos.
           </ThreadNotice>
         }
       />
+      {error && <p role="alert" className="error">{error}</p>}
+      {blocked && <p className="chat-transfer">Bloqueaste a este compañero. El historial se conserva; desbloquéalo para volver a enviar mensajes.</p>}
+      {thread.extras}
       <Composer
         key={draftKey}
         draftKey={draftKey}
@@ -429,6 +558,10 @@ export function DirectThread() {
         onSend={thread.onSend}
         mode={thread.mode}
         onCancelMode={thread.cancel}
+        attachments
+        retryingAttachments={thread.retryingAttachments}
+        disabled={blocked}
+        mentionMemberIds={conversation.participantIds}
       />
     </>
   );

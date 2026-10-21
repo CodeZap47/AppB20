@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useSnapshot } from '../data/DataContext';
+import { fileSizeError, formatBytes } from '@b20/core';
 import type { Id } from '../data/types';
 import type { ChatMessage } from '../lib/messages';
 import {
@@ -23,6 +24,7 @@ import {
   type Reference,
 } from '../lib/references';
 import { normalize } from '../lib/search';
+import { mentionToken } from '../lib/chat';
 import { Icon, type IconName } from './Icon';
 import { StickerPicker } from './StickerPicker';
 
@@ -80,17 +82,26 @@ export function Composer({
   maxLength = 4000,
   mode,
   onCancelMode,
+  attachments = false,
+  mentionMemberIds,
+  disabled = false,
+  retryingAttachments = false,
 }: {
   placeholder: string;
   /** Devuelve false si no se envió, para conservar el texto. */
   /** Resuelve `true` si se envió; si no, el texto se queda en el campo. */
-  onSend: (text: string) => Promise<boolean>;
+  onSend: (text: string, files?: File[]) => Promise<boolean>;
   /** Identifica la conversación (y a quien escribe) para guardar su borrador. */
   draftKey: string;
   error?: string | null;
   maxLength?: number;
   mode?: ComposerMode;
   onCancelMode?: () => void;
+  attachments?: boolean;
+  /** En directos solo se pueden mencionar sus participantes. */
+  mentionMemberIds?: Id[];
+  disabled?: boolean;
+  retryingAttachments?: boolean;
 }) {
   const data = useSnapshot();
   const navigate = useNavigate();
@@ -100,6 +111,11 @@ export function Composer({
   const [active, setActive] = useState(0);
   const [dismissed, setDismissed] = useState(false);
   const [stickers, setStickers] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
+  const fileInput = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const editing = mode?.kind === 'edit' ? mode.message : undefined;
   const remaining = maxLength - text.length;
@@ -139,15 +155,24 @@ export function Composer({
       .join('\n');
 
   const send = async () => {
+    if (disabled || sendingRef.current) return;
     const message = compose(text, refs);
-    if (message && (await onSend(message))) {
-      update('');
-      setRefs([]);
-    }
+    if (!message && !files.length) return;
+    sendingRef.current = true;
+    setSending(true);
+    try {
+      if (await onSend(message, files)) {
+        update('');
+        setRefs([]);
+        setFiles([]);
+        setFileError(null);
+      }
+    } finally { sendingRef.current = false; setSending(false); }
     inputRef.current?.focus();
   };
 
   const sendSticker = (id: Id) => {
+    if (disabled || sendingRef.current) return;
     setStickers(false);
     void onSend(formatReference('sticker', id));
     inputRef.current?.focus();
@@ -266,7 +291,7 @@ export function Composer({
     send();
   };
 
-  const canSend = Boolean(text.trim() || refs.length);
+  const canSend = !disabled && !sending && Boolean(text.trim() || refs.length || files.length);
   const optionId = (i: number) => `${menuId}-${i}`;
 
   return (
@@ -276,6 +301,13 @@ export function Composer({
           {error}
         </p>
       )}
+      {fileError && <p className="composer__error error" role="alert">{fileError}</p>}
+      {files.length > 0 && <ul className="composer__refs" aria-label="Archivos que se enviarán">
+        {files.map((file, index) => <li className="ref-chip" key={`${file.name}:${index}`}>
+          <Icon name="file" size={14} /><span>{file.name} · {formatBytes(file.size)}</span>
+          <button type="button" disabled={sending || retryingAttachments} aria-label={`Quitar ${file.name}`} onClick={() => setFiles((current) => current.filter((_file, i) => i !== index))}><Icon name="close" size={14} /></button>
+        </li>)}
+      </ul>}
 
       {mode && (
         <div className="composer__mode">
@@ -376,6 +408,19 @@ export function Composer({
       {stickers && <StickerPicker onPick={sendSticker} onClose={() => setStickers(false)} />}
 
       <div className="composer__row">
+        {attachments && <>
+          <input ref={fileInput} className="sr-only" type="file" multiple aria-label="Adjuntar archivos" disabled={disabled || sending || retryingAttachments || Boolean(editing)}
+            onChange={(event) => {
+              const accepted: File[] = []; const errors: string[] = [];
+              for (const file of Array.from(event.target.files ?? [])) {
+                const problem = fileSizeError(file.name, file.size);
+                if (problem) errors.push(problem); else accepted.push(file);
+              }
+              if (accepted.length) setFiles((current) => [...current, ...accepted]);
+              setFileError(errors.join(' ') || null); event.target.value = '';
+            }} />
+          <button type="button" className="icon-button composer__tool" aria-label="Elegir archivos adjuntos" title="Adjuntar archivos" onClick={() => fileInput.current?.click()} disabled={disabled || sending || retryingAttachments || Boolean(editing)}><Icon name="upload" /></button>
+        </>}
         <button
           type="button"
           className="icon-button composer__tool"
@@ -383,7 +428,7 @@ export function Composer({
           title="Stickers"
           aria-expanded={stickers}
           onClick={() => setStickers(!stickers)}
-          disabled={Boolean(editing)}
+          disabled={disabled || sending || retryingAttachments || Boolean(editing)}
         >
           <Icon name="smile" />
         </button>
@@ -396,7 +441,7 @@ export function Composer({
             update('/');
             inputRef.current?.focus();
           }}
-          disabled={Boolean(editing)}
+          disabled={disabled || sending || retryingAttachments || Boolean(editing)}
         >
           <Icon name="slash" />
         </button>
@@ -409,6 +454,7 @@ export function Composer({
           onChange={(e) => update(e.target.value)}
           onKeyDown={onKeyDown}
           maxLength={maxLength}
+          disabled={disabled || sending || retryingAttachments}
           autoFocus={!isTouch()}
           role="combobox"
           aria-expanded={menuOpen}
@@ -420,11 +466,22 @@ export function Composer({
           type="submit"
           className="composer__send"
           disabled={!canSend}
-          aria-label={editing ? 'Guardar cambios' : 'Enviar mensaje'}
+          aria-label={editing ? 'Guardar cambios' : retryingAttachments ? 'Reintentar adjuntos' : 'Enviar mensaje'}
         >
           <Icon name={editing ? 'check' : 'send'} />
         </button>
       </div>
+      {mentionMemberIds && !editing && <label className="chat-mention-picker">
+        <span className="sr-only">Mencionar a un compañero</span>
+        <select aria-label="Mencionar a un compañero" value="" disabled={disabled || sending || retryingAttachments} onChange={(event) => {
+          if (!event.target.value) return;
+          update(`${text}${text && !text.endsWith(' ') ? ' ' : ''}${mentionToken(event.target.value)} `);
+          inputRef.current?.focus();
+        }}>
+          <option value="">@ Mencionar</option>
+          {data.members.filter((member) => member.status === 'active' && mentionMemberIds.includes(member.id)).map((member) => <option value={member.id} key={member.id}>{member.displayName}</option>)}
+        </select>
+      </label>}
       <p className="composer__hint">
         <span className="composer__keys">
           / para comandos y referencias · Enter para enviar · Mayús + Enter para otra línea

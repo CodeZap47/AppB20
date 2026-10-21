@@ -26,8 +26,8 @@ let root: Root;
 let source: DemoDataSource;
 
 function field(label: string, within: ParentNode = container): Field {
-  const target = [...within.querySelectorAll('label')]
-    .find((node) => node.textContent?.includes(label))?.querySelector('input, textarea, select');
+  const labelNode = [...within.querySelectorAll('label')].find((node) => node.textContent?.includes(label));
+  const target = labelNode?.control ?? labelNode?.querySelector('input, textarea, select');
   if (!target) throw new Error(`Falta el campo ${label}`);
   return target as Field;
 }
@@ -173,7 +173,7 @@ describe('integración real de Aprende enseñando en la aplicación', () => {
       .toBe('Nueva explicación guardada después de publicar.');
     expect(source.getSnapshot().notes.filter((item) => item.id === publishedId)).toHaveLength(1);
     await navigate('/perfil/demo-1');
-    await clickButton('Notas');
+    await clickButton('Notas y guías');
     const publishedLinks = [...container.querySelectorAll('main a')]
       .filter((link) => link.getAttribute('href') === `#/m/notas/${publishedId}`);
     expect(publishedLinks).toHaveLength(1);

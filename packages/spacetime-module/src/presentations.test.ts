@@ -61,7 +61,7 @@ function setup() {
       { id: 102n, author: reviewer, subjectId: 1n, visibility: 'group', version: 1 },
       { id: 103n, author: reviewer, subjectId: 1n, visibility: 'personal', version: 3 },
       { id: 104n, author: owner, subjectId: 2n, visibility: 'group', version: 1 }]),
-    studyGuide: tableStore('id', [{ id: 201n, subjectId: 1n, version: 5 }]),
+    studyGuide: tableStore('id', [{ id: 201n, subjectId: 1n, version: 5 }]), contentStatus: tableStore('key'),
     presentationPractice: tableStore('id'), presentationAttempt: tableStore('id'), presentationPersonal: tableStore('attemptId'),
     presentationQuestion: tableStore('id'), presentationFeedback: tableStore('id'), changeLog: { insert: vi.fn() },
   };
@@ -134,6 +134,19 @@ describe('Exposiciones: permisos privados y fuentes', () => {
     const s = setup(); s.ready(101n); expect(presentation_attempts(s.ctx)[0]).toMatchObject({ sourceId: 101n, sourceVersion: 2 });
     s.as(s.reviewer); expect(presentation_attempts(s.ctx)[0]).toMatchObject({ sourceId: undefined, sourceKind: undefined, sourceVersion: undefined });
     expect(presentation_practices(s.ctx)[0]).toMatchObject({ sourceId: undefined, creationHash: '', requestId: '' });
+  });
+  it('rechaza fuentes retiradas por ID directo al crear o configurar y oculta la referencia al revisor', () => {
+    const s = setup(); const { id, attemptId } = s.ready(102n);
+    s.db.contentStatus.insert({ key: 'note:102', withdrawnAt: s.mutableCtx.timestamp });
+    s.db.contentStatus.insert({ key: 'guide:201', withdrawnAt: s.mutableCtx.timestamp });
+    expect(() => s.practice({ sourceKind: 'note', sourceId: 102n })).toThrow(/retirada/);
+    expect(() => s.practice({ sourceKind: 'guide', sourceId: 201n })).toThrow(/retirada/);
+    expect(() => s.attempt(id)).toThrow(/retirada/);
+    expect(() => save_presentation_practice(s.ctx, s.input({ practiceId: id, sourceKind: 'note', sourceId: 102n,
+      expectedVersion: s.p(id).version as number }))).toThrow(/retirada/);
+    expect(presentation_attempts(s.ctx)[0]).toMatchObject({ id: attemptId, sourceId: 102n, sourceVersion: 1 });
+    s.as(s.reviewer); expect(presentation_attempts(s.ctx)[0]).toMatchObject({ sourceKind: undefined, sourceId: undefined, sourceVersion: undefined });
+    expect(presentation_practices(s.ctx)[0]).toMatchObject({ sourceId: undefined });
   });
   it('retira la referencia al cambiar su visibilidad, sin modificar el texto ni la versión de origen', () => {
     const s = setup(); const { attemptId } = s.ready(102n); s.db.note.rows.set('102', { ...s.db.note.rows.get('102')!, visibility: 'personal', author: s.third, version: 2 });

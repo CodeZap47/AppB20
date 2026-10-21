@@ -174,6 +174,20 @@ describe('Exposiciones en la demo', () => {
     expect(attempt(data, first).sourceId).toBe('n1'); data.setViewer('demo-3');
     expect(practice(data, id)).not.toHaveProperty('sourceId'); expect(attempt(data, first)).not.toHaveProperty('sourceId');
   });
+  it('rechaza fuentes retiradas e intentos nuevos, conserva el historial y oculta la referencia al revisor', () => {
+    const { data } = setup(); const id = create(data, { source: { kind: 'note', id: 'n1' } }); const first = start(data, id); finish(data, first);
+    data.setPresentationReviewer(id, 'demo-3', 2);
+    const note = data.getSnapshot().notes.find((row) => row.id === 'n1')!;
+    data.withdrawContent('note', note.id, true, note.version);
+    expect(() => create(data, { requestId: 'retired-note', source: { kind: 'note', id: note.id } })).toThrow('fuente');
+    expect(() => start(data, id, 'retired-attempt')).toThrow('retirada');
+    expect(attempt(data, first)).toMatchObject({ body: input.body, sourceId: note.id, sourceVersion: note.version });
+    data.setViewer('demo-3'); expect(attempt(data, first)).not.toHaveProperty('sourceId'); expect(practice(data, id)).not.toHaveProperty('sourceId');
+    data.setViewer('demo-2'); data.savePresentationPractice({ ...configuration, id, subjectId, expectedVersion: 3, requestId: 'remove-reference' });
+    expect(start(data, id, 'without-reference')).toBeDefined();
+    const guide = data.getSnapshot().guides[0]!; data.setViewer('demo-1'); data.withdrawContent('guide', guide.id, true, guide.version, 'Retirada de prueba');
+    expect(() => create(data, { requestId: 'retired-guide', subjectId: guide.subjectId, source: { kind: 'guide', id: guide.id } })).toThrow('fuente');
+  });
   it('no publica notas, novedades, puntos ni otro contenido comunitario al practicar', () => {
     const { data } = setup(); const before = data.getSnapshot(); const id = create(data); const first = start(data, id); finish(data, first);
     const after = data.getSnapshot(); for (const key of ['notes', 'questions', 'answers', 'activities', 'revisions', 'groupMessages', 'guides'] as const) expect(after[key]).toEqual(before[key]);

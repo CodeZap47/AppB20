@@ -19,6 +19,16 @@ import { nextSpacedSchedule, type SpacedRating } from '../../core/src/spaced';
 import { normalizePresentationConfiguration, normalizePresentationBody, normalizePresentationObservations,
   normalizePresentationNextSteps, normalizePresentationQuestion, normalizePresentationAnswer,
   normalizePresentationFeedback, presentationGuidingQuestions } from '../../core/src/presentations';
+import { delivery2Tables, chatChannel, channelMessage, conversationState, memberBlock, messageReport,
+  noteDetail, noteVersion, guideVersion, questionComment, answerUsefulness, questionLink, resourceVersion, memberProfile, contentStatus } from './delivery2Tables';
+import * as delivery2 from './delivery2Handlers';
+import { saveMemberProfile, withdrawContent } from './communityHandlers';
+import * as knowledge from './knowledgeHandlers';
+import { configureModuleHelpers } from './moduleContext';
+import { readContributionOrigins } from './contributionOrigins';
+import { roomsTables, studyRoom, roomMember, roomMaterial, roomEntry, roomTimer, roomSummary, helpRoomLink } from './roomsTables';
+import * as rooms from './roomsHandlers';
+import * as nativeStickers from './nativeStickersHandlers';
 
 // ---------------------------------------------------------------------------
 // Tablas
@@ -763,6 +773,8 @@ const resourceExpiry = table({ name: 'resource_expiry' }, {
 
 const spacetimedb = schema({
   presentationPractice, presentationAttempt, presentationPersonal, presentationQuestion, presentationFeedback,
+  ...delivery2Tables,
+  ...roomsTables,
   resourceUpload, resourceChunk, resourceCapacity, resourceExpiry,
   spacedCollection, spacedCard, spacedEnrollment, spacedProgress, spacedReview,
   assignmentDetail, personalProgress, workDetail, workRevision, workReview, academicComment,
@@ -816,7 +828,8 @@ const spacetimedb = schema({
 });
 export default spacetimedb;
 
-type Ctx = ReducerCtx<typeof spacetimedb.schemaType>;
+export type Ctx = ReducerCtx<typeof spacetimedb.schemaType>;
+configureModuleHelpers({ activeMember, attachmentIds, expectVersion, isActive, log, messageText, readableMessage, requireGuide, requireSubject, requireText, restoreAttachments, sourceVersion, targetVersion, saveTargetBaseline, bumpMaterial });
 
 // ---------------------------------------------------------------------------
 // Utilidades de permisos
@@ -1016,6 +1029,7 @@ export const remove_member = spacetimedb.reducer(
     const row = ctx.db.member.identity.find(identity);
     if (!row) throw new SenderError('Ese miembro no existe.');
     ctx.db.member.identity.update({ ...row, status: 'removed' });
+    rooms.removeGroupMember(ctx, identity);
     log(ctx, 'remove', 'member', identity.toHexString());
   },
 );
@@ -1394,6 +1408,7 @@ export const send_group_message = spacetimedb.reducer(
   { text: t.string(), replyToId: t.u64().optional() },
   (ctx, { text, replyToId }) => {
     activeMember(ctx);
+    delivery2.validateMentions(ctx, text);
     if (replyToId !== undefined) {
       const target = ctx.db.groupMessage.id.find(replyToId);
       if (!target || target.deletedAt)
@@ -1423,6 +1438,9 @@ function readableMessage(ctx: Ctx, scope: string, messageId: bigint) {
       requireConversation(ctx, row.conversationId);
       return { scope, row } as const;
     }
+  } else if (scope === 'channel') {
+    const row = ctx.db.channelMessage.id.find(messageId);
+    if (row) { delivery2.channel(ctx, row.channelId); return { scope, row } as const; }
   }
   throw new SenderError('El mensaje no existe o no participas en esa conversación.');
 }
@@ -1441,8 +1459,13 @@ export const edit_message = spacetimedb.reducer(
       throw new SenderError('Ya no se puede editar: pasaron más de 15 minutos o se eliminó.');
     }
     const clean = messageText(ctx, text);
+    delivery2.validateMentions(ctx, text, found.scope === 'direct'
+      ? [ctx.db.directConversation.id.find(found.row.conversationId)!.userA, ctx.db.directConversation.id.find(found.row.conversationId)!.userB] : undefined);
     if (found.scope === 'group') {
       ctx.db.groupMessage.id.update({ ...found.row, text: clean, editedAt: ctx.timestamp });
+    } else if (found.scope === 'channel') {
+      delivery2.channel(ctx, found.row.channelId, true);
+      ctx.db.channelMessage.id.update({ ...found.row, text: clean, editedAt: ctx.timestamp });
     } else {
       ctx.db.directMessage.id.update({ ...found.row, text: clean, editedAt: ctx.timestamp });
     }
@@ -1461,18 +1484,19 @@ export const delete_message = spacetimedb.reducer(
     const { row } = found;
     if (row.deletedAt) throw new SenderError('Ese mensaje ya se eliminó.');
     const own = row.sender.isEqual(ctx.sender);
-    if (!own && !(found.scope === 'group' && me.isCreator)) {
+    if (!own && !(found.scope !== 'direct' && me.isCreator)) {
       throw new SenderError(
         'Solo quien lo envió puede eliminarlo (en el canal, también un administrador).',
       );
     }
     const change = { text: '', deletedAt: ctx.timestamp, deletedBy: ctx.sender };
     if (found.scope === 'group') ctx.db.groupMessage.id.update({ ...found.row, ...change });
+    else if (found.scope === 'channel') ctx.db.channelMessage.id.update({ ...found.row, ...change });
     else ctx.db.directMessage.id.update({ ...found.row, ...change });
     for (const reaction of [...ctx.db.messageReaction.messageId.filter(messageId)]) {
       if (reaction.scope === scope) ctx.db.messageReaction.id.delete(reaction.id);
     }
-    if (!own) log(ctx, 'moderate', 'group_message', messageId);
+    if (!own) log(ctx, 'moderate', `${scope}_message`, messageId);
   },
 );
 
@@ -1559,7 +1583,10 @@ export const remove_sticker_pack = spacetimedb.reducer({ packId: t.u64() }, (ctx
   activeMember(ctx);
   requireOwnPack(ctx, packId);
   for (const row of [...ctx.db.sticker.iter()].filter((row) => row.packId === packId)) {
-    if (!row.used) ctx.db.sticker.id.delete(row.id);
+    if (!row.used) {
+      if (row.storageKey.startsWith('native:')) nativeStickers.removeUnusedStickerBlob(ctx, row.id);
+      ctx.db.sticker.id.delete(row.id);
+    }
   }
   ctx.db.stickerPack.id.delete(packId);
 });
@@ -1630,6 +1657,7 @@ export const open_direct_conversation = spacetimedb.reducer(
     if (other.isEqual(ctx.sender)) throw new SenderError('No puedes abrir una conversación contigo.');
     const otherRow = ctx.db.member.identity.find(other);
     if (!otherRow || otherRow.status !== 'active') throw new SenderError('Ese compañero no está activo.');
+    delivery2.assertDirectAllowed(ctx, ctx.sender, other);
     if (findConversation(ctx, ctx.sender, other)) return;
     const [userA, userB] = orderedPair(ctx.sender, other);
     ctx.db.directConversation.insert({ id: 0n, userA, userB, createdAt: ctx.timestamp });
@@ -1640,7 +1668,9 @@ export const send_direct_message = spacetimedb.reducer(
   { conversationId: t.u64(), text: t.string(), replyToId: t.u64().optional() },
   (ctx, { conversationId, text, replyToId }) => {
     activeMember(ctx);
-    requireConversation(ctx, conversationId);
+    const conversation = requireConversation(ctx, conversationId);
+    delivery2.assertDirectAllowed(ctx, ctx.sender, conversation.userA.isEqual(ctx.sender) ? conversation.userB : conversation.userA);
+    delivery2.validateMentions(ctx, text, [conversation.userA, conversation.userB]);
     if (replyToId !== undefined) {
       const target = ctx.db.directMessage.id.find(replyToId);
       if (!target || target.conversationId !== conversationId || target.deletedAt) {
@@ -1823,6 +1853,9 @@ export const save_note = spacetimedb.reducer(
   },
   (ctx, { noteId, subjectId, topic, title, body, tags, visibility, source }) => {
     activeMember(ctx);
+    if (noteId !== undefined) {
+      throw new SenderError('Actualiza la aplicación para editar la nota con su versión actual.');
+    }
     requireSubject(ctx, subjectId);
     if (!NOTE_VISIBILITY.includes(visibility)) throw new SenderError('Visibilidad inválida.');
     if (!NOTE_SOURCE.includes(source)) throw new SenderError('Origen inválido.');
@@ -1835,25 +1868,16 @@ export const save_note = spacetimedb.reducer(
       visibility,
       source,
     };
-    if (noteId === undefined) {
-      const row = ctx.db.note.insert({
-        id: 0n,
-        ...fields,
-        author: ctx.sender,
-        version: 1,
-        createdAt: ctx.timestamp,
-        updatedAt: ctx.timestamp,
-      });
-      log(ctx, 'create', 'note', row.id);
-      return;
-    }
-    const row = ctx.db.note.id.find(noteId);
-    if (!row) throw new SenderError('La nota no existe.');
-    if (!row.author.isEqual(ctx.sender)) {
-      throw new SenderError('Solo su autor edita esta nota; los demás pueden comentar.');
-    }
-    ctx.db.note.id.update({ ...row, ...fields, version: row.version + 1, updatedAt: ctx.timestamp });
-    log(ctx, 'update', 'note', noteId);
+    const row = ctx.db.note.insert({
+      id: 0n,
+      ...fields,
+      author: ctx.sender,
+      version: 1,
+      createdAt: ctx.timestamp,
+      updatedAt: ctx.timestamp,
+    });
+    delivery2.captureNote(ctx, row.id, ctx.sender);
+    log(ctx, 'create', 'note', row.id);
   },
 );
 
@@ -1862,7 +1886,7 @@ export const comment_note = spacetimedb.reducer(
   (ctx, { noteId, text }) => {
     activeMember(ctx);
     const row = ctx.db.note.id.find(noteId);
-    if (!row || (row.visibility !== 'group' && !row.author.isEqual(ctx.sender))) {
+    if (!row || delivery2.withdrawn(ctx.db, 'note', noteId) || (row.visibility !== 'group' && !row.author.isEqual(ctx.sender))) {
       throw new SenderError('La nota no existe.');
     }
     ctx.db.noteComment.insert({
@@ -1899,7 +1923,7 @@ export const answer_question = spacetimedb.reducer(
   { questionId: t.u64(), body: t.string() },
   (ctx, { questionId, body }) => {
     activeMember(ctx);
-    if (!ctx.db.question.id.find(questionId)) throw new SenderError('La pregunta no existe.');
+    if (!delivery2.canReadTarget(ctx.db, ctx.sender, 'question', questionId) || delivery2.withdrawn(ctx.db, 'question', questionId)) throw new SenderError('La pregunta no existe.');
     ctx.db.answer.insert({
       id: 0n,
       questionId,
@@ -1913,7 +1937,7 @@ export const answer_question = spacetimedb.reducer(
 function ownQuestion(ctx: Ctx, questionId: bigint) {
   activeMember(ctx);
   const row = ctx.db.question.id.find(questionId);
-  if (!row) throw new SenderError('La pregunta no existe.');
+  if (!row || delivery2.withdrawn(ctx.db, 'question', questionId)) throw new SenderError('La pregunta no existe.');
   if (!row.author.isEqual(ctx.sender)) throw new SenderError('Solo quien preguntó puede hacer esto.');
   return row;
 }
@@ -1925,6 +1949,9 @@ export const accept_answer = spacetimedb.reducer(
     const q = ownQuestion(ctx, questionId);
     if (!row || row.questionId !== questionId) {
       throw new SenderError('La respuesta no es de esta pregunta.');
+    }
+    if (delivery2.withdrawn(ctx.db, 'answer', answerId) || !delivery2.canReadTarget(ctx.db, ctx.sender, 'answer', answerId)) {
+      throw new SenderError('La respuesta no está disponible.');
     }
     ctx.db.question.id.update({
       ...q,
@@ -2206,6 +2233,10 @@ function requireGuide(ctx: Ctx, guideId: bigint) {
 /** Versión actual del material citado; comprueba que exista, sea del grupo y de la materia. */
 function sourceVersion(ctx: Ctx, kind: string, refId: bigint, subjectId: bigint): number {
   if (!GUIDE_SOURCE_KINDS.includes(kind)) throw new SenderError('Tipo de fuente inválido.');
+  const target = ({ trabajo: 'work', tarea: 'assignment', actividad: 'activity', nota: 'note', pregunta: 'question' } as Record<string, string>)[kind];
+  if (!delivery2.canReadTarget(ctx.db, ctx.sender, target, refId) || delivery2.withdrawn(ctx.db, target, refId)) {
+    throw new SenderError('Una de las fuentes ya no existe o no es del grupo.');
+  }
   let found: { subjectId: bigint; version: number } | undefined;
   if (kind === 'trabajo') {
     const row = ctx.db.work.id.find(refId);
@@ -2221,7 +2252,7 @@ function sourceVersion(ctx: Ctx, kind: string, refId: bigint, subjectId: bigint)
     if (row?.visibility === 'group') found = row;
   } else {
     const row = ctx.db.question.id.find(refId);
-    if (row) found = { subjectId: row.subjectId, version: 1 };
+    if (row) found = { subjectId: row.subjectId, version: delivery2.extraVersion(ctx, 'question', refId) };
   }
   if (!found) throw new SenderError('Una de las fuentes ya no existe o no es del grupo.');
   if (found.subjectId !== subjectId) {
@@ -2270,33 +2301,43 @@ export const create_guide = spacetimedb.reducer(
       updatedAt: ctx.timestamp,
     });
     addGuideSources(ctx, row, sources);
+    delivery2.captureGuide(ctx, row.id, ctx.sender);
     log(ctx, 'create', 'study_guide', row.id);
   },
 );
 
-/** Como en un wiki: cualquier miembro activo edita; la materia no cambia. */
+/** Aplicación compartida por la ruta V2; el reducer heredado no admite ediciones sin versión. */
+function applyGuideUpdate(ctx: Ctx, { guideId, ...input }: Parameters<typeof checkGuide>[1] & { guideId: bigint }) {
+  activeMember(ctx);
+  const row = requireGuide(ctx, guideId);
+  if (delivery2.withdrawn(ctx.db, 'guide', guideId)) throw new SenderError('La guía está retirada.');
+  const checked = checkGuide(ctx, input);
+  if (checked.subjectId !== row.subjectId) {
+    throw new SenderError('La materia de una guía no cambia.');
+  }
+  delivery2.captureGuide(ctx, guideId);
+  ctx.db.studyGuide.id.update({
+    ...row,
+    ...checked,
+    version: row.version + 1,
+    updatedBy: ctx.sender,
+    updatedAt: ctx.timestamp,
+  });
+  // Un tema que se quitó del temario deja de contar en las fuentes.
+  for (const source of [...ctx.db.guideSource.guideId.filter(guideId)]) {
+    const topics = source.topics.filter((topic) => checked.topics.includes(topic));
+    if (topics.length !== source.topics.length) ctx.db.guideSource.id.update({ ...source, topics });
+  }
+  log(ctx, 'update', 'study_guide', guideId);
+  delivery2.captureGuide(ctx, guideId, ctx.sender);
+}
+
+/** Una versión antigua debe actualizarse antes de editar material compartido. */
 export const update_guide = spacetimedb.reducer(
   { guideId: t.u64(), ...GUIDE_ARGS },
-  (ctx, { guideId, ...input }) => {
+  (ctx) => {
     activeMember(ctx);
-    const row = requireGuide(ctx, guideId);
-    const checked = checkGuide(ctx, input);
-    if (checked.subjectId !== row.subjectId) {
-      throw new SenderError('La materia de una guía no cambia.');
-    }
-    ctx.db.studyGuide.id.update({
-      ...row,
-      ...checked,
-      version: row.version + 1,
-      updatedBy: ctx.sender,
-      updatedAt: ctx.timestamp,
-    });
-    // Un tema que se quitó del temario deja de contar en las fuentes.
-    for (const source of [...ctx.db.guideSource.guideId.filter(guideId)]) {
-      const topics = source.topics.filter((topic) => checked.topics.includes(topic));
-      if (topics.length !== source.topics.length) ctx.db.guideSource.id.update({ ...source, topics });
-    }
-    log(ctx, 'update', 'study_guide', guideId);
+    throw new SenderError('Actualiza la aplicación para editar la guía con su versión actual.');
   },
 );
 
@@ -2304,13 +2345,16 @@ export const add_guide_sources = spacetimedb.reducer(
   { guideId: t.u64(), sources: t.array(GUIDE_SOURCE_REF) },
   (ctx, { guideId, sources }) => {
     activeMember(ctx);
+    delivery2.captureGuide(ctx, guideId);
     addGuideSources(ctx, requireGuide(ctx, guideId), sources);
+    delivery2.bumpExtra(ctx, 'guide', guideId);
     log(ctx, 'update', 'study_guide', guideId);
   },
 );
 
 function requireGuideSource(ctx: Ctx, sourceId: bigint) {
   const row = ctx.db.guideSource.id.find(sourceId);
+  if (row && delivery2.withdrawn(ctx.db, 'guide', row.guideId)) throw new SenderError('La guía está retirada.');
   if (!row) throw new SenderError('La fuente no existe.');
   return row;
 }
@@ -2321,6 +2365,7 @@ export const update_guide_source = spacetimedb.reducer(
     activeMember(ctx);
     const row = requireGuideSource(ctx, sourceId);
     const guide = requireGuide(ctx, row.guideId);
+    delivery2.captureGuide(ctx, guide.id);
     if (status !== 'processed' && status !== 'pending') {
       throw new SenderError('Estado de fuente inválido.');
     }
@@ -2336,6 +2381,7 @@ export const update_guide_source = spacetimedb.reducer(
       reason: status === 'pending' ? why : '',
       topics: guide.topics.filter((topic) => topics.includes(topic)),
     });
+    delivery2.bumpExtra(ctx, 'guide', guide.id);
     log(ctx, 'update', 'guide_source', sourceId);
   },
 );
@@ -2348,7 +2394,9 @@ export const refresh_guide_source = spacetimedb.reducer(
     const row = requireGuideSource(ctx, sourceId);
     const guide = requireGuide(ctx, row.guideId);
     const version = sourceVersion(ctx, row.kind, row.refId, guide.subjectId);
+    delivery2.captureGuide(ctx, guide.id);
     ctx.db.guideSource.id.update({ ...row, sourceVersion: version });
+    delivery2.bumpExtra(ctx, 'guide', guide.id);
     log(ctx, 'update', 'guide_source', sourceId);
   },
 );
@@ -2357,8 +2405,10 @@ export const remove_guide_source = spacetimedb.reducer(
   { sourceId: t.u64() },
   (ctx, { sourceId }) => {
     activeMember(ctx);
-    requireGuideSource(ctx, sourceId);
+    const row = requireGuideSource(ctx, sourceId);
+    delivery2.captureGuide(ctx, row.guideId);
     ctx.db.guideSource.id.delete(sourceId);
+    delivery2.bumpExtra(ctx, 'guide', row.guideId);
     log(ctx, 'delete', 'guide_source', sourceId);
   },
 );
@@ -2628,8 +2678,8 @@ export const close_help_contact = spacetimedb.reducer(
 // Tareas y Actividades: versiones completas, seguimiento y archivos verificados
 // ---------------------------------------------------------------------------
 
-type ResourceKind = 'assignment' | 'activity' | 'work' | 'evidence';
-const RESOURCE_KINDS: readonly string[] = ['assignment', 'activity', 'work', 'evidence'];
+type ResourceKind = 'assignment' | 'activity' | 'work' | 'evidence' | typeof delivery2.extraKinds[number];
+const RESOURCE_KINDS: readonly string[] = ['assignment', 'activity', 'work', 'evidence', ...delivery2.extraKinds];
 const hexIdentity = (value: string) => value.trim().replace(/^0x/i, '').toLowerCase();
 
 function resourceKind(value: string): ResourceKind {
@@ -2638,6 +2688,7 @@ function resourceKind(value: string): ResourceKind {
 }
 
 function targetVersion(ctx: Ctx, kind: string, targetId: bigint): number {
+  if (delivery2.extraKinds.includes(kind as typeof delivery2.extraKinds[number])) return delivery2.extraVersion(ctx, kind, targetId);
   switch (resourceKind(kind)) {
     case 'assignment': {
       const row = ctx.db.assignment.id.find(targetId);
@@ -2658,6 +2709,7 @@ function targetVersion(ctx: Ctx, kind: string, targetId: bigint): number {
       if (!ctx.db.evidence.id.find(targetId)) throw new SenderError('La evidencia no existe.');
       return ctx.db.evidenceDetail.evidenceId.find(targetId)?.version ?? 1;
   }
+  throw new SenderError('El recurso no existe.');
 }
 
 function expectVersion(actual: number, expected: number) {
@@ -2670,6 +2722,10 @@ function requireTargetWriter(ctx: Ctx, kind: string, targetId: bigint, actor = c
   const person = ctx.db.member.identity.find(actor);
   if (!person || person.status !== 'active') throw new SenderError('No eres miembro activo del grupo.');
   targetVersion(ctx, kind, targetId);
+  if (delivery2.extraKinds.includes(kind as typeof delivery2.extraKinds[number])) {
+    delivery2.extraWriter(ctx, kind, targetId, actor); return;
+  }
+  if (delivery2.withdrawn(ctx.db, kind, targetId)) throw new SenderError('El contenido está retirado.');
   if (kind === 'work') {
     if (![...ctx.db.workAuthor.workId.filter(targetId)].some((row) => row.author.isEqual(actor))) {
       throw new SenderError('Solo el autor o los coautores editan este trabajo.');
@@ -2767,6 +2823,8 @@ function savePageSnapshot(ctx: Ctx, page: 'assignment' | 'activity', pageId: big
 }
 
 function saveTargetBaseline(ctx: Ctx, kind: string, targetId: bigint) {
+  if (kind === 'note') { delivery2.captureNote(ctx, targetId); return; }
+  if (kind === 'guide') { delivery2.captureGuide(ctx, targetId); return; }
   if (kind === 'work') saveWorkSnapshot(ctx, targetId);
   else if (kind === 'assignment' || kind === 'activity') savePageSnapshot(ctx, kind, targetId);
   else if (kind === 'evidence') {
@@ -2778,6 +2836,9 @@ function saveTargetBaseline(ctx: Ctx, kind: string, targetId: bigint) {
 
 /** Cada cambio material invalida revisiones de versiones anteriores, sin borrarlas. */
 function bumpMaterial(ctx: Ctx, kind: string, targetId: bigint, actor = ctx.sender, restoredFrom?: number) {
+  if (delivery2.extraKinds.includes(kind as typeof delivery2.extraKinds[number])) {
+    delivery2.bumpExtra(ctx, kind, targetId, actor); return;
+  }
   const version = targetVersion(ctx, kind, targetId) + 1;
   if (kind === 'work') {
     const row = ctx.db.work.id.find(targetId)!;
@@ -3206,11 +3267,19 @@ function readableResource(tx: Ctx, fileId: string) {
     }
     const file = tx.db.resourceFile.id.find(fileId);
     if (!file) throw new SenderError('El archivo no existe.');
+    if (delivery2.reportFileReadable(tx.db, tx.sender, fileId)) return file;
+    if (!delivery2.canReadTarget(tx.db, tx.sender, file.targetKind, file.targetId)) throw new SenderError('No tienes acceso a este archivo.');
+    if (file.targetKind === 'profile') {
+      const profile = tx.db.memberProfile.id.find(file.targetId)!;
+      if (profile.photoFileId !== fileId && !profile.memberId.isEqual(tx.sender)) throw new SenderError('Esta foto ya no está compartida.');
+    }
     targetVersion(tx, file.targetKind, file.targetId);
     if (file.removedAt !== undefined) {
       // Las evidencias conservan adjuntos retirados como registros recuperables propios;
       // no tienen snapshots del texto. targetVersion ya comprobó que el destino existe.
-      const historical = file.targetKind === 'evidence' || (file.targetKind === 'work'
+      const historical = file.targetKind === 'evidence' || (file.targetKind === 'note'
+        ? [...tx.db.noteVersion.noteId.filter(file.targetId)].some((v) => v.attachmentIds.includes(fileId))
+        : file.targetKind === 'guide' ? [...tx.db.guideVersion.guideId.filter(file.targetId)].some((v) => v.attachmentIds.includes(fileId)) : file.targetKind === 'work'
         ? [...tx.db.workRevision.workId.filter(file.targetId)].some((r) => r.attachmentIds.includes(fileId))
         : (file.targetKind === 'assignment' || file.targetKind === 'activity') &&
           [...tx.db.pageSnapshot.pageId.filter(file.targetId)].some((r) => r.page === file.targetKind && r.attachmentIds.includes(fileId)));
@@ -3286,6 +3355,9 @@ export const begin_resource_upload = spacetimedb.reducer({
     throw new SenderError('Identificador de subida inválido.');
   }
   if (input.bytes <= 0n || input.bytes > MAX_FILE_BYTES) throw new SenderError('El archivo debe medir entre 1 byte y 50 MB.');
+  if (input.targetKind === 'profile' && (input.bytes > 5n * 1024n * 1024n || !['image/png', 'image/jpeg', 'image/webp'].includes(input.mime))) {
+    throw new SenderError('Usa una foto PNG, JPEG o WebP de hasta 5 MiB.');
+  }
   if (!/^[a-f0-9]{64}$/.test(input.sha256)) throw new SenderError('Comprobación SHA-256 inválida.');
   const name = requireText(input.name, 'El nombre del archivo', 200);
   const mime = requireText(input.mime, 'El tipo del archivo', 200);
@@ -3348,6 +3420,15 @@ export const finalize_resource_upload = spacetimedb.reducer({ uploadId: t.string
   }
   const actual = Array.from(hash.digest(), (byte) => byte.toString(16).padStart(2, '0')).join('');
   if (actual !== upload.sha256) throw new SenderError('El archivo no supera la comprobación de integridad.');
+  if (upload.targetKind === 'profile') {
+    const head = ctx.db.resourceChunk.id.find(`${uploadId}:0`)!.bytes;
+    const png = head.length >= 8 && [137, 80, 78, 71, 13, 10, 26, 10].every((b, i) => head[i] === b);
+    const jpeg = head.length >= 3 && head[0] === 255 && head[1] === 216 && head[2] === 255;
+    const webp = head.length >= 12 && [82, 73, 70, 70].every((b, i) => head[i] === b) && [87, 69, 66, 80].every((b, i) => head[i + 8] === b);
+    if (!(upload.mime === 'image/png' && png || upload.mime === 'image/jpeg' && jpeg || upload.mime === 'image/webp' && webp)) {
+      throw new SenderError('El contenido de la foto no coincide con su tipo de imagen.');
+    }
+  }
   saveTargetBaseline(ctx, upload.targetKind, upload.targetId);
   ctx.db.resourceFile.insert({ id: uploadId, targetKind: upload.targetKind, targetId: upload.targetId,
     name: upload.name, contentType: upload.mime, size: upload.bytes, storageKey: `stdb:${uploadId}`,
@@ -3388,8 +3469,9 @@ export const get_resource_upload_status = spacetimedb.procedure({ uploadId: t.st
 export const get_resource_manifest = spacetimedb.procedure({ fileId: t.string() }, t.string(),
   (ctx, { fileId }) => ctx.withTx((tx) => {
     const file = readableResource(tx, fileId);
-    const native = tx.db.resourceUpload.id.find(fileId);
-    const direct = file.storageKey === `stdb:${fileId}` && native?.state === 'ready';
+    const sourceId = file.storageKey.startsWith('stdb:') ? file.storageKey.slice(5) : undefined;
+    const native = sourceId ? tx.db.resourceUpload.id.find(sourceId) : undefined;
+    const direct = native?.state === 'ready';
     return JSON.stringify({ storageKind: direct ? 'spacetime' : 'legacy', fileId, name: file.name,
       mime: file.contentType, bytes: file.size.toString(), chunkCount: direct ? native.chunkCount : 0,
       sha256: direct ? native.sha256 : '' });
@@ -3399,8 +3481,10 @@ export const read_resource_chunk = spacetimedb.procedure({ fileId: t.string(), i
   t.object('ResourceChunkResult', { index: t.u32(), bytes: t.byteArray(), sha256: t.string() }),
   (ctx, { fileId, index }) => ctx.withTx((tx) => {
     const file = readableResource(tx, fileId);
-    if (file.storageKey !== `stdb:${fileId}`) throw new SenderError('El archivo usa almacenamiento anterior.');
-    const row = tx.db.resourceChunk.id.find(`${fileId}:${index}`);
+    if (!file.storageKey.startsWith('stdb:')) throw new SenderError('El archivo usa almacenamiento anterior.');
+    const sourceId = file.storageKey.slice(5);
+    if (tx.db.resourceUpload.id.find(sourceId)?.state !== 'ready') throw new SenderError('El archivo no está disponible.');
+    const row = tx.db.resourceChunk.id.find(`${sourceId}:${index}`);
     if (!row) throw new SenderError('El bloque no existe.');
     return { index: row.index, bytes: row.bytes, sha256: row.sha256 };
   }));
@@ -3434,6 +3518,7 @@ function presentationVersion(actual: number, expected: number | undefined) {
 function presentationSourceVersion(db: ViewDb, sender: Ctx['sender'], subjectId: bigint, kind?: string, id?: bigint): number | undefined {
   if (kind === undefined && id === undefined) return undefined;
   if (id === undefined || (kind !== 'note' && kind !== 'guide')) throw new SenderError('La fuente debe ser una nota o guía accesible.');
+  if (delivery2.withdrawn(db, kind, id)) throw new SenderError('La fuente está retirada o no está disponible.');
   const row = kind === 'note' ? db.note.id.find(id) : db.studyGuide.id.find(id);
   if (!row || row.subjectId !== subjectId || ('visibility' in row && row.visibility !== 'group' && !row.author.isEqual(sender))) {
     throw new SenderError('La fuente no existe, no es accesible o pertenece a otra materia.');
@@ -3512,6 +3597,9 @@ export const create_presentation_attempt = spacetimedb.reducer({ practiceId: t.u
       ctx.db.presentationPractice.id.find(attempt.practiceId)?.ownerId.isEqual(ctx.sender));
     if (previous) { if (previous.practiceId !== practiceId || previous.creationVersion !== expectedVersion) throw new SenderError('La solicitud ya se usó con otra versión.'); return; }
     presentationVersion(row.version, expectedVersion);
+    if (row.sourceKind && row.sourceId !== undefined && delivery2.withdrawn(ctx.db, row.sourceKind, row.sourceId)) {
+      throw new SenderError('La fuente está retirada. Cambia o elimina la referencia antes de crear otro intento.');
+    }
     if (attempts.some((attempt) => attempt.status === 'draft')) throw new SenderError('Completa el borrador actual antes de crear otro intento.');
     if (attempts.length >= 100) throw new SenderError('La exposición admite hasta 100 intentos.');
     const last = attempts.sort((a, b) => b.number - a.number)[0];
@@ -3590,6 +3678,7 @@ const spacedKey = (id: bigint, sender: Ctx['sender']) => `${id}:${sender.toHexSt
 
 function spacedSourceVersion(db: ViewDb, sender: Ctx['sender'], collection: SpacedCollectionRow,
   kind: string, id: bigint): number | undefined {
+  if ((kind !== 'note' && kind !== 'guide') || delivery2.withdrawn(db, kind, id)) return undefined;
   if (kind === 'guide') {
     const row = db.studyGuide.id.find(id);
     return row?.subjectId === collection.subjectId ? row.version : undefined;
@@ -3853,6 +3942,9 @@ function checkTeachingSource(
   if ((sourceKind !== 'note' && sourceKind !== 'guide') || sourceId === undefined) {
     throw new SenderError('La fuente debe ser una nota o guía accesible.');
   }
+  if (delivery2.withdrawn(ctx.db, sourceKind, sourceId) || !delivery2.canReadTarget(ctx.db, ctx.sender, sourceKind, sourceId)) {
+    throw new SenderError('La fuente no existe o no tienes acceso.');
+  }
   const source = sourceKind === 'note'
     ? ctx.db.note.id.find(sourceId)
     : ctx.db.studyGuide.id.find(sourceId);
@@ -4038,7 +4130,43 @@ export const publish_teaching_explanation = spacetimedb.reducer(
   },
 );
 
-type ViewDb = Parameters<Parameters<typeof spacetimedb.view>[2]>[0]['db'];
+export type ViewDb = Parameters<Parameters<typeof spacetimedb.view>[2]>[0]['db'];
+
+// Salas: la ficha y la conversación tienen vistas independientes para que una
+// invitación pendiente nunca entregue materiales ni historial privado.
+const ROOM_METADATA = { title: t.string(), topic: t.string(), objective: t.string(), startsAt: t.timestamp(),
+  endsAt: t.timestamp(), capacity: t.u32().optional() };
+export const create_study_room = spacetimedb.reducer({ requestId: t.string(), subjectId: t.u64(), ...ROOM_METADATA,
+  visibility: t.string(), helpContactId: t.u64().optional(), sourceKind: t.string().optional(), sourceId: t.u64().optional() }, rooms.createRoom);
+export const update_study_room = spacetimedb.reducer({ roomId: t.u64(), ...ROOM_METADATA, expectedVersion: t.u32() }, rooms.updateRoom);
+export const join_study_room = spacetimedb.reducer({ roomId: t.u64() }, rooms.joinRoom);
+export const leave_study_room = spacetimedb.reducer({ roomId: t.u64() }, rooms.leaveRoom);
+export const invite_study_room_member = spacetimedb.reducer({ roomId: t.u64(), memberId: t.identity() }, rooms.inviteMember);
+export const respond_study_room_invitation = spacetimedb.reducer({ roomId: t.u64(), accepted: t.bool() }, rooms.respondInvitation);
+export const remove_study_room_member = spacetimedb.reducer({ roomId: t.u64(), memberId: t.identity() }, rooms.removeMember);
+export const set_study_room_status = spacetimedb.reducer({ roomId: t.u64(), status: t.string(), expectedVersion: t.u32() }, rooms.setRoomStatus);
+export const set_study_room_material = spacetimedb.reducer({ roomId: t.u64(), kind: t.string(), sourceId: t.u64(), enabled: t.bool() }, rooms.setMaterial);
+export const send_study_room_entry = spacetimedb.reducer({ roomId: t.u64(), kind: t.string(), text: t.string(), requestId: t.string() }, rooms.sendEntry);
+export const control_study_room_timer = spacetimedb.reducer({ roomId: t.u64(), action: t.string(), expectedVersion: t.u32(),
+  studyMinutes: t.u32().optional(), breakMinutes: t.u32().optional() }, rooms.controlTimer);
+export const save_study_room_summary = spacetimedb.reducer({ roomId: t.u64(), text: t.string(), expectedVersion: t.u32() }, rooms.saveSummary);
+export const publish_study_room_summary = spacetimedb.reducer({ roomId: t.u64(), expectedVersion: t.u32() }, rooms.publishSummary);
+export const study_room_clock = spacetimedb.procedure({ roomId: t.u64() }, t.timestamp(),
+  (ctx, { roomId }) => ctx.withTx((tx) => rooms.roomClock(tx, roomId)));
+export const study_rooms = spacetimedb.view({ name: 'study_rooms', public: true }, t.array(studyRoom.rowType),
+  (ctx) => rooms.visibleRooms(ctx.db, ctx.sender));
+export const room_members = spacetimedb.view({ name: 'room_members', public: true }, t.array(roomMember.rowType),
+  (ctx) => rooms.visibleMembers(ctx.db, ctx.sender));
+export const room_materials = spacetimedb.view({ name: 'room_materials', public: true }, t.array(roomMaterial.rowType),
+  (ctx) => rooms.visibleMaterials(ctx.db, ctx.sender));
+export const room_entries = spacetimedb.view({ name: 'room_entries', public: true }, t.array(roomEntry.rowType),
+  (ctx) => rooms.visibleEntries(ctx.db, ctx.sender));
+export const room_timers = spacetimedb.view({ name: 'room_timers', public: true }, t.array(roomTimer.rowType),
+  (ctx) => rooms.visibleTimers(ctx.db, ctx.sender));
+export const room_summaries = spacetimedb.view({ name: 'room_summaries', public: true }, t.array(roomSummary.rowType),
+  (ctx) => rooms.visibleSummaries(ctx.db, ctx.sender));
+export const my_help_room_links = spacetimedb.view({ name: 'my_help_room_links', public: true }, t.array(helpRoomLink.rowType),
+  (ctx) => rooms.visibleHelpLinks(ctx.db, ctx.sender));
 
 export const assignment_details = spacetimedb.view(
   { name: 'assignment_details', public: true }, t.array(assignmentDetail.rowType),
@@ -4050,23 +4178,23 @@ export const my_progress = spacetimedb.view(
 );
 export const work_details = spacetimedb.view(
   { name: 'work_details', public: true }, t.array(workDetail.rowType),
-  (ctx) => isActive(ctx.db, ctx.sender) ? [...ctx.db.workDetail.iter()] : [],
+  (ctx) => isActive(ctx.db, ctx.sender) ? [...ctx.db.workDetail.iter()].filter((r) => delivery2.canReadTarget(ctx.db, ctx.sender, 'work', r.workId)) : [],
 );
 export const work_revisions = spacetimedb.view(
   { name: 'work_revisions', public: true }, t.array(workRevision.rowType),
-  (ctx) => isActive(ctx.db, ctx.sender) ? [...ctx.db.workRevision.iter()] : [],
+  (ctx) => isActive(ctx.db, ctx.sender) ? [...ctx.db.workRevision.iter()].filter((r) => delivery2.canReadTarget(ctx.db, ctx.sender, 'work', r.workId)) : [],
 );
 export const work_reviews = spacetimedb.view(
   { name: 'work_reviews', public: true }, t.array(workReview.rowType),
-  (ctx) => isActive(ctx.db, ctx.sender) ? [...ctx.db.workReview.iter()] : [],
+  (ctx) => isActive(ctx.db, ctx.sender) ? [...ctx.db.workReview.iter()].filter((r) => delivery2.canReadTarget(ctx.db, ctx.sender, 'work', r.workId)) : [],
 );
 export const academic_comments = spacetimedb.view(
   { name: 'academic_comments', public: true }, t.array(academicComment.rowType),
-  (ctx) => isActive(ctx.db, ctx.sender) ? [...ctx.db.academicComment.iter()] : [],
+  (ctx) => isActive(ctx.db, ctx.sender) ? [...ctx.db.academicComment.iter()].filter((r) => delivery2.canReadTarget(ctx.db, ctx.sender, r.targetKind, r.targetId)) : [],
 );
 export const evidence_details = spacetimedb.view(
   { name: 'evidence_details', public: true }, t.array(evidenceDetail.rowType),
-  (ctx) => isActive(ctx.db, ctx.sender) ? [...ctx.db.evidenceDetail.iter()] : [],
+  (ctx) => isActive(ctx.db, ctx.sender) ? [...ctx.db.evidenceDetail.iter()].filter((r) => delivery2.canReadTarget(ctx.db, ctx.sender, 'evidence', r.evidenceId)) : [],
 );
 /** Una nota que después se vuelve personal deja de exponerse también por sus enlaces. */
 export const activity_links = spacetimedb.view(
@@ -4088,7 +4216,15 @@ const resourceFileInfo = t.object('ResourceFileInfo', {
 });
 export const resource_files = spacetimedb.view(
   { name: 'resource_files', public: true }, t.array(resourceFileInfo),
-  (ctx) => isActive(ctx.db, ctx.sender) ? [...ctx.db.resourceFile.iter()].map(({ storageKey: _key, ...row }) => row) : [],
+  (ctx) => isActive(ctx.db, ctx.sender) ? [...ctx.db.resourceFile.iter()].filter((file) => {
+    if (delivery2.reportFileReadable(ctx.db, ctx.sender, file.id)) return true;
+    if (!delivery2.canReadTarget(ctx.db, ctx.sender, file.targetKind, file.targetId)) return false;
+    if (file.targetKind === 'profile') {
+      const profile = ctx.db.memberProfile.id.find(file.targetId);
+      return profile?.memberId.isEqual(ctx.sender) || profile?.photoFileId === file.id;
+    }
+    return true;
+  }).map(({ storageKey: _key, ...row }) => row) : [],
 );
 
 function isActive(db: ViewDb, sender: Ctx['sender']): boolean {
@@ -4259,19 +4395,19 @@ export const page_revisions = spacetimedb.view(
 export const works = spacetimedb.view(
   { name: 'works', public: true },
   t.array(work.rowType),
-  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.work.iter()] : []),
+  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.work.iter()].filter((r) => delivery2.canReadTarget(ctx.db, ctx.sender, 'work', r.id)) : []),
 );
 
 export const work_authors = spacetimedb.view(
   { name: 'work_authors', public: true },
   t.array(workAuthor.rowType),
-  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.workAuthor.iter()] : []),
+  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.workAuthor.iter()].filter((r) => delivery2.canReadTarget(ctx.db, ctx.sender, 'work', r.workId)) : []),
 );
 
 export const work_files = spacetimedb.view(
   { name: 'work_files', public: true },
   t.array(workFile.rowType),
-  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.workFile.iter()] : []),
+  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.workFile.iter()].filter((r) => delivery2.canReadTarget(ctx.db, ctx.sender, 'work', r.workId)) : []),
 );
 
 export const group_messages = spacetimedb.view(
@@ -4289,7 +4425,35 @@ export const birthdays = spacetimedb.view(
 export const change_history = spacetimedb.view(
   { name: 'change_history', public: true },
   t.array(changeLog.rowType),
-  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.changeLog.iter()] : []),
+  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.changeLog.iter()].filter((r) => {
+    if (['invitation', 'auth_config', 'file_service', 'resource_capacity'].includes(r.entity)) {
+      return ctx.db.member.identity.find(ctx.sender)?.isCreator === true;
+    }
+    const kind = r.entity === 'study_guide' ? 'guide' : r.entity;
+    if (['note', 'guide', 'question', 'answer', 'work', 'evidence'].includes(kind) && /^\d+$/.test(r.entityId)) {
+      return delivery2.canReadTarget(ctx.db, ctx.sender, kind, BigInt(r.entityId));
+    }
+    if (r.entity === 'resource_file') {
+      const file = ctx.db.resourceFile.id.find(r.entityId);
+      if (!file || !delivery2.canReadTarget(ctx.db, ctx.sender, file.targetKind, file.targetId)) return false;
+      if (file.targetKind === 'profile') {
+        const profile = ctx.db.memberProfile.id.find(file.targetId);
+        return profile?.memberId.isEqual(ctx.sender) || profile?.photoFileId === file.id;
+      }
+      return true;
+    }
+    if (r.entity === 'guide_source' && /^\d+$/.test(r.entityId)) {
+      const source = ctx.db.guideSource.id.find(BigInt(r.entityId));
+      return source ? delivery2.canReadTarget(ctx.db, ctx.sender, 'guide', source.guideId) : r.actor.isEqual(ctx.sender);
+    }
+    if (r.entity === 'help_post' && /^\d+$/.test(r.entityId)) {
+      const post = ctx.db.helpPost.id.find(BigInt(r.entityId));
+      return !!post && (post.status !== 'withdrawn' || post.author.isEqual(ctx.sender) || ctx.db.member.identity.find(ctx.sender)?.isCreator === true);
+    }
+    if (r.entity === 'member_profile' && /^\d+$/.test(r.entityId)) return delivery2.canReadTarget(ctx.db, ctx.sender, 'profile', BigInt(r.entityId));
+    return ['member', 'subject', 'term', 'calendar', 'assignment', 'activity', 'poll', 'group_message', 'channel_message'].includes(r.entity)
+      || r.actor.isEqual(ctx.sender);
+  }) : []),
 );
 
 /** Solo las conversaciones 1 a 1 en las que participas. */
@@ -4333,6 +4497,7 @@ export const message_reactions = spacetimedb.view(
     );
     return [...ctx.db.messageReaction.iter()].filter((r) => {
       if (r.scope === 'group') return true;
+      if (r.scope === 'channel') return !!ctx.db.channelMessage.id.find(r.messageId);
       const message = ctx.db.directMessage.id.find(r.messageId);
       return message != null && mine.has(message.conversationId);
     });
@@ -4355,11 +4520,8 @@ export const stickers = spacetimedb.view(
   t.array(sticker.rowType),
   (ctx) => {
     if (!isActive(ctx.db, ctx.sender)) return [];
-    return [...ctx.db.sticker.iter()].filter((row) => {
-      if (row.used) return true;
-      const pack = ctx.db.stickerPack.id.find(row.packId);
-      return pack != null && (pack.shared || pack.owner.isEqual(ctx.sender));
-    });
+    const visible = nativeStickers.visibleStickerIds(ctx.db, ctx.sender);
+    return [...ctx.db.sticker.iter()].filter((row) => visible.has(row.id));
   },
 );
 
@@ -4378,13 +4540,13 @@ export const activities = spacetimedb.view(
 export const evidences = spacetimedb.view(
   { name: 'evidences', public: true },
   t.array(evidence.rowType),
-  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.evidence.iter()] : []),
+  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.evidence.iter()].filter((r) => delivery2.canReadTarget(ctx.db, ctx.sender, 'evidence', r.id)) : []),
 );
 
 /** Notas del grupo y las personales propias; nunca las personales de otros. */
 function visibleNotes(db: ViewDb, sender: Ctx['sender']) {
   if (!isActive(db, sender)) return [];
-  return [...db.note.iter()].filter((n) => n.visibility === 'group' || n.author.isEqual(sender));
+  return [...db.note.iter()].filter((n) => delivery2.canReadTarget(db, sender, 'note', n.id));
 }
 
 export const notes = spacetimedb.view(
@@ -4432,13 +4594,13 @@ export const teaching_questions = spacetimedb.view(
 export const questions = spacetimedb.view(
   { name: 'questions', public: true },
   t.array(question.rowType),
-  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.question.iter()] : []),
+  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.question.iter()].filter((r) => delivery2.canReadTarget(ctx.db, ctx.sender, 'question', r.id)) : []),
 );
 
 export const answers = spacetimedb.view(
   { name: 'answers', public: true },
   t.array(answer.rowType),
-  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.answer.iter()] : []),
+  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.answer.iter()].filter((r) => delivery2.canReadTarget(ctx.db, ctx.sender, 'answer', r.id)) : []),
 );
 
 export const my_last_seen = spacetimedb.view(
@@ -4453,19 +4615,19 @@ export const my_last_seen = spacetimedb.view(
 export const study_guides = spacetimedb.view(
   { name: 'study_guides', public: true },
   t.array(studyGuide.rowType),
-  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.studyGuide.iter()] : []),
+  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.studyGuide.iter()].filter((r) => delivery2.canReadTarget(ctx.db, ctx.sender, 'guide', r.id)) : []),
 );
 
 export const guide_sources = spacetimedb.view(
   { name: 'guide_sources', public: true },
   t.array(guideSource.rowType),
-  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.guideSource.iter()] : []),
+  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.guideSource.iter()].filter((r) => delivery2.canReadTarget(ctx.db, ctx.sender, 'guide', r.guideId)) : []),
 );
 
 export const guide_reviews = spacetimedb.view(
   { name: 'guide_reviews', public: true },
   t.array(guideReview.rowType),
-  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.guideReview.iter()] : []),
+  (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.guideReview.iter()].filter((r) => delivery2.canReadTarget(ctx.db, ctx.sender, 'guide', r.guideId)) : []),
 );
 
 /** Votaciones nominales: todo el grupo ve las votaciones y los votos, nadie de fuera. */
@@ -4480,3 +4642,96 @@ export const poll_votes = spacetimedb.view(
   t.array(pollVote.rowType),
   (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.pollVote.iter()] : []),
 );
+
+// Segunda entrega: se añaden tablas y operaciones sin alterar los esquemas históricos.
+export const create_chat_channel = spacetimedb.reducer({ name: t.string(), kind: t.string(), subjectId: t.u64().optional() }, delivery2.createChatChannel);
+export const set_chat_channel_archived = spacetimedb.reducer({ channelId: t.u64(), archived: t.bool() }, (ctx, { channelId, archived }) => {
+  const row = delivery2.channel(ctx, channelId);
+  if (!row.createdBy.isEqual(ctx.sender) && !activeMember(ctx).isCreator) throw new SenderError('Solo el creador del canal o un administrador puede archivarlo.');
+  ctx.db.chatChannel.id.update({ ...row, archivedAt: archived ? ctx.timestamp : undefined });
+});
+export const send_channel_message = spacetimedb.reducer({ channelId: t.u64(), text: t.string(), replyToId: t.u64().optional() }, delivery2.sendChannelMessage);
+export const mark_conversation_read = spacetimedb.reducer({ scope: t.string(), conversationId: t.string(), messageId: t.u64() }, delivery2.markConversationRead);
+export const set_conversation_muted = spacetimedb.reducer({ scope: t.string(), conversationId: t.string(), muted: t.bool() }, (ctx, { scope, conversationId, muted }) => {
+  delivery2.conversationAccess(ctx, scope, conversationId);
+  const key = `${ctx.sender.toHexString()}:${scope}:${conversationId}`;
+  const old = ctx.db.conversationState.key.find(key);
+  const row = { key, memberId: ctx.sender, scope, conversationId, muted, readThroughId: old?.readThroughId, updatedAt: ctx.timestamp };
+  if (old) ctx.db.conversationState.key.update(row); else ctx.db.conversationState.insert(row);
+});
+export const set_member_blocked = spacetimedb.reducer({ memberId: t.identity(), blocked: t.bool() }, (ctx, { memberId, blocked }) => {
+  activeMember(ctx);
+  if (memberId.isEqual(ctx.sender) || !isActive(ctx.db, memberId)) throw new SenderError('Selecciona otro compañero activo.');
+  const key = `${ctx.sender.toHexString()}:${memberId.toHexString()}`;
+  if (!blocked) { ctx.db.memberBlock.key.delete(key); return; }
+  if (!ctx.db.memberBlock.key.find(key)) ctx.db.memberBlock.insert({ key, owner: ctx.sender, memberId, createdAt: ctx.timestamp });
+});
+export const report_message = spacetimedb.reducer({ scope: t.string(), messageId: t.u64(), reason: t.string(), shareText: t.bool(), attachmentIds: t.array(t.string()) }, delivery2.reportMessage);
+export const resolve_message_report = spacetimedb.reducer({ reportId: t.u64() }, (ctx, { reportId }) => {
+  if (!activeMember(ctx).isCreator) throw new SenderError('Solo un administrador resuelve reportes.');
+  const row = ctx.db.messageReport.id.find(reportId);
+  if (!row) throw new SenderError('El reporte no existe.');
+  ctx.db.messageReport.id.update({ ...row, status: 'resolved', resolvedBy: ctx.sender, resolvedAt: ctx.timestamp });
+});
+export const save_member_profile = spacetimedb.reducer({ expectedVersion: t.u32(), preferredName: t.string(), bio: t.string(), interests: t.array(t.string()),
+  learningGoals: t.string(), skills: t.array(t.string()), helpTopics: t.array(t.string()), portfolioLinks: t.array(t.string()),
+  subjectIds: t.array(t.u64()), photoFileId: t.string().optional() }, saveMemberProfile);
+export const withdraw_content = spacetimedb.reducer({ kind: t.string(), targetId: t.u64(), withdrawn: t.bool(), expectedVersion: t.u32(), reason: t.string() }, withdrawContent);
+export const save_note_v2 = spacetimedb.reducer({ noteId: t.u64().optional(), expectedVersion: t.u32().optional(), subjectId: t.u64(), termId: t.u64().optional(),
+  session: t.string(), topic: t.string(), title: t.string(), body: t.string(), tags: t.array(t.string()), visibility: t.string(), source: t.string(),
+  assignmentIds: t.array(t.u64()), activityIds: t.array(t.u64()), questionIds: t.array(t.u64()) }, knowledge.saveNoteV2);
+export const publish_note_version = spacetimedb.reducer({ noteId: t.u64(), expectedVersion: t.u32() }, knowledge.publishNoteVersion);
+export const restore_note_version = spacetimedb.reducer({ noteId: t.u64(), version: t.u32(), expectedVersion: t.u32() }, knowledge.restoreNoteVersion);
+export const update_guide_v2 = spacetimedb.reducer({ guideId: t.u64(), expectedVersion: t.u32(), ...GUIDE_ARGS }, (ctx, { expectedVersion, ...input }) => {
+  activeMember(ctx);
+  expectVersion(requireGuide(ctx, input.guideId).version, expectedVersion); applyGuideUpdate(ctx, input);
+});
+export const restore_guide_version = spacetimedb.reducer({ guideId: t.u64(), version: t.u32(), expectedVersion: t.u32() }, knowledge.restoreGuideVersion);
+export const comment_question = spacetimedb.reducer({ questionId: t.u64(), answerId: t.u64().optional(), text: t.string() }, knowledge.commentQuestion);
+export const toggle_answer_usefulness = spacetimedb.reducer({ answerId: t.u64() }, knowledge.toggleAnswerUsefulness);
+export const save_question_links = spacetimedb.reducer({ questionId: t.u64(), noteIds: t.array(t.u64()), guideIds: t.array(t.u64()) }, knowledge.saveQuestionLinks);
+
+export const chat_channels = spacetimedb.view({ name: 'chat_channels', public: true }, t.array(chatChannel.rowType),
+  (ctx) => isActive(ctx.db, ctx.sender) ? [...ctx.db.chatChannel.iter()] : []);
+export const channel_messages = spacetimedb.view({ name: 'channel_messages', public: true }, t.array(channelMessage.rowType),
+  (ctx) => isActive(ctx.db, ctx.sender) ? [...ctx.db.channelMessage.iter()] : []);
+export const my_conversation_states = spacetimedb.view({ name: 'my_conversation_states', public: true }, t.array(conversationState.rowType),
+  (ctx) => isActive(ctx.db, ctx.sender) ? [...ctx.db.conversationState.memberId.filter(ctx.sender)] : []);
+export const my_blocked_members = spacetimedb.view({ name: 'my_blocked_members', public: true }, t.array(memberBlock.rowType),
+  (ctx) => isActive(ctx.db, ctx.sender) ? [...ctx.db.memberBlock.owner.filter(ctx.sender)] : []);
+export const my_message_reports = spacetimedb.view({ name: 'my_message_reports', public: true }, t.array(messageReport.rowType),
+  (ctx) => isActive(ctx.db, ctx.sender) ? [...ctx.db.messageReport.iter()].filter((r) => r.reporter.isEqual(ctx.sender) || ctx.db.member.identity.find(ctx.sender)?.isCreator) : []);
+export const member_profiles = spacetimedb.view({ name: 'member_profiles', public: true }, t.array(memberProfile.rowType),
+  (ctx) => isActive(ctx.db, ctx.sender) ? [...ctx.db.memberProfile.iter()].filter((r) => isActive(ctx.db, r.memberId)) : []);
+export const note_details = spacetimedb.view({ name: 'note_details', public: true }, t.array(noteDetail.rowType),
+  (ctx) => [...ctx.db.noteDetail.iter()].filter((r) => delivery2.canReadTarget(ctx.db, ctx.sender, 'note', r.noteId))
+    .map((r) => ctx.db.note.id.find(r.noteId)?.author.isEqual(ctx.sender) ? r : { ...r, publishedFromId: undefined, publishedFromVersion: undefined }));
+export const note_versions = spacetimedb.view({ name: 'note_versions', public: true }, t.array(noteVersion.rowType),
+  (ctx) => [...ctx.db.noteVersion.iter()].filter((r) => delivery2.canReadTarget(ctx.db, ctx.sender, 'note', r.noteId) && (r.visibility === 'group' || r.author.isEqual(ctx.sender))));
+export const guide_versions = spacetimedb.view({ name: 'guide_versions', public: true }, t.array(guideVersion.rowType),
+  (ctx) => [...ctx.db.guideVersion.iter()].filter((r) => delivery2.canReadTarget(ctx.db, ctx.sender, 'guide', r.guideId)));
+export const question_comments = spacetimedb.view({ name: 'question_comments', public: true }, t.array(questionComment.rowType),
+  (ctx) => [...ctx.db.questionComment.iter()].filter((r) => delivery2.canReadTarget(ctx.db, ctx.sender, 'question', r.questionId) && (r.answerId === undefined || delivery2.canReadTarget(ctx.db, ctx.sender, 'answer', r.answerId))));
+export const answer_usefulness = spacetimedb.view({ name: 'answer_usefulness', public: true }, t.array(answerUsefulness.rowType),
+  (ctx) => [...ctx.db.answerUsefulness.iter()].filter((r) => delivery2.canReadTarget(ctx.db, ctx.sender, 'answer', r.answerId)));
+export const question_links = spacetimedb.view({ name: 'question_links', public: true }, t.array(questionLink.rowType),
+  (ctx) => [...ctx.db.questionLink.iter()].filter((r) => delivery2.canReadTarget(ctx.db, ctx.sender, 'question', r.questionId) && delivery2.canReadTarget(ctx.db, ctx.sender, r.targetKind, r.targetId)));
+export const resource_versions = spacetimedb.view({ name: 'resource_versions', public: true }, t.array(resourceVersion.rowType),
+  (ctx) => [...ctx.db.resourceVersion.iter()].filter((r) => delivery2.canReadTarget(ctx.db, ctx.sender, r.targetKind, r.targetId)));
+export const content_statuses = spacetimedb.view({ name: 'content_statuses', public: true }, t.array(contentStatus.rowType),
+  (ctx) => [...ctx.db.contentStatus.iter()].filter((r) => delivery2.canReadTarget(ctx.db, ctx.sender, r.kind, r.targetId)));
+
+/** Bytes de stickers privados: las suscripciones solo reciben metadatos. */
+export const create_sticker_pack_native = spacetimedb.procedure({ requestId: t.string(), name: t.string() }, t.u64(),
+  (ctx, input) => ctx.withTx((tx) => nativeStickers.createStickerPackNative(tx, input)));
+export const add_sticker_native = spacetimedb.procedure({ requestId: t.string(), packId: t.u64(), name: t.string(),
+  contentType: t.string(), animated: t.bool(), bytes: t.byteArray() }, t.u64(),
+  (ctx, input) => ctx.withTx((tx) => nativeStickers.addStickerNative(tx, input)));
+export const read_sticker_bytes = spacetimedb.procedure({ stickerId: t.u64() },
+  t.object('StickerBytesResult', { bytes: t.byteArray(), contentType: t.string() }),
+  (ctx, input) => ctx.withTx((tx) => nativeStickers.readStickerBytes(tx, input)));
+
+/** Procedencia mínima para no volver a premiar copias de aportes retirados. */
+export const contribution_origins = spacetimedb.view({ name: 'contribution_origins', public: true },
+  t.array(t.object('ContributionOrigin', { kind: t.string(), refId: t.u64(), memberId: t.identity(), creditedAt: t.timestamp(), duplicateOf: t.u64().optional() })),
+  (ctx) => readContributionOrigins(ctx.db, ctx.sender));
