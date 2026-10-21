@@ -3,5 +3,16 @@
   // Cambiar este nombre si Cloudflare asigna uno distinto al crear el proyecto.
   "name": "app-b20",
   "pages_build_output_dir": "./apps/web/dist",
-  "compatibility_date": "2026-10-20"
+  "compatibility_date": "2026-10-20",
+  // Pages toma estas variables públicas como fuente de verdad del build.
+  // Los secretos del backend nunca se configuran aquí.
+  "vars": {
+    "VITE_SPACETIME_URI": "wss://maincloud.spacetimedb.com",
+    "VITE_SPACETIME_DB": "app-b20-34245",
+    "VITE_SPACETIMEAUTH_CLIENT_ID": "client_034jL0AHYYQ1bps8SupHU0",
+    "VITE_SPACETIMEAUTH_AUTHORITY": "https://auth.spacetimedb.com/oidc",
+    "VITE_SPACETIMEAUTH_REDIRECT_URI": "",
+    "VITE_SPACETIMEAUTH_POST_LOGOUT_REDIRECT_URI": "",
+    "VITE_API_URL": ""
+  }
 }
