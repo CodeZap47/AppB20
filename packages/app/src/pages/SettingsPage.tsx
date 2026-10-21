@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { requestNotificationPermission, webPushSupport } from '../lib/notifications';
 import { CalendarSettings } from '../components/CalendarSettings';
+import { ByokSettings } from '../components/ByokSettings';
 import { MembershipSettings } from '../components/MembershipSettings';
 import { usePlatform } from '../components/PlatformContext';
 import { useSession, useSessionStore } from '../auth/AuthContext';
@@ -50,17 +51,7 @@ export function SettingsPage() {
 
       <MembershipSettings />
 
-      <section>
-        <h2>Gemini (BYOK)</h2>
-        <p className="muted">
-          Cada alumno usa su propia clave. La clave se guarda cifrada en el backend y aquí solo se
-          muestra si existe; nunca se vuelve a mostrar completa. Las funciones del grupo siguen
-          disponibles sin configurar IA.
-        </p>
-        <p className="placeholder">
-          Pendiente: habilitar solo después de confirmar edad y acceso a Google AI Studio.
-        </p>
-      </section>
+      <ByokSettings />
 
       <section>
         <h2>Notificaciones</h2>

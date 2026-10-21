@@ -104,6 +104,18 @@ export function captureNote(ctx: Ctx, id: bigint, actor?: Ctx['sender'], restore
 export function captureGuide(ctx: Ctx, id: bigint, actor?: Ctx['sender'], restoredFromVersion?: number) {
   const row = ctx.db.studyGuide.id.find(id);
   if (!row || [...ctx.db.guideVersion.guideId.filter(id)].some((v) => v.version === row.version)) return;
+  const provenanceKey = `${id}:${row.version}`;
+  if (!ctx.db.guideAiProvenance.key.find(provenanceKey)) {
+    const prior = ctx.db.guideAiProvenance.key.find(`${id}:${restoredFromVersion ?? row.version - 1}`);
+    if (prior) {
+      const provenance = JSON.parse(prior.json) as { citations?: { id: string; content: string; citations: string[] }[]; editedAfterGeneration?: boolean };
+      if (restoredFromVersion === undefined && provenance.citations?.some((section, index) => section.content !== row.sections[index])) {
+        provenance.editedAfterGeneration = true;
+        provenance.citations = provenance.citations.map((section, index) => ({ ...section, content: row.sections[index] ?? '' }));
+      }
+      ctx.db.guideAiProvenance.insert({ ...prior, key: provenanceKey, guideVersion: row.version, json: JSON.stringify(provenance) });
+    }
+  }
   ctx.db.guideVersion.insert({ id: 0n, guideId: id, version: row.version, subjectId: row.subjectId,
     termId: row.termId, title: row.title, topics: row.topics, sections: row.sections,
     sources: [...ctx.db.guideSource.guideId.filter(id)].map(({ kind, refId, sourceVersion, status, reason, topics, addedBy, addedAt }) => ({ kind, refId, sourceVersion, status, reason, topics, addedBy, addedAt })),

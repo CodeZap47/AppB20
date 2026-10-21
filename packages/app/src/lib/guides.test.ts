@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { emptySnapshot } from '../data/spacetimeSnapshot';
 import type { GuideSource, Snapshot, StudyGuide } from '../data/types';
-import { candidateSources, guideStatus } from './guides';
+import { candidateSources, guideStatus, isOutdated } from './guides';
 
 const at = new Date('2026-10-20T12:00:00Z');
 const guide: StudyGuide = { id: 'g1', subjectId: 's1', termId: 'p1', title: 'Guía', topics: ['Ciclos'],
@@ -87,5 +87,51 @@ describe('vigencia de fuentes de una guía', () => {
     expect(candidateSources('s1', 'p1', data).matched.some((item) => item.kind === 'nota' && item.refId === 'note')).toBe(true);
     data.notes = data.notes.map((note) => ({ ...note, withdrawnAt: at }));
     expect(candidateSources('s1', 'p1', data).matched.some((item) => item.kind === 'nota')).toBe(false);
+  });
+
+  it('una actividad visible deja de cubrir cuando solo se citó una evidencia que ya no está disponible', () => {
+    const data = fixture();
+    data.activities = [{ id: 'activity', subjectId: 's1', termId: 'p1', topic: 'Ciclos', date: '', title: 'Actividad visible', objective: '', instructions: '',
+      version: 3, createdBy: 'a', createdAt: at, updatedBy: 'a', updatedAt: at }];
+    data.guideSources = [{ ...source, kind: 'actividad', refId: 'activity', sourceVersion: 3 }];
+    data.guideAiSourceAvailability = [{ sourceId: source.id, guideId: guide.id, guideVersion: guide.version,
+      available: false, outdated: false, reason: 'La evidencia citada fue retirada del grupo.' }];
+    const status = guideStatus(guide, data);
+    expect(status).toMatchObject({ covered: 0, processed: 0, pending: 1, missing: 1 });
+    expect(status.sources[0]?.info?.title).toBe('Actividad visible');
+    expect(status.sources[0]?.source.reason).toBe('La evidencia citada fue retirada del grupo.');
+    expect(data.guideSources[0]?.status).toBe('processed');
+  });
+
+  it('conserva la cobertura citada histórica y avisa de cambios en evidencia, respuesta o archivo sin alterar el padre', () => {
+    const data = fixture();
+    data.guideAiSourceAvailability = [{ sourceId: source.id, guideId: guide.id, guideVersion: guide.version,
+      available: true, outdated: true, reason: 'El material tiene cambios posteriores a la versión citada.' }];
+    const status = guideStatus(guide, data);
+    expect(status).toMatchObject({ covered: 1, processed: 1, pending: 0, missing: 0, outdated: 1 });
+    expect(status.sources[0]?.info?.version).toBe(source.sourceVersion);
+    expect(isOutdated(status.sources[0]!.source, status.sources[0]?.info)).toBe(true);
+    expect(source.sourceVersion).toBe(1);
+  });
+
+  it('ignora disponibilidad de otra versión y nunca convierte texto preparado sin citar en cobertura', () => {
+    const data = fixture();
+    data.guideAiSourceAvailability = [{ sourceId: source.id, guideId: guide.id, guideVersion: guide.version + 1,
+      available: false, outdated: true, reason: 'Otra versión.' }];
+    expect(guideStatus(guide, data)).toMatchObject({ covered: 1, missing: 0, outdated: 0 });
+    data.guideSources = [{ ...source, status: 'pending', reason: 'Preparada, pero no citada en esta versión.' }];
+    data.guideAiSourceAvailability[0] = { ...data.guideAiSourceAvailability[0]!, guideVersion: guide.version, available: true, outdated: false };
+    expect(guideStatus(guide, data)).toMatchObject({ covered: 0, processed: 0, pending: 1 });
+  });
+
+  it('retirar disponibilidad no oculta la guía, sus revisiones ni la versión histórica citada', () => {
+    const data = fixture();
+    data.guideReviews = [{ id: 'review', guideId: guide.id, guideVersion: guide.version, reviewerId: 'b', verdict: 'approved', comment: 'Leída.', createdAt: at }];
+    data.guideAiSourceAvailability = [{ sourceId: source.id, guideId: guide.id, guideVersion: guide.version,
+      available: false, outdated: true, reason: 'La fuente ya no es compartida.' }];
+    const status = guideStatus(guide, data);
+    expect(status).toMatchObject({ covered: 0, approvals: 1, outdated: 1 });
+    expect(status.sources[0]?.source.sourceVersion).toBe(source.sourceVersion);
+    expect(data.guides).toEqual([guide]); expect(data.guideReviews).toHaveLength(1);
   });
 });

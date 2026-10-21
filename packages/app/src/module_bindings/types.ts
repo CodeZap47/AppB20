@@ -63,6 +63,84 @@ export type ActivityLink = __Infer<typeof ActivityLink>;
 export const ActivityLinks = __t.object("ActivityLinks", {});
 export type ActivityLinks = __Infer<typeof ActivityLinks>;
 
+export const AiConsent = __t.object("AiConsent", {
+  actor: __t.identity(),
+  version: __t.string(),
+  accepted: __t.bool(),
+  updatedAt: __t.timestamp(),
+});
+export type AiConsent = __Infer<typeof AiConsent>;
+
+export const AiGeneration = __t.object("AiGeneration", {
+  id: __t.string(),
+  actor: __t.identity(),
+  preparationId: __t.string(),
+  requestHash: __t.string(),
+  configJson: __t.string(),
+  keyId: __t.string(),
+  model: __t.string(),
+  status: __t.string(),
+  createdAt: __t.timestamp(),
+  claimedAt: __t.option(__t.timestamp()),
+  inputTokens: __t.option(__t.u32()),
+  outputTokens: __t.option(__t.u32()),
+  resultJson: __t.string(),
+  errorCode: __t.string(),
+  errorMessage: __t.string(),
+});
+export type AiGeneration = __Infer<typeof AiGeneration>;
+
+export const AiKey = __t.object("AiKey", {
+  actor: __t.identity(),
+  keyId: __t.string(),
+  provider: __t.string(),
+  ciphertext: __t.string(),
+  iv: __t.string(),
+  masterVersion: __t.string(),
+  updatedAt: __t.timestamp(),
+});
+export type AiKey = __Infer<typeof AiKey>;
+
+export const AiKeyIntent = __t.object("AiKeyIntent", {
+  id: __t.string(),
+  actor: __t.identity(),
+  keyId: __t.string(),
+  provider: __t.string(),
+  status: __t.string(),
+  createdAt: __t.timestamp(),
+  expiresAt: __t.timestamp(),
+});
+export type AiKeyIntent = __Infer<typeof AiKeyIntent>;
+
+export const AiPreparation = __t.object("AiPreparation", {
+  id: __t.string(),
+  actor: __t.identity(),
+  fingerprint: __t.string(),
+  model: __t.string(),
+  json: __t.string(),
+  requestJson: __t.string(),
+  createdAt: __t.timestamp(),
+  expiresAt: __t.timestamp(),
+});
+export type AiPreparation = __Infer<typeof AiPreparation>;
+
+export const AiReservation = __t.object("AiReservation", {
+  id: __t.string(),
+  actor: __t.identity(),
+  estimatedTokens: __t.u32(),
+  status: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type AiReservation = __Infer<typeof AiReservation>;
+
+export const AiServiceConfig = __t.object("AiServiceConfig", {
+  id: __t.u32(),
+  identity: __t.identity(),
+  enabled: __t.bool(),
+  dailyTokenBudget: __t.u32(),
+});
+export type AiServiceConfig = __Infer<typeof AiServiceConfig>;
+
 export const Answer = __t.object("Answer", {
   id: __t.u64(),
   questionId: __t.u64(),
@@ -307,6 +385,51 @@ export type GroupMessage = __Infer<typeof GroupMessage>;
 
 export const GroupMessages = __t.object("GroupMessages", {});
 export type GroupMessages = __Infer<typeof GroupMessages>;
+
+export const GuideAiAvailabilityRow = __t.object("GuideAiAvailabilityRow", {
+  sourceId: __t.u64(),
+  guideId: __t.u64(),
+  guideVersion: __t.u32(),
+  available: __t.bool(),
+  outdated: __t.bool(),
+  reason: __t.string(),
+});
+export type GuideAiAvailabilityRow = __Infer<typeof GuideAiAvailabilityRow>;
+
+export const GuideAiDraft = __t.object("GuideAiDraft", {
+  id: __t.string(),
+  actor: __t.identity(),
+  revision: __t.u32(),
+  state: __t.string(),
+  json: __t.string(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type GuideAiDraft = __Infer<typeof GuideAiDraft>;
+
+export const GuideAiProvenance = __t.object("GuideAiProvenance", {
+  key: __t.string(),
+  guideId: __t.u64(),
+  guideVersion: __t.u32(),
+  json: __t.string(),
+});
+export type GuideAiProvenance = __Infer<typeof GuideAiProvenance>;
+
+export const GuideAiSourceAvailability = __t.object("GuideAiSourceAvailability", {});
+export type GuideAiSourceAvailability = __Infer<typeof GuideAiSourceAvailability>;
+
+export const GuideAiTranscription = __t.object("GuideAiTranscription", {
+  id: __t.string(),
+  actor: __t.identity(),
+  fileId: __t.string(),
+  fileHash: __t.string(),
+  targetKind: __t.string(),
+  targetId: __t.u64(),
+  targetVersion: __t.u32(),
+  json: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type GuideAiTranscription = __Infer<typeof GuideAiTranscription>;
 
 export const GuideReview = __t.object("GuideReview", {
   id: __t.u64(),

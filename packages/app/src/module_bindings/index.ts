@@ -37,6 +37,7 @@ import {
 import AcceptAnswerReducer from "./accept_answer_reducer";
 import AddEvidenceReducer from "./add_evidence_reducer";
 import AddGuideSourcesReducer from "./add_guide_sources_reducer";
+import AddGuideSourcesV3Reducer from "./add_guide_sources_v_3_reducer";
 import AddStickerReducer from "./add_sticker_reducer";
 import AnswerPresentationQuestionReducer from "./answer_presentation_question_reducer";
 import AnswerQuestionReducer from "./answer_question_reducer";
@@ -96,8 +97,10 @@ import PublishWorkV2Reducer from "./publish_work_v_2_reducer";
 import PutResourceChunkReducer from "./put_resource_chunk_reducer";
 import RecordPollDecisionReducer from "./record_poll_decision_reducer";
 import RefreshGuideSourceReducer from "./refresh_guide_source_reducer";
+import RefreshGuideSourceV3Reducer from "./refresh_guide_source_v_3_reducer";
 import RemoveChatCommandReducer from "./remove_chat_command_reducer";
 import RemoveGuideSourceReducer from "./remove_guide_source_reducer";
+import RemoveGuideSourceV3Reducer from "./remove_guide_source_v_3_reducer";
 import RemoveMemberReducer from "./remove_member_reducer";
 import RemoveResourceFileReducer from "./remove_resource_file_reducer";
 import RemoveStickerPackReducer from "./remove_sticker_pack_reducer";
@@ -116,6 +119,7 @@ import RestorePageSnapshotReducer from "./restore_page_snapshot_reducer";
 import RestoreResourceFileReducer from "./restore_resource_file_reducer";
 import RestoreWorkVersionReducer from "./restore_work_version_reducer";
 import ReviewGuideReducer from "./review_guide_reducer";
+import ReviewGuideV3Reducer from "./review_guide_v_3_reducer";
 import ReviewSpacedCardReducer from "./review_spaced_card_reducer";
 import ReviewWorkReducer from "./review_work_reducer";
 import RevokeInvitationReducer from "./revoke_invitation_reducer";
@@ -140,6 +144,7 @@ import SendDirectMessageReducer from "./send_direct_message_reducer";
 import SendGroupMessageReducer from "./send_group_message_reducer";
 import SendHelpContactReducer from "./send_help_contact_reducer";
 import SendStudyRoomEntryReducer from "./send_study_room_entry_reducer";
+import SetAiServiceReducer from "./set_ai_service_reducer";
 import SetAuthConfigReducer from "./set_auth_config_reducer";
 import SetChatChannelArchivedReducer from "./set_chat_channel_archived_reducer";
 import SetConversationMutedReducer from "./set_conversation_muted_reducer";
@@ -164,6 +169,7 @@ import UpdateAssignmentReducer from "./update_assignment_reducer";
 import UpdateAssignmentV2Reducer from "./update_assignment_v_2_reducer";
 import UpdateGuideReducer from "./update_guide_reducer";
 import UpdateGuideSourceReducer from "./update_guide_source_reducer";
+import UpdateGuideSourceV3Reducer from "./update_guide_source_v_3_reducer";
 import UpdateGuideV2Reducer from "./update_guide_v_2_reducer";
 import UpdatePollReducer from "./update_poll_reducer";
 import UpdateProfileReducer from "./update_profile_reducer";
@@ -175,12 +181,24 @@ import WithdrawHelpPostReducer from "./withdraw_help_post_reducer";
 
 // Import all procedure arg schemas
 import * as AddStickerNativeProcedure from "./add_sticker_native_procedure";
+import * as AiAuthorizeGenerationProcedure from "./ai_authorize_generation_procedure";
+import * as AiAuthorizeKeyProcedure from "./ai_authorize_key_procedure";
+import * as AiClaimGenerationProcedure from "./ai_claim_generation_procedure";
+import * as AiCommitKeyProcedure from "./ai_commit_key_procedure";
+import * as AiDeleteKeyProcedure from "./ai_delete_key_procedure";
+import * as AiFinishGenerationProcedure from "./ai_finish_generation_procedure";
+import * as AiGetGenerationProcedure from "./ai_get_generation_procedure";
+import * as AiKeyStatusProcedure from "./ai_key_status_procedure";
+import * as AiPrepareProcedure from "./ai_prepare_procedure";
+import * as AiSetConsentProcedure from "./ai_set_consent_procedure";
+import * as AiStatusProcedure from "./ai_status_procedure";
 import * as AuthorizeFileUploadProcedure from "./authorize_file_upload_procedure";
 import * as CreateStickerPackNativeProcedure from "./create_sticker_pack_native_procedure";
 import * as GetFileDownloadAccessProcedure from "./get_file_download_access_procedure";
 import * as GetFileUploadStatusProcedure from "./get_file_upload_status_procedure";
 import * as GetResourceManifestProcedure from "./get_resource_manifest_procedure";
 import * as GetResourceUploadStatusProcedure from "./get_resource_upload_status_procedure";
+import * as GuideAiProcedure from "./guide_ai_procedure";
 import * as ReadResourceChunkProcedure from "./read_resource_chunk_procedure";
 import * as ReadStickerBytesProcedure from "./read_sticker_bytes_procedure";
 import * as StudyRoomClockProcedure from "./study_room_clock_procedure";
@@ -203,6 +221,7 @@ import ContributionOriginsRow from "./contribution_origins_table";
 import EvidenceDetailsRow from "./evidence_details_table";
 import EvidencesRow from "./evidences_table";
 import GroupMessagesRow from "./group_messages_table";
+import GuideAiSourceAvailabilityRow from "./guide_ai_source_availability_table";
 import GuideReviewsRow from "./guide_reviews_table";
 import GuideSourcesRow from "./guide_sources_table";
 import GuideVersionsRow from "./guide_versions_table";
@@ -390,6 +409,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, GroupMessagesRow),
+  guideAiSourceAvailability: __table({
+    name: 'guide_ai_source_availability',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, GuideAiSourceAvailabilityRow),
   guideReviews: __table({
     name: 'guide_reviews',
     indexes: [
@@ -838,6 +864,7 @@ const reducersSchema = __reducers(
   __reducerSchema("accept_answer", AcceptAnswerReducer),
   __reducerSchema("add_evidence", AddEvidenceReducer),
   __reducerSchema("add_guide_sources", AddGuideSourcesReducer),
+  __reducerSchema("add_guide_sources_v_3", AddGuideSourcesV3Reducer),
   __reducerSchema("add_sticker", AddStickerReducer),
   __reducerSchema("answer_presentation_question", AnswerPresentationQuestionReducer),
   __reducerSchema("answer_question", AnswerQuestionReducer),
@@ -897,8 +924,10 @@ const reducersSchema = __reducers(
   __reducerSchema("put_resource_chunk", PutResourceChunkReducer),
   __reducerSchema("record_poll_decision", RecordPollDecisionReducer),
   __reducerSchema("refresh_guide_source", RefreshGuideSourceReducer),
+  __reducerSchema("refresh_guide_source_v_3", RefreshGuideSourceV3Reducer),
   __reducerSchema("remove_chat_command", RemoveChatCommandReducer),
   __reducerSchema("remove_guide_source", RemoveGuideSourceReducer),
+  __reducerSchema("remove_guide_source_v_3", RemoveGuideSourceV3Reducer),
   __reducerSchema("remove_member", RemoveMemberReducer),
   __reducerSchema("remove_resource_file", RemoveResourceFileReducer),
   __reducerSchema("remove_sticker_pack", RemoveStickerPackReducer),
@@ -917,6 +946,7 @@ const reducersSchema = __reducers(
   __reducerSchema("restore_resource_file", RestoreResourceFileReducer),
   __reducerSchema("restore_work_version", RestoreWorkVersionReducer),
   __reducerSchema("review_guide", ReviewGuideReducer),
+  __reducerSchema("review_guide_v_3", ReviewGuideV3Reducer),
   __reducerSchema("review_spaced_card", ReviewSpacedCardReducer),
   __reducerSchema("review_work", ReviewWorkReducer),
   __reducerSchema("revoke_invitation", RevokeInvitationReducer),
@@ -941,6 +971,7 @@ const reducersSchema = __reducers(
   __reducerSchema("send_group_message", SendGroupMessageReducer),
   __reducerSchema("send_help_contact", SendHelpContactReducer),
   __reducerSchema("send_study_room_entry", SendStudyRoomEntryReducer),
+  __reducerSchema("set_ai_service", SetAiServiceReducer),
   __reducerSchema("set_auth_config", SetAuthConfigReducer),
   __reducerSchema("set_chat_channel_archived", SetChatChannelArchivedReducer),
   __reducerSchema("set_conversation_muted", SetConversationMutedReducer),
@@ -965,6 +996,7 @@ const reducersSchema = __reducers(
   __reducerSchema("update_assignment_v_2", UpdateAssignmentV2Reducer),
   __reducerSchema("update_guide", UpdateGuideReducer),
   __reducerSchema("update_guide_source", UpdateGuideSourceReducer),
+  __reducerSchema("update_guide_source_v_3", UpdateGuideSourceV3Reducer),
   __reducerSchema("update_guide_v_2", UpdateGuideV2Reducer),
   __reducerSchema("update_poll", UpdatePollReducer),
   __reducerSchema("update_profile", UpdateProfileReducer),
@@ -978,12 +1010,24 @@ const reducersSchema = __reducers(
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
 const proceduresSchema = __procedures(
   __procedureSchema("add_sticker_native", AddStickerNativeProcedure.params, AddStickerNativeProcedure.returnType),
+  __procedureSchema("ai_authorize_generation", AiAuthorizeGenerationProcedure.params, AiAuthorizeGenerationProcedure.returnType),
+  __procedureSchema("ai_authorize_key", AiAuthorizeKeyProcedure.params, AiAuthorizeKeyProcedure.returnType),
+  __procedureSchema("ai_claim_generation", AiClaimGenerationProcedure.params, AiClaimGenerationProcedure.returnType),
+  __procedureSchema("ai_commit_key", AiCommitKeyProcedure.params, AiCommitKeyProcedure.returnType),
+  __procedureSchema("ai_delete_key", AiDeleteKeyProcedure.params, AiDeleteKeyProcedure.returnType),
+  __procedureSchema("ai_finish_generation", AiFinishGenerationProcedure.params, AiFinishGenerationProcedure.returnType),
+  __procedureSchema("ai_get_generation", AiGetGenerationProcedure.params, AiGetGenerationProcedure.returnType),
+  __procedureSchema("ai_key_status", AiKeyStatusProcedure.params, AiKeyStatusProcedure.returnType),
+  __procedureSchema("ai_prepare", AiPrepareProcedure.params, AiPrepareProcedure.returnType),
+  __procedureSchema("ai_set_consent", AiSetConsentProcedure.params, AiSetConsentProcedure.returnType),
+  __procedureSchema("ai_status", AiStatusProcedure.params, AiStatusProcedure.returnType),
   __procedureSchema("authorize_file_upload", AuthorizeFileUploadProcedure.params, AuthorizeFileUploadProcedure.returnType),
   __procedureSchema("create_sticker_pack_native", CreateStickerPackNativeProcedure.params, CreateStickerPackNativeProcedure.returnType),
   __procedureSchema("get_file_download_access", GetFileDownloadAccessProcedure.params, GetFileDownloadAccessProcedure.returnType),
   __procedureSchema("get_file_upload_status", GetFileUploadStatusProcedure.params, GetFileUploadStatusProcedure.returnType),
   __procedureSchema("get_resource_manifest", GetResourceManifestProcedure.params, GetResourceManifestProcedure.returnType),
   __procedureSchema("get_resource_upload_status", GetResourceUploadStatusProcedure.params, GetResourceUploadStatusProcedure.returnType),
+  __procedureSchema("guide_ai", GuideAiProcedure.params, GuideAiProcedure.returnType),
   __procedureSchema("read_resource_chunk", ReadResourceChunkProcedure.params, ReadResourceChunkProcedure.returnType),
   __procedureSchema("read_sticker_bytes", ReadStickerBytesProcedure.params, ReadStickerBytesProcedure.returnType),
   __procedureSchema("study_room_clock", StudyRoomClockProcedure.params, StudyRoomClockProcedure.returnType),
@@ -1013,6 +1057,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "evidence_details": Omit<typeof tablesSchema.schemaType.tables["evidenceDetails"], "accessorName"> & { readonly accessorName: "evidence_details" };
     /** @deprecated Use `groupMessages` instead. This alias will be removed in the next major version. */
     readonly "group_messages": Omit<typeof tablesSchema.schemaType.tables["groupMessages"], "accessorName"> & { readonly accessorName: "group_messages" };
+    /** @deprecated Use `guideAiSourceAvailability` instead. This alias will be removed in the next major version. */
+    readonly "guide_ai_source_availability": Omit<typeof tablesSchema.schemaType.tables["guideAiSourceAvailability"], "accessorName"> & { readonly accessorName: "guide_ai_source_availability" };
     /** @deprecated Use `guideReviews` instead. This alias will be removed in the next major version. */
     readonly "guide_reviews": Omit<typeof tablesSchema.schemaType.tables["guideReviews"], "accessorName"> & { readonly accessorName: "guide_reviews" };
     /** @deprecated Use `guideSources` instead. This alias will be removed in the next major version. */
@@ -1150,6 +1196,7 @@ const tableAccessorAliases = {
   "contribution_origins": "contributionOrigins",
   "evidence_details": "evidenceDetails",
   "group_messages": "groupMessages",
+  "guide_ai_source_availability": "guideAiSourceAvailability",
   "guide_reviews": "guideReviews",
   "guide_sources": "guideSources",
   "guide_versions": "guideVersions",
@@ -1246,6 +1293,8 @@ export type DbView = __DbViewBase & {
   readonly "evidence_details": __DbViewBase["evidenceDetails"];
   /** @deprecated Use `groupMessages` instead. This alias will be removed in the next major version. */
   readonly "group_messages": __DbViewBase["groupMessages"];
+  /** @deprecated Use `guideAiSourceAvailability` instead. This alias will be removed in the next major version. */
+  readonly "guide_ai_source_availability": __DbViewBase["guideAiSourceAvailability"];
   /** @deprecated Use `guideReviews` instead. This alias will be removed in the next major version. */
   readonly "guide_reviews": __DbViewBase["guideReviews"];
   /** @deprecated Use `guideSources` instead. This alias will be removed in the next major version. */
@@ -1380,6 +1429,8 @@ export type Tables = __TablesBase & {
   readonly "evidence_details": __TablesBase["evidenceDetails"];
   /** @deprecated Use `groupMessages` instead. This alias will be removed in the next major version. */
   readonly "group_messages": __TablesBase["groupMessages"];
+  /** @deprecated Use `guideAiSourceAvailability` instead. This alias will be removed in the next major version. */
+  readonly "guide_ai_source_availability": __TablesBase["guideAiSourceAvailability"];
   /** @deprecated Use `guideReviews` instead. This alias will be removed in the next major version. */
   readonly "guide_reviews": __TablesBase["guideReviews"];
   /** @deprecated Use `guideSources` instead. This alias will be removed in the next major version. */

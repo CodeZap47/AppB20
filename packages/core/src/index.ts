@@ -15,3 +15,7 @@ export * from './help';
 export * from './spaced';
 export * from './presentations';
 export * from './rooms';
+
+export * from './ai';
+export * from './exam';
+export * from './guideAi';

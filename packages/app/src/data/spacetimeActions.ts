@@ -4,6 +4,7 @@ import { createStudyRoomActions } from './roomsActions';
 import { Identity, Timestamp } from 'spacetimedb';
 import type { DbConnection } from '../module_bindings';
 import type { ResourceTargetKind } from './types';
+import type { GuideAiActions } from './guideAiTypes';
 import type { ResourceTransport } from './resourceTransport';
 import { StickerTransport } from './stickerTransport';
 import type { HelpPostInput } from './types';
@@ -31,7 +32,7 @@ const teachingUpdate = (input: SaveTeachingPracticeInput) => ({
 });
 
 /** Los reducers confirman los permisos en el servidor; nunca se modifica la caché de forma optimista. */
-export function createSpacetimeActions(getConnection: () => DbConnection, identity: () => string, files?: ResourceTransport): Actions {
+export function createSpacetimeActions(getConnection: () => DbConnection, identity: () => string, files?: ResourceTransport): Omit<Actions, keyof GuideAiActions> {
   const stickers = new StickerTransport(getConnection, identity);
   let queue = Promise.resolve();
   function serial<T>(task: () => Promise<T>): Promise<T> {
@@ -304,11 +305,11 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
       (c) => c.reducers.createGuide({ ...guide(input), sources: sources(refs) }),
       (row, author) => own(row.createdBy, author) && row.subjectId === id(input.subjectId) && row.title === input.title.trim()),
     updateGuide: (guideId, input, expectedVersion) => getConnection().reducers.updateGuideV2({ guideId: id(guideId), ...guide(input), expectedVersion: expectedVersion ?? versionFor('guide', guideId) }),
-    addGuideSources: (guideId, refs) => getConnection().reducers.addGuideSources({ guideId: id(guideId), sources: sources(refs) }),
-    updateGuideSource: (sourceId, update) => getConnection().reducers.updateGuideSource({ sourceId: id(sourceId), ...update }),
-    refreshGuideSource: (sourceId) => getConnection().reducers.refreshGuideSource({ sourceId: id(sourceId) }),
-    removeGuideSource: (sourceId) => getConnection().reducers.removeGuideSource({ sourceId: id(sourceId) }),
-    reviewGuide: (guideId, verdict, comment) => getConnection().reducers.reviewGuide({ guideId: id(guideId), verdict, comment }),
+    addGuideSources: (guideId, refs, expectedVersion) => getConnection().reducers.addGuideSourcesV3({ guideId: id(guideId), sources: sources(refs), expectedVersion: expectedVersion ?? versionFor('guide', guideId) }),
+    updateGuideSource: (sourceId, update, expectedVersion) => { const source = [...getConnection().db.guideSources.iter()].find((row) => row.id === id(sourceId)); if (!source) throw new Error('La fuente ya no está disponible.'); return getConnection().reducers.updateGuideSourceV3({ sourceId: id(sourceId), ...update, expectedVersion: expectedVersion ?? versionFor('guide', source.guideId.toString()) }); },
+    refreshGuideSource: (sourceId, expectedVersion) => { const source = [...getConnection().db.guideSources.iter()].find((row) => row.id === id(sourceId)); if (!source) throw new Error('La fuente ya no está disponible.'); return getConnection().reducers.refreshGuideSourceV3({ sourceId: id(sourceId), expectedVersion: expectedVersion ?? versionFor('guide', source.guideId.toString()) }); },
+    removeGuideSource: (sourceId, expectedVersion) => { const source = [...getConnection().db.guideSources.iter()].find((row) => row.id === id(sourceId)); if (!source) throw new Error('La fuente ya no está disponible.'); return getConnection().reducers.removeGuideSourceV3({ sourceId: id(sourceId), expectedVersion: expectedVersion ?? versionFor('guide', source.guideId.toString()) }); },
+    reviewGuide: (guideId, verdict, comment, expectedVersion) => getConnection().reducers.reviewGuideV3({ guideId: id(guideId), verdict, comment, expectedVersion: expectedVersion ?? versionFor('guide', guideId) }),
     createPoll: (input) => create((c) => c.db.polls.iter(),
       (c) => c.reducers.createPoll({ ...poll(input), restartOf: optionalId(input.restartOf) }),
       (row, author) => own(row.createdBy, author) && row.title === input.title.trim()),

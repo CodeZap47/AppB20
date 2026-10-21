@@ -18,7 +18,8 @@
     "@google/genai": "^2.28.0",
     "@hono/node-server": "^2.1.4",
     "hono": "^4.13.13",
-    "jose": "^6.2.12"
+    "jose": "^6.2.12",
+    "@b20/core": "*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
