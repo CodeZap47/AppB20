@@ -89,6 +89,12 @@ recursos nuevos ni activar facturación.
 
 ## Registro de validación en producción
 
+La lectura del esquema de Maincloud y de la web pública del 21 de octubre de 2026 confirma
+que el despliegue conserva una versión anterior: Maincloud incluye Ayuda, pero no las
+operaciones de archivos nativos ni `restore_resource_file`; Pages tampoco incorpora la
+pantalla de Ayuda. El código, los bindings y GitHub se verifican por separado de esa
+publicación. Un push a `main` no se registra como un despliegue completado.
+
 Esta entrega no incorpora todavía evidencia de publicación ni de recorridos con tres cuentas.
 Al realizarlos, registrar fecha, versión publicada, presentación, escenario, resultado y
 referencia de evidencia sin tokens ni datos personales. Los resultados automatizados y de
