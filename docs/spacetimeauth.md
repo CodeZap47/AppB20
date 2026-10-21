@@ -94,7 +94,22 @@ El formulario actual permite entrar por correo mediante un enlace de acceso. Con
 método para el piloto; no hace falta habilitar Google. El correo del token debe estar
 verificado. La fase `demo` no consulta invitaciones; la fase `spacetime` sí exige que el
 correo coincida con la invitación. Si se desea Google, configúralo como proveedor opcional con
-el siguiente paso. El acceso anónimo no abre la simulación ni concede membresía del grupo.
+el siguiente paso. El acceso anónimo está desactivado en el proyecto: no se ofrece como método
+de entrada. B20 conserva además su comprobación de correo verificado.
+
+### Identidad visual y métodos de acceso
+
+En **Settings** del proyecto de SpacetimeAuth se guardó el nombre visible **B20**, el favicon
+`https://app-b20.pages.dev/icons/icon.svg` y la paleta oscura del producto: fondo `#121418`,
+tarjeta `#1B1E24`, texto `#E9EBF0`, azul principal `#7D9BFF` y borde `#2C3039`.
+**Email login** permanece habilitado y **Anonymous login** está desactivado. Estos ajustes
+pertenecen al proyecto del proveedor; no se sustituyen ocultando un enlace mediante CSS local.
+
+La entrada de B20 se adapta automáticamente al modo claro u oscuro del dispositivo, también
+cuando cambia con la página abierta. El formulario alojado en SpacetimeAuth mantiene una
+paleta oscura fija: su configuración pública actual admite colores hexadecimales, sin una
+opción documentada para seguir el tema del dispositivo. No se modificaron el cliente ni sus
+direcciones de retorno. [Configuración pública del proveedor](https://auth.spacetimedb.com/docs).
 
 ## 2. Google Cloud: proveedor opcional
 

@@ -27,6 +27,7 @@ import { SpacetimeProvider } from './lib/spacetime';
 import { AuthProvider, useSession, useSessionStore } from './auth/AuthContext';
 import { SignInPage } from './auth/SignInPage';
 import { JoinPage } from './auth/JoinPage';
+import { AuthFrame } from './auth/AuthFrame';
 import { useSnapshot } from './data/DataContext';
 import { config } from './config';
 import { PlatformContext } from './components/PlatformContext';
@@ -143,22 +144,21 @@ function MembershipGate() {
   const sessionStore = useSessionStore();
   if (connection === 'offline') {
     return (
-      <main className="signin">
-        <h1>B20</h1>
-        <p role="alert">{connectionError ?? 'No se pudo conectar con el grupo.'}</p>
-        <button type="button" onClick={() => window.location.reload()}>Volver a conectar</button>
-        <button type="button" className="secondary" onClick={() => sessionStore?.signOut()}>
+      <AuthFrame title="No pudimos conectar con tu grupo"
+        description="Comprueba tu conexión y vuelve a intentarlo.">
+        <p className="auth-feedback auth-feedback--error" role="alert">{connectionError ?? 'No se pudo conectar con el grupo.'}</p>
+        <button type="button" className="auth-action" onClick={() => window.location.reload()}>Volver a conectar</button>
+        <button type="button" className="auth-action auth-action--secondary" onClick={() => sessionStore?.signOut()}>
           Cerrar sesión
         </button>
-      </main>
+      </AuthFrame>
     );
   }
   if (connection === 'connecting') {
     return (
-      <main className="signin">
-        <h1>B20</h1>
-        <p className="muted">Conectando con el grupo…</p>
-      </main>
+      <AuthFrame title="Conectando con tu grupo" busy>
+        <p className="auth-loading" role="status"><span className="auth-spinner" aria-hidden="true" />Conectando con el grupo…</p>
+      </AuthFrame>
     );
   }
   if (me?.status !== 'active') return <JoinPage />;
@@ -174,7 +174,9 @@ function DemoApp({ subject }: { subject: string }) {
     return () => data.dispose();
   }, [subject, createDemoState]);
   if (!owned || owned.subject !== subject) {
-    return <main className="signin"><h1>B20</h1><p>Preparando datos de prueba…</p></main>;
+    return <AuthFrame title="Todo listo para explorar" busy>
+      <p className="auth-loading" role="status"><span className="auth-spinner" aria-hidden="true" />Preparando datos de prueba…</p>
+    </AuthFrame>;
   }
   return (
     <DataProvider source={owned.data}>

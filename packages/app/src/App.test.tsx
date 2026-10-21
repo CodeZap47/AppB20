@@ -18,7 +18,7 @@ vi.mock('./auth/AuthContext', () => ({
   AuthProvider: ({ children }: { children: ReactNode }) => <div data-auth-provider>{children}</div>,
   useSession: () => control.session,
   useSessionStore: () => ({ signOut: () => { control.session = { status: 'signedOut' }; } }),
-  SpacetimeAuthButton: () => <button>Continuar con SpacetimeAuth</button>,
+  SpacetimeAuthButton: ({ label = 'Continuar con SpacetimeAuth' }: { label?: string }) => <button>{label}</button>,
 }));
 vi.mock('react-router', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react-router')>();
@@ -84,10 +84,27 @@ describe('login real antes de cualquier fuente de datos', () => {
     window.history.replaceState({}, '', url);
     await renderApp();
     expect(container.querySelector('[data-auth-provider]')).not.toBeNull();
-    expect(container.textContent).toContain('Continuar con SpacetimeAuth');
+    expect(container.textContent).toContain('Continuar con correo');
     expect(container.querySelector('[data-simulation]')).toBeNull();
     expect(container.querySelector('a[href="?demo"]')).toBeNull();
     expect(control.realConnections).not.toHaveBeenCalled();
+  });
+
+  it('anuncia la preparación de sesión y no muestra datos ni una acción de entrada duplicada', async () => {
+    control.session = { status: 'loading' };
+    await renderApp();
+    expect(container.querySelector('main[aria-busy="true"]')).not.toBeNull();
+    expect(container.querySelector('[role="status"]')).not.toBeNull();
+    expect(container.querySelector('[data-simulation]')).toBeNull();
+    expect(container.textContent).not.toContain('Continuar con correo');
+    expect(control.realConnections).not.toHaveBeenCalled();
+  });
+
+  it('presenta el fallo de acceso como alerta sin abrir la simulación', async () => {
+    control.session = { status: 'signedOut', error: 'No se pudo completar el acceso.' };
+    await renderApp();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('No se pudo completar el acceso.');
+    expect(container.querySelector('[data-simulation]')).toBeNull();
   });
 
   it('tampoco ofrece una entrada de prueba cuando falta configurar el cliente real', async () => {

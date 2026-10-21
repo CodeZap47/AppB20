@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { SpacetimeAuthButton, useSession } from './AuthContext';
 import { config } from '../config';
+import { AuthFrame } from './AuthFrame';
+import { Icon } from '../components/Icon';
 
 /** Una cuenta real permite explorar la simulación; el grupo real conserva sus invitaciones. */
 export function SignInPage() {
@@ -15,17 +17,23 @@ export function SignInPage() {
     window.history.replaceState(window.history.state, '', url.href);
   }, [restarted]);
   return (
-    <main className="signin">
-      <h1>B20</h1>
-      <p>{simulated
-        ? 'Inicia sesión con SpacetimeAuth para explorar B20. Puedes usar cualquier correo verificado.'
-        : 'Inicia sesión en SpacetimeAuth con el correo con el que te invitaron al grupo.'}</p>
-      {restarted && <p role="status">El acceso debe iniciarse desde esta dirección de B20. Vuelve a intentarlo aquí.</p>}
-      {session?.status === 'loading' ? <p className="muted">Preparando acceso…</p> : <SpacetimeAuthButton />}
-      {error && <p className="error" role="alert">{error}</p>}
-      <p className="muted">{simulated
-        ? 'Tu cuenta es real. El contenido y los perfiles de esta versión son simulados.'
-        : 'Solo los correos invitados tienen acceso al grupo.'}</p>
-    </main>
+    <AuthFrame variant="welcome" title="Bienvenido a B20"
+      description={simulated
+        ? 'Accede con tu correo y conoce el espacio de tu grupo.'
+        : 'Accede con el correo con el que te invitaron al grupo.'}
+      busy={session?.status === 'loading'}>
+      {restarted && <p className="auth-feedback" role="status">El acceso debe iniciarse desde esta dirección de B20. Vuelve a intentarlo aquí.</p>}
+      {session?.status === 'loading'
+        ? <p className="auth-loading" role="status"><span className="auth-spinner" aria-hidden="true" />Preparando acceso…</p>
+        : <SpacetimeAuthButton className="auth-action" label="Continuar con correo" />}
+      {error && <p className="auth-feedback auth-feedback--error" role="alert">{error}</p>}
+      <p className="auth-provider-note"><Icon name="lock" size={15} /> Acceso con SpacetimeAuth</p>
+      <div className="auth-mode-note">
+        <span className="auth-mode-note__mark" aria-hidden="true" />
+        <p>{simulated
+          ? 'Tu cuenta es real. Esta versión utiliza datos de prueba.'
+          : 'Solo los correos invitados tienen acceso al grupo.'}</p>
+      </div>
+    </AuthFrame>
   );
 }

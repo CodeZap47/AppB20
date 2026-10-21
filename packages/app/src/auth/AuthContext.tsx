@@ -7,6 +7,7 @@ import { buildOidcSettings, matchesCallback, signinReturnTo } from './oidc';
 import { AndroidAuthNavigator, androidSilentNavigator, attachAndroidCallbacks, ChromeSessionStateStore,
   createChromeNavigator, getChromeAuth } from './platformAuth';
 import { SessionStore, type SessionState } from './session';
+import { AuthFrame } from './AuthFrame';
 
 interface AuthValue {
   store: SessionStore;
@@ -58,8 +59,11 @@ export function AuthProvider({ clientId, platform = 'web', children }: {
   useEffect(() => { try { sessionStorage.removeItem('b20.idToken'); } catch {} }, []);
 
   if (!setup.manager) {
-    return <main className="signin"><h1>B20</h1><p role="alert" className="error">{setup.error}</p>
-      <p>Configura SpacetimeAuth y las direcciones de retorno para iniciar sesión.</p></main>;
+    return <AuthFrame title="El acceso aún no está listo"
+      description="Hace falta completar la configuración de acceso de B20.">
+      <p role="alert" className="auth-feedback auth-feedback--error">{setup.error}</p>
+      <p className="auth-help">Configura SpacetimeAuth y las direcciones de retorno para iniciar sesión.</p>
+    </AuthFrame>;
   }
   return <OidcProvider userManager={setup.manager}
     skipSigninCallback={platform !== 'web'}
@@ -176,10 +180,19 @@ export function useSession(): SessionState | null {
 }
 export function useSessionStore(): SessionStore | null { return useContext(AuthContext)?.store ?? null; }
 
-export function SpacetimeAuthButton() {
+export function SpacetimeAuthButton({ className, label = 'Continuar con SpacetimeAuth' }: {
+  className?: string;
+  label?: string;
+} = {}) {
   const auth = useContext(AuthContext);
   if (!auth) return null;
-  return <button type="button" disabled={auth.busy} onClick={auth.signIn}>
-    {auth.busy ? 'Preparando acceso…' : 'Continuar con SpacetimeAuth'}
+  return <button type="button" className={className} disabled={auth.busy} aria-busy={auth.busy} onClick={auth.signIn}>
+    {auth.busy ? <span className="auth-spinner" aria-hidden="true" /> : (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true" focusable="false">
+        <rect x="3" y="5" width="18" height="14" rx="3" />
+        <path d="m4 7 8 6 8-6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    )}
+    <span>{auth.busy ? 'Preparando acceso…' : label}</span>
   </button>;
 }
