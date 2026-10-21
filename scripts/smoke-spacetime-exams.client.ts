@@ -62,7 +62,12 @@ const noSolutions = (value: unknown, label: string) => {
 
 export async function runSmoke(options: Options) {
   setGlobalLogLevel('error'); const pool = clients(options); const checks: string[] = [];
-  const exam = async <T>(connection: DbConnection, request: ExamActionRequest) => JSON.parse(await connection.procedures.examAction({ payload: JSON.stringify(request) })) as T;
+  const exam = async <T>(connection: DbConnection, request: ExamActionRequest): Promise<T> => {
+    const response = JSON.parse(await connection.procedures.examAction({ payload: JSON.stringify(request) }));
+    if (response && typeof response === 'object' && !Array.isArray(response) && response.ok === false)
+      throw Object.assign(new Error(String(response.message ?? 'La operación de Exámenes fue rechazada.')), { code: response.code });
+    return response as T;
+  };
   try {
     let owner: DbConnection, author: DbConnection, peer: DbConnection;
     if (options.baseline) {

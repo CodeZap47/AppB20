@@ -28,9 +28,9 @@ La interfaz revalida el acceso al abrir o reanudar, al recuperar el foco y cada 
 
 | Comprobación | Estado |
 | --- | --- |
-| Implementación y pruebas de EX-2 | Completada sobre `ff98cc8`: 1 115 pruebas, tipos y compilaciones con Node 22. Integración con cambios publicados posteriores en curso |
-| Recorrido persistente con tres identidades sintéticas y reinicio | Aprobado: once grupos, cinco generaciones simuladas y cero llamadas reales |
-| Migración aditiva conservando datos | Ensayo desde `ff98cc8` aprobado con `--delete-data=never`; comprobación de producción pendiente |
+| Implementación y pruebas de EX-2 | Completada e integrada sobre producción `00f761d`: 1 266 pruebas, tipos y compilaciones con Node 22 (web/PWA, Pages, extensión y ambos Workers) |
+| Recorrido persistente con tres identidades sintéticas y reinicio | Aprobado sobre `00f761d`: once grupos, cinco generaciones simuladas y cero llamadas reales; también pasó el recorrido persistente de retención |
+| Migración aditiva conservando datos | Ensayo desde `00f761d` aprobado con `--delete-data=never`; comprobación de producción pendiente |
 | Publicación módulo → Worker → Pages | Pendiente de validación y publicación |
 | Prueba real de Gemini | No ejecutada; se mantiene pendiente por decisión del usuario |
 | Aceptación con cuentas del grupo y dispositivos | Pendiente de participación de sus titulares |
