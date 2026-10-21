@@ -26,6 +26,7 @@ const actions = {
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.clearAllMocks();
+  vi.stubGlobal('CSS', { escape: (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, (char) => `\\${char.codePointAt(0)!.toString(16)} `) });
   Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
   snapshot = { ...emptySnapshot('ready'), me: member('viewer'), members: [member('viewer'), member('other'), member('admin', true)],
     chatChannels: [], channelMessages: [], conversationStates: [], blockedMembers: [], messageReports: [],
@@ -36,7 +37,7 @@ beforeEach(() => {
   source = { ...actions, getSnapshot: () => snapshot, subscribe: () => () => {} } as unknown as DataSource;
   container = document.createElement('div'); document.body.append(container); root = createRoot(container);
 });
-afterEach(async () => { await act(async () => root.unmount()); container.remove(); });
+afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals(); });
 async function show(path = '/m/mensajes') {
   await act(async () => root.render(<DataProvider source={source}><MemoryRouter initialEntries={[path]}><Routes>
     <Route path="/m/mensajes" element={<MessagesLayout />}>
@@ -54,6 +55,45 @@ async function fill(input: HTMLInputElement | HTMLTextAreaElement, value: string
 }
 
 describe('mensajería de la segunda entrega', () => {
+  const conversations = [
+    { label: 'grupo', path: '/m/mensajes', action: 'sendGroupMessage', args: ['Mensaje de prueba', undefined] },
+    { label: 'canal', path: '/m/mensajes/canales/project', action: 'sendChannelMessage', args: ['project', 'Mensaje de prueba', undefined] },
+    { label: 'directo', path: '/m/mensajes/directos/private', action: 'sendDirectMessage', args: ['private', 'Mensaje de prueba', undefined] },
+  ] as const;
+
+  it.each(conversations)('envía al $label desde el editor renovado y limpia el borrador confirmado', async ({ path, action, args }) => {
+    snapshot.chatChannels = [{ id: 'project', name: 'Proyecto final', kind: 'project', createdBy: 'viewer', createdAt: at }];
+    await show(path);
+    await fill(container.querySelector('textarea')!, 'Mensaje de prueba');
+    await click(container.querySelector('[aria-label="Enviar mensaje"]')!);
+    expect(actions[action]).toHaveBeenCalledExactlyOnceWith(...args);
+    for (const other of conversations.filter((conversation) => conversation.action !== action)) {
+      expect(actions[other.action]).not.toHaveBeenCalled();
+    }
+    expect(container.querySelector('textarea')?.value).toBe('');
+    expect(container.querySelector('[aria-label="Enviar mensaje"]')?.getAttribute('disabled')).not.toBeNull();
+  }, 15_000);
+
+  it.each(conversations)('conserva el borrador del $label y anuncia un error asíncrono para reintentarlo', async ({ path, action, args }) => {
+    let rejectSend!: (error: Error) => void;
+    actions[action].mockImplementationOnce(() => new Promise<string>((_resolve, reject) => { rejectSend = reject; }));
+    snapshot.chatChannels = [{ id: 'project', name: 'Proyecto final', kind: 'project', createdBy: 'viewer', createdAt: at }];
+    await show(path);
+    await fill(container.querySelector('textarea')!, 'Mensaje de prueba');
+    await click(container.querySelector('[aria-label="Enviar mensaje"]')!);
+    expect(container.querySelector('textarea')?.disabled).toBe(true);
+    expect(container.querySelector('textarea')?.value).toBe('Mensaje de prueba');
+    await act(async () => rejectSend(new Error('No se pudo confirmar el envío')));
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('No se pudo confirmar el envío');
+    expect(container.querySelector('textarea')?.disabled).toBe(false);
+    expect(container.querySelector('textarea')?.value).toBe('Mensaje de prueba');
+    await click(container.querySelector('[aria-label="Enviar mensaje"]')!);
+    expect(actions[action]).toHaveBeenCalledTimes(2);
+    expect(actions[action]).toHaveBeenLastCalledWith(...args);
+    expect(container.querySelector('textarea')?.value).toBe('');
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+  }, 15_000);
+
   it('marca solo la conversación abierta al estar visible, sin consumir los directos', async () => {
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
     await show(); expect(actions.markConversationRead).not.toHaveBeenCalled();
@@ -82,7 +122,7 @@ describe('mensajería de la segunda entrega', () => {
   it('ofrece reporte con evidencia sin seleccionar por defecto', async () => {
     await show('/m/mensajes/directos/private');
     await click(container.querySelector('[aria-label="Opciones del mensaje"]')!);
-    await click([...container.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Reportar mensaje')!);
+    await click([...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent?.trim() === 'Reportar mensaje')!);
     const checkbox = container.querySelector<HTMLInputElement>('.chat-report input[type="checkbox"]')!;
     expect(checkbox.checked).toBe(false);
     await fill(container.querySelector<HTMLTextAreaElement>('.chat-report textarea')!, 'Revisar conducta');

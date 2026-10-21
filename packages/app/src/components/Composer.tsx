@@ -27,6 +27,7 @@ import { normalize } from '../lib/search';
 import { mentionToken } from '../lib/chat';
 import { Icon, type IconName } from './Icon';
 import { StickerPicker } from './StickerPicker';
+import { ChatButton, ChatTextArea } from './messaging/Messaging';
 
 /** Borradores por conversación: cambiar de chat no borra lo que estabas escribiendo. */
 const drafts = new Map<string, string>();
@@ -88,7 +89,6 @@ export function Composer({
   retryingAttachments = false,
 }: {
   placeholder: string;
-  /** Devuelve false si no se envió, para conservar el texto. */
   /** Resuelve `true` si se envió; si no, el texto se queda en el campo. */
   onSend: (text: string, files?: File[]) => Promise<boolean>;
   /** Identifica la conversación (y a quien escribe) para guardar su borrador. */
@@ -172,10 +172,15 @@ export function Composer({
   };
 
   const sendSticker = (id: Id) => {
-    if (disabled || sendingRef.current) return;
+    if (disabled || retryingAttachments || sendingRef.current) return;
     setStickers(false);
-    void onSend(formatReference('sticker', id));
-    inputRef.current?.focus();
+    sendingRef.current = true;
+    setSending(true);
+    void onSend(formatReference('sticker', id)).finally(() => {
+      sendingRef.current = false;
+      setSending(false);
+      inputRef.current?.focus();
+    });
   };
 
   const addRef = (ref: Reference) => {
@@ -261,6 +266,7 @@ export function Composer({
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.nativeEvent.isComposing) return;
     if (menuOpen) {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
@@ -295,7 +301,7 @@ export function Composer({
   const optionId = (i: number) => `${menuId}-${i}`;
 
   return (
-    <form className="composer" onSubmit={submit}>
+    <form className="composer messaging-composer" onSubmit={submit} aria-label="Escribir mensaje" aria-busy={sending}>
       {error && (
         <p className="composer__error error" role="alert">
           {error}
@@ -305,7 +311,7 @@ export function Composer({
       {files.length > 0 && <ul className="composer__refs" aria-label="Archivos que se enviarán">
         {files.map((file, index) => <li className="ref-chip" key={`${file.name}:${index}`}>
           <Icon name="file" size={14} /><span>{file.name} · {formatBytes(file.size)}</span>
-          <button type="button" disabled={sending || retryingAttachments} aria-label={`Quitar ${file.name}`} onClick={() => setFiles((current) => current.filter((_file, i) => i !== index))}><Icon name="close" size={14} /></button>
+          <ChatButton variant="tertiary" type="button" disabled={sending || retryingAttachments} aria-label={`Quitar ${file.name}`} onClick={() => setFiles((current) => current.filter((_file, i) => i !== index))}><Icon name="close" size={14} /></ChatButton>
         </li>)}
       </ul>}
 
@@ -318,14 +324,15 @@ export function Composer({
             </strong>
             <span>{messagePreview(mode.message)}</span>
           </span>
-          <button
+          <ChatButton
+            variant="tertiary"
             type="button"
             className="icon-button"
             aria-label="Cancelar"
             onClick={onCancelMode}
           >
             <Icon name="close" size={18} />
-          </button>
+          </ChatButton>
         </div>
       )}
 
@@ -407,47 +414,11 @@ export function Composer({
 
       {stickers && <StickerPicker onPick={sendSticker} onClose={() => setStickers(false)} />}
 
-      <div className="composer__row">
-        {attachments && <>
-          <input ref={fileInput} className="sr-only" type="file" multiple aria-label="Adjuntar archivos" disabled={disabled || sending || retryingAttachments || Boolean(editing)}
-            onChange={(event) => {
-              const accepted: File[] = []; const errors: string[] = [];
-              for (const file of Array.from(event.target.files ?? [])) {
-                const problem = fileSizeError(file.name, file.size);
-                if (problem) errors.push(problem); else accepted.push(file);
-              }
-              if (accepted.length) setFiles((current) => [...current, ...accepted]);
-              setFileError(errors.join(' ') || null); event.target.value = '';
-            }} />
-          <button type="button" className="icon-button composer__tool" aria-label="Elegir archivos adjuntos" title="Adjuntar archivos" onClick={() => fileInput.current?.click()} disabled={disabled || sending || retryingAttachments || Boolean(editing)}><Icon name="upload" /></button>
-        </>}
-        <button
-          type="button"
-          className="icon-button composer__tool"
-          aria-label="Stickers"
-          title="Stickers"
-          aria-expanded={stickers}
-          onClick={() => setStickers(!stickers)}
-          disabled={disabled || sending || retryingAttachments || Boolean(editing)}
-        >
-          <Icon name="smile" />
-        </button>
-        <button
-          type="button"
-          className="icon-button composer__tool"
-          aria-label="Comandos y referencias"
-          title="Comandos y referencias (/)"
-          onClick={() => {
-            update('/');
-            inputRef.current?.focus();
-          }}
-          disabled={disabled || sending || retryingAttachments || Boolean(editing)}
-        >
-          <Icon name="slash" />
-        </button>
-        <textarea
+      <div className="messaging-composer__surface">
+        <ChatTextArea
           ref={inputRef}
-          rows={1}
+          className="messaging-composer__input ring-0 shadow-none rounded-none bg-transparent px-3.5 py-3"
+          rows={2}
           aria-label={placeholder}
           placeholder={placeholder}
           value={text}
@@ -462,14 +433,58 @@ export function Composer({
           aria-activedescendant={menuOpen && options.length ? optionId(current) : undefined}
           aria-autocomplete="list"
         />
-        <button
+        <div className="composer__row messaging-composer__toolbar">
+          <div className="messaging-composer__tools">
+        {attachments && <>
+          <input ref={fileInput} className="sr-only" type="file" multiple aria-label="Adjuntar archivos" disabled={disabled || sending || retryingAttachments || Boolean(editing)}
+            onChange={(event) => {
+              const accepted: File[] = []; const errors: string[] = [];
+              for (const file of Array.from(event.target.files ?? [])) {
+                const problem = fileSizeError(file.name, file.size);
+                if (problem) errors.push(problem); else accepted.push(file);
+              }
+              if (accepted.length) setFiles((current) => [...current, ...accepted]);
+              setFileError(errors.join(' ') || null); event.target.value = '';
+            }} />
+          <ChatButton variant="tertiary" type="button" className="icon-button composer__tool" aria-label="Elegir archivos adjuntos" title="Adjuntar archivos" onClick={() => fileInput.current?.click()} disabled={disabled || sending || retryingAttachments || Boolean(editing)}><Icon name="upload" /></ChatButton>
+        </>}
+        <ChatButton variant="tertiary"
+          type="button"
+          className="icon-button composer__tool"
+          aria-label="Stickers"
+          title="Stickers"
+          aria-expanded={stickers}
+          onClick={() => setStickers(!stickers)}
+          disabled={disabled || sending || retryingAttachments || Boolean(editing)}
+        >
+          <Icon name="smile" />
+        </ChatButton>
+        <ChatButton variant="tertiary"
+          type="button"
+          className="icon-button composer__tool"
+          aria-label="Comandos y referencias"
+          title="Comandos y referencias (/)"
+          onClick={() => {
+            update('/');
+            inputRef.current?.focus();
+          }}
+          disabled={disabled || sending || retryingAttachments || Boolean(editing)}
+        >
+          <Icon name="slash" />
+        </ChatButton>
+
+          </div>
+        <ChatButton
           type="submit"
           className="composer__send"
+          loading={sending}
           disabled={!canSend}
           aria-label={editing ? 'Guardar cambios' : retryingAttachments ? 'Reintentar adjuntos' : 'Enviar mensaje'}
         >
-          <Icon name={editing ? 'check' : 'send'} />
-        </button>
+          <Icon name={editing ? 'check' : 'send'} size={18} />
+          <span>{editing ? 'Guardar' : retryingAttachments ? 'Reintentar' : 'Enviar'}</span>
+        </ChatButton>
+        </div>
       </div>
       {mentionMemberIds && !editing && <label className="chat-mention-picker">
         <span className="sr-only">Mencionar a un compañero</span>

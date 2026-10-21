@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useMatch, useNavigate, useParams } from 'react-router';
 import { useDataSource, useSnapshot } from '../data/DataContext';
-import { Avatar } from '../components/Avatar';
+import { ChatAvatar, ChatButton } from '../components/messaging/Messaging';
 import { ChatToolsLinks, Composer, type ComposerMode } from '../components/Composer';
 import { Icon } from '../components/Icon';
 import { MessageList, type MessageHandlers } from '../components/MessageList';
@@ -25,7 +25,7 @@ const GROUP_NAME = 'Canal del salón';
 export function MessagesLayout() {
   const onList = useMatch('/m/mensajes/directos');
   return (
-    <div className={onList ? 'chat chat--list' : 'chat chat--thread'}>
+    <div className={onList ? 'b20-messaging chat chat--list' : 'b20-messaging chat chat--thread'}>
       <ConversationList />
       <section className="chat__thread" aria-label="Conversación">
         <Outlet />
@@ -34,12 +34,8 @@ export function MessagesLayout() {
   );
 }
 
-function GroupAvatar({ size = 40 }: { size?: number }) {
-  return (
-    <span className="avatar avatar--group" style={{ width: size, height: size }} aria-hidden="true">
-      <Icon name="users" size={Math.round(size * 0.55)} />
-    </span>
-  );
+function GroupAvatar({ name = GROUP_NAME }: { name?: string }) {
+  return <ChatAvatar name={name} size="sm" className="messaging-avatar--group" />;
 }
 
 function ConversationRow({
@@ -65,7 +61,7 @@ function ConversationRow({
 }) {
   return (
     <li>
-      <NavLink to={to} end={end} className="conv">
+      <NavLink to={to} end={end} className="conv messaging-conversation">
         {avatar}
         <span className="conv__main">
           <span className="conv__top">
@@ -150,11 +146,11 @@ function ConversationList() {
 
   return (
     <aside className="chat__list" aria-label="Conversaciones">
-      <header className="chat__list-header">
-        <h1>Mensajes</h1>
-        <button
+      <header className="chat__list-header messaging-sidebar-heading">
+        <div><p className="messaging-eyebrow">TU SALÓN</p><h1>Mensajes</h1></div>
+        <ChatButton
           type="button"
-          className="icon-button"
+          variant="tertiary" className="icon-button"
           aria-label={picking ? 'Cerrar la lista de compañeros' : 'Nueva conversación'}
           title={picking ? 'Cerrar' : 'Nueva conversación'}
           aria-expanded={picking}
@@ -164,7 +160,7 @@ function ConversationList() {
           }}
         >
           <Icon name={picking ? 'close' : 'plus'} />
-        </button>
+        </ChatButton>
       </header>
       <label className="search">
         <Icon name="search" size={18} />
@@ -197,7 +193,7 @@ function ConversationList() {
             />
           </ul>
         )}
-        <div className="chat-channel-heading"><h2 className="chat__list-title">Canales</h2><button type="button" className="link-button" onClick={() => setCreatingChannel(!creatingChannel)}>{creatingChannel ? 'Cerrar' : 'Crear canal'}</button></div>
+        <div className="chat-channel-heading"><h2 className="chat__list-title">Canales</h2><ChatButton type="button" variant="tertiary" className="link-button" onClick={() => setCreatingChannel(!creatingChannel)}>{creatingChannel ? 'Cerrar' : 'Crear canal'}</ChatButton></div>
         {creatingChannel && <form className="form chat-channel-form" onSubmit={(event) => {
           event.preventDefault(); void run(async () => {
             const id = await source.createChatChannel({ name: channelName, kind: channelKind, subjectId: channelKind === 'subject' ? subjectId : undefined });
@@ -207,12 +203,12 @@ function ConversationList() {
           <label className="field"><span className="field__label">Nombre del canal</span><input value={channelName} maxLength={80} required onChange={(event) => setChannelName(event.target.value)} /></label>
           <label className="field"><span className="field__label">Tipo de canal</span><select value={channelKind} onChange={(event) => setChannelKind(event.target.value as typeof channelKind)}><option value="subject">Materia</option><option value="topic">Tema</option><option value="project">Proyecto</option></select></label>
           {channelKind === 'subject' && <label className="field"><span className="field__label">Materia</span><select value={subjectId} required onChange={(event) => setSubjectId(event.target.value)}><option value="">Elige una materia</option>{subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}</select></label>}
-          <p className="field__hint">Todos los integrantes activos del salón pueden leer el canal.</p><button type="submit">Crear canal</button>
+          <p className="field__hint">Todos los integrantes activos del salón pueden leer el canal.</p><ChatButton type="submit">Crear canal</ChatButton>
         </form>}
         {shownChannels.length > 0 && <ul className="convs">{shownChannels.map((channel) => {
           const messages = channelMessages.filter((message) => message.channelId === channel.id);
           const last = messages.at(-1);
-          return <ConversationRow key={channel.id} to={`/m/mensajes/canales/${channel.id}`} avatar={<GroupAvatar />} name={`${channel.name}${channel.archivedAt ? ' · Archivado' : ''}`} last={last} preview={previewOf(last, true)} {...indicators('channel', channel.id, messages)} />;
+          return <ConversationRow key={channel.id} to={`/m/mensajes/canales/${channel.id}`} avatar={<GroupAvatar name={channel.name} />} name={`${channel.name}${channel.archivedAt ? ' · Archivado' : ''}`} last={last} preview={previewOf(last, true)} {...indicators('channel', channel.id, messages)} />;
         })}</ul>}
 
         {(shownDirects.length > 0 || (!query && !picking)) && (
@@ -224,7 +220,7 @@ function ConversationList() {
                   <ConversationRow
                     key={d.id}
                     to={`/m/mensajes/directos/${d.id}`}
-                    avatar={<Avatar member={d.other} size={40} />}
+                    avatar={<ChatAvatar name={d.name} src={d.other?.photoUrl} size="sm" />}
                     name={d.name}
                     last={d.last}
                     preview={previewOf(d.last, false)}
@@ -235,9 +231,9 @@ function ConversationList() {
             ) : (
               <p className="muted chat__list-note">
                 Aún no tienes conversaciones directas.{' '}
-                <button type="button" className="link-button" onClick={() => setPicking(true)}>
+                <ChatButton type="button" variant="tertiary" className="link-button" onClick={() => setPicking(true)}>
                   Escríbele a un compañero
-                </button>
+                </ChatButton>
               </p>
             )}
           </>
@@ -249,13 +245,13 @@ function ConversationList() {
             <ul className="convs">
               {newPeople.map((m) => (
                 <li key={m.id}>
-                  <button type="button" className="conv" onClick={() => start(m.id)}>
-                    <Avatar member={m} size={40} />
+                  <ChatButton type="button" variant="tertiary" className="conv messaging-conversation" onClick={() => start(m.id)}>
+                    <ChatAvatar name={m.displayName} src={m.photoUrl} size="sm" />
                     <span className="conv__main">
                       <strong className="conv__name">{m.displayName}</strong>
                       <span className="conv__preview">Escribirle por primera vez</span>
                     </span>
-                  </button>
+                  </ChatButton>
                 </li>
               ))}
             </ul>
@@ -398,7 +394,7 @@ function useThread(scope: MessageScope, conversationId: string, sendNew: (text: 
   };
 
   const extras = <>
-    {progress && <p className="chat-transfer" role="status">Subiendo {progress.name}: {Math.round(progress.done / progress.total * 100)} % <button type="button" className="link-button" onClick={() => controller.current?.abort()}>Cancelar subida</button></p>}
+    {progress && <p className="chat-transfer" role="status">Subiendo {progress.name}: {Math.round(progress.done / progress.total * 100)} % <ChatButton type="button" variant="tertiary" className="link-button" onClick={() => controller.current?.abort()}>Cancelar subida</ChatButton></p>}
     {retryingAttachments && <p className="chat-transfer" role="status">El mensaje ya se envió. Pulsa «Reintentar adjuntos» para continuar la misma subida sin duplicarlo.</p>}
     {report && <ReportMessageForm scope={scope} message={report} onClose={() => setReport(null)} />}
   </>;
@@ -417,9 +413,9 @@ export function ChannelThread() {
   const label = channel.kind === 'subject' ? subjects.find((subject) => subject.id === channel.subjectId)?.name ?? 'Materia' : channel.kind === 'project' ? 'Proyecto' : 'Tema';
   const canArchive = me?.id === channel.createdBy || me?.isCreator;
   return <>
-    <ThreadHeader avatar={<GroupAvatar />} title={channel.name} subtitle={`${label} · lo ve todo el grupo${channel.archivedAt ? ' · Archivado' : ''}`} action={<div className="chat-thread-controls">
+    <ThreadHeader avatar={<GroupAvatar name={channel.name} />} title={channel.name} subtitle={`${label} · lo ve todo el grupo${channel.archivedAt ? ' · Archivado' : ''}`} action={<div className="chat-thread-controls">
       <ConversationMute scope="channel" conversationId={channel.id} />
-      {canArchive && <button type="button" className="button secondary" disabled={pending} onClick={() => void run(() => source.setChatChannelArchived(channel.id, !channel.archivedAt))}>{channel.archivedAt ? 'Reabrir canal' : 'Archivar canal'}</button>}
+      {canArchive && <ChatButton type="button" variant="secondary" className="button secondary" disabled={pending} onClick={() => void run(() => source.setChatChannelArchived(channel.id, !channel.archivedAt))}>{channel.archivedAt ? 'Reabrir canal' : 'Archivar canal'}</ChatButton>}
     </div>} />
     <MessageList key={channel.id} messages={messages} members={members} meId={me?.id} showSenders scope="channel" handlers={thread.handlers} onReadThrough={thread.onReadThrough}
       empty={<ThreadNotice title="El canal está en silencio">Comparte el primer mensaje sobre {channel.name}.</ThreadNotice>} />
@@ -518,7 +514,7 @@ export function DirectThread() {
   return (
     <>
       <ThreadHeader
-        avatar={<Avatar member={other} size={40} />}
+        avatar={<ChatAvatar name={name} src={other?.photoUrl} size="sm" />}
         title={<Link to={`/perfil/${otherId}`}>{name}</Link>}
         subtitle={
           <>
@@ -528,7 +524,7 @@ export function DirectThread() {
         action={
           <div className="chat-thread-controls">
             <ConversationMute scope="direct" conversationId={conversation.id} />
-            <button type="button" className="button secondary" disabled={pending} aria-pressed={blocked} onClick={() => void run(() => source.setMemberBlocked(otherId, !blocked))}>{blocked ? 'Desbloquear' : 'Bloquear'}</button>
+            <ChatButton type="button" variant="secondary" className="button secondary" disabled={pending} aria-pressed={blocked} onClick={() => void run(() => source.setMemberBlocked(otherId, !blocked))}>{blocked ? 'Desbloquear' : 'Bloquear'}</ChatButton>
           </div>
         }
       />
