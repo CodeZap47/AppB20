@@ -24,7 +24,7 @@ function setup(extra: Record<string, Row[]> = {}) {
     appConfig: [{ id: 0, owner: admin }], authConfig: [{ id: 0, issuer: 'https://auth.spacetimedb.com/oidc', audiences: ['test'] }],
     subject: [{ id: 1n }], note: [note(1n), note(2n, 'personal')], ...extra,
   };
-  const keys: Record<string, string> = { member: 'identity', contentStatus: 'key', contentRetention: 'key', noteDetail: 'noteId', resourceVersion: 'key', evidenceDetail: 'evidenceId', workDetail: 'workId', contributionTombstone: 'fingerprint', roomSummary: 'roomId', teachingPersonal: 'practiceId' };
+  const keys: Record<string, string> = { member: 'identity', contentStatus: 'key', contentRetention: 'key', noteDetail: 'noteId', resourceVersion: 'key', evidenceDetail: 'evidenceId', workDetail: 'workId', contributionTombstone: 'fingerprint', roomSummary: 'roomId', teachingPersonal: 'practiceId', guideAiProvenance: 'key' };
   const tables = new Map<string, Row[]>(); let next = 1000n;
   const rows = (name: string) => { if (!tables.has(name)) tables.set(name, [...(initial[name] ?? [])]); return tables.get(name)!; };
   const db = new Proxy({}, { get(_target, name: string) {
@@ -153,6 +153,31 @@ describe('papelera de 30 días con reloj del servidor', () => {
     expect(s.rows('noteDetail')[0]?.questionIds).toEqual([]);
     expect(s.rows('spacedCard')[0]).toMatchObject({ archived: true, question: '', explanation: '', hint: '' });
     expect(s.rows('retentionAudit').filter((row) => row.action === 'purge')).toHaveLength(6);
+  });
+
+  it('purga las copias privadas de Guías IA y las citas originales sin borrar la guía independiente', () => {
+    const source = (id: string) => ({ kind: 'note', refId: id, title: `Fuente ${id}`, fragmentIds: [`f${id}`] });
+    const fragment = (id: string) => ({ id: `f${id}`, text: `Original copiado ${id}`, origins: [{ kind: 'note', refId: id }] });
+    const preparation = { sources: [source('1'), source('2')], fragments: [fragment('1'), fragment('2')] };
+    const s = setup({
+      studyGuide: [{ id: 5n, subjectId: 1n, title: 'Guía publicada independiente', topics: [], sections: ['Explicación revisada'], createdBy: author, createdAt: at, updatedAt: at, version: 1 }],
+      guideAiDraft: [{ id: 'private-draft', actor: author, json: JSON.stringify({ preparation, publishedGuideId: '5' }) },
+        { id: 'unrelated-draft', actor: other, json: JSON.stringify({ preparation: { sources: [source('2')], fragments: [fragment('2')] } }) }],
+      guideAiTranscription: [{ id: 'transcription-1', targetKind: 'note', targetId: 1n, json: 'Original transcrito 1' },
+        { id: 'transcription-2', targetKind: 'note', targetId: 2n, json: 'Original transcrito 2' }],
+      guideAiProvenance: [{ key: '5:1', guideId: 5n, guideVersion: 1, json: JSON.stringify({ ...preparation, citations: [{ content: 'Explicación revisada', citations: ['f1', 'f2'] }] }) }],
+    });
+    withdrawContent(s.ctx, withdraw); s.maintenance(); s.time(at.microsSinceUnixEpoch + RETENTION_MICROS);
+    expect(purgeDue(s.ctx, { batchSize: 20 })).toEqual({ processed: 1, remaining: 0 });
+    expect(s.rows('guideAiDraft').map((row) => row.id)).toEqual(['unrelated-draft']);
+    expect(s.rows('guideAiTranscription').map((row) => row.id)).toEqual(['transcription-2']);
+    expect(s.rows('studyGuide')[0]?.sections).toEqual(['Explicación revisada']);
+    const provenance = JSON.parse(s.rows('guideAiProvenance')[0]!.json as string);
+    expect(provenance).toEqual({ sources: [source('2')], fragments: [fragment('2')], citations: [{ content: 'Explicación revisada', citations: ['f2'] }] });
+    s.as(author); withdrawContent(s.ctx, { ...withdraw, kind: 'guide', targetId: 5n });
+    s.time(at.microsSinceUnixEpoch + 2n * RETENTION_MICROS); s.as(service); purgeDue(s.ctx, { batchSize: 20 });
+    expect(s.rows('guideAiProvenance')).toEqual([]);
+    expect(s.rows('studyGuide')).toEqual([]);
   });
 
   it('libera después el archivo de una respuesta activa purgada en cascada cuando pierde su última referencia', () => {

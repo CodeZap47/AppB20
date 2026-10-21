@@ -1,3 +1,5 @@
+import { DemoGuideAiStore } from './demoGuideAi';
+import type { GuideAiActions } from './guideAiTypes';
 import {
   presentationGuidingQuestions,
   cleanHelpPost,
@@ -264,6 +266,7 @@ export class DemoDataSource implements DataSource {
   #teachingVersions: DemoTeachingVersions;
   #batchDepth = 0;
   #batchChanged = false;
+  #guideAi: DemoGuideAiStore;
   #profiles: MemberProfile[] = [];
   #withdrawals: Map<string, DemoWithdrawal>;
   #invalidate = () => { this.#snapshot = undefined; for (const listener of this.#listeners) listener(); };
@@ -298,6 +301,19 @@ export class DemoDataSource implements DataSource {
     this.#notifications = new DemoNotificationsStore({ state: () => this.#state, active: () => this.#activeMember(), current: () => this.getSnapshot(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit() });
     this.#rooms = new DemoRoomsStore({ state: () => this.#state, active: () => this.#activeMember(), id: () => this.#id(), now: () => this.#now(), emit: () => this.#emit(),
       sourceAvailable: (kind, sourceId) => !this.#withdrawals.get(`${kind}:${sourceId}`)?.withdrawnAt });
+    this.#guideAi = new DemoGuideAiStore({ snapshot: () => this.getSnapshot(), now: () => this.#now(), changed: () => this.#emit(),
+      publish: (input, refs, target) => {
+        const me = this.#activeMember(); const checked = this.#checkGuide(input); const now = this.#now();
+        const existing = target ? this.#guide(target.id) : undefined;
+        if (existing) { this.#guideExpected(existing.id, target!.expectedVersion); this.#knowledge.captureGuide(existing.id); }
+        const prepared = refs.map((ref) => ({ ...ref, sourceVersion: this.#sourceVersion(ref, checked.subjectId, checked.termId) }));
+        const guide: StudyGuide = existing ? { ...existing, ...checked, version: existing.version + 1, updatedAt: now, updatedBy: me.id }
+          : { id: this.#id(), ...checked, version: 1, createdBy: me.id, createdAt: now, updatedBy: me.id, updatedAt: now };
+        this.#state.guides = existing ? this.#state.guides.map((row) => row.id === guide.id ? guide : row) : [...this.#state.guides, guide];
+        this.#state.guideSources = [...this.#state.guideSources.filter((row) => row.guideId !== guide.id), ...prepared.map((ref): GuideSource => ({ id: this.#id(), guideId: guide.id, kind: ref.kind, refId: ref.refId,
+          sourceVersion: ref.sourceVersion, status: ref.used ? 'processed' : 'pending', reason: ref.used ? '' : 'Preparada, pero no citada en esta versión.', topics: ref.topics, addedBy: me.id, addedAt: now }))];
+        this.#knowledge.captureGuide(guide.id, me.id); this.#emit(); return { id: guide.id, version: guide.version };
+      }, download: (id) => this.downloadResourceFile(id) });
   }
 
   get viewerId(): Id {
@@ -334,6 +350,18 @@ export class DemoDataSource implements DataSource {
     if (this.#trash.purgeDue()) { for (const key of this.#trash.purgedKeys()) this.#withdrawals.delete(key); this.#emit(); }
     return this.#now();
   }
+  getGuideAiStatus = () => this.#guideAi.getGuideAiStatus();
+  prepareGuideAiDraft = (...args: Parameters<GuideAiActions['prepareGuideAiDraft']>) => this.#guideAi.prepareGuideAiDraft(...args);
+  refreshGuideAiDraft = (...args: Parameters<GuideAiActions['refreshGuideAiDraft']>) => this.#guideAi.refreshGuideAiDraft(...args);
+  listGuideAiDrafts = () => this.#guideAi.listGuideAiDrafts();
+  getGuideAiDraft = (...args: Parameters<GuideAiActions['getGuideAiDraft']>) => this.#guideAi.getGuideAiDraft(...args);
+  getGuideAiFile = (...args: Parameters<GuideAiActions['getGuideAiFile']>) => this.#guideAi.getGuideAiFile(...args);
+  saveGuideAiTranscription = (...args: Parameters<GuideAiActions['saveGuideAiTranscription']>) => this.#guideAi.saveGuideAiTranscription(...args);
+  runGuideAiStep = (...args: Parameters<GuideAiActions['runGuideAiStep']>) => this.#guideAi.runGuideAiStep(...args);
+  updateGuideAiDraft = (...args: Parameters<GuideAiActions['updateGuideAiDraft']>) => this.#guideAi.updateGuideAiDraft(...args);
+  cancelGuideAiDraft = (...args: Parameters<GuideAiActions['cancelGuideAiDraft']>) => this.#guideAi.cancelGuideAiDraft(...args);
+  publishGuideAiDraft = (...args: Parameters<GuideAiActions['publishGuideAiDraft']>) => this.#guideAi.publishGuideAiDraft(...args);
+  getGuideAiProvenance = (...args: Parameters<GuideAiActions['getGuideAiProvenance']>) => this.#guideAi.getGuideAiProvenance(...args);
 
   createStudyRoom = (...args: Parameters<StudyRoomActions['createStudyRoom']>) => this.#rooms.createStudyRoom(...args);
   updateStudyRoom = (...args: Parameters<StudyRoomActions['updateStudyRoom']>) => this.#rooms.updateStudyRoom(...args);
@@ -382,6 +410,7 @@ export class DemoDataSource implements DataSource {
     }
     this.#objectUrls.clear();
     this.#academic.dispose();
+    this.#guideAi.dispose();
     this.#chat.dispose();
     this.#notifications.dispose();
     this.#profiles = [];
@@ -559,6 +588,7 @@ export class DemoDataSource implements DataSource {
     });
     combined.contributionOrigins = this.#trash.contributionOrigins(this.#academic.resources(), combined);
     combined.trashEntries = this.#trash.snapshot(me.id);
+    combined.guideAiSourceAvailability = this.#guideAi.sourceAvailability(combined);
     const result = { ...combined, ...this.#rooms.snapshot(me.id) };
     return { ...result, ...this.#notifications.snapshot(result), ...this.#practice.snapshot(), ...this.#community4.snapshot(result) };
   }
@@ -639,6 +669,7 @@ export class DemoDataSource implements DataSource {
   }
   #changedExtra(kind: ResourceTargetKind, id: Id) {
     const me = this.#activeMember(); const now = this.#now();
+    const previousGuide = kind === 'guide' ? this.#state.guides.find((row) => row.id === id) : undefined;
     if (kind === 'note') this.#state.notes = this.#state.notes.map((row) => row.id === id ? { ...row, version: row.version + 1, updatedAt: now } : row);
     else if (kind === 'guide') this.#state.guides = this.#state.guides.map((row) => row.id === id ? { ...row, version: row.version + 1, updatedBy: me.id, updatedAt: now } : row);
     else if (kind === 'question') this.#state.questions = this.#state.questions.map((row) => row.id === id ? { ...row, version: (row.version ?? 1) + 1 } : row);
@@ -648,7 +679,7 @@ export class DemoDataSource implements DataSource {
       this.#profiles = this.#profiles.map((row) => row.id === id ? { ...row, photoFileId: latest?.id, version: row.version + 1, updatedAt: now } : row);
     }
     if (kind === 'note') this.#knowledge.captureNote(id, me.id);
-    else if (kind === 'guide') this.#knowledge.captureGuide(id, me.id);
+    else if (kind === 'guide') { this.#knowledge.captureGuide(id, me.id); if (previousGuide) this.#guideAi.inheritProvenance(id, previousGuide.version, previousGuide.version + 1, previousGuide.sections); }
     this.#emit();
   }
 
@@ -1438,7 +1469,7 @@ export class DemoDataSource implements DataSource {
   }
   publishNoteVersion(noteId: Id, expectedVersion: number) { this.#extraTarget('note', noteId, true); return this.#knowledge.publishNoteVersion(noteId, expectedVersion); }
   restoreNoteVersion(noteId: Id, version: number, expectedVersion: number) { this.#extraTarget('note', noteId, true); return this.#knowledge.restoreNoteVersion(noteId, version, expectedVersion); }
-  restoreGuideVersion(guideId: Id, version: number, expectedVersion: number) { this.#extraTarget('guide', guideId, true); return this.#knowledge.restoreGuideVersion(guideId, version, expectedVersion); }
+  restoreGuideVersion(guideId: Id, version: number, expectedVersion: number) { this.#extraTarget('guide', guideId, true); this.#knowledge.restoreGuideVersion(guideId, version, expectedVersion); this.#guideAi.restoreProvenance(guideId, version, expectedVersion + 1); }
   commentQuestion(questionId: Id, text: string, answerId?: Id) { this.#extraTarget('question', questionId); if (this.#withdrawals.get(`question:${questionId}`)?.withdrawnAt || (answerId && this.#withdrawals.get(`answer:${answerId}`)?.withdrawnAt)) throw new Error('El contenido fue retirado.'); return this.#knowledge.commentQuestion(questionId, text, answerId); }
   toggleAnswerUsefulness(answerId: Id) { this.#extraTarget('answer', answerId); if (this.#withdrawals.get(`answer:${answerId}`)?.withdrawnAt) throw new Error('La respuesta fue retirada.'); return this.#knowledge.toggleAnswerUsefulness(answerId); }
   saveQuestionLinks(questionId: Id, noteIds: Id[], guideIds: Id[]) { this.#extraTarget('question', questionId); if (this.#withdrawals.get(`question:${questionId}`)?.withdrawnAt || noteIds.some((id) => !!this.#withdrawals.get(`note:${id}`)?.withdrawnAt) || guideIds.some((id) => !!this.#withdrawals.get(`guide:${id}`)?.withdrawnAt)) throw new Error('El material fue retirado.'); return this.#knowledge.saveQuestionLinks(questionId, noteIds, guideIds); }
@@ -1559,7 +1590,7 @@ export class DemoDataSource implements DataSource {
   }
 
   /** Versión actual del material citado; también comprueba que exista y sea de la materia. */
-  #sourceVersion(ref: GuideSourceRef, subjectId: Id): number {
+  #sourceVersion(ref: GuideSourceRef, subjectId: Id, termId?: Id): number {
     if (!isGuideSourceKind(ref.kind)) throw new Error('Tipo de fuente inválido.');
     const kind = { nota: 'note', trabajo: 'work', tarea: 'assignment', actividad: 'activity', pregunta: 'question' }[ref.kind];
     if (this.#withdrawals.get(`${kind}:${ref.refId}`)?.withdrawnAt) throw new Error('La fuente fue retirada.');
@@ -1569,7 +1600,7 @@ export class DemoDataSource implements DataSource {
         case 'trabajo': {
           const work = s.works.find((w) => w.id === ref.refId);
           const assignment = work && s.assignments.find((a) => a.id === work.assignmentId);
-          return work && assignment && { subjectId: assignment.subjectId, version: work.version };
+          return work && assignment && { subjectId: assignment.subjectId, termId: assignment.termId, version: work.version };
         }
         case 'tarea':
           return s.assignments.find((a) => a.id === ref.refId);
@@ -1582,12 +1613,13 @@ export class DemoDataSource implements DataSource {
         }
         case 'pregunta': {
           const question = s.questions.find((q) => q.id === ref.refId);
-          return question && { subjectId: question.subjectId, version: question.version ?? 1 };
+          return question && { subjectId: question.subjectId, termId: undefined, version: question.version ?? 1 };
         }
       }
     })();
     if (!found) throw new Error('Una de las fuentes ya no existe o no es del grupo.');
     if (found.subjectId !== subjectId) throw new Error('Las fuentes deben ser de la misma materia.');
+    if (termId && found.termId && found.termId !== termId) throw new Error('La fuente pertenece a otro parcial.');
     return found.version;
   }
 
@@ -1596,7 +1628,7 @@ export class DemoDataSource implements DataSource {
     const existing = this.#state.guideSources.filter((src) => src.guideId === guide.id);
     const added: GuideSource[] = [];
     for (const ref of refs) {
-      const version = this.#sourceVersion(ref, guide.subjectId);
+      const version = this.#sourceVersion(ref, guide.subjectId, guide.termId);
       const duplicate = [...existing, ...added].some((src) => src.kind === ref.kind && src.refId === ref.refId);
       if (duplicate) continue;
       added.push({
@@ -1618,9 +1650,11 @@ export class DemoDataSource implements DataSource {
   createGuide(input: GuideInput, sources: GuideSourceRef[]): Id {
     const me = this.#activeMember();
     const now = this.#now();
+    const checked = this.#checkGuide(input);
+    for (const ref of sources) this.#sourceVersion(ref, checked.subjectId, checked.termId);
     const guide: StudyGuide = {
       id: this.#id(),
-      ...this.#checkGuide(input),
+      ...checked,
       version: 1,
       createdBy: me.id,
       createdAt: now,
@@ -1654,6 +1688,7 @@ export class DemoDataSource implements DataSource {
       src.guideId === guideId ? { ...src, topics: src.topics.filter((t) => next.topics.includes(t)) } : src,
     );
     this.#knowledge.captureGuide(guideId, me.id);
+    this.#guideAi.inheritProvenance(guideId, current.version, next.version, next.sections);
     this.#emit();
   }
 
@@ -2130,8 +2165,9 @@ export class DemoDataSource implements DataSource {
     this.#emit();
   }
 
-  addGuideSources(guideId: Id, sources: GuideSourceRef[]) {
+  addGuideSources(guideId: Id, sources: GuideSourceRef[], expectedVersion?: number) {
     const me = this.#activeMember();
+    this.#guideExpected(guideId, expectedVersion);
     this.#knowledge.captureGuide(guideId);
     this.#addSources(this.#guide(guideId), sources, me.id);
     this.#changedExtra('guide', guideId);
@@ -2143,10 +2179,12 @@ export class DemoDataSource implements DataSource {
     return source;
   }
 
-  updateGuideSource(sourceId: Id, update: GuideSourceUpdate) {
+  updateGuideSource(sourceId: Id, update: GuideSourceUpdate, expectedVersion?: number) {
     this.#activeMember();
     const source = this.#guideSource(sourceId);
     const guide = this.#guide(source.guideId);
+    this.#guideExpected(guide.id, expectedVersion);
+    if (update.status === 'processed') this.#sourceVersion(source, guide.subjectId, guide.termId);
     const problem = sourceStatusError(update.status, update.reason);
     if (problem) throw new Error(problem);
     if (update.topics.some((t) => !guide.topics.includes(t))) {
@@ -2163,14 +2201,15 @@ export class DemoDataSource implements DataSource {
     this.#changedExtra('guide', guide.id);
   }
 
-  refreshGuideSource(sourceId: Id) {
+  refreshGuideSource(sourceId: Id, expectedVersion?: number) {
     this.#activeMember();
     const source = this.#guideSource(sourceId);
     const guide = this.#guide(source.guideId);
-    const version = this.#sourceVersion(source, guide.subjectId);
+    this.#guideExpected(guide.id, expectedVersion);
+    const version = this.#sourceVersion(source, guide.subjectId, guide.termId);
     this.#knowledge.captureGuide(guide.id);
     this.#state.guideSources = this.#state.guideSources.map((src) =>
-      src.id === sourceId ? { ...src, sourceVersion: version } : src,
+      src.id === sourceId ? { ...src, sourceVersion: version, status: 'pending', reason: 'La fuente se actualizó; vuelve a procesarla.' } : src,
     );
     this.#changedExtra('guide', guide.id);
   }
@@ -2224,15 +2263,21 @@ export class DemoDataSource implements DataSource {
     this.#emit();
   }
 
-  removeGuideSource(sourceId: Id) {
+  removeGuideSource(sourceId: Id, expectedVersion?: number) {
     this.#activeMember();
+    this.#guideExpected(this.#guideSource(sourceId).guideId, expectedVersion);
     const source = this.#guideSource(sourceId); this.#guide(source.guideId); this.#knowledge.captureGuide(source.guideId);
     this.#state.guideSources = this.#state.guideSources.filter((src) => src.id !== sourceId);
     this.#changedExtra('guide', source.guideId);
   }
 
-  reviewGuide(guideId: Id, verdict: GuideReviewVerdict, comment: string) {
+  #guideExpected(guideId: Id, expectedVersion?: number) {
+    if (expectedVersion !== undefined && this.#guide(guideId).version !== expectedVersion) throw new Error('La guía cambió. Recarga antes de guardar o revisar.');
+  }
+
+  reviewGuide(guideId: Id, verdict: GuideReviewVerdict, comment: string, expectedVersion?: number) {
     const me = this.#activeMember();
+    this.#guideExpected(guideId, expectedVersion);
     const guide = this.#guide(guideId);
     if (!canReviewGuide(me.id, guide.updatedBy)) {
       throw new Error('Guardaste esta versión; la revisa otro compañero.');
@@ -2243,6 +2288,8 @@ export class DemoDataSource implements DataSource {
       throw new Error(`El comentario excede ${MAX_REVIEW_COMMENT_LENGTH} caracteres.`);
     }
     if (verdict === 'changes' && !text) throw new Error('Di qué cambios propones.');
+    if (!text) throw new Error('Escribe un comentario de revisión.');
+    if (this.#state.guideReviews.some((r) => r.guideId === guideId && r.guideVersion === guide.version && r.reviewerId === me.id)) throw new Error('Ya revisaste esta versión. Una revisión no se sobrescribe.');
     const review: GuideReview = {
       id: this.#id(),
       guideId,
@@ -2252,13 +2299,7 @@ export class DemoDataSource implements DataSource {
       comment: text,
       createdAt: this.#now(),
     };
-    // Una revisión por persona y versión: volver a revisar reemplaza la anterior.
-    this.#state.guideReviews = [
-      ...this.#state.guideReviews.filter(
-        (r) => !(r.guideId === guideId && r.guideVersion === guide.version && r.reviewerId === me.id),
-      ),
-      review,
-    ];
+    this.#state.guideReviews = [...this.#state.guideReviews, review];
     this.#emit();
   }
 }

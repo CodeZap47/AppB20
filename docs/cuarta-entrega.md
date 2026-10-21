@@ -4,7 +4,7 @@ Implementación local sobre `5650d87`, posterior a la tercera entrega integrada 
 El alcance procede del plan y de las secciones 7.2–7.9 y 7.12 de la
 [definición del proyecto](definicion-del-proyecto.md). Los datos, permisos, versiones,
 archivos y estados persistentes permanecen en SpacetimeDB 2.12.0. Cloudflare Pages sirve
-la interfaz y el Worker existente realiza la integración autorizada con Gemini BYOK.
+la interfaz y el Worker de IA dedicado realiza la integración autorizada con Gemini BYOK.
 No se incorpora otro servicio ni se despliega infraestructura durante esta implementación.
 
 ## Funciones
@@ -147,3 +147,32 @@ Esta entrega no activa Gemini, push, secretos, facturación ni publicaciones rem
 La recepción en dispositivos y el uso del modelo con una clave real se verifican durante
 la activación. Microproyectos, préstamos y el módulo 3.11 mantienen la entrega 5; no se
 declaran implementados por incorporarse estos módulos de estudio.
+
+## Integración con `main`
+
+El commit de funciones `eee025a` se integra con `00f761d`, que incorpora las Guías IA,
+la navegación Slim y el despliegue previo de la tercera entrega. Se conservan ambas
+implementaciones, se regeneran los bindings desde el esquema combinado y los paneles de
+estudio utilizan `VITE_AI_API_URL`, igual que el resto de la integración con Gemini.
+El Worker de archivos mantiene su dirección independiente.
+
+La integración no ejecuta comandos de despliegue. Publicar los nuevos módulos y clientes
+corresponde a un paso separado. La navegación Slim incluye también Retos, Revisión de
+código, Museo y Oportunidades; el recorrido real de la aplicación comprueba todos los
+destinos disponibles.
+
+Comprobaciones sobre el conjunto integrado del 21 de octubre de 2026:
+
+- **1.339 pruebas aprobadas en 149 archivos:** interfaz 682, dominio 146, módulo 333,
+  API/Workers 127 y web 51. Tras añadir los destinos al menú se repitió la suite completa
+  de interfaz, incluidas las pruebas de navegación de ambos padres.
+- Tipos de todos los workspaces correctos y comprobación final adicional de la interfaz.
+- Compilaciones de web/PWA, extensión y los dos Workers con `--dry-run`; Pages en modo
+  SpacetimeDB con direcciones independientes para archivos e IA.
+- Cinco recorridos reales locales aprobados: Retos/Revisión/Ayuda, Museo/Oportunidades,
+  IA de estudio, versiones manuales de Aprende enseñando y regresión de Guías IA.
+- Regresiones nuevas de los dos paneles de estudio con dominios de archivos e IA distintos:
+  estado e historial privados consultan exclusivamente el Worker de IA configurado.
+
+Las llamadas de generación siguen simuladas durante estas comprobaciones; no se usan claves
+personales reales ni se modifica la base de producción.

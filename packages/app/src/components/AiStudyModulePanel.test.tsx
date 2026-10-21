@@ -1,11 +1,17 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildAiPreparation, type AiGeneration } from '@b20/core';
+import { AI_CONSENT_VERSION, AI_LIMITS, buildAiPreparation, type AiGeneration, type AiStatus } from '@b20/core';
 import { AiClientError, type AiClient } from '../data/aiClient';
-import type { SpacedCollection } from '../data/types';
-import { AiStudyDraftReview } from './AiStudyModulePanel';
+import { DataProvider } from '../data/DataContext';
+import { emptySnapshot } from '../data/spacetimeSnapshot';
+import type { DataSource, SpacedCollection, TeachingPractice } from '../data/types';
+import { AiStudyDraftReview, AiStudyModulePanel } from './AiStudyModulePanel';
+vi.mock('../auth/AuthContext', () => ({ useSession: () => ({ status: 'signedIn', token: 'session-token',
+  expiresAt: Date.now() + 60_000, profile: { subject: 'self', email: 'alumno@example.test', name: 'Alumno' } }) }));
+vi.mock('../config', () => ({ config: { apiUrl: 'https://files.example', aiApiUrl: 'https://gemini-worker.example' } }));
 let root: Root; let container: HTMLDivElement;
 const collection = (visibility: 'personal' | 'group' = 'personal'): SpacedCollection => ({ id: '80', subjectId: '1', title: 'Ciclos', visibility, ownerId: 'self', version: 1, archived: false, createdAt: new Date(), updatedAt: new Date(), updatedBy: 'self' });
 function generation(purpose: 'teaching_questions' | 'spaced_cards', personal = true): AiGeneration {
@@ -19,7 +25,36 @@ function generation(purpose: 'teaching_questions' | 'spaced_cards', personal = t
 const button = () => container.querySelector<HTMLButtonElement>('button')!;
 async function review() { await act(async () => [...container.querySelectorAll<HTMLInputElement>('input[type=checkbox]')].at(-1)!.click()); }
 beforeEach(() => { Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true }); container = document.createElement('div'); document.body.append(container); root = createRoot(container); });
-afterEach(async () => { await act(async () => root.unmount()); container.remove(); });
+afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals(); });
+describe('dirección independiente del servicio Gemini en los módulos de estudio', () => {
+  it.each(['teaching_questions', 'spaced_cards'] as const)('consulta estado e historial de %s solamente en el Worker de IA', async (purpose) => {
+    const saved = generation(purpose);
+    const status: AiStatus = { actor: 'self', enabled: true, configured: true, consented: true,
+      model: 'gemini-test', limits: AI_LIMITS, consentVersion: AI_CONSENT_VERSION };
+    const network = vi.fn(async (url: string, _options?: RequestInit) => {
+      if (url === 'https://gemini-worker.example/ai/status') return Response.json(status);
+      if (url === 'https://gemini-worker.example/ai/generations') return Response.json([saved]);
+      return Response.json({ code: 'unavailable' }, { status: 404 });
+    });
+    vi.stubGlobal('fetch', network);
+    const snapshot = emptySnapshot('ready');
+    snapshot.me = { id: 'self', displayName: 'Alumno', status: 'active', isCreator: false, joinedAt: new Date() };
+    snapshot.members = [snapshot.me];
+    const source = { label: 'Grupo B20', getSnapshot: () => snapshot, subscribe: (_listener: () => void) => () => {} } as DataSource;
+    const explanation = { concept: 'Un ciclo repite instrucciones.', example: 'Repetir tres veces.', limits: 'Con una condición de salida.' };
+    const practice: TeachingPractice = { id: '5', ownerId: 'self', subjectId: '1', topic: 'Ciclos', initial: explanation,
+      revised: explanation, status: 'draft', version: 1, createdAt: new Date(), updatedAt: new Date() };
+    await act(async () => root.render(<MemoryRouter><DataProvider source={source}>
+      {purpose === 'teaching_questions' ? <AiStudyModulePanel practice={practice} /> : <AiStudyModulePanel collection={collection()} />}
+    </DataProvider></MemoryRouter>));
+    expect(network.mock.calls.map(([url]) => url).sort()).toEqual([
+      'https://gemini-worker.example/ai/generations', 'https://gemini-worker.example/ai/status',
+    ]);
+    expect(network.mock.calls.every(([, options]) => (options?.headers as Record<string, string>).Authorization === 'Bearer session-token')).toBe(true);
+    expect(container.textContent).toContain('Mis borradores privados (1)');
+    expect(container.querySelector('[role=alert]')).toBeNull();
+  });
+});
 describe('revisión explícita de preguntas y tarjetas privadas Gemini', () => {
   it('no incorpora preguntas hasta revisar y confirmar, mostrando su versión y citas', async () => {
     const saved = generation('teaching_questions'); const request = vi.fn(async () => ({}));

@@ -1,13 +1,18 @@
 import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
+import { fileURLToPath } from 'node:url';
 
 // Manifest V3 no permite cargar código remoto: todo (React, SDK de SpacetimeDB, etc.)
 // queda empaquetado en `dist/`, que es la carpeta que se carga en chrome://extensions.
 export default defineConfig({
   envDir: '../..',
   base: './',
-  plugins: [react()],
+  resolve: {
+    alias: { '@b20-ui': fileURLToPath(new URL('../../packages/app/src/untitled', import.meta.url)) },
+  },
+  plugins: [react(), tailwindcss()],
   build: {
     outDir: 'dist',
     emptyOutDir: true,

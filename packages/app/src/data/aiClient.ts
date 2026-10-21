@@ -25,6 +25,7 @@ const MESSAGES: Record<string, string> = {
   disabled: 'La generación con IA todavía no está habilitada para el grupo.',
   limit_exceeded: 'Se alcanzó un límite. Reduce la selección o consulta los límites del servicio.',
   consent_required: 'Revisa y acepta el consentimiento vigente para continuar.',
+  unknown_confirmation_required: 'Hay otro envío de IA con resultado incierto. Consulta su estado y confirma expresamente el posible consumo adicional antes de continuar.',
 };
 
 export class AiClient {

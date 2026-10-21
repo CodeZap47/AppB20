@@ -23,7 +23,7 @@ export function ByokSettings() {
 
 function ByokAccountSettings({ token, simulated, active }: { token?: string; simulated: boolean; active: boolean }) {
   const tokenRef = useRef(token); tokenRef.current = token;
-  const client = useMemo(() => simulated ? undefined : new AiClient({ apiUrl: config.apiUrl, getToken: () => tokenRef.current }), [token, simulated]);
+  const client = useMemo(() => simulated ? undefined : new AiClient({ apiUrl: config.aiApiUrl, getToken: () => tokenRef.current }), [token, simulated]);
   const [status, setStatus] = useState<UiAiStatus | undefined>(simulated ? demoStatus : undefined);
   const [keyState, setKeyState] = useState<AiKeyStatus>({ configured: false });
   const [apiKey, setApiKey] = useState('');

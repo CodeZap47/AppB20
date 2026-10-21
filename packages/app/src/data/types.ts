@@ -40,6 +40,8 @@ import type { TrashActions, TrashEntry } from './trashTypes';
 export type * from './trashTypes';
 export type * from './notificationTypes';
 export type * from './roomTypes';
+import type { GuideAiActions } from './guideAiTypes';
+export type * from './guideAiTypes';
 
 export interface SpacedCollection {
   id: Id;
@@ -651,6 +653,16 @@ export interface GuideReview {
   createdAt: Date;
 }
 
+/** Public derived flags; private drafts and the text of source fragments are never subscribed. */
+export interface GuideAiSourceAvailability {
+  sourceId: Id;
+  guideId: Id;
+  guideVersion: number;
+  available: boolean;
+  outdated: boolean;
+  reason: string;
+}
+
 export interface Answer {
   withdrawnAt?: Date;
   withdrawnBy?: Id;
@@ -776,6 +788,7 @@ export interface Snapshot extends StudyRoomsSnapshot, NotificationsSnapshot, Pre
   guides: StudyGuide[];
   guideSources: GuideSource[];
   guideReviews: GuideReview[];
+  guideAiSourceAvailability?: GuideAiSourceAvailability[];
   polls: Poll[];
   pollVotes: PollVote[];
   /** Publicaciones del grupo y las retiradas propias. */
@@ -813,7 +826,7 @@ export interface PublishWorkInput {
 export type MaybePromise<T> = T | Promise<T>;
 
 /** Acciones: corresponden uno a uno con los reducers del módulo. */
-export interface Actions extends Delivery2Actions, StudyRoomActions, NotificationActions, TrashActions, PresentationActions, PracticeActions, Community4Actions {
+export interface Actions extends Delivery2Actions, StudyRoomActions, NotificationActions, TrashActions, PresentationActions, PracticeActions, Community4Actions, GuideAiActions {
   replaceSpacedCardSource(cardId: Id, expectedVersion: number, sourceKind: SpacedSourceKind, sourceId: Id): MaybePromise<void>;
   saveSpacedCollection(input: SpacedCollectionInput): MaybePromise<Id>;
   publishSpacedCollection(collectionId: Id, expectedVersion: number): MaybePromise<void>;
@@ -922,14 +935,14 @@ export interface Actions extends Delivery2Actions, StudyRoomActions, Notificatio
   createGuide(input: GuideInput, sources: GuideSourceRef[]): MaybePromise<Id>;
   /** Como en un wiki: cualquier miembro activo edita y la versión sube. */
   updateGuide(guideId: Id, input: GuideInput, expectedVersion?: number): MaybePromise<void>;
-  addGuideSources(guideId: Id, sources: GuideSourceRef[]): MaybePromise<void>;
+  addGuideSources(guideId: Id, sources: GuideSourceRef[], expectedVersion?: number): MaybePromise<void>;
   /** Marca una fuente como procesada o pendiente (con razón) y qué temas cubre. */
-  updateGuideSource(sourceId: Id, update: GuideSourceUpdate): MaybePromise<void>;
+  updateGuideSource(sourceId: Id, update: GuideSourceUpdate, expectedVersion?: number): MaybePromise<void>;
   /** Toma la versión actual del material, por ejemplo después de revisar sus cambios. */
-  refreshGuideSource(sourceId: Id): MaybePromise<void>;
-  removeGuideSource(sourceId: Id): MaybePromise<void>;
+  refreshGuideSource(sourceId: Id, expectedVersion?: number): MaybePromise<void>;
+  removeGuideSource(sourceId: Id, expectedVersion?: number): MaybePromise<void>;
   /** Un compañero revisa la versión actual; quien la guardó no puede. */
-  reviewGuide(guideId: Id, verdict: GuideReviewVerdict, comment: string): MaybePromise<void>;
+  reviewGuide(guideId: Id, verdict: GuideReviewVerdict, comment: string, expectedVersion?: number): MaybePromise<void>;
   createPoll(input: PollInput): MaybePromise<Id>;
   /** Solo quien la creó y mientras nadie haya votado. */
   updatePoll(pollId: Id, input: PollInput): MaybePromise<void>;

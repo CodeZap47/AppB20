@@ -1,6 +1,7 @@
 # Dependencias y compilaciones
 node_modules/
 dist/
+dist-ai/
 build/
 *.tsbuildinfo
 coverage/

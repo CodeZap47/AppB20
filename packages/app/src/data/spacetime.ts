@@ -4,6 +4,8 @@ import { createSpacetimeActions } from './spacetimeActions';
 import { emptySnapshot, PUBLIC_VIEWS, readSnapshot } from './spacetimeSnapshot';
 import { ResourceTransport } from './resourceTransport';
 import { config } from '../config';
+import { AiClient } from './aiClient';
+import { createGuideAiActions } from './guideAiClient';
 
 export interface ConnectionOptions {
   uri: string;
@@ -44,6 +46,9 @@ export class SpacetimeDataSource {
   private generation = 0;
   private ready = false;
   private refreshQueued = false;
+  private aiClient?: AiClient;
+
+  setAiClient(client: AiClient) { this.aiClient = client; }
 
   constructor(
     private options: ConnectionOptions,
@@ -135,6 +140,7 @@ export class SpacetimeDataSource {
   }
 
   disconnect() {
+    this.aiClient?.cancelPending();
     ++this.generation;
     this.ready = false;
     this.refreshQueued = false;
@@ -149,8 +155,10 @@ export class SpacetimeDataSource {
 export function createSpacetimeDataSource(options: ConnectionOptions, factory?: ConnectionFactory) {
   const source = new SpacetimeDataSource(options, factory);
   const legacyApiUrl = options.apiUrl ?? config.apiUrl;
+  const ai = new AiClient({ apiUrl: options.apiUrl ?? config.aiApiUrl, getToken: () => source.getSnapshot().me?.status === 'active' ? (options.getToken ?? (() => options.token))() : undefined });
+  source.setAiClient(ai);
   const files = new ResourceTransport({ getConnection: source.getConnection, getIdentity: source.getIdentity,
     legacy: legacyApiUrl ? { apiUrl: legacyApiUrl, getToken: options.getToken ?? (() => options.token) } : undefined });
-  return Object.assign(source, createSpacetimeActions(source.getConnection, source.getIdentity, files)) as
+  return Object.assign(source, createSpacetimeActions(source.getConnection, source.getIdentity, files), createGuideAiActions(ai)) as
     SpacetimeDataSource & Actions;
 }

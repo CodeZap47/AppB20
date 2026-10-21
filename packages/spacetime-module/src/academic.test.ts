@@ -14,7 +14,7 @@ vi.mock('spacetimedb/server', () => {
 });
 
 import {
-  academic_comments, add_evidence, add_guide_sources, assignment_details, attach_work_file, authorize_file_upload, backfill_academic_v2,
+  academic_comments, add_evidence, add_guide_sources_v3, assignment_details, attach_work_file, authorize_file_upload, backfill_academic_v2,
   comment_academic, finalize_file_upload, get_file_download_access, get_file_upload_status,
   my_progress, on_connect, page_snapshots, publish_work_v2, remove_resource_file, remove_work_file,
   resource_files, restore_page_snapshot, restore_work_version, review_work, save_activity_links,
@@ -376,7 +376,7 @@ describe('Tareas y Actividades: progreso y edición con versiones', () => {
     const { ctx, proc, as, rows, db } = setup();
     db.studyGuide.insert({ id: 80n, subjectId: 1n, termId: 11n, title: 'Guía', topics: ['Tema'],
       sections: [], version: 1, createdBy: author, createdAt: ctx.timestamp, updatedBy: author, updatedAt: ctx.timestamp });
-    add_guide_sources(ctx, { guideId: 80n, sources: [{ kind: 'actividad', refId: 30n }] });
+    add_guide_sources_v3(ctx, { guideId: 80n, expectedVersion: 1, sources: [{ kind: 'actividad', refId: 30n }] });
     expect(rows('guideSource')[0].sourceVersion).toBe(1);
     add_evidence(ctx, { activityId: 30n, content: 'Otra solución del equipo', participants: [coauthor] });
     expect(rows('activity')[0].version).toBe(2);

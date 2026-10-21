@@ -26,7 +26,9 @@ preferencias, recordatorios y Web Push configurable; y papelera con plazo de 30 
 restauración y purga de datos dependientes. Los servicios externos comienzan desactivados.
 
 Las comprobaciones locales con servidor real aislado usan identidades y claves sintéticas.
-No se han publicado estos cambios en Maincloud o Cloudflare ni se ha activado facturación.
+El [registro de despliegue de la tercera entrega](tercera-entrega.md) documenta su publicación
+posterior en Maincloud, Pages y el Worker de IA. La ampliación de la cuarta entrega todavía
+requiere su propio despliegue; sus pruebas locales no consumen Gemini real.
 Los formatos binarios no admitidos para IA permanecen como omisiones explícitas. La cuarta
 entrega añade tarjetas de Repaso y preguntas de Aprende enseñando con Gemini; Exámenes
 sigue pendiente. El módulo 3.11 conserva su entrega 5 y el push nativo del APK permanece pendiente.
@@ -42,6 +44,10 @@ Validación conjunta del 21 de octubre de 2026: **1.210 pruebas aprobadas**, tip
 compilaciones de web/PWA, Pages, extensión y Worker de prueba, cuatro recorridos nuevos
 contra SpacetimeDB local y regresión de Salas. El [registro de comprobaciones](cuarta-entrega.md#comprobación-local)
 detalla los resultados y las condiciones de ejecución.
+
+Al integrar con el `main` que incluye Guías IA y la navegación Slim, la validación combinada
+asciende a **1.339 pruebas aprobadas en 149 archivos**, con tipos, compilaciones y cinco
+recorridos contra SpacetimeDB local correctos. Véase la [integración de la cuarta entrega](cuarta-entrega.md#integración-con-main).
 
 ## Módulos base (sección 3)
 

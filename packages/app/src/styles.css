@@ -1,3 +1,5 @@
+@import './untitled/styles/foundation.css';
+
 :root {
   --bg: #f7f7f9;
   --surface: #ffffff;
@@ -53,59 +55,35 @@ button {
   outline-offset: 2px;
 }
 
-.shell {
+/* El rail Slim reserva su ancho; sus submenús se superponen al contenido. */
+.shell.shell--slim {
   display: grid;
-  grid-template-columns: 220px 1fr;
-  grid-template-rows: auto 1fr;
-  grid-template-areas:
-    'top top'
-    'nav main';
+  grid-template-columns: 68px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: 'nav main';
   min-height: 100dvh;
 }
 
-.topbar {
-  grid-area: top;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.75rem 1rem;
-  padding-top: max(0.75rem, env(safe-area-inset-top));
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-}
-
-.brand {
-  font-weight: 700;
-  font-size: 1.2rem;
-  color: var(--text);
-}
-
-.sidenav {
+.shell--slim > .b20-sidebar-slot {
   grid-area: nav;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 0.75rem;
-  background: var(--surface);
-  border-right: 1px solid var(--border);
-}
-
-.sidenav__link {
-  padding: 0.5rem 0.75rem;
-  border-radius: var(--radius);
-  color: var(--text);
-}
-
-.sidenav__link.active {
-  background: color-mix(in srgb, var(--accent) 15%, transparent);
-  color: var(--accent);
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  align-self: start;
+  inline-size: 68px;
+  block-size: 100dvh;
+  min-width: 0;
+  min-height: 0;
 }
 
 .content {
   grid-area: main;
   min-width: 0;
-  padding: 1rem 1.25rem 2rem;
+  min-height: 0;
+  inline-size: 100%;
   max-width: 960px;
+  padding: max(1rem, env(safe-area-inset-top)) max(1.25rem, env(safe-area-inset-right))
+    max(2rem, env(safe-area-inset-bottom)) 1.25rem;
 }
 
 .muted {
@@ -139,52 +117,43 @@ button {
   color: var(--text);
 }
 
-/* Pantallas angostas y panel lateral de la extensión: navegación horizontal arriba. */
-@media (max-width: 720px) {
-  .shell {
+/* En móvil y panel de extensión el rail se convierte en cabecera y cajón. */
+@media (max-width: 1023px) {
+  .shell.shell--slim {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
     grid-template-areas:
-      'top'
       'nav'
       'main';
-    grid-template-rows: auto auto 1fr;
+  }
+
+  .shell--slim > .b20-sidebar-slot {
+    inline-size: 100%;
+    block-size: auto;
+  }
+
+  .shell--slim > .content {
+    padding: 1rem max(1rem, env(safe-area-inset-right))
+      max(2rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
   }
 }
 
-.shell--compact {
+.shell.shell--slim.shell--compact {
   grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas:
-    'top'
     'nav'
     'main';
-  grid-template-rows: auto auto 1fr;
 }
 
-@media (max-width: 720px) {
-  .sidenav {
-    flex-direction: row;
-    overflow-x: auto;
-    border-right: 0;
-    border-bottom: 1px solid var(--border);
-  }
-  .sidenav__link {
-    white-space: nowrap;
-  }
+.shell--slim.shell--compact > .b20-sidebar-slot {
+  inline-size: 100%;
+  block-size: auto;
 }
 
-.shell--compact .sidenav {
-  flex-direction: row;
-  overflow-x: auto;
-  border-right: 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.shell--compact .sidenav__link {
-  white-space: nowrap;
-}
-
-.shell--compact .content {
-  padding: 0.75rem;
+.shell--slim.shell--compact > .content {
+  padding: 0.75rem max(0.75rem, env(safe-area-inset-right))
+    max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
 }
 
 /* ---- Componentes del MVP ---- */
@@ -342,6 +311,16 @@ button:disabled {
   margin: 0;
 }
 
+/* Las opciones largas de un select no deben imponer su ancho al armazón móvil. */
+.shell--slim .field {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.shell--slim .field :is(input, select, textarea) {
+  max-width: 100%;
+}
+
 .check {
   display: flex;
   align-items: center;
@@ -481,39 +460,36 @@ a.button.secondary {
 
 /* ---- Pantallas de alto completo ---- */
 
-/* El chat ocupa el alto de la ventana y se desplaza por dentro, en vez de alargar la página. */
-.shell--fill {
+/* El chat ocupa el alto de la ventana y se desplaza por dentro. */
+.shell.shell--slim.shell--fill {
   height: 100dvh;
+  overflow: hidden;
 }
 
-.shell--fill .sidenav {
-  min-height: 0;
-  overflow-y: auto;
-}
-
-.shell--fill .content {
+.shell--slim.shell--fill > .content {
   display: flex;
   flex-direction: column;
   min-height: 0;
   max-width: 1280px;
-  padding-bottom: 1.25rem;
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
   container: content / inline-size;
 }
 
-@media (max-width: 720px) {
-  .shell--fill .content {
-    padding: 0;
+@media (max-width: 1023px) {
+  .shell--slim.shell--fill > .content {
+    padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left);
   }
-  .shell--fill .content > .demo-banner {
+
+  .shell--slim.shell--fill > .content > .demo-banner {
     margin: 0.5rem;
   }
 }
 
-.shell--compact.shell--fill .content {
-  padding: 0;
+.shell--slim.shell--compact.shell--fill > .content {
+  padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left);
 }
 
-.shell--compact.shell--fill .content > .demo-banner {
+.shell--slim.shell--compact.shell--fill > .content > .demo-banner {
   margin: 0.5rem;
 }
 
@@ -4036,13 +4012,14 @@ a.ref-card:hover {
 }
 
 @media print {
-  .topbar,
-  .sidenav,
+  .b20-sidebar-slot,
+  .b20-navigation-overlay,
   .demo-banner,
   .no-print {
     display: none !important;
   }
-  .shell,
+  .shell.shell--slim,
+  .shell.shell--slim.shell--fill,
   .content {
     display: block;
     height: auto;

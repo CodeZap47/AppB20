@@ -13,6 +13,8 @@ export interface SourceInfo extends GuideSourceRef {
   subjectId?: Id;
   /** Parcial del material; vacío si no tiene. */
   termId: Id | undefined;
+  /** A cited evidence, answer or file changed without changing the parent source's version. */
+  citedContentChanged?: boolean;
 }
 
 export const SOURCE_KIND_LABEL: Record<GuideSourceKind, string> = {
@@ -149,8 +151,13 @@ export function candidateSources(
 
 /** Todo lo que la lista y el detalle muestran de una guía: cobertura, fuentes y revisiones. */
 export function guideStatus(guide: StudyGuide, data: Snapshot) {
+  const availability = new Map((data.guideAiSourceAvailability ?? [])
+    .filter((row) => row.guideId === guide.id && row.guideVersion === guide.version)
+    .map((row) => [row.sourceId, row]));
   const described = data.guideSources.filter((s) => s.guideId === guide.id).map((source) => {
-    const info = describeSource(source, data);
+    const cited = availability.get(source.id);
+    const originalInfo = describeSource(source, data);
+    const info = originalInfo && cited?.outdated ? { ...originalInfo, citedContentChanged: true } : originalInfo;
     // Las fuentes sin parcial se seleccionan manualmente; una guía sin parcial admite
     // cualquier parcial de su materia, igual que candidateSources.
     const placementIssue = info?.subjectId !== undefined && info.subjectId !== guide.subjectId
@@ -158,12 +165,14 @@ export function guideStatus(guide: StudyGuide, data: Snapshot) {
       : info && guide.termId && info.termId && info.termId !== guide.termId
         ? 'La fuente ahora pertenece a otro parcial. Revisa su clasificación o quítala de esta guía.'
         : undefined;
-    const reason = placementIssue ?? (!info ? 'La fuente ya no está disponible para esta guía.' : undefined);
+    const reason = placementIssue ?? (!info ? 'La fuente ya no está disponible para esta guía.' : undefined)
+      ?? (cited?.available === false ? cited.reason || 'El material citado ya no está disponible para el grupo y no aporta cobertura.' : undefined);
     return {
       // Es un estado de lectura: no modifica el registro original ni su versión citada.
       source: reason ? { ...source, status: 'pending' as const, reason } : source,
       info,
       placementIssue,
+      citedAvailability: cited,
     };
   });
   const sources = described.map((item) => item.source);
@@ -179,8 +188,8 @@ export function guideStatus(guide: StudyGuide, data: Snapshot) {
     processed: sources.filter((s) => s.status === 'processed').length,
     pending: sources.filter((s) => s.status === 'pending').length,
     /** Material que cambió después de que se agregó a la guía. */
-    outdated: described.filter((d) => d.placementIssue || (d.info && d.info.version > d.source.sourceVersion)).length,
-    missing: described.filter((d) => !d.info).length,
+    outdated: described.filter((d) => d.placementIssue || d.citedAvailability?.outdated || isOutdated(d.source, d.info)).length,
+    missing: described.filter((d) => !d.info || d.citedAvailability?.available === false).length,
     reviews,
     approvals: current.filter((r) => r.verdict === 'approved').length,
     changeRequests: current.filter((r) => r.verdict === 'changes').length,
@@ -188,5 +197,5 @@ export function guideStatus(guide: StudyGuide, data: Snapshot) {
 }
 
 export function isOutdated(source: GuideSource, info: SourceInfo | undefined): boolean {
-  return Boolean(info && info.version > source.sourceVersion);
+  return Boolean(info && (info.version > source.sourceVersion || info.citedContentChanged));
 }

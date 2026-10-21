@@ -30,6 +30,11 @@ export function enrichDelivery2Snapshot(connection: Pick<DbConnection, 'db'>, sn
     addedBy: row.addedBy?.toHexString(), addedAt: row.addedAt?.toDate(),
   });
   const enriched: Snapshot = { ...snapshot,
+    guideAiSourceAvailability: [...(db.guideAiSourceAvailability?.iter() ?? [])]
+      .filter((row) => snapshot.guides.some((guide) => guide.id === row.guideId.toString() && guide.version === row.guideVersion && !guide.withdrawnAt)
+        && snapshot.guideSources.some((source) => source.id === row.sourceId.toString() && source.guideId === row.guideId.toString()))
+      .map((row) => ({ sourceId: row.sourceId.toString(), guideId: row.guideId.toString(), guideVersion: row.guideVersion,
+        available: row.available, outdated: row.outdated, reason: row.reason })),
     contributionOrigins: [...(db.contributionOrigins?.iter() ?? [])].map((r) => ({
       kind: value(r.kind, ['trabajo', 'apunte', 'evidencia', 'guia', 'respuesta']), refId: r.refId.toString(),
       memberId: r.memberId.toHexString(), creditedAt: r.creditedAt.toDate(), duplicateOf: r.duplicateOf?.toString(),

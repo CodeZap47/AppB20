@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { AI_CONSENT_VERSION, AI_LIMITS, GUIDE_SECTIONS, aiHash, buildAiPreparation, type AiGeneration, type AiGenerationConfig, type AiPreparation } from '@b20/core';
 import { createWorkerApp } from '../workerApp.ts';
 import type { AuthOptions } from '../lib/auth.ts';
-import type { AiDatabase, AiWorkerEnv } from './database.ts';
+import { AiApiError, type AiDatabase, type AiWorkerEnv } from './database.ts';
+import { encryptAiKey } from './crypto.ts';
 
 const actor = 'a'.repeat(64);
 const issuer = 'https://ai-auth.example.test';
@@ -94,8 +95,9 @@ beforeAll(async () => {
       }
       if (procedure === 'ai_authorize_generation') {
         const id = String(input.id); const existing = generations.get(id);
-        const requestHash = aiHash({ preparationId: input.preparationId, fingerprint: input.fingerprint, config: input.config, model: input.model });
+        const requestHash = aiHash({ preparationId: input.preparationId, fingerprint: input.fingerprint, config: input.config });
         if (existing) return existing.requestHash === requestHash ? dto(existing) : denied('conflict');
+        if (input.allowNew === false) return denied('disabled');
         if (quota) return denied('quota');
         if (!consent) return denied('consent');
         if (!key) return denied('key_required');
@@ -146,7 +148,9 @@ const generationRequest = (prep: AiPreparation, id = crypto.randomUUID()) => ({ 
 
 describe('BYOK en runtime Cloudflare con Gemini interceptado localmente', () => {
   it('el flag ausente o falso bloquea generación aunque el grupo y secretos estén listos', async () => {
-    const db: AiDatabase = { async user<T>() { return { actor, enabled: true, configured: true, model: '', limits: AI_LIMITS, consentVersion: AI_CONSENT_VERSION, consented: true } as T; },
+    const db: AiDatabase = { async user<T>(_token: string, procedure: string) {
+      if (procedure === 'ai_authorize_generation') throw new AiApiError(503, 'disabled', 'La generación con IA permanece desactivada.');
+      return { actor, enabled: true, configured: true, model: '', limits: AI_LIMITS, consentVersion: AI_CONSENT_VERSION, consented: true } as T; },
       async service<T>() { throw new Error('No debe reclamar la generación'); return undefined as T; } };
     const app = createWorkerApp({ auth: localAuth, aiDatabase: () => db,
       aiProvider: { async generate() { throw new Error('No debe llamar a Gemini'); } } });
@@ -157,6 +161,49 @@ describe('BYOK en runtime Cloudflare con Gemini interceptado localmente', () => 
         body: JSON.stringify({ id: crypto.randomUUID(), preparationId: crypto.randomUUID(), fingerprint: 'a'.repeat(64), config, confirmed: true }) }, env);
       expect(response.status).toBe(503); expect(response.headers.get('cache-control')).toBe('private, no-store');
     }
+  });
+  it('POST conserva resultados tras desactivar IA y quitar secretos/modelo, sin permitir nuevos envíos', async () => {
+    const env = { CORS_ORIGINS: '', AI_ENABLED: 'true', GEMINI_MODEL: 'gemini-test', AI_MASTER_VERSION: 'v1',
+      AI_MASTER_KEYS_JSON: JSON.stringify({ v1: btoa('m'.repeat(32)) }), AI_SERVICE_TOKEN: serviceToken } as AiWorkerEnv;
+    const prep = buildAiPreparation(prepInput, [{ kind: 'note', refId: '1', version: 1, subjectId: prepInput.subjectId,
+      visibility: 'personal', title: 'Variables', fields: [{ name: 'content', text: 'Una variable almacena valores.' }] }],
+    { id: crypto.randomUUID(), model: 'gemini-test', now: Date.now() });
+    const keyId = crypto.randomUUID();
+    const encrypted = { keyId, provider: 'gemini', ...await encryptAiKey(env, { actor, provider: 'gemini', keyId }, personalKey) };
+    const request = generationRequest(prep); let saved: AiGeneration | undefined; let savedHash = ''; let allowed = true; let calls = 0;
+    const db: AiDatabase = {
+      async user<T>(_token: string, procedure: string, raw: unknown) {
+        const input = raw as Record<string, unknown>;
+        if (procedure === 'ai_status') return { actor, enabled: true, configured: true, model: '', limits: AI_LIMITS, consentVersion: AI_CONSENT_VERSION, consented: true } as T;
+        if (procedure === 'ai_authorize_generation') {
+          if (!allowed) throw new AiApiError(403, 'unauthorized', 'Ya no tienes acceso a este material.');
+          const requestHash = aiHash({ preparationId: input.preparationId, fingerprint: input.fingerprint, config: input.config });
+          if (saved?.id === input.id) {
+            if (savedHash !== requestHash) throw new AiApiError(409, 'conflict', 'El UUID ya pertenece a otra solicitud.');
+            return saved as T;
+          }
+          if (input.allowNew === false) throw new AiApiError(503, 'disabled', 'La generación con IA permanece desactivada.');
+          saved = { id: String(input.id), preparationId: String(input.preparationId), state: 'prepared', createdAt: Date.now() };
+          savedHash = requestHash; return saved as T;
+        }
+        if (procedure === 'ai_get_generation') return saved as T;
+        throw new Error('Unexpected user procedure');
+      },
+      async service<T>(procedure: string, raw: unknown) {
+        if (procedure === 'ai_claim_generation') { saved!.state = 'running'; return { claimed: true, generation: saved, preparation: prep, key: encrypted, config } as T; }
+        if (procedure === 'ai_finish_generation') { const input = raw as Record<string, unknown>; saved!.state = input.state as AiGeneration['state']; saved!.result = input.result; return saved as T; }
+        throw new Error('Unexpected service procedure');
+      },
+    };
+    const app = createWorkerApp({ auth: localAuth, aiDatabase: () => db, aiProvider: { async generate() { calls++; return { text: JSON.stringify(question(prep)) }; } } });
+    const post = (body: unknown) => app.request('https://api.example.test/ai/generations', { method: 'POST', headers: {
+      Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, env);
+    const first = await post(request); expect(first.status).toBe(200); expect((await first.json() as AiGeneration).state).toBe('succeeded'); expect(calls).toBe(1);
+    env.AI_ENABLED = 'false'; env.GEMINI_MODEL = ''; delete env.AI_SERVICE_TOKEN; delete env.AI_MASTER_KEYS_JSON;
+    const replay = await post(request); expect(replay.status).toBe(200); expect((await replay.json() as AiGeneration).result).toEqual(question(prep)); expect(calls).toBe(1);
+    expect((await post({ ...request, id: crypto.randomUUID() })).status).toBe(503);
+    expect((await post({ ...request, config: { ...config, questionCount: 2 } })).status).toBe(409);
+    allowed = false; expect((await post(request)).status).toBe(403); expect(calls).toBe(1);
   });
   it('cifra por identidad DB, no expone clave y recupera un commit cuya respuesta se perdió', async () => {
     failCommitAfter = true; await saveKey();

@@ -25,7 +25,7 @@ export function AiStudyModulePanel(props: Target) {
 function AiStudyModuleAccount({ token, simulated, ...target }: Target & { token?: string; simulated: boolean }) {
   const data = useSnapshot();
   const tokenRef = useRef(token); tokenRef.current = token;
-  const client = useMemo(() => simulated ? undefined : new AiClient({ apiUrl: config.apiUrl, getToken: () => tokenRef.current }), [token, simulated]);
+  const client = useMemo(() => simulated ? undefined : new AiClient({ apiUrl: config.aiApiUrl, getToken: () => tokenRef.current }), [token, simulated]);
   const purpose = target.practice ? 'teaching_questions' as const : 'spaced_cards' as const;
   const subjectId = target.practice?.subjectId ?? target.collection!.subjectId;
   const candidates = aiSourceCandidates(data, subjectId).filter((entry) => ['note', 'guide'].includes(entry.kind)
