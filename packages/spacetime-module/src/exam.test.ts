@@ -9,6 +9,7 @@ vi.mock('spacetimedb/server', () => {
     schema: () => ({ reducer: handler, procedure: handler, init: handler, clientConnected: handler, view: handler }) };
 });
 import { ai_prepare, exam_action, type Ctx } from './index';
+import { purgeExamSource } from './examHandlers';
 const person = (digit: string) => Identity.fromString(digit.repeat(64)); const alice = person('a'); const bob = person('b'); const creator = person('c'); const removed = person('d');
 const uid = (n: number) => `20000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 type Row = Record<string, unknown>;
@@ -38,7 +39,11 @@ function setup() {
   const state = { db, sender: alice, timestamp, env: {}, senderAuth: { jwt: { issuer: 'https://issuer.test', audience: ['test'], fullPayload: { email: 'member@example.com', email_verified: true } } } };
   const ctx = state as unknown as Ctx;
   const proc = { withTx: (fn: (tx: Ctx) => unknown) => fn(ctx) } as unknown as Parameters<typeof exam_action>[0];
-  const call = <T = ExamDetail>(action: string, raw: Record<string, unknown> = {}) => JSON.parse(exam_action(proc, { payload: JSON.stringify({ action, ...raw }) })) as T;
+  const call = <T = ExamDetail>(action: string, raw: Record<string, unknown> = {}) => {
+    const result = JSON.parse(exam_action(proc, { payload: JSON.stringify({ action, ...raw }) }));
+    if (result?.ok === false) throw new Error(`${result.code}:${result.message ?? ''}`);
+    return result as T;
+  };
   const rows = (name: string) => [...(db as Record<string, ReturnType<typeof store>>)[name].rows.values()];
   const as = (identity: Identity) => { state.sender = identity; };
   const tick = (seconds: number) => { state.timestamp = new Timestamp(state.timestamp.microsSinceUnixEpoch + BigInt(seconds) * 1_000_000n); };
@@ -60,6 +65,19 @@ function setup() {
   return { ctx, call, rows, as, tick, seed, imported, approve, shared, start };
 }
 describe('EX-2: permisos, borradores y versiones listas', () => {
+  it('separa las guías y explicaciones de las generaciones de preguntas y conserva errores recuperables', () => {
+    const s = setup(); const legacy = s.seed(1); const questions = s.seed(2); const guide = s.seed(3); const explanation = s.seed(4);
+    for (const [id, purpose] of [[questions.generationId, 'questions'], [guide.generationId, 'guide'], [explanation.generationId, 'explanation']] as const) {
+      const row = s.rows('aiGeneration').find((row) => row.id === id)!; row.configJson = JSON.stringify({ ...JSON.parse(String(row.configJson)), purpose });
+    }
+    expect(s.call<ExamGenerationSummary[]>('listGenerations').map((row) => row.id).sort()).toEqual([legacy.generationId, questions.generationId].sort());
+    for (const id of [guide.generationId, explanation.generationId]) expect(() => s.call('importGeneration', { generationId: id, requestId: uid(4000 + Number(id.slice(-1))), title: 'No es un examen' })).toThrow('preguntas');
+    const exam = s.call('importGeneration', { generationId: questions.generationId, requestId: uid(1001), title: 'Preguntas explícitas' });
+    expect(exam.draft!.config.purpose).toBe('questions');
+    expect(() => s.call('saveDraft', { examId: exam.id, version: 1, expectedRevision: exam.revision, title: exam.title,
+      config: { ...exam.draft!.config, purpose: 'guide' }, questions: exam.draft!.questions })).toThrow('preguntas');
+    expect(JSON.parse(exam_action({ withTx: (fn: (ctx: Ctx) => unknown) => fn(s.ctx) } as Parameters<typeof exam_action>[0], { payload: '{' }))).toMatchObject({ ok: false, code: 'invalid' });
+  });
   it('importa una generación una sola vez y no entrega soluciones en catálogo ni a otro autor', () => {
     const s = setup(); const generation = s.seed(); const request = { generationId: generation.generationId, requestId: uid(1001), title: 'Autoevaluación' };
     const exam = s.call('importGeneration', request); expect(s.call('importGeneration', request).id).toBe(exam.id);
@@ -76,6 +94,7 @@ describe('EX-2: permisos, borradores y versiones listas', () => {
     const save = { examId: exam.id, version: 1, expectedRevision: exam.revision, title: draft.title, config: draft.config, questions: draft.questions.map((question) => ({ ...question, issue: 'Ambigua' })) };
     exam = s.call('saveDraft', save); expect(() => s.approve(exam)).toThrow('observaciones');
     expect(() => s.call('saveDraft', save)).toThrow('cambió');
+    expect(JSON.parse(exam_action({ withTx: (fn: (ctx: Ctx) => unknown) => fn(s.ctx) } as Parameters<typeof exam_action>[0], { payload: JSON.stringify({ action: 'saveDraft', ...save }) }))).toMatchObject({ ok: false, code: 'conflict' });
     exam = s.call('saveDraft', { ...save, expectedRevision: exam.revision, questions: draft.questions }); exam = s.approve(exam);
     expect(exam.readyVersion).toBe(1); expect(exam.draftVersion).toBeUndefined();
     expect(() => s.call('saveDraft', { ...save, expectedRevision: exam.revision })).toThrow('inmutable');
@@ -98,6 +117,21 @@ describe('EX-2: permisos, borradores y versiones listas', () => {
   });
 });
 describe('EX-2: intentos privados y soluciones por fase', () => {
+  it('la purga elimina copias de texto de todas las versiones y preserva puntuación y corrección pendiente', () => {
+    const s = setup(); const exam = s.shared(); s.as(bob); let closed = s.start(exam); let active = s.start(exam, 'simulation', 2001);
+    closed = s.call('saveAnswer', { attemptId: closed.id, expectedRevision: closed.revision, requestId: uid(4000), questionId: 'q1', optionId: 'b' });
+    closed = s.call('finishAttempt', { attemptId: closed.id, expectedRevision: closed.revision, requestId: uid(4001) });
+    active = s.call('saveAnswer', { attemptId: active.id, expectedRevision: active.revision, requestId: uid(4002), questionId: 'q1', optionId: 'b' });
+    purgeExamSource(s.ctx, 'note', 1n); s.ctx.db.note.id.delete(1n);
+    const copied = JSON.stringify(s.rows('examVersion').map((row) => row.json));
+    expect(copied).not.toMatch(/repite instrucciones|Pregunta 1 sobre ciclos|Explicación protegida|Opción b/);
+    const reread = s.call<ExamAttempt>('getAttempt', { attemptId: closed.id }); expect(reread.result).toEqual(closed.result);
+    expect(reread.questions.every((question) => question.unavailable && !question.solution && question.options.length === 0)).toBe(true);
+    const finished = s.call<ExamAttempt>('finishAttempt', { attemptId: active.id, expectedRevision: active.revision, requestId: uid(4003) });
+    expect(finished.result).toMatchObject({ correct: 1, total: 2 }); expect(finished.contentUnavailable).toBe(true);
+    purgeExamSource(s.ctx, 'note', 1n); expect(JSON.stringify(s.rows('examVersion').map((row) => row.json))).toBe(copied);
+    s.as(alice); expect(s.call('getExam', { examId: exam.id }).draft).toBeUndefined();
+  });
   it('práctica solo revela después de confirmar, la respuesta es irreversible y el orden persiste', () => {
     const s = setup(); const exam = s.shared(); s.as(bob); let attempt = s.start(exam, 'practice');
     expect(JSON.stringify(attempt)).not.toContain('correctOptionId'); const order = attempt.questions.map((question) => [question.id, question.options.map((option) => option.id)]);

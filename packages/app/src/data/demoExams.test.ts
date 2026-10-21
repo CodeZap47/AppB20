@@ -57,6 +57,19 @@ describe('Exámenes de estudio en simulación', () => {
     const redacted = await source.examAction({ action: 'getAttempt', attemptId: attempt.id }); expect(redacted.result).toEqual(closed.result); expect(redacted.contentUnavailable).toBe(true); expect(redacted.questions.every((row) => row.unavailable && !row.text && !row.solution)).toBe(true);
   });
 
+  it('purga las copias de material a los 30 días y conserva únicamente el resultado del intento', async () => {
+    vi.useFakeTimers(); const { source, input, noteId } = setup(); const ready = await approve(source, await create(source, input));
+    const attempt = await source.examAction({ action: 'startAttempt', examId: ready.id, version: 1, mode: 'simulation', requestId: crypto.randomUUID() });
+    const closed = await source.examAction({ action: 'finishAttempt', attemptId: attempt.id, expectedRevision: attempt.revision, requestId: crypto.randomUUID() });
+    const note = source.getSnapshot().notes.find((row) => row.id === noteId)!; source.withdrawContent('note', noteId, true, note.version);
+    vi.advanceTimersByTime(30 * 86_400_000 + 1); await source.getTrashClock();
+    expect(source.getSnapshot().notes.some((row) => row.id === noteId)).toBe(false);
+    expect(await source.examAction({ action: 'listGenerations' })).toEqual([]);
+    const redacted = await source.examAction({ action: 'getAttempt', attemptId: attempt.id }); expect(redacted.result).toEqual(closed.result); expect(redacted.questions.every((row) => row.unavailable && !row.text && !row.solution && !row.options.length)).toBe(true);
+    expect((await source.examAction({ action: 'getExam', examId: ready.id })).draft).toBeUndefined();
+    await expect(source.examAction({ action: 'getVersion', examId: ready.id, version: 1 })).rejects.toThrow('no está disponible');
+  });
+
   it('protege versiones listas, CAS e identificadores de reintento', async () => {
     const { source, input } = setup(); const { generation, request } = await generate(source, input); expect((await source.generateExamQuestions(request)).id).toBe(generation.id);
     await expect(source.generateExamQuestions({ ...request, config: { ...request.config, questionCount: 3 } })).rejects.toThrow('identificador');

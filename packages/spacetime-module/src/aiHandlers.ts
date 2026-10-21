@@ -5,10 +5,12 @@ import { activeMember, isActive, type Ctx } from './moduleContext';
 import { canReadTarget, withdrawn } from './delivery2Handlers';
 import { GUIDE_SECTIONS } from '../../core/src/guides';
 import {
-  AI_CONSENT_VERSION, AI_LIMITS, buildAiPreparation, validateAiGenerationConfig,
+  AI_CONSENT_VERSION, AI_LIMITS, AI_SOURCE_KINDS, buildAiPreparation, validateAiGenerationConfig,
   aiHash, aiSourceFingerprint, estimateAiQuestionTokens, sanitizeAiText, validateAiPrepareInput, type AiPreparation, type AiPrepareInput, type AiSourceSnapshot,
 } from '../../core/src/ai';
 import { validateAiQuestionDraft } from '../../core/src/exam';
+import { validateAiStudyDraft } from '../../core/src/aiStudyDraft';
+import { captureGuide, captureNote } from './delivery2Handlers';
 
 const HOUR = 60n * 60n * 1_000_000n;
 const DAY = 24n * HOUR;
@@ -48,7 +50,9 @@ export function isAiService(ctx: Ctx): boolean {
   const configured = ctx.db.aiServiceConfig.id.find(0)?.identity;
   return !!configured && configured.isEqual(ctx.sender) && !ctx.db.appConfig.id.find(0)?.owner.isEqual(ctx.sender)
     && !ctx.db.fileServiceConfig.id.find(0)?.identity.isEqual(ctx.sender)
-    && hex(ctx.env.B20_FILE_SERVICE_IDENTITY ?? '') !== hex(ctx.sender.toHexString());
+    && hex(ctx.env.B20_FILE_SERVICE_IDENTITY ?? '') !== hex(ctx.sender.toHexString())
+    && !ctx.db.notificationServiceConfig.id.find(0)?.identity.isEqual(ctx.sender) && !ctx.db.maintenanceService.id.find(0)?.identity.isEqual(ctx.sender)
+    && hex(ctx.env.B20_MAINTENANCE_IDENTITY ?? '') !== hex(ctx.sender.toHexString());
 }
 function service(ctx: Ctx) { if (!isAiService(ctx)) fail('forbidden', 'Solo el servicio de IA puede realizar esta operación.'); }
 function enabled(ctx: Ctx) { if (!ctx.db.aiServiceConfig.id.find(0)?.enabled) fail('ai_disabled', 'La IA real todavía no está habilitada para este grupo.'); }
@@ -59,7 +63,9 @@ function consent(ctx: Ctx, actor = ctx.sender) {
 export function setAiService(ctx: Ctx, input: { identity: Identity; enabled: boolean; dailyTokenBudget: number }) {
   if (!ctx.db.appConfig.id.find(0)?.owner.isEqual(ctx.sender)) fail('forbidden', 'Solo el propietario configura el servicio de IA.');
   if (input.identity.isEqual(ctx.sender) || ctx.db.member.identity.find(input.identity) || ctx.db.fileServiceConfig.id.find(0)?.identity.isEqual(input.identity)
-    || hex(ctx.env.B20_FILE_SERVICE_IDENTITY ?? '') === hex(input.identity.toHexString())) fail('invalid_service_identity', 'IA necesita una identidad técnica exclusiva.');
+    || hex(ctx.env.B20_FILE_SERVICE_IDENTITY ?? '') === hex(input.identity.toHexString())
+    || ctx.db.notificationServiceConfig.id.find(0)?.identity.isEqual(input.identity) || ctx.db.maintenanceService.id.find(0)?.identity.isEqual(input.identity)
+    || hex(ctx.env.B20_MAINTENANCE_IDENTITY ?? '') === hex(input.identity.toHexString())) fail('invalid_service_identity', 'IA necesita una identidad técnica exclusiva.');
   if (!Number.isInteger(input.dailyTokenBudget) || input.dailyTokenBudget < 1 || input.dailyTokenBudget > 10_000_000) fail('invalid_request', 'Presupuesto diario inválido.');
   const row = { id: 0, ...input };
   if (ctx.db.aiServiceConfig.id.find(0)) ctx.db.aiServiceConfig.id.update(row); else ctx.db.aiServiceConfig.insert(row);
@@ -195,8 +201,8 @@ export function resolveAiSource(ctx: Ctx, kind: string, refId: string, actor = c
       }
       const available = !!sourceKind && currentVersion !== undefined && canReadTarget(ctx.db, actor, sourceKind, source.refId)
         && !withdrawn(ctx.db, sourceKind, source.refId) && (sourceKind !== 'work' || parent?.available === true);
-      if (sourceKind) origins.push({ kind: sourceKind, refId: String(source.refId), version: source.sourceVersion });
-      else omissions.push('La guía cita un tipo de fuente fuera de EX-1; no se extrajo su contenido.');
+      if (sourceKind && available) origins.push({ kind: sourceKind, refId: String(source.refId), version: source.sourceVersion });
+      else if (!sourceKind) omissions.push('La guía cita un tipo de fuente no compatible; no se extrajo su contenido.');
       if (source.status !== 'processed') omissions.push(`Original pendiente de la guía${source.reason ? `: ${sanitizeAiText(source.reason)}` : '.'}`);
       if (sourceKind && !available) omissions.push('Un original de la guía no está disponible; revisa la procedencia.');
       if (currentVersion !== undefined && currentVersion !== source.sourceVersion) omissions.push('La guía cita una versión anterior de un original.');
@@ -209,10 +215,34 @@ export function resolveAiSource(ctx: Ctx, kind: string, refId: string, actor = c
       topic: row.topics.join(', '), visibility: 'group', fields: row.sections.map((section, index) => ({ name: GUIDE_SECTIONS[index]?.title ?? `Sección ${index + 1}`, text: section })),
       origins, omissions, context: aiHash(provenance) };
   } else return fail('invalid_request', 'Este módulo no es una fuente admitida.');
-  // Excluded attachments are counted without extracting their names or metadata.
-  const excluded = [...ctx.db.resourceFile.targetId.filter(id)].filter((file) => file.targetKind === kind && file.removedAt === undefined).length
-    + (kind === 'work' ? [...ctx.db.workFile.workId.filter(id)].length : 0);
-  if (excluded) snapshot.omissions = [...(snapshot.omissions ?? []), `${excluded} archivo(s) adjunto(s) excluido(s): extracción documental pendiente.`];
+  const files = [...ctx.db.resourceFile.targetId.filter(id)].filter((file) => file.targetKind === kind && file.removedAt === undefined);
+  const manifests: unknown[] = [];
+  for (const file of files) {
+    manifests.push([file.id, file.etag, file.size.toString(), file.storageKey]);
+    const sourceId = file.storageKey.startsWith('stdb:') ? file.storageKey.slice(5) : undefined;
+    const upload = sourceId ? ctx.db.resourceUpload.id.find(sourceId) : undefined;
+    if (!sourceId || upload?.state !== 'ready' || file.size > 262_144n || !(/^(text\/|application\/(json|xml|javascript))/.test(file.contentType) || /\.(txt|md|csv|json|xml|js|ts|py|rs|java|c|cpp|h|css|html|sql)$/i.test(file.name))) {
+      snapshot.omissions = [...(snapshot.omissions ?? []), 'Adjunto omitido: formato no compatible, almacenamiento anterior o tamaño superior a 256 KiB. No se envió su contenido.']; continue;
+    }
+    try {
+      const bytes = new Uint8Array(Number(file.size)); let offset = 0;
+      for (let index = 0; index < upload.chunkCount; index++) {
+        const chunk = ctx.db.resourceChunk.id.find(`${sourceId}:${index}`);
+        if (!chunk || offset + chunk.bytes.length > bytes.length) throw new Error();
+        bytes.set(chunk.bytes, offset); offset += chunk.bytes.length;
+      }
+      if (offset !== bytes.length) throw new Error();
+      const content = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+      if (content.includes('\0')) throw new Error();
+      snapshot.fields.push({ name: `Adjunto de texto ${file.id}`, text: content });
+    } catch { snapshot.omissions = [...(snapshot.omissions ?? []), 'Adjunto omitido: texto ilegible o archivo incompleto.']; }
+  }
+  if (kind === 'work' && [...ctx.db.workFile.workId.filter(id)].some((old) => !files.some((file) => file.id === `legacy:${old.id}`))) snapshot.omissions = [...(snapshot.omissions ?? []), 'Adjuntos heredados omitidos: requieren migración antes de extraerse.'];
+  snapshot.context = aiHash({ context: snapshot.context, files: manifests });
+  const names = [...ctx.db.member.iter()].map((member) => (member.displayName ?? '').trim()).filter((name) => name.length >= 4);
+  const redact = (value: string) => names.reduce((clean, name) => clean.split(name).join('[nombre retirado]'), sanitizeAiText(value));
+  snapshot.title = redact(snapshot.title); snapshot.fields = snapshot.fields.map((field) => ({ ...field, text: redact(field.text) }));
+  if (snapshot.omissions) snapshot.omissions = snapshot.omissions.map(redact);
   return snapshot;
 }
 
@@ -252,7 +282,7 @@ type GenerationRow = NonNullable<ReturnType<Ctx['db']['aiGeneration']['id']['fin
 function generationDto(ctx: Ctx, row: GenerationRow) {
   return { id: row.id, state: row.status === 'queued' ? 'prepared' : row.status,
     preparationId: row.preparationId, createdAt: date(row.createdAt), updatedAt: date(row.claimedAt ?? row.createdAt),
-    ...(row.resultJson ? { result: JSON.parse(row.resultJson) as unknown } : {}),
+    ...(row.resultJson ? { result: JSON.parse(row.resultJson) as unknown, preparation: JSON.parse(ctx.db.aiPreparation.id.find(row.preparationId)!.json) as AiPreparation } : {}),
     ...(row.errorCode ? { error: `${row.errorCode}:${row.errorMessage}` } : {}),
     ...(row.inputTokens !== undefined && row.outputTokens !== undefined ? { usage: { inputTokens: row.inputTokens, outputTokens: row.outputTokens } } : {}),
     estimatedTokens: ctx.db.aiReservation.id.find(row.id)?.estimatedTokens ?? 0 };
@@ -343,8 +373,11 @@ export function aiFinishGeneration(ctx: Ctx, input: Record<string, unknown>) {
   if (!previous || !previous.actor.isEqual(actor)) fail('unavailable', 'La generación no está disponible.');
   const state = input.state ?? (input.status === 'completed' ? 'succeeded' : input.status);
   if (!['succeeded', 'failed', 'unknown'].includes(String(state))) fail('invalid_request', 'Estado final inválido.');
-  const resultJson = state === 'succeeded' ? JSON.stringify(validateAiQuestionDraft(input.result,
-    JSON.parse(ctx.db.aiPreparation.id.find(previous.preparationId)!.json) as AiPreparation, validateAiGenerationConfig(JSON.parse(previous.configJson)))) : '';
+  const savedPreparation = ctx.db.aiPreparation.id.find(previous.preparationId);
+  if (!savedPreparation) fail('unavailable', 'El material preparado ya no está disponible.');
+  const preparation = JSON.parse(savedPreparation.json) as AiPreparation;
+  const config = validateAiGenerationConfig(JSON.parse(previous.configJson));
+  const resultJson = state === 'succeeded' ? JSON.stringify(config.purpose && config.purpose !== 'questions' ? validateAiStudyDraft(input.result, preparation, config) : validateAiQuestionDraft(input.result, preparation, config)) : '';
   if (resultJson.length > 128_000) fail('request_too_large', 'La respuesta excede el límite.');
   if (previous.status !== 'running') {
     if (previous.status === state && previous.resultJson === resultJson) return generationDto(ctx, previous);
@@ -375,12 +408,93 @@ export function aiGetGeneration(ctx: Ctx, input: Record<string, unknown>) {
   return generationDto(ctx, ctx.db.aiGeneration.id.find(id)!);
 }
 
+export function aiListGenerations(ctx: Ctx) {
+  activeMember(ctx);
+  const rows = [...ctx.db.aiGeneration.actor.filter(ctx.sender)].sort((a, b) => a.createdAt.microsSinceUnixEpoch < b.createdAt.microsSinceUnixEpoch ? 1 : -1).slice(0, 30);
+  return rows.flatMap((row) => {
+    try { return [aiGetGeneration(ctx, { id: row.id })]; } catch { return []; }
+  });
+}
+export function aiPublishGeneration(ctx: Ctx, input: Record<string, unknown>) {
+  activeMember(ctx); const id = uuid(input.id, 'El borrador');
+  const generation = ctx.db.aiGeneration.id.find(id);
+  if (!generation?.actor.isEqual(ctx.sender) || generation.status !== 'succeeded') fail('unavailable', 'El borrador no está disponible.');
+  const prior = ctx.db.aiPublication.generationId.find(id);
+  if (prior) return { targetKind: prior.targetKind, targetId: String(prior.targetId) };
+  const { prep } = validPreparation(ctx, generation.preparationId, ctx.sender, false);
+  if (prep.sources.some((source) => source.visibility !== 'group')) fail('forbidden', 'Comparte expresamente las fuentes personales antes de publicar un borrador para el grupo.');
+  const config = validateAiGenerationConfig(JSON.parse(generation.configJson));
+  const draft = validateAiStudyDraft(JSON.parse(generation.resultJson), prep, config);
+  const usedSources = new Set(draft.sections.flatMap((section) => section.citations.flatMap((citation) => prep.fragments.find((entry) => entry.id === citation)!.origins.map((origin) => `${origin.kind}:${origin.refId}`))));
+  const citedSources = prep.sources.filter((source) => usedSources.has(`${source.kind}:${source.refId}`));
+  const linkFor = (kind: string, refId: string) => kind === 'work' ? `#/m/tareas/${ctx.db.work.id.find(BigInt(refId))!.assignmentId}?trabajo=${refId}`
+    : kind === 'evidence' ? `#/m/actividades/${ctx.db.evidence.id.find(BigInt(refId))!.activityId}`
+      : `#/m/${({ note: 'notas', assignment: 'tareas', activity: 'actividades', guide: 'guias' } as Record<string, string>)[kind]}/${refId}`;
+  const citations = citedSources.map((source) => `[${source.kind}:${source.refId} v${source.version}](${linkFor(source.kind, source.refId)})`).join('; ');
+  const sections = draft.sections.map((section) => `${section.text}\n\nFuentes: ${section.citations.map((citation) => {
+    const fragment = prep.fragments.find((entry) => entry.id === citation)!;
+    return fragment.origins.map((origin) => `[${origin.kind}:${origin.refId} v${origin.version}](${linkFor(origin.kind, origin.refId)})`).join(', ');
+  }).join('; ')}.`);
+  if (prep.omissions.length) sections[0] += `\n\nOmisiones pendientes: ${prep.omissions.join(' ')}. No se afirma cobertura completa de los archivos omitidos.`;
+  if (citedSources.length < prep.sources.length) sections[0] += '\n\nEl borrador no cita todas las fuentes preparadas; no se afirma cobertura completa del material seleccionado.';
+  let targetId: bigint; let targetKind: string;
+  if (draft.purpose === 'guide') {
+    const guide = ctx.db.studyGuide.insert({ id: 0n, subjectId: BigInt(prep.subjectId), termId: prep.termId ? BigInt(prep.termId) : undefined,
+      title: draft.title, topics: prep.topics, sections: sections.map((section, index) => index === 0 ? `Borrador generado con Gemini, revisado y publicado por su solicitante.\n\n${section}` : section),
+      version: 1, createdBy: ctx.sender, createdAt: ctx.timestamp, updatedBy: ctx.sender, updatedAt: ctx.timestamp });
+    const kinds: Record<string, string> = { note: 'nota', assignment: 'tarea', activity: 'actividad', work: 'trabajo' };
+    const references = new Map<string, { kind: string; refId: bigint; sourceVersion: number; topics: string[] }>();
+    for (const source of citedSources) {
+      const origins = kinds[source.kind] ? [source] : source.kind === 'evidence'
+        ? [{ kind: 'activity', refId: String(ctx.db.evidence.id.find(BigInt(source.refId))!.activityId), version: ctx.db.activity.id.find(ctx.db.evidence.id.find(BigInt(source.refId))!.activityId)!.version }]
+        : source.origins;
+      for (const origin of origins) if (kinds[origin.kind] && canReadTarget(ctx.db, ctx.sender, origin.kind, BigInt(origin.refId)) && !withdrawn(ctx.db, origin.kind, BigInt(origin.refId))
+        && (origin.kind !== 'note' || ctx.db.note.id.find(BigInt(origin.refId))?.visibility === 'group')) {
+        references.set(`${origin.kind}:${origin.refId}`, { kind: kinds[origin.kind]!, refId: BigInt(origin.refId), sourceVersion: origin.version, topics: source.topics });
+      }
+    }
+    for (const reference of references.values()) ctx.db.guideSource.insert({ id: 0n, guideId: guide.id, ...reference,
+      status: 'processed', reason: '', addedBy: ctx.sender, addedAt: ctx.timestamp });
+    if (!references.size) ctx.db.studyGuide.id.update({ ...guide, sections: guide.sections.map((section, index) => index === 0 ? `${section}\n\nReferencias utilizadas: ${citations}` : section) });
+    captureGuide(ctx, guide.id, ctx.sender); targetId = guide.id; targetKind = 'guide';
+  } else {
+    const body = `${sections.map((section, index) => `## ${draft.sections[index]!.heading}\n\n${section}`).join('\n\n')}\n\nOrigen Gemini. Fuentes: ${citations}`;
+    if (body.length > 50_000) fail('invalid_result', 'La explicación y sus referencias superan el tamaño de una nota. Prepara menos material.');
+    const note = ctx.db.note.insert({ id: 0n, subjectId: BigInt(prep.subjectId), topic: prep.topics.join(', ').slice(0, 120), title: draft.title,
+      body, tags: ['gemini'], visibility: 'group', source: 'ai', author: ctx.sender,
+      version: 1, createdAt: ctx.timestamp, updatedAt: ctx.timestamp });
+    ctx.db.noteDetail.insert({ noteId: note.id, termId: prep.termId ? BigInt(prep.termId) : undefined, session: '', assignmentIds: [], activityIds: [], questionIds: [], publishedFromId: undefined, publishedFromVersion: undefined });
+    captureNote(ctx, note.id, ctx.sender); targetId = note.id; targetKind = 'note';
+  }
+  ctx.db.aiPublication.insert({ generationId: id, actor: ctx.sender, targetKind, targetId, createdAt: ctx.timestamp });
+  return { targetKind, targetId: String(targetId) };
+}
+
+/** Called by retention before deleting an original; no copied private text survives its purge. */
+export function purgeAiSource(ctx: Ctx, kind: string, id: bigint): void {
+  if (!AI_SOURCE_KINDS.includes(kind as typeof AI_SOURCE_KINDS[number])) return;
+  const matches = (source: { kind: string; refId: string }) => source.kind === kind && source.refId === String(id);
+  for (const row of ctx.db.aiPreparation.iter()) {
+    const preparation = JSON.parse(row.json) as AiPreparation;
+    if (!preparation.sources.some((source) => matches(source) || source.origins.some(matches))
+      && !preparation.fragments.some((fragment) => fragment.origins.some(matches))) continue;
+    for (const generation of ctx.db.aiGeneration.iter()) if (generation.preparationId === row.id) {
+      ctx.db.aiGeneration.id.update({ ...generation, status: 'failed', resultJson: '', errorCode: 'source_purged', errorMessage: 'El material original fue eliminado definitivamente.' });
+      const reservation = ctx.db.aiReservation.id.find(generation.id);
+      if (reservation && generation.status === 'queued') ctx.db.aiReservation.id.update({ ...reservation, status: 'released' });
+    }
+    ctx.db.aiPreparation.id.delete(row.id);
+  }
+}
+
 /** Convert shared validation failures to stable, recoverable procedure errors. */
 export function aiResponse(ctx: Ctx, payload: string, handler: (ctx: Ctx, input: Record<string, unknown>) => unknown): string {
   try { return JSON.stringify(handler(ctx, parseAiPayload(payload))); }
   catch (error) {
-    if (error instanceof SenderError) throw error;
-    if (error instanceof Error && 'code' in error && typeof error.code === 'string') return fail(error.code, error.message);
+    // Procedures serialize errors instead of throwing: the HTTP runtime treats a
+    // thrown SenderError as a fatal module error, losing the recoverable code.
+    if (error instanceof SenderError) return JSON.stringify({ ok: false, code: /^([a-z_]{3,40}):/.exec(error.message)?.[1] ?? 'unavailable', message: error.message });
+    if (error instanceof Error && 'code' in error && typeof error.code === 'string') return JSON.stringify({ ok: false, code: error.code, message: error.message });
     throw error;
   }
 }

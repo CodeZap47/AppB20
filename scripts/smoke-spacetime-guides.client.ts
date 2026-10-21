@@ -133,7 +133,10 @@ export async function runSmoke(options: Options) {
     const ex1Input = { subjectId: String(subjectId), termId: String(termId), topics: ['Ciclos'], model: 'synthetic-no-network' };
     const ordinaryPreparation = JSON.parse(await author.procedures.aiPrepare({ payload: JSON.stringify({ ...ex1Input, id: randomUUID(), sources: selection([noteId]).sources }) }));
     assert.equal(ordinaryPreparation.canGenerate, true);
-    await assert.rejects(author.procedures.aiPrepare({ payload: JSON.stringify({ ...ex1Input, id: randomUUID(), sources: questionInput.sources }) }));
+    const rejectedEx1Question = JSON.parse(await author.procedures.aiPrepare({ payload: JSON.stringify({ ...ex1Input, id: randomUUID(), sources: questionInput.sources }) }));
+    assert.equal(rejectedEx1Question.ok, false);
+    assert.equal(rejectedEx1Question.code, 'invalid');
+    assert.match(rejectedEx1Question.message, /selección de fuentes/);
     checks.push('preguntas con respuestas públicas y selección expresa sin parcial solo amplían Guías, manteniendo el contrato EX-1');
 
     const bytes = new TextEncoder().encode('Documento compartido: ejemplo de un ciclo.\nRepetir hasta terminar.');

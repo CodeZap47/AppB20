@@ -1,4 +1,4 @@
-/** IA BYOK EX-1, servidor real aislado y proveedor simulado: no usa cuentas ni bases de producción. */
+/** IA BYOK: guías y explicaciones, servidor real aislado y proveedor simulado: no usa cuentas ni bases de producción. */
 import { spawn } from 'node:child_process';
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';

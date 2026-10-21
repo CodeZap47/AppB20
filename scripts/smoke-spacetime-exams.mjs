@@ -107,7 +107,7 @@ try {
   }
   await command(['publish', '--server', address, '--js-path', 'packages/spacetime-module/dist/bundle.js',
     '--delete-data=never', '--no-config', '--yes=all', database]);
-  const summary = await runSmoke({ address, database, tokens, baseline,
+  const summary = await runSmoke({ address, database, tokens, baseline, baselineRef: process.env.B20_SMOKE_EXAMS_BASELINE_REF,
     restart: async () => { await stopServer(); await startServer(); } });
   passed = true;
   console.log(JSON.stringify({ result: 'passed', ...summary }, null, 2));

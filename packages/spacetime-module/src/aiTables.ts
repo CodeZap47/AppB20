@@ -33,4 +33,7 @@ export const aiReservation = table({ name: 'ai_reservation' }, {
   id: t.string().primaryKey(), actor: t.identity().index('btree'), estimatedTokens: t.u32(),
   status: t.string(), createdAt: t.timestamp(),
 });
-export const aiTables = { aiServiceConfig, aiKey, aiKeyIntent, aiConsent, aiPreparation, aiGeneration, aiReservation };
+export const aiPublication = table({ name: 'ai_publication' }, {
+  generationId: t.string().primaryKey(), actor: t.identity(), targetKind: t.string(), targetId: t.u64(), createdAt: t.timestamp(),
+});
+export const aiTables = { aiPublication, aiServiceConfig, aiKey, aiKeyIntent, aiConsent, aiPreparation, aiGeneration, aiReservation };

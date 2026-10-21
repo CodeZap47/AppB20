@@ -208,14 +208,51 @@ describe('integración real de Aprende enseñando en la aplicación', () => {
   });
 
   it('abre cada módulo disponible desde el menú real y conserva el aviso de simulación', async () => {
-    const nav = container.querySelector('nav[aria-label="Módulos"]')!;
-    expect([...nav.querySelectorAll('a')].map((link) => link.textContent)).toEqual(navigableModules().map((module) => module.title));
+    const desktop = container.querySelector<HTMLElement>('.b20-slim-desktop')!;
+    const nav = desktop.querySelector('nav[aria-label="Módulos"]')!;
+    const groups = [...nav.querySelectorAll<HTMLButtonElement>('button[aria-controls]')];
+    async function moduleLink(id: string) {
+      const selector = `a[href="#/m/${id}"]`;
+      let target = nav.querySelector<HTMLAnchorElement>(selector);
+      for (const group of groups) {
+        if (target) break;
+        if (group.getAttribute('aria-expanded') !== 'true') await act(async () => group.click());
+        // Exit animations may briefly retain another area's links. Use the open area only.
+        const panel = desktop.querySelector(`[data-area="${group.getAttribute('aria-label')}"]`);
+        target = panel?.querySelector<HTMLAnchorElement>(selector) ?? null;
+      }
+      if (!target) throw new Error(`Falta el acceso al módulo ${id}`);
+      return target;
+    }
     for (const module of navigableModules()) {
-      await clickLink(module.title, nav);
+      const target = await moduleLink(module.id);
+      expect(target.getAttribute('aria-label') ?? target.textContent).toContain(module.id === 'inicio' ? 'Inicio' : module.title);
+      await act(async () => target.click());
       expect(window.location.hash).toBe(`#/m/${module.id}`);
       expectHealthyPage();
       expect(container.querySelector('.demo-banner')?.textContent).toContain('los cambios no se guardan ni se comparten');
-      expect(container.querySelector('a.sidenav__link[aria-current="page"]')?.textContent).toBe(module.title);
+      expect((await moduleLink(module.id)).getAttribute('aria-current'), module.id).toBe('page');
     }
+    expect(desktop.querySelector('.b20-slim-account')?.textContent).toContain('Perfil simulado');
+  });
+
+  it('abre Avisos desde el pie y actualiza su contador cuando los avisos se leen', async () => {
+    const desktop = container.querySelector<HTMLElement>('.b20-slim-desktop')!;
+    const noticesLink = () => desktop.querySelector<HTMLAnchorElement>('nav[aria-label="Cuenta y aplicación"] a[href="#/m/avisos"]')!;
+    const unread = () => source.getSnapshot().notifications.filter((notification) => !notification.readAt).length;
+    expect(noticesLink().getAttribute('aria-label')).toBe(unread() ? `Avisos (${unread()})` : 'Avisos');
+    await act(async () => source.requestNotificationTest());
+    expect(unread()).toBeGreaterThan(0);
+    expect(noticesLink().getAttribute('aria-label')).toBe(`Avisos (${unread()})`);
+    await act(async () => noticesLink().click());
+    expect(window.location.hash).toBe('#/m/avisos');
+    expect(container.querySelector('main h1')?.textContent).toBe('Mis avisos');
+    expect(noticesLink().getAttribute('aria-current')).toBe('page');
+    const noticeCount = source.getSnapshot().notifications.length;
+    await clickButton('Marcar todos como leídos', container.querySelector('main')!);
+    expect(unread()).toBe(0);
+    expect(source.getSnapshot().notifications).toHaveLength(noticeCount);
+    expect(noticesLink().getAttribute('aria-label')).toBe('Avisos');
+    expectHealthyPage();
   });
 });

@@ -1,13 +1,13 @@
 import { Timestamp } from 'spacetimedb';
-import { computeContributionOrigins, type ContributionContent, type ContributionOriginInput, type OriginContributionKind } from '../../core/src/contributionOrigins';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { computeContributionOrigins, contributionEqualityKey, type ContributionContent, type ContributionOriginInput, type OriginContributionKind } from '../../core/src/contributionOrigins';
 import { isActive, type Ctx, type ViewDb } from './moduleContext';
 import { canReadTarget } from './delivery2Handlers';
 
 const targetKind: Record<OriginContributionKind, string> = { trabajo: 'work', apunte: 'note', evidencia: 'evidence', guia: 'guide', respuesta: 'answer' };
 
 /** Solo metadatos de procedencia; no devuelve cuerpos, hashes ni firmas de material privado. */
-export function readContributionOrigins(db: ViewDb, sender: Ctx['sender']) {
-  if (!isActive(db, sender)) return [];
+export function collectContributionInputs(db: ViewDb) {
   const inputs: ContributionOriginInput[] = [];
   const people = new Map<string, Ctx['sender']>();
   const fileKeys = new Map<string, string[]>();
@@ -64,7 +64,35 @@ export function readContributionOrigins(db: ViewDb, sender: Ctx['sender']) {
     inputs.push({ kind: 'respuesta', refId: row.id.toString(), memberId, createdAt: row.createdAt.microsSinceUnixEpoch,
       context: [row.questionId.toString()], content: ['respuesta'], files: [] });
   }
-  return computeContributionOrigins(inputs)
+  return { inputs, people };
+}
+const fingerprint = (row: ContributionOriginInput) => Array.from(sha256(new TextEncoder().encode(contributionEqualityKey(row))), (byte) => byte.toString(16).padStart(2, '0')).join('');
+function originsWithTombstones(db: ViewDb, inputs: ContributionOriginInput[]) {
+  const origins = computeContributionOrigins(inputs);
+  return origins.map((origin, index) => {
+    const prior = db.contributionTombstone?.fingerprint.find(fingerprint(inputs[index]));
+    if (!prior || prior.creditedAt.microsSinceUnixEpoch > origin.creditedAt) return origin;
+    return { ...origin, creditedAt: prior.creditedAt.microsSinceUnixEpoch,
+      duplicateOf: origin.refId === prior.canonicalId.toString() ? undefined : prior.canonicalId.toString() };
+  });
+}
+/** Antes de purgar: persiste únicamente hash, fecha y referencia canónica, sin actores ni texto. */
+export function rememberContributionOrigins(ctx: Ctx, targets: ReadonlySet<string>) {
+  const { inputs } = collectContributionInputs(ctx.db);
+  const origins = originsWithTombstones(ctx.db, inputs);
+  inputs.forEach((input, index) => {
+    if (!targets.has(`${targetKind[input.kind]}:${input.refId}`)) return;
+    const origin = origins[index]; const key = fingerprint(input);
+    const row = { fingerprint: key, kind: input.kind, canonicalId: BigInt(origin.duplicateOf ?? origin.refId), creditedAt: new Timestamp(origin.creditedAt) };
+    const prior = ctx.db.contributionTombstone.fingerprint.find(key);
+    if (!prior) ctx.db.contributionTombstone.insert(row);
+    else if (prior.creditedAt.microsSinceUnixEpoch > origin.creditedAt) ctx.db.contributionTombstone.fingerprint.update(row);
+  });
+}
+export function readContributionOrigins(db: ViewDb, sender: Ctx['sender']) {
+  if (!isActive(db, sender)) return [];
+  const { inputs, people } = collectContributionInputs(db);
+  return originsWithTombstones(db, inputs)
     .filter((row) => canReadTarget(db, sender, targetKind[row.kind], BigInt(row.refId)))
     .map((row) => ({ kind: row.kind, refId: BigInt(row.refId), memberId: people.get(row.memberId)!,
       creditedAt: new Timestamp(row.creditedAt), duplicateOf: row.duplicateOf === undefined ? undefined : BigInt(row.duplicateOf) }));

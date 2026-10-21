@@ -49,6 +49,8 @@ function setup() {
     authConfig: tableStore('id', [{ id: 0, issuer, audiences: ['web-client', 'android-client'] }]),
     fileServiceConfig: tableStore('id'),
     aiServiceConfig: tableStore('id'),
+    notificationServiceConfig: tableStore('id'),
+    maintenanceService: tableStore('id'),
     member: tableStore('identity'),
     invitation: tableStore('email'),
     subject: tableStore('id', [{ id: 1, name: 'Privado del grupo' }]),
@@ -58,6 +60,7 @@ function setup() {
   };
   const mutableCtx = {
     sender: student,
+    identity: identity('module'),
     senderAuth: {
       jwt: {
         issuer,

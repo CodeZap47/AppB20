@@ -4,6 +4,8 @@ import { Hono } from 'hono';
 import { Identity, setGlobalLogLevel } from 'spacetimedb';
 import { DbConnection } from '../packages/app/src/module_bindings';
 import { AI_CONSENT_VERSION, type AiPreparation, type AiGeneration } from '../packages/core/src/ai';
+import { GUIDE_SECTIONS } from '../packages/core/src/guides';
+import { ResourceTransport } from '../packages/app/src/data/resourceTransport';
 import { createAiDatabase, type AiWorkerEnv } from '../apps/api/src/ai/database';
 import { aiWorkerRoutes, aiPublicError, type AiRouteContext } from '../apps/api/src/ai/routes';
 import { checkActiveMembership } from '../apps/api/src/lib/membership';
@@ -32,12 +34,14 @@ export async function runSmoke(options: { address: string; database: string; tok
     let author = await connect(options.tokens[1]!);
     await author.reducers.joinGroup({ displayName: 'Synthetic author' });
     await subscribe(author, ['subjects', 'notes']);
-    await author.reducers.createSubject({ name: 'Synthetic EX-1', period: 1 });
+    await author.reducers.createSubject({ name: 'Synthetic BYOK', period: 1 });
     const subjectId = [...author.db.subjects.iter()][0]!.id;
     await author.reducers.saveNoteV2({ noteId: undefined, expectedVersion: undefined, subjectId, termId: undefined,
       session: '', topic: 'Ciclos', title: 'Synthetic private note', body: 'Un ciclo repite instrucciones. Contacto: privacy@example.invalid',
       tags: ['ciclos'], visibility: 'personal', source: 'student', assignmentIds: [], activityIds: [], questionIds: [] });
     const noteId = [...author.db.notes.iter()][0]!.id;
+    const transfer = new ResourceTransport({ getConnection: () => author, getIdentity: () => author.identity!.toHexString() });
+    await transfer.upload('note', noteId.toString(), new File(['const vueltas = 3; // UTF8 real'], 'ejemplo.ts', { type: 'text/plain' }), 1);
     const serviceResponse = await fetch(`${options.address}/v1/identity`, { method: 'POST' });
     assert.equal(serviceResponse.status, 200);
     const service = await serviceResponse.json() as { identity: string; token: string };
@@ -57,9 +61,10 @@ export async function runSmoke(options: { address: string; database: string; tok
       providerCalls++;
       assert.equal(input.apiKey, 'synthetic-local-key-never-a-real-key');
       assert.ok(!JSON.stringify(input.preparation.fragments).includes('privacy@example.invalid'));
-      return { text: JSON.stringify({ questions: [{ id: 'q1', type: 'single', text: '¿Qué hace un ciclo?',
-        options: [{ id: 'a', text: 'Repite' }, { id: 'b', text: 'Borra' }, { id: 'c', text: 'Cierra' }, { id: 'd', text: 'Envía' }],
-        correctOptionId: 'a', explanation: 'Repite instrucciones.', topic: 'Ciclos', citations: [input.preparation.fragments[0]!.id] }] }),
+      assert.equal(input.preparation.config.purpose, input.config.purpose);
+      const headings = input.config.purpose === 'guide' ? GUIDE_SECTIONS.map((section) => section.title) : ['Explicación'];
+      return { text: JSON.stringify({ purpose: input.config.purpose, title: 'Ciclos revisables',
+        sections: headings.map((heading) => ({ heading, text: 'Un ciclo repite instrucciones. Ejemplo: tres vueltas.', citations: [input.preparation.fragments[0]!.id] })) }),
         usage: { inputTokens: 100, outputTokens: 100 } };
     } } }));
     app.onError((error, c) => { const safe = aiPublicError(error); return c.json({ error: safe?.message ?? 'Local failure', code: safe?.code }, safe?.status ?? 503); });
@@ -74,15 +79,17 @@ export async function runSmoke(options: { address: string; database: string; tok
     const key = await request(options.tokens[1]!, 'key', 'PUT', { apiKey: 'synthetic-local-key-never-a-real-key' });
     assert.equal(key.status, 200); assert.ok(!(await key.text()).includes('synthetic-local-key'));
     assert.equal((await successful<{ configured: boolean }>(await request(options.tokens[0]!, 'key'))).configured, false);
-    const config = { questionCount: 1, types: ['single'], difficulty: 'basic' };
+    const config = { purpose: 'explanation', questionCount: 1, types: ['single'], difficulty: 'basic' };
     const selection = { subjectId: subjectId.toString(), topics: ['Ciclos'], config,
       sources: [{ kind: 'note', refId: noteId.toString(), topics: ['Ciclos'], includeUnplaced: true }] };
     assert.ok(!(await request(options.tokens[0]!, 'preparations', 'POST', selection)).ok);
     const preparation = await successful<AiPreparation>(await request(options.tokens[1]!, 'preparations', 'POST', selection));
     assert.equal(preparation.canGenerate, true);
     assert.ok(!JSON.stringify(preparation).includes('privacy@example.invalid'));
+    assert.ok(JSON.stringify(preparation.fragments).includes('const vueltas = 3;'));
+    assert.equal(preparation.sources[0]!.version, 2);
     await assert.rejects(subscribe(author, ['ai_key']));
-    await assert.rejects(author.procedures.aiClaimGeneration({ payload: JSON.stringify({ id: randomUUID(), actor: author.identity!.toHexString() }) }));
+    assert.equal(JSON.parse(await author.procedures.aiClaimGeneration({ payload: JSON.stringify({ id: randomUUID(), actor: author.identity!.toHexString() }) })).code, 'unauthorized');
     checks.push('tres identidades, clave cifrada, fuente personal y operaciones técnicas aisladas');
     const generationBody = { id: randomUUID(), preparationId: preparation.id, fingerprint: preparation.fingerprint, config, confirmed: true };
     const replies = await Promise.all([request(options.tokens[1]!, 'generations', 'POST', generationBody), request(options.tokens[1]!, 'generations', 'POST', generationBody)]);
@@ -90,14 +97,37 @@ export async function runSmoke(options: { address: string; database: string; tok
     const generation = await successful<AiGeneration>(await request(options.tokens[1]!, `generations/${generationBody.id}`));
     assert.equal(generation.state, 'succeeded'); assert.equal(providerCalls, 1);
     assert.ok(!(await request(options.tokens[0]!, `generations/${generationBody.id}`)).ok);
-    checks.push('preparación autorizada y redacción; generación simulada y UUID concurrente sin doble envío');
+    assert.equal((await request(options.tokens[1]!, `generations/${generationBody.id}/publish`, 'POST', {})).status, 403);
+    checks.push('adjunto UTF8 real, fuentes/versiones, redacción; explicación privada y UUID concurrente sin doble envío');
+    await author.reducers.saveNoteV2({ noteId: undefined, expectedVersion: undefined, subjectId, termId: undefined,
+      session: '', topic: 'Ciclos', title: 'Synthetic group note', body: 'Los ciclos for y while repiten instrucciones.',
+      tags: ['ciclos'], visibility: 'group', source: 'student', assignmentIds: [], activityIds: [], questionIds: [] });
+    const groupNoteId = [...author.db.notes.iter()].find((note) => note.visibility === 'group')!.id;
+    const guideConfig = { ...config, purpose: 'guide' };
+    const guidePreparation = await successful<AiPreparation>(await request(options.tokens[1]!, 'preparations', 'POST', { ...selection,
+      config: guideConfig, sources: [{ kind: 'note', refId: groupNoteId.toString(), topics: ['Ciclos'], includeUnplaced: true }] }));
+    const guideBody = { id: randomUUID(), preparationId: guidePreparation.id, fingerprint: guidePreparation.fingerprint, config: guideConfig, confirmed: true };
+    const guideDraft = await successful<AiGeneration>(await request(options.tokens[1]!, 'generations', 'POST', guideBody));
+    assert.equal(guideDraft.state, 'succeeded'); assert.equal(providerCalls, 2);
+    const drafts = await successful<AiGeneration[]>(await request(options.tokens[1]!, 'generations'));
+    assert.equal(drafts.length, 2); assert.equal(drafts[0]!.preparation!.sources[0]!.version, 1);
+    const publication = await successful<{ targetKind: string; targetId: string }>(await request(options.tokens[1]!, `generations/${guideBody.id}/publish`, 'POST', {}));
+    assert.equal(publication.targetKind, 'guide');
+    assert.deepEqual(await successful(await request(options.tokens[1]!, `generations/${guideBody.id}/publish`, 'POST', {})), publication);
+    await subscribe(owner, ['study_guides', 'guide_sources']);
+    const guide = [...owner.db.studyGuides.iter()].find((row) => row.id.toString() === publication.targetId)!;
+    assert.equal(guide.sections.length, 8); assert.ok(guide.sections[0]!.includes('Gemini'));
+    assert.ok(guide.sections[0]!.includes(`note:${groupNoteId} v1`));
+    assert.ok([...owner.db.guideSources.iter()].some((row) => row.guideId === guide.id && row.refId === groupNoteId && row.sourceVersion === 1));
+    checks.push('borradores privados recuperables y guía con ocho secciones publicada explícitamente una sola vez con referencias');
     close(); await options.restart();
     assert.equal((await successful<{ configured: boolean }>(await request(options.tokens[1]!, 'key'))).configured, true);
     assert.equal((await successful<AiGeneration>(await request(options.tokens[1]!, `generations/${generationBody.id}`))).state, 'succeeded');
-    await successful(await request(options.tokens[1]!, 'generations', 'POST', generationBody)); assert.equal(providerCalls, 1);
+    await successful(await request(options.tokens[1]!, 'generations', 'POST', generationBody)); assert.equal(providerCalls, 2);
+    assert.equal((await successful<AiGeneration[]>(await request(options.tokens[1]!, 'generations'))).length, 2);
     checks.push('reinicio conserva clave, preparación y generación sin volver a llamar al proveedor');
     owner = await connect(options.tokens[0]!); author = await connect(options.tokens[1]!);
-    await author.reducers.withdrawContent({ kind: 'note', targetId: noteId, withdrawn: true, expectedVersion: 1, reason: 'Synthetic withdrawal' });
+    await author.reducers.withdrawContent({ kind: 'note', targetId: noteId, withdrawn: true, expectedVersion: 2, reason: 'Synthetic withdrawal' });
     assert.ok(!(await request(options.tokens[1]!, `generations/${generationBody.id}`)).ok);
     await successful(await request(options.tokens[1]!, 'key', 'DELETE'));
     assert.equal((await successful<{ configured: boolean }>(await request(options.tokens[1]!, 'key'))).configured, false);

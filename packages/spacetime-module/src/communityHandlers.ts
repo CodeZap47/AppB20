@@ -1,6 +1,7 @@
 import { SenderError } from 'spacetimedb/server';
 import { activeMember, bumpMaterial, expectVersion, log, requireSubject, saveTargetBaseline, targetVersion, type Ctx } from './moduleContext';
 import { canReadTarget, contentOwner } from './delivery2Handlers';
+import { assertRetentionReadable, restoreRetention, scheduleRetention } from './trashHandlers';
 
 interface ProfileInput {
   preferredName: string; bio: string; interests: string[]; learningGoals: string;
@@ -74,6 +75,7 @@ export function withdrawContent(ctx: Ctx, input: { kind: string; targetId: bigin
     ? [...ctx.db.workAuthor.workId.filter(input.targetId)].map((row) => row.author)
     : [owner];
   const own = authors.some((author) => author.isEqual(ctx.sender));
+  if (!input.withdrawn) assertRetentionReadable(ctx, input.kind, input.targetId);
   if (!own && !canReadTarget(ctx.db, ctx.sender, input.kind, input.targetId)) throw new SenderError('El contenido no está disponible.');
   if (!own && !member.isCreator) throw new SenderError('Solo su autor o un administrador pueden retirar este contenido.');
   // La membresía de administración no concede acceso a apuntes personales ajenos.
@@ -93,11 +95,14 @@ export function withdrawContent(ctx: Ctx, input: { kind: string; targetId: bigin
     if (!moderation && !own) throw new SenderError('Solo sus autores pueden restaurar este aporte.');
   }
   saveTargetBaseline(ctx, input.kind, input.targetId);
+  const actorRole = !own ? 'moderator' : owner.isEqual(ctx.sender) ? 'author' : 'coauthor';
+  if (!input.withdrawn) restoreRetention(ctx, input.kind, input.targetId, actorRole);
   const row = { key, kind: input.kind, targetId: input.targetId,
     withdrawnAt: input.withdrawn ? ctx.timestamp : undefined,
     withdrawnBy: input.withdrawn ? ctx.sender : undefined,
     reason: input.withdrawn ? reason : '' };
   if (previous) ctx.db.contentStatus.key.update(row); else ctx.db.contentStatus.insert(row);
+  if (input.withdrawn) scheduleRetention(ctx, input.kind, input.targetId, actorRole);
   bumpMaterial(ctx, input.kind, input.targetId);
   log(ctx, input.withdrawn ? 'withdraw' : 'restore', input.kind, input.targetId);
 }

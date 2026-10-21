@@ -8,6 +8,12 @@ const questions: AiQuestion[] = [
   { id: 'q2', type: 'boolean', text: 'Es verdadero', topic: 'Funciones', options: [{ id: 'v', text: 'Verdadero' }, { id: 'f', text: 'Falso' }], correctOptionId: 'v', explanation: 'Por definición', citations: ['fragment'] },
 ];
 describe('EX-2: plano, orden y corrección deterministas', () => {
+  it('conserva el propósito de Gemini junto con los pesos sin cambiar la configuración heredada', () => {
+    const base = { questionCount: 2, types: ['single'], difficulty: 'basic' };
+    expect(validateAiGenerationConfig(base)).toEqual(base);
+    for (const purpose of ['questions', 'guide', 'explanation']) expect(validateAiGenerationConfig({ ...base, purpose, topicWeights: [{ topic: 'Ciclos', weight: 1 }] })).toEqual({ ...base, purpose, topicWeights: [{ topic: 'Ciclos', weight: 1 }] });
+    expect(() => validateAiGenerationConfig({ ...base, purpose: 'other' })).toThrow('borrador');
+  });
   it('distribuye pesos por restos mayores, incluye ceros y conserva el orden en empates', () => {
     expect(examTopicDistribution(['A', 'B', 'C'], 7, [{ topic: 'A', weight: 2 }, { topic: 'B', weight: 1 }, { topic: 'C', weight: 0 }])).toEqual([{ topic: 'A', count: 5 }, { topic: 'B', count: 2 }, { topic: 'C', count: 0 }]);
     expect(examTopicDistribution(['A', 'B', 'C'], 2)).toEqual([{ topic: 'A', count: 1 }, { topic: 'B', count: 1 }, { topic: 'C', count: 0 }]);

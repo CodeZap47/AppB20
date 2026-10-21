@@ -4,14 +4,19 @@ import { AiClient } from '../data/aiClient';
 import { useSnapshot } from '../data/DataContext';
 import { aiCandidateKey, aiSourceCandidates } from '../lib/aiSources';
 import { AiSourcePreview } from './AiSourcePreview';
+import { AiGenerationPanel } from './AiGenerationPanel';
 import { AiSourceSelector } from './AiSourceSelector';
 
 export function AiPreparationPanel({ client, status, simulated }: { client?: AiClient; status?: AiStatus; simulated: boolean }) {
   const data = useSnapshot();
-  const [subjectId, setSubjectId] = useState(data.subjects[0]?.id ?? '');
+  const params = new URLSearchParams(window.location.hash.split('?')[1] ?? window.location.search);
+  const preset = params.get('aiSource');
+  const presetCandidate = data.subjects.flatMap((subject) => aiSourceCandidates(data, subject.id)).find((candidate) => aiCandidateKey(candidate) === preset);
+  const [purpose, setPurpose] = useState<'guide' | 'explanation'>(params.get('purpose') === 'explanation' ? 'explanation' : 'guide');
+  const [subjectId, setSubjectId] = useState(presetCandidate?.subjectId ?? data.subjects[0]?.id ?? '');
   const [termId, setTermId] = useState('');
-  const [topicsText, setTopicsText] = useState('');
-  const [selected, setSelected] = useState<AiSourceRef[]>([]);
+  const [topicsText, setTopicsText] = useState(presetCandidate?.topics.join('\n') ?? '');
+  const [selected, setSelected] = useState<AiSourceRef[]>(presetCandidate ? [{ kind: presetCandidate.kind, refId: presetCandidate.refId, topics: presetCandidate.topics, includeUnplaced: true }] : []);
   const [result, setResult] = useState<{ signature: string; preparation: AiPreparation }>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -20,7 +25,7 @@ export function AiPreparationPanel({ client, status, simulated }: { client?: AiC
   const parsed = useMemo(() => parseTopics(topicsText), [topicsText]);
   const topics = 'topics' in parsed ? parsed.topics : [];
   const sources = selected.map((source) => ({ ...source, topics: source.topics.filter((topic) => topics.includes(topic)) }));
-  const signature = JSON.stringify([subjectId, termId, topics, sources, status?.model,
+  const signature = JSON.stringify([purpose, subjectId, termId, topics, sources, status?.model,
     sources.map((ref) => candidates.find((candidate) => aiCandidateKey(ref) === aiCandidateKey(candidate))?.revision ?? 'unavailable')]);
   const currentSignature = useRef(signature); currentSignature.current = signature;
   useEffect(() => {
@@ -35,7 +40,7 @@ export function AiPreparationPanel({ client, status, simulated }: { client?: AiC
     const captured = signature;
     controller.current?.abort(); const abort = new AbortController(); controller.current = abort;
     setBusy(true); setError(''); setResult(undefined);
-    const input: AiPrepareInput = { subjectId, ...(termId ? { termId } : {}), topics, sources };
+    const input: AiPrepareInput = { subjectId, ...(termId ? { termId } : {}), topics, sources, config: { purpose, questionCount: 10, types: ['single', 'boolean'], difficulty: 'intermediate' } };
     try {
       let preparation: AiPreparation;
       if (simulated) {
@@ -59,8 +64,9 @@ export function AiPreparationPanel({ client, status, simulated }: { client?: AiC
   };
   return <section className="panel settings" aria-label="Preparar material para IA">
     <h2>Preparar material para IA</h2>
-    <p>Elige fuentes y revisa exactamente el texto que se usaría para crear preguntas. Esta vista previa no llama a Gemini.</p>
+    <p>Elige fuentes y revisa exactamente el texto que se usaría para crear una guía o una explicación con sus fuentes. Esta vista previa no llama a Gemini.</p>
     {simulated && <p className="ai-notice">Simulación local: los fragmentos son ficticios. No se envían datos ni claves a la red.</p>}
+    <label className="field"><span>Tipo de borrador</span><select value={purpose} onChange={(event) => setPurpose(event.target.value as 'guide' | 'explanation')}><option value="guide">Guía integral</option><option value="explanation">Explicación de materiales</option></select></label>
     <div className="ai-scope">
       <label className="field"><span>Materia del material</span><select value={subjectId} onChange={(e) => { setSubjectId(e.target.value); setTermId(''); setSelected([]); setResult(undefined); }}>
         {!subjectId && <option value="">Elige una materia</option>}{data.subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
@@ -79,5 +85,6 @@ export function AiPreparationPanel({ client, status, simulated }: { client?: AiC
     <div className="form__actions"><button type="button" disabled={!valid || busy} aria-busy={busy} onClick={() => void prepare()}>{busy ? 'Preparando material…' : 'Preparar vista previa'}</button>
       <button type="button" className="button--secondary" onClick={() => { controller.current?.abort(); setSelected([]); setResult(undefined); setError(''); setBusy(false); }}>Limpiar selección</button></div>
     {result && !stale && <AiSourcePreview preparation={result.preparation} />}
+    <AiGenerationPanel client={client} status={status} preparation={result && !stale ? result.preparation : undefined} simulated={simulated} />
   </section>;
 }

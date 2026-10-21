@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { AI_LIMITS, AiError, aiUuid, validateAiPrepareInput, validateAiGenerationConfig, validateAiQuestionDraft,
+import { AI_LIMITS, AiError, aiUuid, validateAiPrepareInput, validateAiGenerationConfig, validateAiQuestionDraft, validateAiStudyDraft,
   type AiStatus, type AiKeyStatus, type AiPreparation, type AiGeneration, type AiGenerationConfig } from '@b20/core';
 import { AiApiError, type AiDatabase, type AiWorkerEnv, type AiAuthorizedKey, type AiEncryptedKey } from './database.ts';
 import { canEncrypt, decryptAiKey, encryptAiKey } from './crypto.ts';
@@ -107,7 +107,7 @@ export function aiWorkerRoutes(options: AiRouteOptions = {}) {
         if (new TextEncoder().encode(result.text).byteLength > 256 * 1024) throw new AiProviderError('invalid_output', false, 'La respuesta superó el límite permitido.');
         let parsed: unknown;
         try { parsed = JSON.parse(result.text); } catch { throw new AiProviderError('invalid_output', false, 'La IA devolvió una respuesta inválida.'); }
-        const draft = validateAiQuestionDraft(parsed, claim.preparation, config);
+        const draft = config.purpose && config.purpose !== 'questions' ? validateAiStudyDraft(parsed, claim.preparation, config) : validateAiQuestionDraft(parsed, claim.preparation, config);
         if (JSON.stringify(draft).length > 128_000) throw new AiProviderError('invalid_output', false, 'El borrador superó el límite permitido.');
         terminal = { state: 'succeeded', result: draft, ...(result.usage ? { usage: result.usage } : {}) };
       } catch (error) {
@@ -120,6 +120,8 @@ export function aiWorkerRoutes(options: AiRouteOptions = {}) {
     // Source access is rechecked here, too, before returning the generated content.
     return c.json(await db.user<AiGeneration>(token, 'ai_get_generation', { id }));
   });
+  app.get('/generations', async (c) => c.json(await c.get('ai').user(c.get('sessionToken'), 'ai_list_generations', {})));
+  app.post('/generations/:id/publish', async (c) => c.json(await c.get('ai').user(c.get('sessionToken'), 'ai_publish_generation', { id: uuid(c.req.param('id')) })));
   app.get('/generations/:id', async (c) => c.json(await c.get('ai').user<AiGeneration>(c.get('sessionToken'), 'ai_get_generation', { id: uuid(c.req.param('id')) })));
   return app;
 }

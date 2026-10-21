@@ -5,18 +5,19 @@ import { validateAiQuestionDraft, type AiQuestion } from '../../core/src/exam';
 import { examAttemptOrder, examTopicDistribution, scoreExam, type ExamAttempt, type ExamAttemptSummary, type ExamDetail,
   type ExamDraft, type ExamEditableQuestion, type ExamGenerationSummary, type ExamScore, type ExamSourceIssue, type ExamSummary,
   type ExamVersionSummary } from '../../core/src/exams';
-import { activeMember, expectVersion, type Ctx } from './moduleContext';
+import { activeMember, type Ctx } from './moduleContext';
 import { resolveAiSource } from './aiHandlers';
 
 type ExamRow = NonNullable<ReturnType<Ctx['db']['studyExam']['id']['find']>>;
 type VersionRow = NonNullable<ReturnType<Ctx['db']['examVersion']['key']['find']>>;
 type AttemptRow = NonNullable<ReturnType<Ctx['db']['examAttempt']['id']['find']>>;
 interface StoredVersion { title: string; config: AiGenerationConfig; timeLimitSeconds?: number; preparation: AiPreparation; questions: ExamEditableQuestion[];
-  approvedAt?: number; hasPersonalSources: boolean }
+  approvedAt?: number; hasPersonalSources: boolean; purgedQuestionIds?: string[] }
 interface StoredAttempt { title: string; mode: 'practice' | 'simulation'; startedAt: number; deadlineAt?: number; closedAt?: number;
   closeReason?: 'submitted' | 'timeout'; order: { questionId: string; optionIds: string[] }[];
   answers: Record<string, { optionId: string; confirmed: boolean }>; result?: ExamScore }
 function fail(code: string, message: string): never { throw new SenderError(`${code}:${message}`); }
+function expectVersion(actual: number, expected: number) { if (actual !== expected) fail('conflict', 'El contenido cambió. Recarga antes de guardar otra vez.'); }
 function obj(value: unknown) { if (!aiRecord(value)) fail('invalid', 'Se esperaba un objeto.'); return value; }
 function uuid(value: unknown, label = 'El identificador') { if (!aiUuid(value)) fail('invalid', `${label} debe ser UUID.`); return value.toLowerCase(); }
 function integer(value: unknown, label: string, max = 0xffffffff) { if (!Number.isInteger(value) || Number(value) < 1 || Number(value) > max) fail('invalid', `${label} inválida.`); return Number(value); }
@@ -24,6 +25,11 @@ function text(value: unknown, label: string, max = 200) { if (typeof value !== '
 function now(ctx: Ctx) { return Number(ctx.timestamp.microsSinceUnixEpoch / 1000n); }
 function at(timestamp: Ctx['timestamp']) { return Number(timestamp.microsSinceUnixEpoch / 1000n); }
 function timeLimit(value: unknown) { if (value === undefined) return undefined; if (!Number.isInteger(value) || Number(value) < 60 || Number(value) > 10800) fail('invalid', 'El tiempo debe ser de 60 a 10 800 segundos.'); return Number(value); }
+function examConfig(value: unknown) {
+  const config = validateAiGenerationConfig(value);
+  if (config.purpose !== undefined && config.purpose !== 'questions') fail('invalid', 'Exámenes solo admite generaciones de preguntas.');
+  return config;
+}
 function own(ctx: Ctx, examId: unknown) { activeMember(ctx); const exam = ctx.db.studyExam.id.find(uuid(examId)); if (!exam || !exam.owner.isEqual(ctx.sender)) fail('unavailable', 'Este examen no está disponible para editarlo.'); return exam; }
 function readable(ctx: Ctx, examId: unknown) { activeMember(ctx); const exam = ctx.db.studyExam.id.find(uuid(examId)); if (!exam || !(exam.owner.isEqual(ctx.sender) || exam.visibility === 'group')) fail('unavailable', 'El examen no está disponible.'); return exam; }
 function requireVersion(ctx: Ctx, examId: string, version: unknown) { const row = ctx.db.examVersion.key.find(`${examId}:${integer(version, 'Versión')}`); if (!row) fail('unavailable', 'La versión no existe.'); return row; }
@@ -51,6 +57,7 @@ function prepIssues(ctx: Ctx, prep: AiPreparation): ExamSourceIssue[] {
   const issues: ExamSourceIssue[] = [];
   for (const source of prep.sources) {
     try {
+      if (source.status === 'unauthorized') throw new Error('purged');
       const current = resolveAiSource(ctx, source.kind, source.refId);
       if (current.subjectId !== prep.subjectId || (prep.termId && current.termId && prep.termId !== current.termId)) throw new Error('classification');
       for (const origin of source.origins) { const original = resolveAiSource(ctx, origin.kind, origin.refId); if (original.visibility !== 'group') throw new Error('origin'); }
@@ -61,6 +68,7 @@ function prepIssues(ctx: Ctx, prep: AiPreparation): ExamSourceIssue[] {
 }
 function versionIssues(ctx: Ctx, version: StoredVersion) { return [...new Map(preparations(version).flatMap((prep) => prepIssues(ctx, prep)).map((issue) => [`${issue.kind}:${issue.refId}:${issue.state}`, issue])).values()]; }
 function questionAvailable(ctx: Ctx, version: StoredVersion, question: AiQuestion, issues?: ExamSourceIssue[]) {
+  if (version.purgedQuestionIds?.includes(question.id)) return false;
   const prep = version.preparation;
   const inaccessible = new Set((issues ?? prepIssues(ctx, prep)).filter((issue) => issue.state === 'unavailable').map((issue) => `${issue.kind}:${issue.refId}`));
   return question.citations.every((citation) => {
@@ -110,7 +118,7 @@ function generation(ctx: Ctx, generationId: unknown) {
   const row = ctx.db.aiGeneration.id.find(uuid(generationId)); const prepRow = row && ctx.db.aiPreparation.id.find(row.preparationId);
   if (!row || !row.actor.isEqual(ctx.sender) || row.status !== 'succeeded' || !prepRow || !prepRow.actor.isEqual(ctx.sender)) fail('unavailable', 'La generación terminada no está disponible.');
   const preparation = JSON.parse(prepRow.json) as AiPreparation;
-  const config = validateAiGenerationConfig(JSON.parse(row.configJson));
+  const config = examConfig(JSON.parse(row.configJson));
   const questions = validatedQuestions(obj(JSON.parse(row.resultJson)).questions, preparation, config);
   const version: StoredVersion = { title: '', config, preparation, questions, hasPersonalSources: preparation.sources.some((source) => source.visibility === 'personal') };
   requireAccess(ctx, version, true); return { row, value: version };
@@ -130,7 +138,7 @@ function importGeneration(ctx: Ctx, raw: Record<string, unknown>): ExamDetail {
 
 function saveExamDraft(ctx: Ctx, raw: Record<string, unknown>): ExamDetail {
   const { exam, version, value } = mutable(ctx, raw); requireAccess(ctx, value);
-  const config = validateAiGenerationConfig(raw.config); const questions = validatedQuestions(raw.questions, value.preparation, config);
+  const config = examConfig(raw.config); const questions = validatedQuestions(raw.questions, value.preparation, config);
   const next = { ...value, title: text(raw.title, 'El título'), config, questions, timeLimitSeconds: timeLimit(raw.timeLimitSeconds) };
   ctx.db.examVersion.key.update({ ...version, json: JSON.stringify(next) }); return detail(ctx, bump(ctx, exam));
 }
@@ -269,7 +277,11 @@ function dispatch(ctx: Ctx, raw: Record<string, unknown>): unknown {
     : exam.visibility === 'group' && exam.readyVersion !== undefined && !exam.archived).map((exam) => examSummary(ctx, exam)).sort((a, b) => b.updatedAt - a.updatedAt);
   if (raw.action === 'getExam') return detail(ctx, readable(ctx, raw.examId));
   if (raw.action === 'getVersion') { const exam = own(ctx, raw.examId); return versionDto(ctx, exam, requireVersion(ctx, exam.id, raw.version)); }
-  if (raw.action === 'listGenerations') return [...ctx.db.aiGeneration.actor.filter(ctx.sender)].filter((row) => !!ctx.db.aiPreparation.id.find(row.preparationId)).map((row): ExamGenerationSummary => ({
+  if (raw.action === 'listGenerations') return [...ctx.db.aiGeneration.actor.filter(ctx.sender)].filter((row) => {
+    if (!ctx.db.aiPreparation.id.find(row.preparationId)) return false;
+    const config = JSON.parse(row.configJson) as AiGenerationConfig;
+    return config.purpose === undefined || config.purpose === 'questions';
+  }).map((row): ExamGenerationSummary => ({
     id: row.id, state: row.status === 'queued' ? 'prepared' : row.status as ExamGenerationSummary['state'], preparationId: row.preparationId, createdAt: at(row.createdAt),
     ...(row.errorCode ? { error: row.errorCode } : {}), ...(ctx.db.examGenerationImport.generationId.find(row.id) ? { importedExamId: ctx.db.examGenerationImport.generationId.find(row.id)!.examId } : {}) })).sort((a, b) => b.createdAt - a.createdAt);
   if (raw.action === 'importGeneration') return importGeneration(ctx, raw);
@@ -287,9 +299,39 @@ function dispatch(ctx: Ctx, raw: Record<string, unknown>): unknown {
   return fail('invalid', 'Operación de Exámenes no admitida.');
 }
 export function examResponse(ctx: Ctx, payload: string): string {
-  if (new TextEncoder().encode(payload).length > 2 * 1024 * 1024) fail('invalid', 'La solicitud excede el límite.');
-  let raw: Record<string, unknown>;
-  try { raw = obj(JSON.parse(payload)); } catch (error) { if (error instanceof SenderError) throw error; return fail('invalid', 'JSON inválido.'); }
-  try { return JSON.stringify(dispatch(ctx, raw)); }
-  catch (error) { if (error instanceof SenderError) throw error; if (error instanceof Error && 'code' in error && typeof error.code === 'string') return fail(error.code, error.message); throw error; }
+  try {
+    if (new TextEncoder().encode(payload).length > 2 * 1024 * 1024) fail('invalid', 'La solicitud excede el límite.');
+    let raw: Record<string, unknown>;
+    try { raw = obj(JSON.parse(payload)); } catch (error) { if (error instanceof SenderError) throw error; return fail('invalid', 'JSON inválido.'); }
+    return JSON.stringify(dispatch(ctx, raw));
+  } catch (error) {
+    // Preserve stable errors through the HTTP procedure runtime, like EX-1.
+    if (error instanceof SenderError) return JSON.stringify({ ok: false, code: /^([a-z_]{3,40}):/.exec(error.message)?.[1] ?? 'unauthorized', message: error.message });
+    if (error instanceof Error && 'code' in error && typeof error.code === 'string') return JSON.stringify({ ok: false, code: error.code, message: error.message });
+    throw error;
+  }
+}
+
+/** Permanently remove copied source text; frozen answer IDs still permit numeric scoring. */
+export function purgeExamSource(ctx: Ctx, kind: string, targetId: bigint): void {
+  const refId = String(targetId);
+  const matches = (source: { kind: string; refId: string }) => source.kind === kind && source.refId === refId;
+  for (const row of [...ctx.db.examVersion.iter()]) {
+    const value = data(row); const prep = value.preparation;
+    const affectedSources = new Set(prep.sources.filter((source) => matches(source) || source.origins.some(matches)).map((source) => `${source.kind}:${source.refId}`));
+    const removed = new Set(prep.fragments.filter((fragment) => fragment.origins.some((origin) => matches(origin) || affectedSources.has(`${origin.kind}:${origin.refId}`))).map((fragment) => fragment.id));
+    if (!removed.size && !affectedSources.size) continue;
+    const purgedQuestionIds = new Set(value.purgedQuestionIds ?? []);
+    for (const question of value.questions) if (question.citations.some((id) => removed.has(id))) purgedQuestionIds.add(question.id);
+    const preparation: AiPreparation = { ...prep, canGenerate: false, omissions: [],
+      sources: prep.sources.map((source) => affectedSources.has(`${source.kind}:${source.refId}`)
+        ? { ...source, title: 'Fuente eliminada', status: 'unauthorized', reason: 'El material original fue eliminado definitivamente.', fragmentIds: [], origins: [] }
+        : { ...source, fragmentIds: source.fragmentIds.filter((id) => !removed.has(id)), origins: source.origins.filter((origin) => !matches(origin)) }),
+      fragments: prep.fragments.filter((fragment) => !removed.has(fragment.id)),
+      coverage: prep.coverage.map((item) => ({ ...item, sourceIds: item.sourceIds.filter((id) => !affectedSources.has(id)) })) };
+    const questions = value.questions.map((question) => purgedQuestionIds.has(question.id)
+      ? { ...question, text: '', explanation: '', options: question.options.map((option) => ({ id: option.id, text: '' })), citations: [], issue: undefined }
+      : question);
+    ctx.db.examVersion.key.update({ ...row, json: JSON.stringify({ ...value, preparation, questions, purgedQuestionIds: [...purgedQuestionIds] }) });
+  }
 }

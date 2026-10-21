@@ -14,6 +14,10 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.restoreAllMocks(); });
 
 describe('contenido académico estructurado', () => {
+  it('permite referencias internas del material y bloquea otros protocolos', async () => {
+    await act(async () => root.render(<StructuredText text={'[Fuente v2](#/m/notas/42) [Perfil](#/perfil/alumno) [Script](javascript:alert(1)) [Data](data:text/html,x)'} />));
+    expect([...container.querySelectorAll('a')].map((link) => link.getAttribute('href'))).toEqual(['#/m/notas/42', '#/perfil/alumno']);
+  });
   it('presenta listas, tablas y código, y mantiene el contenido HTML como texto seguro', async () => {
     const text = '## Tema\n\n- Uno\n- Dos\n\n1. Paso\n2. Siguiente\n\n| Nombre | Valor |\n| --- | --- |\n| **A** | `4` |\n\n```html\n<script>alert(1)</script>\n```\n\n<img src=x onerror=alert(1)>\n![remota](https://ejemplo.invalid/espia.png)\n[javascript](javascript:alert(1))';
     await act(async () => root.render(<StructuredText text={text} />));

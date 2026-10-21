@@ -1,20 +1,13 @@
-import { useState } from 'react';
 import { Link } from 'react-router';
-import { requestNotificationPermission, webPushSupport } from '../lib/notifications';
 import { CalendarSettings } from '../components/CalendarSettings';
 import { ByokSettings } from '../components/ByokSettings';
 import { MembershipSettings } from '../components/MembershipSettings';
-import { usePlatform } from '../components/PlatformContext';
+import { NotificationSettings } from '../components/NotificationSettings';
 import { useSession, useSessionStore } from '../auth/AuthContext';
 import { useDataSource } from '../data/DataContext';
 import { DemoDataSource } from '../data/demo';
 
 export function SettingsPage() {
-  const platform = usePlatform();
-  const [permission, setPermission] = useState<string>(
-    'Notification' in window ? Notification.permission : 'no disponible',
-  );
-  const support = platform === 'web' ? webPushSupport() : null;
   const session = useSession();
   const sessionStore = useSessionStore();
   const simulated = useDataSource() instanceof DemoDataSource;
@@ -53,32 +46,7 @@ export function SettingsPage() {
 
       <ByokSettings />
 
-      <section>
-        <h2>Notificaciones</h2>
-        {platform === 'android' && (
-          <p className="muted">En Android los avisos llegan por Firebase Cloud Messaging.</p>
-        )}
-        {platform.startsWith('extension') && (
-          <p className="muted">La extensión tendrá su propia bandeja de avisos.</p>
-        )}
-        {support?.kind === 'needs-install' && (
-          <p>
-            {support.reason} <Link to="/instalar">Ver cómo instalar</Link>
-          </p>
-        )}
-        {support?.kind === 'unsupported' && <p>{support.reason}</p>}
-        {support?.kind === 'supported' && (
-          <>
-            <p>Permiso actual: {permission}</p>
-            <button
-              type="button"
-              onClick={async () => setPermission(await requestNotificationPermission())}
-            >
-              Activar notificaciones
-            </button>
-          </>
-        )}
-      </section>
+      <NotificationSettings />
     </>
   );
 }

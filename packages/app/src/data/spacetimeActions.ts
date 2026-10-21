@@ -1,6 +1,8 @@
 import { CURRICULUM } from '@b20/core';
 import { createPresentationActions } from './presentationActions';
 import { createStudyRoomActions } from './roomsActions';
+import { createTrashActions } from './trashSnapshot';
+import { createNotificationActions } from './notificationActions';
 import { Identity, Timestamp } from 'spacetimedb';
 import type { DbConnection } from '../module_bindings';
 import type { ResourceTargetKind } from './types';
@@ -104,6 +106,8 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
   return {
     ...createPresentationActions(getConnection, identity),
     ...createStudyRoomActions(getConnection, identity),
+    ...createTrashActions(getConnection),
+    ...createNotificationActions(getConnection),
     createChatChannel: (input) => create((c) => c.db.chatChannels.iter(),
       (c) => c.reducers.createChatChannel({ ...input, subjectId: optionalId(input.subjectId) }),
       (row, author) => own(row.createdBy, author) && row.kind === input.kind && row.name === input.name.trim()),

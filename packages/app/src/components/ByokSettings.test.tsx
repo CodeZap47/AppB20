@@ -11,9 +11,9 @@ import { ByokSettings } from './ByokSettings';
 
 const auth = vi.hoisted(() => ({ session: null as SessionState | null }));
 vi.mock('../auth/AuthContext', () => ({ useSession: () => auth.session }));
-vi.mock('../config', () => ({ config: { apiUrl: 'https://api.example', aiApiUrl: 'https://api.example' } }));
+vi.mock('../config', () => ({ config: { apiUrl: 'https://legacy-api.example', aiApiUrl: 'https://api.example' } }));
 let root: Root; let container: HTMLDivElement; let source: DemoDataSource;
-const status: AiStatus = { actor: 'member-one', enabled: false, configured: false, model: 'gemini-test', limits: AI_LIMITS, consentVersion: AI_CONSENT_VERSION, consented: false };
+const status: AiStatus = { actor: 'member-one', enabled: false, configured: false, model: 'gemini-test', limits: AI_LIMITS, consentVersion: AI_CONSENT_VERSION, consented: false, serviceConfigured: true };
 const signedIn = (token: string): SessionState => ({ status: 'signedIn', token, expiresAt: Date.now() + 60_000, profile: { subject: token, email: 'alumno@example.test', name: 'Alumno' } });
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -32,7 +32,7 @@ async function input(element: HTMLInputElement | HTMLTextAreaElement, value: str
 async function click(label: string) { const button = [...container.querySelectorAll('button')].find((entry) => entry.textContent === label)!; expect(button).toBeTruthy(); await act(async () => button.click()); }
 async function subjectWithMaterial() {
   const subjectId = source.getSnapshot().notes[0]!.subjectId;
-  const select = container.querySelector<HTMLSelectElement>('section[aria-label="Preparar material para IA"] select')!;
+  const select = container.querySelector<HTMLSelectElement>('section[aria-label="Preparar material para IA"] .ai-scope select')!;
   await act(async () => { select.value = subjectId; select.dispatchEvent(new Event('change', { bubbles: true })); });
 }
 
@@ -52,6 +52,22 @@ describe('Ajustes de BYOK y preparación de fuentes', () => {
     expect([...container.querySelectorAll('button')].some((button) => /Generar examen|Crear examen/.test(button.textContent ?? ''))).toBe(false);
     await input(container.querySelector('textarea')!, 'Otro tema');
     expect(container.textContent).not.toContain('Texto exacto preparado'); expect(container.textContent).toContain('Prepara el material nuevamente');
+  });
+
+  it('consulta BYOK y sus borradores en el Worker de IA aunque el API heredado tenga otra dirección', async () => {
+    auth.session = signedIn('one');
+    const network = vi.fn(async (url: string) => {
+      if (url.endsWith('/ai/status')) return Response.json(status);
+      if (url.endsWith('/ai/generations')) return Response.json([]);
+      return Response.json({ configured: false });
+    });
+    vi.stubGlobal('fetch', network);
+    await show(false);
+    const requests = network.mock.calls.map(([url]) => url);
+    expect(requests).toContain('https://api.example/ai/status');
+    expect(requests).toContain('https://api.example/ai/key');
+    expect(requests).toContain('https://api.example/ai/generations');
+    expect(requests.every((url) => url.startsWith('https://api.example/'))).toBe(true);
   });
 
   it('limpia el secreto al enviar, cancelar y cambiar la sesión; sigue operativo en StrictMode', async () => {
@@ -83,6 +99,7 @@ describe('Ajustes de BYOK y preparación de fuentes', () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string, options?: RequestInit) => {
       if (url.endsWith('/ai/status')) return Response.json(status);
       if (url.endsWith('/ai/key')) return Response.json({ configured: false });
+      if (url.endsWith('/ai/generations')) return Response.json([]);
       submitted = JSON.parse(String(options?.body)) as AiPrepareInput;
       // Server fixture uses decimal IDs; demo IDs are presentation-only in this test.
       const sample = { ...submitted, subjectId: '1', sources: submitted.sources.map((ref, index) => ({ ...ref, refId: String(index + 1) })) };

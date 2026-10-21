@@ -85,7 +85,9 @@ import InviteStudyRoomMemberReducer from "./invite_study_room_member_reducer";
 import JoinGroupReducer from "./join_group_reducer";
 import JoinStudyRoomReducer from "./join_study_room_reducer";
 import LeaveStudyRoomReducer from "./leave_study_room_reducer";
+import MarkAllNotificationsReadReducer from "./mark_all_notifications_read_reducer";
 import MarkConversationReadReducer from "./mark_conversation_read_reducer";
+import MarkNotificationReadReducer from "./mark_notification_read_reducer";
 import MarkSeenReducer from "./mark_seen_reducer";
 import OpenDirectConversationReducer from "./open_direct_conversation_reducer";
 import PublishNoteVersionReducer from "./publish_note_version_reducer";
@@ -98,10 +100,12 @@ import PutResourceChunkReducer from "./put_resource_chunk_reducer";
 import RecordPollDecisionReducer from "./record_poll_decision_reducer";
 import RefreshGuideSourceReducer from "./refresh_guide_source_reducer";
 import RefreshGuideSourceV3Reducer from "./refresh_guide_source_v_3_reducer";
+import RegisterPushInstallationReducer from "./register_push_installation_reducer";
 import RemoveChatCommandReducer from "./remove_chat_command_reducer";
 import RemoveGuideSourceReducer from "./remove_guide_source_reducer";
 import RemoveGuideSourceV3Reducer from "./remove_guide_source_v_3_reducer";
 import RemoveMemberReducer from "./remove_member_reducer";
+import RemovePushInstallationReducer from "./remove_push_installation_reducer";
 import RemoveResourceFileReducer from "./remove_resource_file_reducer";
 import RemoveStickerPackReducer from "./remove_sticker_pack_reducer";
 import RemoveStudyRoomMemberReducer from "./remove_study_room_member_reducer";
@@ -110,6 +114,7 @@ import ReopenQuestionReducer from "./reopen_question_reducer";
 import ReopenTeachingPracticeReducer from "./reopen_teaching_practice_reducer";
 import ReplaceSpacedCardSourceReducer from "./replace_spaced_card_source_reducer";
 import ReportMessageReducer from "./report_message_reducer";
+import RequestNotificationTestReducer from "./request_notification_test_reducer";
 import ResolveMessageReportReducer from "./resolve_message_report_reducer";
 import RespondHelpContactReducer from "./respond_help_contact_reducer";
 import RespondStudyRoomInvitationReducer from "./respond_study_room_invitation_reducer";
@@ -130,6 +135,7 @@ import SaveHelpPostReducer from "./save_help_post_reducer";
 import SaveMemberProfileReducer from "./save_member_profile_reducer";
 import SaveNoteReducer from "./save_note_reducer";
 import SaveNoteV2Reducer from "./save_note_v_2_reducer";
+import SaveNotificationPreferencesReducer from "./save_notification_preferences_reducer";
 import SavePresentationAttemptReducer from "./save_presentation_attempt_reducer";
 import SavePresentationFeedbackReducer from "./save_presentation_feedback_reducer";
 import SavePresentationPracticeReducer from "./save_presentation_practice_reducer";
@@ -150,7 +156,9 @@ import SetChatChannelArchivedReducer from "./set_chat_channel_archived_reducer";
 import SetConversationMutedReducer from "./set_conversation_muted_reducer";
 import SetFileServiceReducer from "./set_file_service_reducer";
 import SetHelpPostStatusReducer from "./set_help_post_status_reducer";
+import SetMaintenanceServiceReducer from "./set_maintenance_service_reducer";
 import SetMemberBlockedReducer from "./set_member_blocked_reducer";
+import SetNotificationServiceReducer from "./set_notification_service_reducer";
 import SetPresentationReviewerReducer from "./set_presentation_reviewer_reducer";
 import SetProgressReducer from "./set_progress_reducer";
 import SetResourceCapacityReducer from "./set_resource_capacity_reducer";
@@ -189,7 +197,9 @@ import * as AiDeleteKeyProcedure from "./ai_delete_key_procedure";
 import * as AiFinishGenerationProcedure from "./ai_finish_generation_procedure";
 import * as AiGetGenerationProcedure from "./ai_get_generation_procedure";
 import * as AiKeyStatusProcedure from "./ai_key_status_procedure";
+import * as AiListGenerationsProcedure from "./ai_list_generations_procedure";
 import * as AiPrepareProcedure from "./ai_prepare_procedure";
+import * as AiPublishGenerationProcedure from "./ai_publish_generation_procedure";
 import * as AiSetConsentProcedure from "./ai_set_consent_procedure";
 import * as AiStatusProcedure from "./ai_status_procedure";
 import * as AuthorizeFileUploadProcedure from "./authorize_file_upload_procedure";
@@ -199,7 +209,15 @@ import * as GetFileDownloadAccessProcedure from "./get_file_download_access_proc
 import * as GetFileUploadStatusProcedure from "./get_file_upload_status_procedure";
 import * as GetResourceManifestProcedure from "./get_resource_manifest_procedure";
 import * as GetResourceUploadStatusProcedure from "./get_resource_upload_status_procedure";
+import * as GetTrashClockProcedure from "./get_trash_clock_procedure";
 import * as GuideAiProcedure from "./guide_ai_procedure";
+import * as NotificationCommitRemindersProcedure from "./notification_commit_reminders_procedure";
+import * as NotificationReminderContextProcedure from "./notification_reminder_context_procedure";
+import * as NotificationsAuthorizeProcedure from "./notifications_authorize_procedure";
+import * as NotificationsClaimProcedure from "./notifications_claim_procedure";
+import * as NotificationsFinishProcedure from "./notifications_finish_procedure";
+import * as NotificationsSweepProcedure from "./notifications_sweep_procedure";
+import * as PurgeDueProcedure from "./purge_due_procedure";
 import * as ReadResourceChunkProcedure from "./read_resource_chunk_procedure";
 import * as ReadStickerBytesProcedure from "./read_sticker_bytes_procedure";
 import * as StudyRoomClockProcedure from "./study_room_clock_procedure";
@@ -241,12 +259,16 @@ import MyHelpRoomLinksRow from "./my_help_room_links_table";
 import MyLastSeenRow from "./my_last_seen_table";
 import MyMemberRow from "./my_member_table";
 import MyMessageReportsRow from "./my_message_reports_table";
+import MyNotificationPreferencesRow from "./my_notification_preferences_table";
+import MyNotificationsRow from "./my_notifications_table";
 import MyPresentationPersonalRow from "./my_presentation_personal_table";
 import MyProgressRow from "./my_progress_table";
+import MyPushInstallationsRow from "./my_push_installations_table";
 import MySpacedEnrollmentsRow from "./my_spaced_enrollments_table";
 import MySpacedProgressRow from "./my_spaced_progress_table";
 import MySpacedReviewsRow from "./my_spaced_reviews_table";
 import MyTeachingPersonalRow from "./my_teaching_personal_table";
+import MyTrashEntriesRow from "./my_trash_entries_table";
 import NoteCommentsRow from "./note_comments_table";
 import NoteDetailsRow from "./note_details_table";
 import NoteVersionsRow from "./note_versions_table";
@@ -543,6 +565,20 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyMessageReportsRow),
+  myNotificationPreferences: __table({
+    name: 'my_notification_preferences',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyNotificationPreferencesRow),
+  myNotifications: __table({
+    name: 'my_notifications',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyNotificationsRow),
   myPresentationPersonal: __table({
     name: 'my_presentation_personal',
     indexes: [
@@ -557,6 +593,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyProgressRow),
+  myPushInstallations: __table({
+    name: 'my_push_installations',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyPushInstallationsRow),
   mySpacedEnrollments: __table({
     name: 'my_spaced_enrollments',
     indexes: [
@@ -585,6 +628,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyTeachingPersonalRow),
+  myTrashEntries: __table({
+    name: 'my_trash_entries',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyTrashEntriesRow),
   noteComments: __table({
     name: 'note_comments',
     indexes: [
@@ -913,7 +963,9 @@ const reducersSchema = __reducers(
   __reducerSchema("join_group", JoinGroupReducer),
   __reducerSchema("join_study_room", JoinStudyRoomReducer),
   __reducerSchema("leave_study_room", LeaveStudyRoomReducer),
+  __reducerSchema("mark_all_notifications_read", MarkAllNotificationsReadReducer),
   __reducerSchema("mark_conversation_read", MarkConversationReadReducer),
+  __reducerSchema("mark_notification_read", MarkNotificationReadReducer),
   __reducerSchema("mark_seen", MarkSeenReducer),
   __reducerSchema("open_direct_conversation", OpenDirectConversationReducer),
   __reducerSchema("publish_note_version", PublishNoteVersionReducer),
@@ -926,10 +978,12 @@ const reducersSchema = __reducers(
   __reducerSchema("record_poll_decision", RecordPollDecisionReducer),
   __reducerSchema("refresh_guide_source", RefreshGuideSourceReducer),
   __reducerSchema("refresh_guide_source_v_3", RefreshGuideSourceV3Reducer),
+  __reducerSchema("register_push_installation", RegisterPushInstallationReducer),
   __reducerSchema("remove_chat_command", RemoveChatCommandReducer),
   __reducerSchema("remove_guide_source", RemoveGuideSourceReducer),
   __reducerSchema("remove_guide_source_v_3", RemoveGuideSourceV3Reducer),
   __reducerSchema("remove_member", RemoveMemberReducer),
+  __reducerSchema("remove_push_installation", RemovePushInstallationReducer),
   __reducerSchema("remove_resource_file", RemoveResourceFileReducer),
   __reducerSchema("remove_sticker_pack", RemoveStickerPackReducer),
   __reducerSchema("remove_study_room_member", RemoveStudyRoomMemberReducer),
@@ -938,6 +992,7 @@ const reducersSchema = __reducers(
   __reducerSchema("reopen_teaching_practice", ReopenTeachingPracticeReducer),
   __reducerSchema("replace_spaced_card_source", ReplaceSpacedCardSourceReducer),
   __reducerSchema("report_message", ReportMessageReducer),
+  __reducerSchema("request_notification_test", RequestNotificationTestReducer),
   __reducerSchema("resolve_message_report", ResolveMessageReportReducer),
   __reducerSchema("respond_help_contact", RespondHelpContactReducer),
   __reducerSchema("respond_study_room_invitation", RespondStudyRoomInvitationReducer),
@@ -958,6 +1013,7 @@ const reducersSchema = __reducers(
   __reducerSchema("save_member_profile", SaveMemberProfileReducer),
   __reducerSchema("save_note", SaveNoteReducer),
   __reducerSchema("save_note_v_2", SaveNoteV2Reducer),
+  __reducerSchema("save_notification_preferences", SaveNotificationPreferencesReducer),
   __reducerSchema("save_presentation_attempt", SavePresentationAttemptReducer),
   __reducerSchema("save_presentation_feedback", SavePresentationFeedbackReducer),
   __reducerSchema("save_presentation_practice", SavePresentationPracticeReducer),
@@ -978,7 +1034,9 @@ const reducersSchema = __reducers(
   __reducerSchema("set_conversation_muted", SetConversationMutedReducer),
   __reducerSchema("set_file_service", SetFileServiceReducer),
   __reducerSchema("set_help_post_status", SetHelpPostStatusReducer),
+  __reducerSchema("set_maintenance_service", SetMaintenanceServiceReducer),
   __reducerSchema("set_member_blocked", SetMemberBlockedReducer),
+  __reducerSchema("set_notification_service", SetNotificationServiceReducer),
   __reducerSchema("set_presentation_reviewer", SetPresentationReviewerReducer),
   __reducerSchema("set_progress", SetProgressReducer),
   __reducerSchema("set_resource_capacity", SetResourceCapacityReducer),
@@ -1019,7 +1077,9 @@ const proceduresSchema = __procedures(
   __procedureSchema("ai_finish_generation", AiFinishGenerationProcedure.params, AiFinishGenerationProcedure.returnType),
   __procedureSchema("ai_get_generation", AiGetGenerationProcedure.params, AiGetGenerationProcedure.returnType),
   __procedureSchema("ai_key_status", AiKeyStatusProcedure.params, AiKeyStatusProcedure.returnType),
+  __procedureSchema("ai_list_generations", AiListGenerationsProcedure.params, AiListGenerationsProcedure.returnType),
   __procedureSchema("ai_prepare", AiPrepareProcedure.params, AiPrepareProcedure.returnType),
+  __procedureSchema("ai_publish_generation", AiPublishGenerationProcedure.params, AiPublishGenerationProcedure.returnType),
   __procedureSchema("ai_set_consent", AiSetConsentProcedure.params, AiSetConsentProcedure.returnType),
   __procedureSchema("ai_status", AiStatusProcedure.params, AiStatusProcedure.returnType),
   __procedureSchema("authorize_file_upload", AuthorizeFileUploadProcedure.params, AuthorizeFileUploadProcedure.returnType),
@@ -1029,7 +1089,15 @@ const proceduresSchema = __procedures(
   __procedureSchema("get_file_upload_status", GetFileUploadStatusProcedure.params, GetFileUploadStatusProcedure.returnType),
   __procedureSchema("get_resource_manifest", GetResourceManifestProcedure.params, GetResourceManifestProcedure.returnType),
   __procedureSchema("get_resource_upload_status", GetResourceUploadStatusProcedure.params, GetResourceUploadStatusProcedure.returnType),
+  __procedureSchema("get_trash_clock", GetTrashClockProcedure.params, GetTrashClockProcedure.returnType),
   __procedureSchema("guide_ai", GuideAiProcedure.params, GuideAiProcedure.returnType),
+  __procedureSchema("notification_commit_reminders", NotificationCommitRemindersProcedure.params, NotificationCommitRemindersProcedure.returnType),
+  __procedureSchema("notification_reminder_context", NotificationReminderContextProcedure.params, NotificationReminderContextProcedure.returnType),
+  __procedureSchema("notifications_authorize", NotificationsAuthorizeProcedure.params, NotificationsAuthorizeProcedure.returnType),
+  __procedureSchema("notifications_claim", NotificationsClaimProcedure.params, NotificationsClaimProcedure.returnType),
+  __procedureSchema("notifications_finish", NotificationsFinishProcedure.params, NotificationsFinishProcedure.returnType),
+  __procedureSchema("notifications_sweep", NotificationsSweepProcedure.params, NotificationsSweepProcedure.returnType),
+  __procedureSchema("purge_due", PurgeDueProcedure.params, PurgeDueProcedure.returnType),
   __procedureSchema("read_resource_chunk", ReadResourceChunkProcedure.params, ReadResourceChunkProcedure.returnType),
   __procedureSchema("read_sticker_bytes", ReadStickerBytesProcedure.params, ReadStickerBytesProcedure.returnType),
   __procedureSchema("study_room_clock", StudyRoomClockProcedure.params, StudyRoomClockProcedure.returnType),
@@ -1093,10 +1161,16 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "my_member": Omit<typeof tablesSchema.schemaType.tables["myMember"], "accessorName"> & { readonly accessorName: "my_member" };
     /** @deprecated Use `myMessageReports` instead. This alias will be removed in the next major version. */
     readonly "my_message_reports": Omit<typeof tablesSchema.schemaType.tables["myMessageReports"], "accessorName"> & { readonly accessorName: "my_message_reports" };
+    /** @deprecated Use `myNotificationPreferences` instead. This alias will be removed in the next major version. */
+    readonly "my_notification_preferences": Omit<typeof tablesSchema.schemaType.tables["myNotificationPreferences"], "accessorName"> & { readonly accessorName: "my_notification_preferences" };
+    /** @deprecated Use `myNotifications` instead. This alias will be removed in the next major version. */
+    readonly "my_notifications": Omit<typeof tablesSchema.schemaType.tables["myNotifications"], "accessorName"> & { readonly accessorName: "my_notifications" };
     /** @deprecated Use `myPresentationPersonal` instead. This alias will be removed in the next major version. */
     readonly "my_presentation_personal": Omit<typeof tablesSchema.schemaType.tables["myPresentationPersonal"], "accessorName"> & { readonly accessorName: "my_presentation_personal" };
     /** @deprecated Use `myProgress` instead. This alias will be removed in the next major version. */
     readonly "my_progress": Omit<typeof tablesSchema.schemaType.tables["myProgress"], "accessorName"> & { readonly accessorName: "my_progress" };
+    /** @deprecated Use `myPushInstallations` instead. This alias will be removed in the next major version. */
+    readonly "my_push_installations": Omit<typeof tablesSchema.schemaType.tables["myPushInstallations"], "accessorName"> & { readonly accessorName: "my_push_installations" };
     /** @deprecated Use `mySpacedEnrollments` instead. This alias will be removed in the next major version. */
     readonly "my_spaced_enrollments": Omit<typeof tablesSchema.schemaType.tables["mySpacedEnrollments"], "accessorName"> & { readonly accessorName: "my_spaced_enrollments" };
     /** @deprecated Use `mySpacedProgress` instead. This alias will be removed in the next major version. */
@@ -1105,6 +1179,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "my_spaced_reviews": Omit<typeof tablesSchema.schemaType.tables["mySpacedReviews"], "accessorName"> & { readonly accessorName: "my_spaced_reviews" };
     /** @deprecated Use `myTeachingPersonal` instead. This alias will be removed in the next major version. */
     readonly "my_teaching_personal": Omit<typeof tablesSchema.schemaType.tables["myTeachingPersonal"], "accessorName"> & { readonly accessorName: "my_teaching_personal" };
+    /** @deprecated Use `myTrashEntries` instead. This alias will be removed in the next major version. */
+    readonly "my_trash_entries": Omit<typeof tablesSchema.schemaType.tables["myTrashEntries"], "accessorName"> & { readonly accessorName: "my_trash_entries" };
     /** @deprecated Use `noteComments` instead. This alias will be removed in the next major version. */
     readonly "note_comments": Omit<typeof tablesSchema.schemaType.tables["noteComments"], "accessorName"> & { readonly accessorName: "note_comments" };
     /** @deprecated Use `noteDetails` instead. This alias will be removed in the next major version. */
@@ -1215,12 +1291,16 @@ const tableAccessorAliases = {
   "my_last_seen": "myLastSeen",
   "my_member": "myMember",
   "my_message_reports": "myMessageReports",
+  "my_notification_preferences": "myNotificationPreferences",
+  "my_notifications": "myNotifications",
   "my_presentation_personal": "myPresentationPersonal",
   "my_progress": "myProgress",
+  "my_push_installations": "myPushInstallations",
   "my_spaced_enrollments": "mySpacedEnrollments",
   "my_spaced_progress": "mySpacedProgress",
   "my_spaced_reviews": "mySpacedReviews",
   "my_teaching_personal": "myTeachingPersonal",
+  "my_trash_entries": "myTrashEntries",
   "note_comments": "noteComments",
   "note_details": "noteDetails",
   "note_versions": "noteVersions",
@@ -1329,10 +1409,16 @@ export type DbView = __DbViewBase & {
   readonly "my_member": __DbViewBase["myMember"];
   /** @deprecated Use `myMessageReports` instead. This alias will be removed in the next major version. */
   readonly "my_message_reports": __DbViewBase["myMessageReports"];
+  /** @deprecated Use `myNotificationPreferences` instead. This alias will be removed in the next major version. */
+  readonly "my_notification_preferences": __DbViewBase["myNotificationPreferences"];
+  /** @deprecated Use `myNotifications` instead. This alias will be removed in the next major version. */
+  readonly "my_notifications": __DbViewBase["myNotifications"];
   /** @deprecated Use `myPresentationPersonal` instead. This alias will be removed in the next major version. */
   readonly "my_presentation_personal": __DbViewBase["myPresentationPersonal"];
   /** @deprecated Use `myProgress` instead. This alias will be removed in the next major version. */
   readonly "my_progress": __DbViewBase["myProgress"];
+  /** @deprecated Use `myPushInstallations` instead. This alias will be removed in the next major version. */
+  readonly "my_push_installations": __DbViewBase["myPushInstallations"];
   /** @deprecated Use `mySpacedEnrollments` instead. This alias will be removed in the next major version. */
   readonly "my_spaced_enrollments": __DbViewBase["mySpacedEnrollments"];
   /** @deprecated Use `mySpacedProgress` instead. This alias will be removed in the next major version. */
@@ -1341,6 +1427,8 @@ export type DbView = __DbViewBase & {
   readonly "my_spaced_reviews": __DbViewBase["mySpacedReviews"];
   /** @deprecated Use `myTeachingPersonal` instead. This alias will be removed in the next major version. */
   readonly "my_teaching_personal": __DbViewBase["myTeachingPersonal"];
+  /** @deprecated Use `myTrashEntries` instead. This alias will be removed in the next major version. */
+  readonly "my_trash_entries": __DbViewBase["myTrashEntries"];
   /** @deprecated Use `noteComments` instead. This alias will be removed in the next major version. */
   readonly "note_comments": __DbViewBase["noteComments"];
   /** @deprecated Use `noteDetails` instead. This alias will be removed in the next major version. */
@@ -1465,10 +1553,16 @@ export type Tables = __TablesBase & {
   readonly "my_member": __TablesBase["myMember"];
   /** @deprecated Use `myMessageReports` instead. This alias will be removed in the next major version. */
   readonly "my_message_reports": __TablesBase["myMessageReports"];
+  /** @deprecated Use `myNotificationPreferences` instead. This alias will be removed in the next major version. */
+  readonly "my_notification_preferences": __TablesBase["myNotificationPreferences"];
+  /** @deprecated Use `myNotifications` instead. This alias will be removed in the next major version. */
+  readonly "my_notifications": __TablesBase["myNotifications"];
   /** @deprecated Use `myPresentationPersonal` instead. This alias will be removed in the next major version. */
   readonly "my_presentation_personal": __TablesBase["myPresentationPersonal"];
   /** @deprecated Use `myProgress` instead. This alias will be removed in the next major version. */
   readonly "my_progress": __TablesBase["myProgress"];
+  /** @deprecated Use `myPushInstallations` instead. This alias will be removed in the next major version. */
+  readonly "my_push_installations": __TablesBase["myPushInstallations"];
   /** @deprecated Use `mySpacedEnrollments` instead. This alias will be removed in the next major version. */
   readonly "my_spaced_enrollments": __TablesBase["mySpacedEnrollments"];
   /** @deprecated Use `mySpacedProgress` instead. This alias will be removed in the next major version. */
@@ -1477,6 +1571,8 @@ export type Tables = __TablesBase & {
   readonly "my_spaced_reviews": __TablesBase["mySpacedReviews"];
   /** @deprecated Use `myTeachingPersonal` instead. This alias will be removed in the next major version. */
   readonly "my_teaching_personal": __TablesBase["myTeachingPersonal"];
+  /** @deprecated Use `myTrashEntries` instead. This alias will be removed in the next major version. */
+  readonly "my_trash_entries": __TablesBase["myTrashEntries"];
   /** @deprecated Use `noteComments` instead. This alias will be removed in the next major version. */
   readonly "note_comments": __TablesBase["noteComments"];
   /** @deprecated Use `noteDetails` instead. This alias will be removed in the next major version. */
@@ -1589,4 +1685,3 @@ export class DbConnection extends __DbConnectionImpl<typeof REMOTE_MODULE> {
     return new SubscriptionBuilder(this);
   };
 }
-

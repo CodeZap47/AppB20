@@ -52,6 +52,7 @@ export class DemoAcademicStore {
   private pages: PageSnapshot[] = [];
   private blobs = new Map<Id, Blob>();
   private urls = new Set<string>();
+  private purgedTargets = new Set<string>();
 
   constructor(private ctx: Context) {}
 
@@ -388,6 +389,24 @@ export class DemoAcademicStore {
       const blob = this.blobs.get(file.id); if (blob) this.blobs.set(id, blob);
     }
     return aliases;
+  }
+
+  purgeTargets(targets: ReadonlySet<string>, externalReferences: ReadonlySet<Id>) {
+    for (const key of targets) this.purgedTargets.add(key);
+    const keep = (kind: string, id: Id) => !targets.has(`${kind}:${id}`);
+    this.workHistory = this.workHistory.filter((row) => keep('work', row.workId));
+    this.reviews = this.reviews.filter((row) => keep('work', row.workId));
+    this.comments = this.comments.filter((row) => keep(row.targetKind, row.targetId));
+    this.links = this.links.filter((row) => keep(row.targetKind, row.targetId));
+    this.pages = this.pages.map((row) => ({ ...row, noteIds: row.noteIds.filter((id) => keep('note', id)) }));
+    const references = new Set([...externalReferences, ...this.workHistory.flatMap((row) => row.attachmentIds), ...this.pages.flatMap((row) => row.attachmentIds)]);
+    const resources = this.resources(); const token = (id: Id) => `(resource:${id})`;
+    for (const file of resources) if (this.ctx.state().notes.some((note) => note.body.includes(token(file.id)))) references.add(file.id);
+    for (const file of resources) if (this.purgedTargets.has(`${file.targetKind}:${file.targetId}`) && !references.has(file.id)) this.blobs.delete(file.id);
+    this.files = this.files.filter((file) => !this.purgedTargets.has(`${file.targetKind}:${file.targetId}`) || references.has(file.id)).map((file) => this.purgedTargets.has(`${file.targetKind}:${file.targetId}`) ? { ...file, name: 'Archivo conservado por referencia', uploadedBy: '' } : file);
+    this.ctx.state().workFiles = this.ctx.state().workFiles.filter((file) => !this.purgedTargets.has(`work:${file.workId}`) || references.has(`legacy:${file.id}`));
+    const keptUrls = new Set(this.files.map((file) => file.url));
+    for (const url of this.urls) if (!keptUrls.has(url)) { URL.revokeObjectURL?.(url); this.urls.delete(url); }
   }
 
   dispose() {

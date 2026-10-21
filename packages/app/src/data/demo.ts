@@ -136,7 +136,9 @@ import { DemoChatStore } from './demoChat';
 import { DemoKnowledgeStore } from './demoKnowledge';
 import { saveDemoMemberProfile } from './communityDemo';
 import { emptyDelivery2 } from './delivery2Snapshot';
-import { buildDemoContributionOrigins } from './demoContributionOrigins';
+import { DemoTrashStore } from './demoTrash';
+import { DemoNotificationsStore } from './demoNotifications';
+import { emptyNotifications, type NotificationActions, type NotificationKind } from './notificationTypes';
 import { DemoRoomsStore, demoRoomExamples } from './demoRooms';
 import { emptyStudyRooms, type StudyRoomActions, type StudyRoomsSnapshot } from './roomTypes';
 
@@ -251,6 +253,10 @@ export class DemoDataSource implements DataSource {
   #chat: DemoChatStore;
   #knowledge: DemoKnowledgeStore;
   #rooms: DemoRoomsStore;
+  #trash: DemoTrashStore;
+  #notifications: DemoNotificationsStore;
+  #batchDepth = 0;
+  #batchChanged = false;
   #guideAi: DemoGuideAiStore;
   #exams: DemoExamStore;
   #profiles: MemberProfile[] = [];
@@ -278,6 +284,9 @@ export class DemoDataSource implements DataSource {
     this.#chat = new DemoChatStore({ state: () => this.#state, active: () => this.#activeMember(), id: () => this.#id(), now: () => this.#now(), emit: () => this.#emit(), validateText: (text, me) => this.#messageText(text, me) });
     this.#knowledge = new DemoKnowledgeStore({ state: () => this.#state, active: () => this.#activeMember(), id: () => this.#id(), now: () => this.#now(), emit: () => this.#emit(),
       files: () => this.#academic.resources(), restoreFiles: (kind, id, ids) => this.#academic.restoreFiles(kind, id, ids), copyFiles: (from, to) => this.#academic.copyFiles(from, to) });
+    this.#trash = new DemoTrashStore({ state: () => this.#state, active: () => this.#activeMember(), now: () => this.#now(), emit: () => this.#emit(), resources: () => this.#academic.resources(),
+      purgePrivate: (targets) => { const references = this.#knowledge.purgeTargets(targets); this.#academic.purgeTargets(targets, references); this.#exams?.purgeTargets(targets); } });
+    this.#notifications = new DemoNotificationsStore({ state: () => this.#state, active: () => this.#activeMember(), current: () => this.getSnapshot(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit() });
     this.#rooms = new DemoRoomsStore({ state: () => this.#state, active: () => this.#activeMember(), id: () => this.#id(), now: () => this.#now(), emit: () => this.#emit(),
       sourceAvailable: (kind, sourceId) => !this.#withdrawals.get(`${kind}:${sourceId}`)?.withdrawnAt });
     this.#exams = new DemoExamStore({ snapshot: () => this.getSnapshot(), now: () => this.#now() }, this.#state);
@@ -300,6 +309,17 @@ export class DemoDataSource implements DataSource {
     return this.#viewerId;
   }
 
+  saveNotificationPreferences = (...args: Parameters<NotificationActions['saveNotificationPreferences']>) => this.#notifications.saveNotificationPreferences(...args);
+  markNotificationRead = (...args: Parameters<NotificationActions['markNotificationRead']>) => this.#notifications.markNotificationRead(...args);
+  markAllNotificationsRead = () => this.#notifications.markAllNotificationsRead();
+  registerPushInstallation = (...args: Parameters<NotificationActions['registerPushInstallation']>) => this.#notifications.registerPushInstallation(...args);
+  removePushInstallation = (...args: Parameters<NotificationActions['removePushInstallation']>) => this.#notifications.removePushInstallation(...args);
+  requestNotificationTest = () => this.#notifications.requestNotificationTest();
+  async getTrashClock(): Promise<Date> {
+    this.#activeMember();
+    if (this.#trash.purgeDue()) { for (const key of this.#trash.purgedKeys()) this.#withdrawals.delete(key); this.#emit(); }
+    return this.#now();
+  }
   getGuideAiStatus = () => this.#guideAi.getGuideAiStatus();
   examAction: ExamActions['examAction'] = (request) => this.#exams.examAction(request);
   prepareExamMaterial = (...args: Parameters<ExamActions['prepareExamMaterial']>) => this.#exams.prepareExamMaterial(...args);
@@ -346,6 +366,11 @@ export class DemoDataSource implements DataSource {
   }
 
   getSnapshot(): Snapshot {
+    if (!this.#disposed && this.#trash.purgeDue()) {
+      for (const key of this.#trash.purgedKeys()) this.#withdrawals.delete(key);
+      this.#snapshot = undefined;
+      queueMicrotask(() => { if (!this.#disposed) this.#emit(); });
+    }
     this.#snapshot ??= this.#buildSnapshot();
     return this.#snapshot;
   }
@@ -362,6 +387,7 @@ export class DemoDataSource implements DataSource {
     this.#guideAi.dispose();
     this.#exams.dispose();
     this.#chat.dispose();
+    this.#notifications.dispose();
     this.#profiles = [];
     sharedDemoListeners.get(this.#state)?.delete(this.#invalidate);
     this.#listeners.clear();
@@ -379,6 +405,8 @@ export class DemoDataSource implements DataSource {
     const me = s.members.find((m) => m.id === this.#viewerId);
     if (me?.status !== 'active') {
       return {
+        ...emptyNotifications(),
+        trashEntries: [],
         ...emptyPresentationsSnapshot(),
         ...emptyStudyRooms(),
         ...emptyDelivery2(),
@@ -454,6 +482,8 @@ export class DemoDataSource implements DataSource {
       ),
     );
     const base: Snapshot = {
+      ...emptyNotifications(),
+      trashEntries: [],
       ...emptyStudyRooms(),
       ...emptyDelivery2(),
       ...this.#presentations.snapshot(me.id),
@@ -527,13 +557,30 @@ export class DemoDataSource implements DataSource {
       }
       return true;
     });
-    combined.contributionOrigins = buildDemoContributionOrigins(s, this.#academic.resources(), combined);
+    combined.contributionOrigins = this.#trash.contributionOrigins(this.#academic.resources(), combined);
+    combined.trashEntries = this.#trash.snapshot(me.id);
     combined.guideAiSourceAvailability = this.#guideAi.sourceAvailability(combined);
-    return { ...combined, ...this.#rooms.snapshot(me.id) };
+    const result = { ...combined, ...this.#rooms.snapshot(me.id) };
+    return { ...result, ...this.#notifications.snapshot(result) };
   }
 
   #emit() {
+    if (this.#batchDepth) { this.#batchChanged = true; this.#snapshot = undefined; return; }
     for (const invalidate of sharedDemoListeners.get(this.#state) ?? []) invalidate();
+  }
+
+  #batch<T>(task: () => T): T {
+    this.#batchDepth++;
+    try { return task(); }
+    finally { if (--this.#batchDepth === 0 && this.#batchChanged) { this.#batchChanged = false; this.#emit(); } }
+  }
+
+  #announce(kind: NotificationKind, sourceKind: string, sourceId: Id, route: string, recipientIds?: Id[], suffix = '1') {
+    this.#batch(() => {
+      this.#notifications.emit({ eventKey: `${kind}:${sourceKind}:${sourceId}:${suffix}`, kind, sourceKind, sourceId, route,
+        recipientIds: recipientIds ?? this.#state.members.filter((member) => member.status === 'active').map((member) => member.id), actorId: this.#viewerId });
+      this.#emit();
+    });
   }
 
   #id(): Id {
@@ -571,6 +618,7 @@ export class DemoDataSource implements DataSource {
   #canReadResource(kind: string, id: Id): boolean {
     const me = this.#state.members.find((member) => member.id === this.#viewerId);
     if (me?.status !== 'active') return false;
+    if (this.#trash.blocksRead(kind, id)) return false;
     if (kind === 'assignment') return this.#state.assignments.some((row) => row.id === id);
     if (kind === 'activity') return this.#state.activities.some((row) => row.id === id);
     const row = this.#contentRow(kind, id); if (!row) return false;
@@ -612,6 +660,7 @@ export class DemoDataSource implements DataSource {
     this.#profiles = [...this.#profiles.filter((profile) => profile.memberId !== me.id), next]; this.#emit(); return next.id;
   }
   withdrawContent(kind: WithdrawableKind, targetId: Id, withdrawn: boolean, expectedVersion: number, reason = '') {
+    if (!withdrawn) this.#trash.assertRestorable(kind, targetId);
     const me = this.#activeMember(); const row = this.#contentRow(kind, targetId);
     const authors = this.#contentAuthors(kind, targetId); const own = authors.includes(me.id);
     if (!row || !authors.length || !this.#canReadResource(kind, targetId) || (!own && !me.isCreator)) throw new Error('Solo sus autores o un administrador pueden retirar este contenido.');
@@ -629,6 +678,7 @@ export class DemoDataSource implements DataSource {
     else if (kind === 'evidence') this.#academic.capturePage('activity', (row as Evidence).activityId);
     else this.#captureExtra(kind, targetId);
     this.#withdrawals.set(`${kind}:${targetId}`, { withdrawnAt: withdrawn ? this.#now() : undefined, withdrawnBy: withdrawn ? me.id : undefined, reason: withdrawn ? cleaned : '' });
+    this.#trash.record(kind, targetId, withdrawn);
     if (kind === 'work') { this.#state.works = this.#state.works.map((work) => work.id === targetId ? { ...work, version: work.version + 1, updatedAt: this.#now() } : work); this.#academic.captureWork(targetId); this.#emit(); }
     else if (kind === 'evidence') { this.#state.evidences = this.#state.evidences.map((evidence) => evidence.id === targetId ? { ...evidence, version: (evidence.version ?? 1) + 1 } : evidence); this.#academic.evidenceChanged((row as Evidence).activityId); }
     else this.#changedExtra(kind, targetId);
@@ -935,7 +985,7 @@ export class DemoDataSource implements DataSource {
       body: next.instructions,
       dueDate: next.dueDate,
     });
-    this.#emit();
+    if (current.dueDate !== next.dueDate) this.#announce('due_change', 'assignment', assignmentId, `/m/tareas/${assignmentId}`, undefined, String(next.version)); else this.#emit();
   }
 
   publishWork(input: PublishWorkInput): Id {
@@ -966,7 +1016,7 @@ export class DemoDataSource implements DataSource {
     };
     this.#state.works = [...this.#state.works, work];
     this.#academic.captureWork(work.id);
-    this.#emit();
+    if (work.status === 'final') this.#announce('work', 'work', work.id, `/m/tareas/${work.assignmentId}?trabajo=${work.id}`); else this.#emit();
     return work.id;
   }
 
@@ -978,7 +1028,11 @@ export class DemoDataSource implements DataSource {
   }
 
   setProgress(kind: ProgressTargetKind, id: Id, status: ProgressStatus) { return this.#academic.setProgress(kind, id, status); }
-  saveWorkVersion(id: Id, input: WorkVersionInput, expectedVersion: number) { return this.#academic.saveWorkVersion(id, input, expectedVersion); }
+  saveWorkVersion(id: Id, input: WorkVersionInput, expectedVersion: number) { return this.#batch(() => {
+    const work = this.#state.works.find((row) => row.id === id); const wasDraft = work?.status === 'draft';
+    this.#academic.saveWorkVersion(id, input, expectedVersion);
+    if (work && wasDraft && input.status === 'final') this.#announce('work', 'work', id, `/m/tareas/${work.assignmentId}?trabajo=${id}`);
+  }); }
   restoreWorkVersion(id: Id, version: number, expectedVersion: number) { return this.#academic.restoreWorkVersion(id, version, expectedVersion); }
   reviewWork(id: Id, expectedVersion: number, comment: string) { return this.#academic.reviewWork(id, expectedVersion, comment); }
   commentAcademic(kind: 'work' | 'evidence', id: Id, value: string) { return this.#academic.commentAcademic(kind, id, value); }
@@ -1002,8 +1056,8 @@ export class DemoDataSource implements DataSource {
 
   createChatChannel(input: CreateChatChannelInput) { return this.#chat.createChatChannel(input); }
   setChatChannelArchived(id: Id, archived: boolean) { return this.#chat.setChatChannelArchived(id, archived); }
-  sendChannelMessage(id: Id, text: string, replyToId?: Id) { return this.#chat.sendChannelMessage(id, text, replyToId); }
-  markConversationRead(scope: MessageScope, conversationId: Id, messageId: Id) { return this.#chat.markConversationRead(scope, conversationId, messageId); }
+  sendChannelMessage(id: Id, text: string, replyToId?: Id) { return this.#batch(() => { const messageId = this.#chat.sendChannelMessage(id, text, replyToId); this.#notifications.notifyMessage('channel', messageId); return messageId; }); }
+  markConversationRead(scope: MessageScope, conversationId: Id, messageId: Id) { return this.#batch(() => { this.#chat.markConversationRead(scope, conversationId, messageId); this.#notifications.suppressConversationNotifications(scope, conversationId); }); }
   setConversationMuted(scope: MessageScope, conversationId: Id, muted: boolean) { return this.#chat.setConversationMuted(scope, conversationId, muted); }
   setMemberBlocked(memberId: Id, blocked: boolean) { return this.#chat.setMemberBlocked(memberId, blocked); }
   reportMessage(input: ReportMessageInput) { return this.#chat.reportMessage(input); }
@@ -1067,6 +1121,7 @@ export class DemoDataSource implements DataSource {
   }
 
   sendGroupMessage(text: string, replyToId?: Id): Id {
+    return this.#batch(() => {
     const me = this.#activeMember();
     const message: GroupMessage = {
       id: this.#id(),
@@ -1077,7 +1132,9 @@ export class DemoDataSource implements DataSource {
     };
     this.#state.groupMessages = [...this.#state.groupMessages, message];
     this.#emit();
+    this.#notifications.notifyMessage('group', message.id);
     return message.id;
+      });
   }
 
   openDirectConversation(otherId: Id): Id {
@@ -1096,6 +1153,7 @@ export class DemoDataSource implements DataSource {
   }
 
   sendDirectMessage(conversationId: Id, text: string, replyToId?: Id): Id {
+    return this.#batch(() => {
     const me = this.#activeMember();
     const conversation = this.#state.directConversations.find((c) => c.id === conversationId);
     if (!conversation || !canReadDirectConversation(me.id, conversation.participantIds)) {
@@ -1112,7 +1170,9 @@ export class DemoDataSource implements DataSource {
     };
     this.#state.directMessages = [...this.#state.directMessages, message];
     this.#emit();
+    this.#notifications.notifyMessage('direct', message.id);
     return message.id;
+      });
   }
 
   editMessage(scope: MessageScope, messageId: Id, text: string) {
@@ -1334,7 +1394,7 @@ export class DemoDataSource implements DataSource {
       summary: next.objective,
       body: next.instructions,
     });
-    this.#emit();
+    if (current.date !== next.date) this.#announce('due_change', 'activity', activityId, `/m/actividades/${activityId}`, undefined, String(next.version)); else this.#emit();
   }
 
   addEvidence(activityId: Id, content: string, participantIds: Id[]): Id {
@@ -1416,7 +1476,7 @@ export class DemoDataSource implements DataSource {
       createdAt: this.#now(),
     };
     this.#state.answers = [...this.#state.answers, answer];
-    this.#emit();
+    this.#announce('answer', 'answer', answer.id, `/m/preguntas/${questionId}`, [this.#state.questions.find((question) => question.id === questionId)!.authorId]);
     return answer.id;
   }
 
@@ -1558,7 +1618,7 @@ export class DemoDataSource implements DataSource {
     this.#state.guides = [...this.#state.guides, guide];
     this.#addSources(guide, sources, me.id);
     this.#knowledge.captureGuide(guide.id, me.id);
-    this.#emit();
+    this.#announce('guide', 'guide', guide.id, `/m/guias/${guide.id}`);
     return guide.id;
   }
 

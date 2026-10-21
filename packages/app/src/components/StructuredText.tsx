@@ -4,10 +4,10 @@ import type { ResourceFile } from '../data/types';
 import './StructuredText.css';
 
 function inline(text: string): ReactNode[] {
-  return text.split(/(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\(https?:\/\/[^\s<>]+\)|https?:\/\/[^\s<>]+)/g).map((part, index) => {
+  return text.split(/(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\((?:https?:\/\/|#\/m\/|#\/perfil\/)[^\s<>]+\)|https?:\/\/[^\s<>]+)/g).map((part, index) => {
     if (part.startsWith('`') && part.endsWith('`')) return <code key={index}>{part.slice(1, -1)}</code>;
     if (part.startsWith('**') && part.endsWith('**')) return <strong key={index}>{part.slice(2, -2)}</strong>;
-    const named = /^\[([^\]]+)\]\((https?:\/\/[^\s<>]+)\)$/.exec(part);
+    const named = /^\[([^\]]+)\]\(((?:https?:\/\/|#\/m\/|#\/perfil\/)[^\s<>]+)\)$/.exec(part);
     if (named) return <a key={index} href={named[2]} target="_blank" rel="noopener noreferrer">{named[1]}</a>;
     if (/^https?:\/\//.test(part)) {
       const href = part.replace(/[.,;:!?\])}]+$/, '');

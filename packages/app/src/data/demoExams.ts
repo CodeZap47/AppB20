@@ -5,7 +5,7 @@ import { aiCandidateKey, aiSourceCandidates } from '../lib/aiSources';
 import type { Snapshot } from './types';
 import type { ExamActions, ExamActionResponse } from './examTypes';
 interface Context { snapshot(): Snapshot; now(): Date }
-interface Version { draft: ExamDraft; sourceRevisions: Record<string, string> }
+interface Version { draft: ExamDraft; sourceRevisions: Record<string, string>; purgedQuestionIds?: string[] }
 interface StoredExam { summary: ExamSummary; versions: Map<number, Version> }
 interface StoredAttempt { actor: string; version: Version; exam: StoredExam; value: ExamAttempt; order: ReturnType<typeof examAttemptOrder>; requests: Map<string, string> }
 interface Prepared { actor: string; preparation: AiPreparation; sourceRevisions: Record<string, string> }
@@ -21,9 +21,9 @@ export class DemoExamStore implements ExamActions {
   private actor() { const me = this.ctx.snapshot().me; if (me?.status !== 'active') throw new Error('Necesitas acceso vigente al grupo.'); return me.id; }
   private now() { return this.ctx.now().getTime(); }
   private issues(version: Version): ExamSourceIssue[] { const data = this.ctx.snapshot(); const input = version.draft.preparation; const candidates = data.subjects.flatMap((subject) => aiSourceCandidates(data, subject.id));
-    return input.sources.flatMap<ExamSourceIssue>((ref) => { const candidate = candidates.find((row) => aiCandidateKey(row) === aiCandidateKey(ref));
-      if (!candidate || (ref.visibility === 'group' && candidate.personal)) return [{ kind: ref.kind, refId: ref.refId, state: 'unavailable' as const, message: 'Una fuente fue retirada o dejó de estar disponible.' }];
-      return candidate.revision !== version.sourceRevisions[aiCandidateKey(ref)] ? [{ kind: ref.kind, refId: ref.refId, state: 'outdated' as const, message: 'La fuente cambió después de preparar esta versión.' }] : []; }); }
+    return [...(version.purgedQuestionIds?.length ? [{ kind: 'exam', refId: version.draft.examId, state: 'unavailable' as const, message: 'Un material de esta versión fue eliminado definitivamente.' }] : []), ...input.sources.flatMap<ExamSourceIssue>((ref) => { const candidate = candidates.find((row) => aiCandidateKey(row) === aiCandidateKey(ref));
+      if (ref.status === 'unauthorized' || !candidate || (ref.visibility === 'group' && candidate.personal)) return [{ kind: ref.kind, refId: ref.refId, state: 'unavailable' as const, message: 'Una fuente fue retirada o dejó de estar disponible.' }];
+      return candidate.revision !== version.sourceRevisions[aiCandidateKey(ref)] ? [{ kind: ref.kind, refId: ref.refId, state: 'outdated' as const, message: 'La fuente cambió después de preparar esta versión.' }] : []; })]; }
   private access(examId: string, edit = false) { const actor = this.actor(); const exam = this.exams.get(examId); if (!exam || (exam.summary.ownerId !== actor && (edit || exam.summary.visibility !== 'group' || !exam.summary.readyVersion))) throw new Error('El examen no existe o no tienes acceso.'); return exam; }
   private version(exam: StoredExam, number: number) { const version = exam.versions.get(number); if (!version) throw new Error('La versión no está disponible.'); return version; }
   private readable(version: Version) { if (this.issues(version).some((issue) => issue.state === 'unavailable')) throw new Error('Una fuente ya no está disponible. Su texto y las preguntas se ocultaron.'); }
@@ -65,7 +65,7 @@ export class DemoExamStore implements ExamActions {
     stored.value.result = scoreExam(stored.version.draft.questions, Object.fromEntries(stored.value.answers.map((answer) => [answer.questionId, answer.optionId]))); stored.value.revision++; }
   private attemptDetail(stored: StoredAttempt): ExamAttempt { const issues = this.issues(stored.version); const unavailableRefs = new Set(issues.filter((issue) => issue.state === 'unavailable').map((issue) => `${issue.kind}:${issue.refId}`)); const mayReadExam = stored.exam.summary.ownerId === this.actor() || stored.exam.summary.visibility === 'group';
     const questions = stored.order.map((order) => { const question = stored.version.draft.questions.find((entry) => entry.id === order.questionId)!; const answer = stored.value.answers.find((entry) => entry.questionId === question.id);
-      const unavailable = !mayReadExam || !question.citations.every((citation) => stored.version.draft.preparation.fragments.find((fragment) => fragment.id === citation)?.origins.some((origin) => !unavailableRefs.has(aiCandidateKey(origin))));
+      const unavailable = !mayReadExam || stored.version.purgedQuestionIds?.includes(question.id) || !question.citations.every((citation) => stored.version.draft.preparation.fragments.find((fragment) => fragment.id === citation)?.origins.some((origin) => !unavailableRefs.has(aiCandidateKey(origin))));
       if (unavailable) return { id: question.id, type: question.type, text: '', topic: '', options: [], unavailable: true };
       return { id: question.id, type: question.type, text: question.text, topic: question.topic, options: order.optionIds.map((id) => question.options.find((entry) => entry.id === id)!),
         ...(stored.value.state === 'closed' || (stored.value.mode === 'practice' && answer?.confirmed) ? { solution: { correctOptionId: question.correctOptionId, explanation: question.explanation, citations: stored.version.draft.preparation.fragments.filter((fragment) => question.citations.includes(fragment.id)).map((fragment) => ({ ...fragment, origins: fragment.origins.filter((origin) => !unavailableRefs.has(aiCandidateKey(origin))) })) } } : {}) }; });
@@ -136,6 +136,27 @@ export class DemoExamStore implements ExamActions {
       version.draft.questions = questions; if (full) { version.draft.preparation = preparation; version.draft.config = config; version.draft.hasPersonalSources = preparation.sources.some((source) => source.visibility === 'personal'); version.sourceRevisions = generation.sourceRevisions; exam.summary.topics = preparation.topics; } generation.importedExamId = exam.summary.id; return this.changed(exam); }
     if (request.action === 'approveVersion') { if (version.draft.questions.some((question) => question.issue) || request.reviewedQuestionIds.length !== version.draft.questions.length || version.draft.questions.some((question) => !request.reviewedQuestionIds.includes(question.id))) throw new Error('Revisa todas las preguntas y corrige sus avisos antes de aprobar.'); validateAiQuestionDraft({ questions: version.draft.questions }, version.draft.preparation, version.draft.config); this.readable(version); version.draft.state = 'ready'; version.draft.approvedAt = this.now(); exam.summary.readyVersion = request.version; exam.summary.draftVersion = undefined; if (version.draft.hasPersonalSources) exam.summary.visibility = 'personal'; exam.summary.title = version.draft.title; exam.summary.topics = version.draft.preparation.topics; return this.changed(exam); }
     throw new Error('Acción no disponible.');
+  }
+  /** Remove copied text when the original reaches its definitive retention purge. */
+  purgeTargets(targets: ReadonlySet<string>) {
+    const touches = (preparation: AiPreparation) => preparation.sources.some((source) => targets.has(aiCandidateKey(source)) || source.origins.some((origin) => targets.has(aiCandidateKey(origin)))) || preparation.fragments.some((fragment) => fragment.origins.some((origin) => targets.has(aiCandidateKey(origin))));
+    for (const [id, row] of this.prepared) if (touches(row.preparation)) this.prepared.delete(id);
+    for (const [id, row] of this.generated) if (touches(row.preparation)) this.generated.delete(id);
+    const purgeVersion = (version: Version) => {
+      const preparation = version.draft.preparation; if (!touches(preparation)) return;
+      const affectedSources = preparation.sources.filter((source) => targets.has(aiCandidateKey(source)) || source.origins.some((origin) => targets.has(aiCandidateKey(origin))));
+      const removed = new Set([...affectedSources.flatMap((source) => source.fragmentIds), ...preparation.fragments.filter((fragment) => fragment.origins.some((origin) => targets.has(aiCandidateKey(origin)))).map((fragment) => fragment.id)]);
+      version.draft.questions = version.draft.questions.map((question) => {
+        if (!question.citations.some((id) => removed.has(id))) return question;
+        version.purgedQuestionIds = [...new Set([...(version.purgedQuestionIds ?? []), question.id])];
+        return { ...question, text: '', options: question.options.map((option) => ({ id: option.id, text: '' })), explanation: '', citations: [], issue: undefined };
+      });
+      preparation.fragments = preparation.fragments.filter((fragment) => !removed.has(fragment.id));
+      preparation.sources = preparation.sources.map((source) => ({ ...source, ...(targets.has(aiCandidateKey(source)) || source.origins.some((origin) => targets.has(aiCandidateKey(origin))) ? { title: 'Fuente eliminada', status: 'unauthorized' as const, reason: 'El material original fue eliminado definitivamente.', origins: [] } : {}), fragmentIds: source.fragmentIds.filter((id) => !removed.has(id)) }));
+      preparation.canGenerate = false;
+    };
+    for (const exam of this.exams.values()) for (const version of exam.versions.values()) purgeVersion(version);
+    for (const attempt of this.attempts.values()) purgeVersion(attempt.version);
   }
   dispose() { if (this.shared && --this.shared.references > 0) return; this.prepared.clear(); this.generated.clear(); this.exams.clear(); this.attempts.clear(); this.requests.clear(); }
 }

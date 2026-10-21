@@ -9,7 +9,7 @@ import type { ExamActionRequest, ExamAttempt, ExamDetail, ExamDraft, ExamSummary
 import { encryptAiKey } from '../apps/api/src/ai/crypto';
 
 interface Baseline { subjectId: string; noteId: string; guideId: string; noteBody: string; guideTitle: string }
-interface Options { address: string; database: string; tokens: string[]; baseline?: Baseline; restart(): Promise<void> }
+interface Options { address: string; database: string; tokens: string[]; baseline?: Baseline; baselineRef?: string; restart(): Promise<void> }
 const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 function clients(options: Pick<Options, 'address' | 'database'>) {
   const open = new Set<DbConnection>();
@@ -77,7 +77,7 @@ export async function runSmoke(options: Options) {
       const oldGuide = [...author.db.studyGuides.iter()].find((row) => String(row.id) === baseline.guideId)!;
       assert.equal(oldGuide.title, baseline.guideTitle); assert.equal(oldGuide.version, 1);
       assert.equal(oldGuide.sections[0], 'Contenido manual existente.');
-      checks.push('migración aditiva desde ff98cc8 conserva IDs, notas, guías manuales y versiones con delete-data=never');
+      checks.push(`migración aditiva desde ${options.baselineRef ?? 'el bundle indicado'} conserva IDs, notas, guías manuales y versiones con delete-data=never`);
     }
     await author.reducers.createSubject({ name: 'Synthetic EX-2', period: 1 });
     const subjectId = [...author.db.subjects.iter()].find((row) => row.name === 'Synthetic EX-2')!.id;
@@ -105,12 +105,18 @@ export async function runSmoke(options: Options) {
     assert.equal(JSON.parse(await peer.procedures.aiKeyStatus({ payload: '{}' })).configured, false);
     const generationResults = new Map<string, AiQuestionDraft>(); let syntheticProviderCalls = 0;
     const generate = async (noteId: bigint | bigint[], questionCount = 2) => {
-      const config: AiGenerationConfig = { questionCount, types: questionCount === 1 ? ['single'] : ['single', 'boolean'], difficulty: 'basic', topicWeights: [{ topic: 'Ciclos', weight: 1 }] };
+      const config: AiGenerationConfig = { purpose: 'questions', questionCount, types: questionCount === 1 ? ['single'] : ['single', 'boolean'], difficulty: 'basic', topicWeights: [{ topic: 'Ciclos', weight: 1 }] };
       const preparation = JSON.parse(await author.procedures.aiPrepare({ payload: JSON.stringify({ id: randomUUID(), subjectId: String(subjectId), termId: String(termId),
         topics: ['Ciclos'], sources: (Array.isArray(noteId) ? noteId : [noteId]).map((id) => ({ kind: 'note', refId: String(id), topics: ['Ciclos'], includeUnplaced: false })), config, model: 'synthetic-no-network' }) })) as AiPreparation;
+      assert.equal(preparation.canGenerate, true);
+      assert.deepEqual(preparation.config, config, 'la preparación conserva el propósito y el plano de Exámenes');
+      assert.ok(preparation.estimatedInputTokens > 0 && preparation.estimatedOutputTokens > 0);
       const generationId = randomUUID();
       await author.procedures.aiAuthorizeGeneration({ payload: JSON.stringify({ id: generationId, preparationId: preparation.id, fingerprint: preparation.fingerprint, config, model: preparation.model, confirmed: true, allowNew: true }) });
       const claimed = JSON.parse(await service.procedures.aiClaimGeneration({ payload: JSON.stringify({ id: generationId, actor }) })); assert.equal(claimed.claimed, true);
+      assert.deepEqual(claimed.config, config);
+      assert.equal(claimed.preparation.fingerprint, preparation.fingerprint);
+      assert.equal(claimed.preparation.model, 'synthetic-no-network');
       const citations = preparation.fragments.map((fragment) => fragment.id);
       const result: AiQuestionDraft = { questions: [{ id: 'loop', type: 'single', text: 'QUESTION_LOOP_SENTINEL: ¿qué hace un ciclo?',
         options: [{ id: 'a', text: 'Repite instrucciones' }, { id: 'b', text: 'Borra todo' }, { id: 'c', text: 'Cierra la app' }, { id: 'd', text: 'Envía correo' }],
@@ -291,7 +297,7 @@ export async function runSmoke(options: Options) {
     const publicHistory = JSON.stringify([...owner.db.changeHistory.iter()], (_key, value: unknown) => typeof value === 'bigint' ? value.toString() : value);
     assert.ok(!publicHistory.includes(examId) && !publicHistory.includes(practiceId) && !publicHistory.includes(timedId));
     checks.push('retirada bloquea intentos nuevos y redacta preguntas, explicación y citas históricas sin recalificar; baja revoca acceso y acciones privadas no llegan al historial público');
-    return { checks, migrationRehearsed: !!options.baseline, syntheticProviderCalls, realGeminiCalls: 0,
+    return { checks, migrationRehearsed: !!options.baseline, ...(options.baseline ? { baselineRef: options.baselineRef ?? 'provided bundle' } : {}), syntheticProviderCalls, realGeminiCalls: 0,
       persistedQuestionFingerprint: createHash('sha256').update(JSON.stringify(generationResults.get(groupGenerationId))).digest('hex') };
   } finally { pool.close(); }
 }

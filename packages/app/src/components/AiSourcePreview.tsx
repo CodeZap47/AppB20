@@ -24,7 +24,7 @@ export function AiSourcePreview({ preparation }: { preparation: AiPreparation })
     <ul>{preparation.sources.map((source) => <li key={`${source.kind}:${source.refId}`}>{source.title} · {AI_SOURCE_LABELS[source.kind]} · v{source.version} · {STATUS_LABEL[source.status]}
       {source.visibility === 'personal' ? ' · Personal propia' : ''}{source.reason ? ` · ${source.reason}` : ''}</li>)}</ul>
     <h4>Omisiones y revisión</h4>
-    <p className="field__hint">Se excluyen adjuntos, comentarios, chats, progreso, metadatos personales y contenido de enlaces externos. Revisa los fragmentos: los patrones automáticos no detectan todos los datos sensibles.</p>
+    <p className="field__hint">Se leen adjuntos UTF8 compatibles de hasta 256 KiB. Los formatos omitidos se indican abajo. Se excluyen comentarios, chats, progreso, metadatos personales y contenido de enlaces externos. Revisa los fragmentos: los patrones automáticos no detectan todos los datos sensibles.</p>
     {preparation.omissions.length ? <ul>{preparation.omissions.map((omission, index) => <li key={index}>{omission}</li>)}</ul> : <p>No se registraron otras omisiones.</p>}
     <h4>Texto exacto preparado</h4>
     {preparation.fragments.map((fragment) => <details key={fragment.id} className="ai-fragment" open>
@@ -33,6 +33,6 @@ export function AiSourcePreview({ preparation }: { preparation: AiPreparation })
       <pre>{fragment.text}</pre>
     </details>)}
     {!preparation.fragments.length && <p>No hay fragmentos preparados.</p>}
-    <p role="status">{expired ? 'Preparación vencida.' : preparation.canGenerate ? 'Material listo para revisar y confirmar.' : 'El material requiere revisión antes de poder generar preguntas.'}</p>
+    <p role="status">{expired ? 'Preparación vencida.' : preparation.canGenerate ? 'Material listo para confirmar la generación con tu clave personal.' : 'El material requiere revisión antes de poder generar el borrador.'}</p>
   </div>;
 }

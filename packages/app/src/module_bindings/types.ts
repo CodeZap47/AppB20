@@ -124,6 +124,15 @@ export const AiPreparation = __t.object("AiPreparation", {
 });
 export type AiPreparation = __Infer<typeof AiPreparation>;
 
+export const AiPublication = __t.object("AiPublication", {
+  generationId: __t.string(),
+  actor: __t.identity(),
+  targetKind: __t.string(),
+  targetId: __t.u64(),
+  createdAt: __t.timestamp(),
+});
+export type AiPublication = __Infer<typeof AiPublication>;
+
 export const AiReservation = __t.object("AiReservation", {
   id: __t.string(),
   actor: __t.identity(),
@@ -273,6 +282,18 @@ export const ChatCommand = __t.object("ChatCommand", {
 });
 export type ChatCommand = __Infer<typeof ChatCommand>;
 
+export const ContentRetention = __t.object("ContentRetention", {
+  key: __t.string(),
+  kind: __t.string(),
+  targetId: __t.u64(),
+  generation: __t.u32(),
+  withdrawnAt: __t.timestamp(),
+  expiresAt: __t.timestamp(),
+  state: __t.string(),
+  purgedAt: __t.option(__t.timestamp()),
+});
+export type ContentRetention = __Infer<typeof ContentRetention>;
+
 export const ContentStatus = __t.object("ContentStatus", {
   key: __t.string(),
   kind: __t.string(),
@@ -297,6 +318,14 @@ export type ContributionOrigin = __Infer<typeof ContributionOrigin>;
 
 export const ContributionOrigins = __t.object("ContributionOrigins", {});
 export type ContributionOrigins = __Infer<typeof ContributionOrigins>;
+
+export const ContributionTombstone = __t.object("ContributionTombstone", {
+  fingerprint: __t.string(),
+  kind: __t.string(),
+  canonicalId: __t.u64(),
+  creditedAt: __t.timestamp(),
+});
+export type ContributionTombstone = __Infer<typeof ContributionTombstone>;
 
 export const ConversationState = __t.object("ConversationState", {
   key: __t.string(),
@@ -614,6 +643,12 @@ export const LastSeen = __t.object("LastSeen", {
 });
 export type LastSeen = __Infer<typeof LastSeen>;
 
+export const MaintenanceService = __t.object("MaintenanceService", {
+  id: __t.u32(),
+  identity: __t.identity(),
+});
+export type MaintenanceService = __Infer<typeof MaintenanceService>;
+
 export const Member = __t.object("Member", {
   identity: __t.identity(),
   displayName: __t.string(),
@@ -712,11 +747,20 @@ export type MyMember = __Infer<typeof MyMember>;
 export const MyMessageReports = __t.object("MyMessageReports", {});
 export type MyMessageReports = __Infer<typeof MyMessageReports>;
 
+export const MyNotificationPreferences = __t.object("MyNotificationPreferences", {});
+export type MyNotificationPreferences = __Infer<typeof MyNotificationPreferences>;
+
+export const MyNotifications = __t.object("MyNotifications", {});
+export type MyNotifications = __Infer<typeof MyNotifications>;
+
 export const MyPresentationPersonal = __t.object("MyPresentationPersonal", {});
 export type MyPresentationPersonal = __Infer<typeof MyPresentationPersonal>;
 
 export const MyProgress = __t.object("MyProgress", {});
 export type MyProgress = __Infer<typeof MyProgress>;
+
+export const MyPushInstallations = __t.object("MyPushInstallations", {});
+export type MyPushInstallations = __Infer<typeof MyPushInstallations>;
 
 export const MySpacedEnrollments = __t.object("MySpacedEnrollments", {});
 export type MySpacedEnrollments = __Infer<typeof MySpacedEnrollments>;
@@ -729,6 +773,9 @@ export type MySpacedReviews = __Infer<typeof MySpacedReviews>;
 
 export const MyTeachingPersonal = __t.object("MyTeachingPersonal", {});
 export type MyTeachingPersonal = __Infer<typeof MyTeachingPersonal>;
+
+export const MyTrashEntries = __t.object("MyTrashEntries", {});
+export type MyTrashEntries = __Infer<typeof MyTrashEntries>;
 
 export const Note = __t.object("Note", {
   id: __t.u64(),
@@ -802,6 +849,98 @@ export type NoteVersions = __Infer<typeof NoteVersions>;
 
 export const Notes = __t.object("Notes", {});
 export type Notes = __Infer<typeof Notes>;
+
+export const Notification = __t.object("Notification", {
+  id: __t.u64(),
+  memberId: __t.identity(),
+  dedupeKey: __t.string(),
+  kind: __t.string(),
+  title: __t.string(),
+  route: __t.string(),
+  sourceKind: __t.string(),
+  sourceId: __t.string(),
+  conversationScope: __t.string(),
+  conversationId: __t.string(),
+  messageId: __t.option(__t.u64()),
+  actor: __t.option(__t.identity()),
+  createdAt: __t.timestamp(),
+  readAt: __t.option(__t.timestamp()),
+  reminderDay: __t.string(),
+});
+export type Notification = __Infer<typeof Notification>;
+
+export const NotificationDelivery = __t.object("NotificationDelivery", {
+  id: __t.string(),
+  notificationId: __t.u64(),
+  installationId: __t.string(),
+  memberId: __t.identity(),
+  status: __t.string(),
+  attempts: __t.u32(),
+  nextAttemptAt: __t.timestamp(),
+  leaseId: __t.string(),
+  leaseUntil: __t.option(__t.timestamp()),
+  installationUpdatedAt: __t.option(__t.timestamp()),
+});
+export type NotificationDelivery = __Infer<typeof NotificationDelivery>;
+
+export const NotificationEvent = __t.object("NotificationEvent", {
+  key: __t.string(),
+  kind: __t.string(),
+  route: __t.string(),
+  sourceKind: __t.string(),
+  sourceId: __t.string(),
+  recipientIds: __t.array(__t.identity()),
+  cursor: __t.u32(),
+  actor: __t.option(__t.identity()),
+  conversationScope: __t.string(),
+  conversationId: __t.string(),
+  messageId: __t.option(__t.u64()),
+  createdAt: __t.timestamp(),
+  completed: __t.bool(),
+});
+export type NotificationEvent = __Infer<typeof NotificationEvent>;
+
+export const NotificationInstallationSummary = __t.object("NotificationInstallationSummary", {
+  id: __t.string(),
+  label: __t.string(),
+  enabled: __t.bool(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type NotificationInstallationSummary = __Infer<typeof NotificationInstallationSummary>;
+
+export const NotificationPlannerState = __t.object("NotificationPlannerState", {
+  id: __t.u32(),
+  lastMember: __t.string(),
+});
+export type NotificationPlannerState = __Infer<typeof NotificationPlannerState>;
+
+export const NotificationPreference = __t.object("NotificationPreference", {
+  memberId: __t.identity(),
+  timeZone: __t.string(),
+  enabledKinds: __t.array(__t.string()),
+  pushEnabled: __t.bool(),
+  quietStartMinute: __t.u32(),
+  quietEndMinute: __t.u32(),
+  reminderMinute: __t.u32(),
+  version: __t.u32(),
+  updatedAt: __t.timestamp(),
+});
+export type NotificationPreference = __Infer<typeof NotificationPreference>;
+
+export const NotificationReminderCursor = __t.object("NotificationReminderCursor", {
+  memberId: __t.identity(),
+  day: __t.string(),
+  updatedAt: __t.timestamp(),
+});
+export type NotificationReminderCursor = __Infer<typeof NotificationReminderCursor>;
+
+export const NotificationServiceConfig = __t.object("NotificationServiceConfig", {
+  id: __t.u32(),
+  identity: __t.identity(),
+  enabled: __t.bool(),
+});
+export type NotificationServiceConfig = __Infer<typeof NotificationServiceConfig>;
 
 export const PageRevision = __t.object("PageRevision", {
   id: __t.u64(),
@@ -992,6 +1131,25 @@ export type PresentationQuestion = __Infer<typeof PresentationQuestion>;
 export const PresentationQuestions = __t.object("PresentationQuestions", {});
 export type PresentationQuestions = __Infer<typeof PresentationQuestions>;
 
+export const PurgeResult = __t.object("PurgeResult", {
+  processed: __t.u32(),
+  remaining: __t.u32(),
+});
+export type PurgeResult = __Infer<typeof PurgeResult>;
+
+export const PushInstallation = __t.object("PushInstallation", {
+  id: __t.string(),
+  memberId: __t.identity(),
+  label: __t.string(),
+  endpoint: __t.string(),
+  p256Dh: __t.string(),
+  auth: __t.string(),
+  enabled: __t.bool(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type PushInstallation = __Infer<typeof PushInstallation>;
+
 export const Question = __t.object("Question", {
   id: __t.u64(),
   subjectId: __t.u64(),
@@ -1124,6 +1282,24 @@ export type ResourceVersion = __Infer<typeof ResourceVersion>;
 
 export const ResourceVersions = __t.object("ResourceVersions", {});
 export type ResourceVersions = __Infer<typeof ResourceVersions>;
+
+export const RetentionAudit = __t.object("RetentionAudit", {
+  id: __t.u64(),
+  key: __t.string(),
+  generation: __t.u32(),
+  action: __t.string(),
+  actorRole: __t.string(),
+  at: __t.timestamp(),
+});
+export type RetentionAudit = __Infer<typeof RetentionAudit>;
+
+export const RetentionExpiry = __t.object("RetentionExpiry", {
+  id: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  key: __t.string(),
+  generation: __t.u32(),
+});
+export type RetentionExpiry = __Infer<typeof RetentionExpiry>;
 
 export const RoomEntries = __t.object("RoomEntries", {});
 export type RoomEntries = __Infer<typeof RoomEntries>;
@@ -1456,6 +1632,17 @@ export type TermDates = __Infer<typeof TermDates>;
 export const Terms = __t.object("Terms", {});
 export type Terms = __Infer<typeof Terms>;
 
+export const TrashEntry = __t.object("TrashEntry", {
+  kind: __t.string(),
+  targetId: __t.u64(),
+  withdrawnAt: __t.timestamp(),
+  expiresAt: __t.timestamp(),
+  state: __t.string(),
+  canRestore: __t.bool(),
+  version: __t.u32(),
+});
+export type TrashEntry = __Infer<typeof TrashEntry>;
+
 export const VersionGuideSource = __t.object("VersionGuideSource", {
   kind: __t.string(),
   refId: __t.u64(),
@@ -1550,4 +1737,3 @@ export type WorkRevisions = __Infer<typeof WorkRevisions>;
 
 export const Works = __t.object("Works", {});
 export type Works = __Infer<typeof Works>;
-

@@ -31,6 +31,10 @@ import type { Delivery2Actions, ChatChannel, ChannelMessage, ConversationState, 
   MemberProfile, NoteVersion, GuideVersion, QuestionComment, AnswerUsefulness, QuestionLink } from './delivery2Types';
 export type * from './delivery2Types';
 import type { StudyRoomActions, StudyRoomsSnapshot } from './roomTypes';
+import type { NotificationActions, NotificationsSnapshot } from './notificationTypes';
+import type { TrashActions, TrashEntry } from './trashTypes';
+export type * from './trashTypes';
+export type * from './notificationTypes';
 export type * from './roomTypes';
 import type { GuideAiActions } from './guideAiTypes';
 export type * from './guideAiTypes';
@@ -700,7 +704,8 @@ export interface PollVote {
 }
 
 /** Lo que el usuario actual puede ver, igual que las vistas del servidor. */
-export interface Snapshot extends StudyRoomsSnapshot, PresentationsSnapshot {
+export interface Snapshot extends StudyRoomsSnapshot, NotificationsSnapshot, PresentationsSnapshot {
+  trashEntries: TrashEntry[];
   contributionOrigins: { kind: OriginContributionKind; refId: Id; memberId: Id; creditedAt: Date; duplicateOf?: Id }[];
   chatChannels: ChatChannel[];
   channelMessages: ChannelMessage[];
@@ -810,7 +815,7 @@ export interface PublishWorkInput {
 export type MaybePromise<T> = T | Promise<T>;
 
 /** Acciones: corresponden uno a uno con los reducers del módulo. */
-export interface Actions extends Delivery2Actions, StudyRoomActions, PresentationActions, GuideAiActions, ExamActions {
+export interface Actions extends Delivery2Actions, StudyRoomActions, NotificationActions, TrashActions, PresentationActions, GuideAiActions, ExamActions {
   replaceSpacedCardSource(cardId: Id, expectedVersion: number, sourceKind: SpacedSourceKind, sourceId: Id): MaybePromise<void>;
   saveSpacedCollection(input: SpacedCollectionInput): MaybePromise<Id>;
   publishSpacedCollection(collectionId: Id, expectedVersion: number): MaybePromise<void>;

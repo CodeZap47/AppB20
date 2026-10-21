@@ -8,6 +8,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { InstallPage } from './pages/InstallPage';
 import { DirectThread, GroupThread, ChannelThread, MessagesLayout, ThreadPlaceholder } from './pages/MessagesPage';
 import { RetiredContentPage } from './pages/RetiredContentPage';
+import { NotificationsPage } from './pages/NotificationsPage';
 import { CommandsPage, StickersPage } from './pages/ChatToolsPage';
 import {
   AssignmentFormPage,
@@ -83,6 +84,7 @@ const router = createHashRouter([
           { path: 'm/tareas/:assignmentId/subir', element: <SubmitWorkPage /> },
           { path: 'm/perfiles', element: <ProfilesPage /> },
           { path: 'm/retirados', element: <RetiredContentPage /> },
+          { path: 'm/avisos', element: <NotificationsPage /> },
           { path: 'perfil/:memberId', element: <ProfilePage /> },
           { path: 'm/cumpleanos', element: <BirthdaysPage /> },
           { path: 'm/actividades', element: <ActivitiesPage /> },

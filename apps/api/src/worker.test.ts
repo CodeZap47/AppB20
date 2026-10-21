@@ -91,7 +91,7 @@ function upload(body = 'hola', extra: Record<string, string> = {}, query = '') {
 }
 
 describe('Worker de archivos en el runtime real de Cloudflare y R2 local', () => {
-  it('arranca sin claves Gemini ni GCP y exige sesión para IA', async () => {
+  it('arranca sin claves Gemini ni GCP y protege las rutas IA con autenticación', async () => {
     expect(await (await mf.dispatchFetch('https://files.example.test/health')).json()).toEqual({ ok: true, files: 'r2', ai: false });
     expect((await mf.dispatchFetch('https://files.example.test/ai/key')).status).toBe(401);
   });

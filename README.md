@@ -36,9 +36,10 @@ Hay dos modos de datos, ambos con inicio de sesión:
 - **`spacetime`:** datos persistentes, invitaciones y permisos de membresía. Es el modo previsto
   en la configuración de producción; su disponibilidad debe comprobarse con la versión publicada.
 
-**Gemini está deshabilitado y pendiente de integración.** Se prevé utilizar claves personales
-(BYOK, «trae tu propia clave»), con consentimiento y control del consumo. También están
-pendientes los avisos, recordatorios y notificaciones push completos.
+La [tercera entrega](docs/tercera-entrega.md) incorpora localmente Gemini con claves personales
+(BYOK), borradores privados y publicación expresa; bandeja de avisos, recordatorios y Web Push;
+y papelera con recuperación durante 30 días. La generación y los envíos externos empiezan
+desactivados: requieren configuración, autorización individual y validación en dispositivos reales.
 
 La [matriz de estado](docs/estado-del-proyecto.md) detalla lo implementado, lo pendiente y
 la evidencia necesaria para cerrar cada entrega.
@@ -56,19 +57,22 @@ primera versión sin IA que también requiere comprobación con cuentas reales.
 | **Mensajes** | Canal general y canales de materia/tema/proyecto, directos con adjuntos privados, menciones, lectura, silencio, bloqueo y reportes selectivos; stickers nativos de SpacetimeDB. |
 | **Notas de clase** | Editor estructurado, sesión y parcial, relaciones, adjuntos e historial recuperable. Publicar una nota personal crea una copia independiente para el grupo. |
 | **Preguntas y respuestas** | Adjuntos privados, aclaraciones, utilidad por integrante y enlaces a notas/guías compartidas; aceptación y reapertura. |
-| **Guías de estudio** | Manual: fuentes, cobertura, revisiones e historial recuperable con archivos y autoría. Extracción y borradores con Gemini siguen pendientes. |
+| **Guías de estudio** | Fuentes, cobertura, revisiones e historial recuperable; borradores privados con Gemini y publicación expresa. Se extrae texto UTF8 compatible de adjuntos; los formatos no admitidos se muestran como omisiones. |
 | **Ayuda entre compañeros** | **Manual.** Ofertas y solicitudes de ayuda, contactos privados y conversación al aceptar el contacto. Pendiente de validación real. |
 | **Aprende enseñando** | **Manual.** Explicaciones, preguntas de un compañero invitado, reflexión privada y publicación voluntaria de una nota. Pendiente de validación real y asistencia con IA. |
-| **Repaso espaciado** | **Manual.** Colecciones, tarjetas, cola de repaso e historial privado. Pendientes la validación real, los recordatorios y los borradores con Gemini. |
+| **Repaso espaciado** | **Manual.** Colecciones, tarjetas, cola e historial privado, con recordatorios integrados localmente. Los borradores de tarjetas con Gemini y Exámenes siguen para una entrega posterior. |
+| **Exposiciones** | Ensayos por texto, preguntas, observaciones privadas y revisor voluntario. Audio y generación con Gemini siguen pendientes. |
 | **Votaciones y contribuciones** | Votaciones nominales con participantes elegibles y reglas de cierre; puntos con reglas y desglose de aportes. Falta validar con datos reales y acordar la puntuación con el grupo. |
-| **Perfiles y cumpleaños** | Presentación voluntaria, foto privada bajo demanda, portafolio, materias y archivo de trabajos; calendario mensual/anual. Recordatorios pendientes. |
+| **Perfiles y cumpleaños** | Presentación voluntaria, foto privada bajo demanda, portafolio y archivo de trabajos; calendario mensual/anual y recordatorios con preferencias y zona horaria, pendientes de activación y validación real. |
+| **Avisos y papelera** | Bandeja privada, lectura y Web Push configurable; recuperación de contenido retirado antes de 30 días y purga programada con limpieza de referencias y bytes sin uso. |
 | **¿Qué me perdí?** | Novedades de materiales, guías, votaciones abiertas, ayuda y repaso compartido; lectura de chats separada. Excluye contenido privado y retirado. |
 
 Salas de estudio está implementada y probada localmente sin IA: acceso abierto o privado,
 materiales, chat, temporizador y resumen. Consulta [su documentación](docs/salas-de-estudio.md).
 
-Retos, revisión de código, museo de bugs, oportunidades, microproyectos,
-simulador de exposiciones, préstamos y lenguaje de señales pertenecen al alcance futuro.
+Retos, revisión de código, museo de bugs, oportunidades, microproyectos
+y préstamos pertenecen al alcance futuro. El módulo 3.11,
+Lenguaje de señales, conserva su alcance y corresponde a la entrega 5.
 Consulta la [definición del proyecto](docs/definicion-del-proyecto.md) para conocer su propósito.
 
 ## Segunda entrega: colaboración
@@ -79,6 +83,19 @@ aclaraciones y utilidad en preguntas, perfiles con fotos privadas, calendario an
 Los retiros conservan archivos y versiones; el ranking excluye borradores, retirados y duplicados.
 Consulta el [alcance y la validación de la segunda entrega](docs/segunda-entrega.md).
 
+## Tercera entrega: IA, avisos y conservación
+
+Gemini BYOK usa claves cifradas por persona en SpacetimeDB y una clave maestra en Cloudflare
+Secrets. La vista previa muestra fuentes, versiones y omisiones antes de confirmar el envío;
+las guías y explicaciones quedan privadas hasta su publicación expresa. La bandeja de avisos
+funciona sin push, y el Worker añade planificación y entrega Web Push cuando se configure.
+La papelera conserva contenido durante 30 días y después elimina los datos dependientes,
+respetando las copias publicadas independientes y los archivos que todavía estén referenciados.
+
+Los recorridos locales usan una base real aislada e identidades sintéticas. No implican
+publicación en producción ni envío real a Gemini o dispositivos. Consulta el
+[índice de la tercera entrega](docs/tercera-entrega.md) para conocer el alcance y sus límites.
+
 ## Plataformas
 
 Las tres presentaciones comparten la interfaz React y el modelo de datos; cada una necesita
@@ -86,7 +103,7 @@ su configuración de acceso y sus comprobaciones antes de distribuirse.
 
 | Plataforma | Estado |
 | --- | --- |
-| **Web y PWA** | Compilación web/PWA disponible y alojamiento previsto en Cloudflare Pages. La instalación y las actualizaciones deben comprobarse en dispositivos reales, incluido iPhone; Web Push sigue pendiente. |
+| **Web y PWA** | Compilación web/PWA disponible y alojamiento previsto en Cloudflare Pages. La instalación y las actualizaciones deben comprobarse en dispositivos reales, incluido iPhone; Web Push está implementado localmente y requiere configuración y pruebas de recepción real. |
 | **Extensión de Chrome** | Manifest V3, panel lateral y vista completa incluidos. La compilación puede cargarse descomprimida para desarrollo; acceso, actualizaciones y distribución requieren validación. |
 | **Android** | Proyecto Capacitor que reutiliza la web. El comando de compilación prepara y sincroniza el proyecto; generar, firmar y distribuir el APK requiere pasos adicionales y pruebas en Android. El push con la app cerrada está pendiente. |
 
@@ -101,9 +118,10 @@ su configuración de acceso y sus comprobaciones antes de distribuirse.
 | Web/PWA y alojamiento | [`apps/web`](apps/web) y Cloudflare Pages. |
 | Extensión y Android | [`apps/extension`](apps/extension) con Manifest V3 y [`apps/android`](apps/android) con Capacitor. |
 
-Cloudflare Workers queda como complemento para integraciones posteriores. La ruta heredada
-de archivos en R2 se conserva por compatibilidad; las instalaciones nuevas guardan los archivos
-en SpacetimeDB. Los detalles están en la [arquitectura](docs/arquitectura.md).
+Cloudflare Workers ejecuta el cifrado BYOK, las llamadas autorizadas a Gemini y la planificación
+y entrega de avisos. La ruta heredada de archivos en R2 se conserva por compatibilidad;
+las instalaciones nuevas guardan los archivos en SpacetimeDB. Los detalles están en la
+[arquitectura](docs/arquitectura.md).
 
 ## Primeros pasos
 
@@ -168,7 +186,7 @@ y reinicia la web. El inicio de sesión y la membresía son requisitos distintos
 | --- | --- |
 | `npm run typecheck` | Revisa los tipos de los paquetes. |
 | `npm test` | Ejecuta las pruebas automatizadas. |
-| `npm run build` | Compila web, extensión y API de compatibilidad. |
+| `npm run build` | Compila web, extensión y Worker de API e integraciones. |
 | `npm run build:pages` | Genera la web para Cloudflare Pages. |
 | `npm run build:extension` | Genera `apps/extension/dist` para cargarla desde `chrome://extensions` con «Cargar descomprimida». |
 | `npm run build:android` | Compila la web y sincroniza Capacitor. Abre Android Studio con `npm run open -w @b20/android` para continuar con el APK. |
@@ -179,6 +197,8 @@ Para publicar servicios y configurar producción, sigue la [guía de despliegue]
 
 - [Definición del proyecto](docs/definicion-del-proyecto.md): propósito y alcance funcional.
 - [Estado del proyecto](docs/estado-del-proyecto.md): avances, pendientes y validaciones registradas.
+- [Segunda entrega](docs/segunda-entrega.md): colaboración y presentación del grupo.
+- [Tercera entrega](docs/tercera-entrega.md): Gemini BYOK, avisos y papelera de 30 días.
 - [Arquitectura](docs/arquitectura.md): componentes, datos y permisos.
 - [Autenticación y acceso](docs/spacetimeauth.md): clientes, retornos e invitaciones.
 - [Tareas y Actividades](docs/tareas-actividades.md): consignas, trabajos, evidencias e historial.

@@ -40,12 +40,12 @@ export interface AiStatus {
   limits: AiLimits; consentVersion: string; consented: boolean; serviceConfigured?: boolean;
 }
 export type AiGenerationState = 'prepared' | 'running' | 'succeeded' | 'failed' | 'unknown';
-export interface AiGenerationConfig { questionCount: number; types: ('single' | 'boolean')[]; difficulty: 'basic' | 'intermediate' | 'advanced'; topicWeights?: { topic: string; weight: number }[] }
+export interface AiGenerationConfig { purpose?: 'guide' | 'explanation' | 'questions'; questionCount: number; types: ('single' | 'boolean')[]; difficulty: 'basic' | 'intermediate' | 'advanced'; topicWeights?: { topic: string; weight: number }[] }
 export const AI_DEFAULT_GENERATION_CONFIG: AiGenerationConfig = { questionCount: 10, types: ['single', 'boolean'], difficulty: 'intermediate' };
 export interface AiGenerationRequest { id: string; preparationId: string; fingerprint: string; config: AiGenerationConfig; confirmed: boolean; acknowledgeUnknown?: boolean }
 export interface AiGeneration {
   id: string; state: AiGenerationState; preparationId: string; createdAt: number; updatedAt?: number;
-  result?: unknown; error?: string; estimatedTokens?: number; usage?: { inputTokens: number; outputTokens: number };
+  result?: unknown; preparation?: AiPreparation; error?: string; estimatedTokens?: number; usage?: { inputTokens: number; outputTokens: number };
 }
 export const aiSourceKey = (source: Pick<AiSourceOrigin, 'kind' | 'refId'>) => `${source.kind}:${source.refId}`;
 export function aiCanonical(value: unknown): string {
@@ -155,6 +155,7 @@ export function validateAiGenerationConfig(value: unknown): AiGenerationConfig {
   if (!aiRecord(value) || !Number.isInteger(value.questionCount) || Number(value.questionCount) < 1 || Number(value.questionCount) > AI_LIMITS.maxQuestions ||
     !Array.isArray(value.types) || !value.types.length || value.types.length > 2 || value.types.some((t) => t !== 'single' && t !== 'boolean') ||
     !['basic', 'intermediate', 'advanced'].includes(String(value.difficulty))) throw new AiError('invalid', 'La configuración de preguntas no es válida.');
+  if (value.purpose !== undefined && !['guide', 'explanation', 'questions'].includes(String(value.purpose))) throw new AiError('invalid', 'El tipo de borrador no es válido.');
   let topicWeights: AiGenerationConfig['topicWeights'];
   if (value.topicWeights !== undefined) {
     if (!Array.isArray(value.topicWeights) || !value.topicWeights.length || value.topicWeights.length > 40) throw new AiError('invalid', 'Revisa los pesos del temario.');
@@ -164,7 +165,7 @@ export function validateAiGenerationConfig(value: unknown): AiGenerationConfig {
     });
     if (new Set(topicWeights.map((item) => item.topic)).size !== topicWeights.length || !topicWeights.some((item) => item.weight > 0)) throw new AiError('invalid', 'Los pesos no pueden repetirse ni ser todos cero.');
   }
-  return { questionCount: Number(value.questionCount), types: [...new Set(value.types as ('single' | 'boolean')[])], difficulty: value.difficulty as AiGenerationConfig['difficulty'], ...(topicWeights ? { topicWeights } : {}) };
+  return { ...(value.purpose ? { purpose: value.purpose as AiGenerationConfig['purpose'] } : {}), questionCount: Number(value.questionCount), types: [...new Set(value.types as ('single' | 'boolean')[])], difficulty: value.difficulty as AiGenerationConfig['difficulty'], ...(topicWeights ? { topicWeights } : {}) };
 }
 
 export function aiTopicDistribution(topics: readonly string[], count: number, weights?: readonly { topic: string; weight: number }[]) {

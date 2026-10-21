@@ -286,6 +286,7 @@ export function GuidePage() {
         <div>
           <p className="eyebrow">{placeLabel(guide, data)}</p>
           <h1>{guide.title}</h1>
+          {!guide.withdrawnAt && <Link className="button secondary" to={`/ajustes?aiSource=guide:${guide.id}&purpose=guide`}>Crear borrador con Gemini</Link>}
           <p className="muted">
             Versión {guide.version} · guardada por {memberName(data.members, guide.updatedBy)} ·{' '}
             {formatTime(guide.updatedAt)}

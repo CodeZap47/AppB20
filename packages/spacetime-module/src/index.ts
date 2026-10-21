@@ -30,9 +30,13 @@ import { roomsTables, studyRoom, roomMember, roomMaterial, roomEntry, roomTimer,
 import * as rooms from './roomsHandlers';
 import * as nativeStickers from './nativeStickersHandlers';
 import { aiTables } from './aiTables';
+import * as ai from './aiHandlers';
+import { notificationTables, notification, notificationPreference } from './notificationTables';
+import * as notifications from './notificationHandlers';
+import { trashTables } from './trashTables';
+import * as trash from './trashHandlers';
 import { guideAiTables } from './guideAiTables';
 import { guideAiResponse, guideAiSourceAvailability } from './guideAiHandlers';
-import * as ai from './aiHandlers';
 import { examTables } from './examTables';
 import { examResponse } from './examHandlers';
 
@@ -776,15 +780,20 @@ const resourceCapacity = table({ name: 'resource_capacity' }, {
 const resourceExpiry = table({ name: 'resource_expiry' }, {
   id: t.u64().primaryKey().autoInc(), scheduledAt: t.scheduleAt(), uploadId: t.string(),
 });
+const retentionExpiry = table({ name: 'retention_expiry' }, {
+  id: t.u64().primaryKey().autoInc(), scheduledAt: t.scheduleAt(), key: t.string(), generation: t.u32(),
+});
 
 const spacetimedb = schema({
-  presentationPractice, presentationAttempt, presentationPersonal, presentationQuestion, presentationFeedback,
   ...aiTables,
+  ...notificationTables,
+  ...trashTables,
+  presentationPractice, presentationAttempt, presentationPersonal, presentationQuestion, presentationFeedback,
   ...examTables,
   ...guideAiTables,
   ...delivery2Tables,
   ...roomsTables,
-  resourceUpload, resourceChunk, resourceCapacity, resourceExpiry,
+  resourceUpload, resourceChunk, resourceCapacity, resourceExpiry, retentionExpiry,
   spacedCollection, spacedCard, spacedEnrollment, spacedProgress, spacedReview,
   assignmentDetail, personalProgress, workDetail, workRevision, workReview, academicComment,
   evidenceDetail, activityLink, pageSnapshot, resourceFile, fileUploadIntent, fileServiceConfig,
@@ -833,6 +842,7 @@ const spacetimedb = schema({
   env: {
     B20_BOOTSTRAP_OWNER_IDENTITY: t.string().optional(),
     B20_FILE_SERVICE_IDENTITY: t.string().optional(),
+    B20_MAINTENANCE_IDENTITY: t.string().optional(),
   },
 });
 export default spacetimedb;
@@ -944,7 +954,7 @@ export const init = spacetimedb.init((ctx) => {
 export const on_connect = spacetimedb.clientConnected((ctx) => {
   // HTTP /call también ejecuta el ciclo de conexión. La identidad técnica solo llega a los
   // handlers que la aceptan expresamente; no adquiere membresía ni puede leer vistas del grupo.
-  if (isOwner(ctx) || isFileService(ctx) || ai.isAiService(ctx)) return;
+  if (isOwner(ctx) || isFileService(ctx) || ai.isAiService(ctx) || notifications.isNotificationService(ctx) || trash.isMaintenanceService(ctx)) return;
   verifiedEmail(ctx);
 });
 
@@ -1274,6 +1284,7 @@ function updateAssignmentContent(ctx: Ctx, assignmentId: bigint, input: Paramete
     dueDate: next.dueDate,
   });
   log(ctx, 'update', 'assignment', assignmentId);
+  if (row.dueDate !== next.dueDate) notifications.emitNotificationEvent(ctx, { eventKey: `due:assignment:${assignmentId}:${next.version}`, kind: 'due_change', sourceKind: 'assignment', sourceId: assignmentId, actor: ctx.sender, route: `/m/tareas/${assignmentId}` });
 }
 
 /** Conserva la firma para clientes anteriores, sin permitir una escritura sin versión. */
@@ -1317,6 +1328,7 @@ export const publish_work = spacetimedb.reducer(
     }
     saveWorkSnapshot(ctx, row.id);
     log(ctx, 'publish', 'work', row.id);
+    notifications.emitNotificationEvent(ctx, { eventKey: `work:${row.id}`, kind: 'work', sourceKind: 'work', sourceId: row.id, actor: ctx.sender, route: `/m/tareas/${row.assignmentId}?trabajo=${row.id}` });
   },
 );
 
@@ -1423,7 +1435,7 @@ export const send_group_message = spacetimedb.reducer(
       if (!target || target.deletedAt)
         throw new SenderError('El mensaje al que respondes ya no está.');
     }
-    ctx.db.groupMessage.insert({
+    const message = ctx.db.groupMessage.insert({
       id: 0n,
       sender: ctx.sender,
       text: messageText(ctx, text),
@@ -1433,6 +1445,7 @@ export const send_group_message = spacetimedb.reducer(
       deletedAt: undefined,
       deletedBy: undefined,
     });
+    notifications.emitMessageNotifications(ctx, 'group', message.id);
   },
 );
 
@@ -1686,7 +1699,7 @@ export const send_direct_message = spacetimedb.reducer(
         throw new SenderError('El mensaje al que respondes ya no está.');
       }
     }
-    ctx.db.directMessage.insert({
+    const message = ctx.db.directMessage.insert({
       id: 0n,
       conversationId,
       sender: ctx.sender,
@@ -1697,6 +1710,7 @@ export const send_direct_message = spacetimedb.reducer(
       deletedAt: undefined,
       deletedBy: undefined,
     });
+    notifications.emitMessageNotifications(ctx, 'direct', message.id);
   },
 );
 
@@ -1814,6 +1828,7 @@ function updateActivityContent(ctx: Ctx, activityId: bigint, input: Parameters<t
     body: next.instructions,
   });
   log(ctx, 'update', 'activity', activityId);
+  if (row.date !== next.date) notifications.emitNotificationEvent(ctx, { eventKey: `due:activity:${activityId}:${next.version}`, kind: 'due_change', sourceKind: 'activity', sourceId: activityId, actor: ctx.sender, route: `/m/actividades/${activityId}` });
 }
 
 export const update_activity = spacetimedb.reducer(
@@ -1933,13 +1948,14 @@ export const answer_question = spacetimedb.reducer(
   (ctx, { questionId, body }) => {
     activeMember(ctx);
     if (!delivery2.canReadTarget(ctx.db, ctx.sender, 'question', questionId) || delivery2.withdrawn(ctx.db, 'question', questionId)) throw new SenderError('La pregunta no existe.');
-    ctx.db.answer.insert({
+    const answer = ctx.db.answer.insert({
       id: 0n,
       questionId,
       author: ctx.sender,
       body: requireText(body, 'La respuesta', 20_000),
       createdAt: ctx.timestamp,
     });
+    notifications.emitNotificationEvent(ctx, { eventKey: `answer:${answer.id}`, kind: 'answer', sourceKind: 'question', sourceId: questionId, actor: ctx.sender, recipientIds: [ctx.db.question.id.find(questionId)!.author], route: `/m/preguntas/${questionId}` });
   },
 );
 
@@ -2313,6 +2329,7 @@ export const create_guide = spacetimedb.reducer(
     addGuideSources(ctx, row, sources);
     delivery2.captureGuide(ctx, row.id, ctx.sender);
     log(ctx, 'create', 'study_guide', row.id);
+    notifications.emitNotificationEvent(ctx, { eventKey: `guide:${row.id}`, kind: 'guide', sourceKind: 'guide', sourceId: row.id, actor: ctx.sender, route: `/m/guias/${row.id}` });
   },
 );
 
@@ -2849,6 +2866,7 @@ export const publish_work_v2 = spacetimedb.reducer(
     setWorkDetail(ctx, row.id, topic, status);
     saveWorkSnapshot(ctx, row.id, ctx.sender);
     log(ctx, 'publish', 'work', row.id);
+    if (status !== 'draft') notifications.emitNotificationEvent(ctx, { eventKey: `work:${row.id}`, kind: 'work', sourceKind: 'work', sourceId: row.id, actor: ctx.sender, route: `/m/tareas/${assignmentId}?trabajo=${row.id}` });
   },
 );
 
@@ -2859,11 +2877,13 @@ export const save_work_version = spacetimedb.reducer(
     expectVersion(targetVersion(ctx, 'work', workId), expectedVersion);
     saveWorkSnapshot(ctx, workId);
     const row = ctx.db.work.id.find(workId)!;
+    const wasDraft = ctx.db.workDetail.workId.find(workId)?.status === 'draft';
     ctx.db.work.id.update({ ...row, title: optionalText(title, 'El título', 200),
       description: optionalText(description, 'La descripción', 50_000) });
     setWorkDetail(ctx, workId, topic, status);
     bumpMaterial(ctx, 'work', workId);
     log(ctx, 'update', 'work', workId);
+    if (wasDraft && status === 'final') notifications.emitNotificationEvent(ctx, { eventKey: `work:${workId}`, kind: 'work', sourceKind: 'work', sourceId: workId, actor: ctx.sender, route: `/m/tareas/${row.assignmentId}?trabajo=${workId}` });
   },
 );
 
@@ -3108,7 +3128,10 @@ export const ai_get_generation = spacetimedb.procedure({ payload: t.string() }, 
 
 export const set_file_service = spacetimedb.reducer({ identity: t.identity() }, (ctx, { identity }) => {
   if (!isOwner(ctx)) throw new SenderError('Solo el propietario configura el servicio de archivos.');
-  if (ctx.db.aiServiceConfig.id.find(0)?.identity.isEqual(identity)) throw new SenderError('Archivos e IA requieren identidades técnicas distintas.');
+  if (ctx.db.aiServiceConfig.id.find(0)?.identity.isEqual(identity) || ctx.db.notificationServiceConfig.id.find(0)?.identity.isEqual(identity) || ctx.db.maintenanceService.id.find(0)?.identity.isEqual(identity)
+    || (ctx.env.B20_MAINTENANCE_IDENTITY && hexIdentity(ctx.env.B20_MAINTENANCE_IDENTITY) === hexIdentity(identity.toHexString()))) {
+    throw new SenderError('Los servicios de archivos, IA, avisos y mantenimiento necesitan identidades distintas.');
+  }
   const row = { id: 0, identity };
   if (ctx.db.fileServiceConfig.id.find(0)) ctx.db.fileServiceConfig.id.update(row);
   else ctx.db.fileServiceConfig.insert(row);
@@ -3218,6 +3241,7 @@ function readableResource(tx: Ctx, fileId: string) {
     }
     const file = tx.db.resourceFile.id.find(fileId);
     if (!file) throw new SenderError('El archivo no existe.');
+    trash.assertRetentionReadable(tx, file.targetKind, file.targetId);
     if (delivery2.reportFileReadable(tx.db, tx.sender, fileId)) return file;
     if (!delivery2.canReadTarget(tx.db, tx.sender, file.targetKind, file.targetId)) throw new SenderError('No tienes acceso a este archivo.');
     if (file.targetKind === 'profile') {
@@ -4092,7 +4116,14 @@ export const create_study_room = spacetimedb.reducer({ requestId: t.string(), su
 export const update_study_room = spacetimedb.reducer({ roomId: t.u64(), ...ROOM_METADATA, expectedVersion: t.u32() }, rooms.updateRoom);
 export const join_study_room = spacetimedb.reducer({ roomId: t.u64() }, rooms.joinRoom);
 export const leave_study_room = spacetimedb.reducer({ roomId: t.u64() }, rooms.leaveRoom);
-export const invite_study_room_member = spacetimedb.reducer({ roomId: t.u64(), memberId: t.identity() }, rooms.inviteMember);
+export const invite_study_room_member = spacetimedb.reducer({ roomId: t.u64(), memberId: t.identity() }, (ctx, input) => {
+  const previous = ctx.db.roomMember.key.find(`${input.roomId}:${input.memberId.toHexString()}`)?.status;
+  rooms.inviteMember(ctx, input);
+  if (previous !== 'invited' && previous !== 'joined') notifications.emitNotificationEvent(ctx, {
+    eventKey: `roomInvite:${input.roomId}:${input.memberId.toHexString()}:${ctx.timestamp.microsSinceUnixEpoch}`,
+    kind: 'room', sourceKind: 'room', sourceId: input.roomId, actor: ctx.sender, recipientIds: [input.memberId], route: `/m/salas/${input.roomId}`,
+  });
+});
 export const respond_study_room_invitation = spacetimedb.reducer({ roomId: t.u64(), accepted: t.bool() }, rooms.respondInvitation);
 export const remove_study_room_member = spacetimedb.reducer({ roomId: t.u64(), memberId: t.identity() }, rooms.removeMember);
 export const set_study_room_status = spacetimedb.reducer({ roomId: t.u64(), status: t.string(), expectedVersion: t.u32() }, rooms.setRoomStatus);
@@ -4608,8 +4639,11 @@ export const set_chat_channel_archived = spacetimedb.reducer({ channelId: t.u64(
   if (!row.createdBy.isEqual(ctx.sender) && !activeMember(ctx).isCreator) throw new SenderError('Solo el creador del canal o un administrador puede archivarlo.');
   ctx.db.chatChannel.id.update({ ...row, archivedAt: archived ? ctx.timestamp : undefined });
 });
-export const send_channel_message = spacetimedb.reducer({ channelId: t.u64(), text: t.string(), replyToId: t.u64().optional() }, delivery2.sendChannelMessage);
-export const mark_conversation_read = spacetimedb.reducer({ scope: t.string(), conversationId: t.string(), messageId: t.u64() }, delivery2.markConversationRead);
+export const send_channel_message = spacetimedb.reducer({ channelId: t.u64(), text: t.string(), replyToId: t.u64().optional() }, (ctx, input) => {
+  const messageId = delivery2.sendChannelMessage(ctx, input);
+  notifications.emitMessageNotifications(ctx, 'channel', messageId);
+});
+export const mark_conversation_read = spacetimedb.reducer({ scope: t.string(), conversationId: t.string(), messageId: t.u64() }, (ctx, input) => { delivery2.markConversationRead(ctx, input); notifications.suppressConversationNotifications(ctx, input.scope, input.conversationId); });
 export const set_conversation_muted = spacetimedb.reducer({ scope: t.string(), conversationId: t.string(), muted: t.bool() }, (ctx, { scope, conversationId, muted }) => {
   delivery2.conversationAccess(ctx, scope, conversationId);
   const key = `${ctx.sender.toHexString()}:${scope}:${conversationId}`;
@@ -4693,3 +4727,69 @@ export const read_sticker_bytes = spacetimedb.procedure({ stickerId: t.u64() },
 export const contribution_origins = spacetimedb.view({ name: 'contribution_origins', public: true },
   t.array(t.object('ContributionOrigin', { kind: t.string(), refId: t.u64(), memberId: t.identity(), creditedAt: t.timestamp(), duplicateOf: t.u64().optional() })),
   (ctx) => readContributionOrigins(ctx.db, ctx.sender));
+
+export const ai_list_generations = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, (inner) => ai.aiListGenerations(inner))));
+export const ai_publish_generation = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, (inner, input) => ai.aiPublishGeneration(inner, input))));
+
+/** Papelera y mantenimiento conservan el reloj y los permisos del servidor. */
+export const my_trash_entries = spacetimedb.view({ name: 'my_trash_entries', public: true },
+  t.array(t.object('TrashEntry', { kind: t.string(), targetId: t.u64(), withdrawnAt: t.timestamp(), expiresAt: t.timestamp(), state: t.string(), canRestore: t.bool(), version: t.u32() })),
+  (ctx) => trash.readTrashEntries(ctx.db, ctx.sender));
+export const get_trash_clock = spacetimedb.procedure({}, t.timestamp(), (ctx) => ctx.withTx((tx) => { activeMember(tx); return tx.timestamp; }));
+export const set_maintenance_service = spacetimedb.reducer({ identity: t.identity() }, trash.setMaintenanceService);
+export const purge_due = spacetimedb.procedure({ batchSize: t.u32() }, t.object('PurgeResult', { processed: t.u32(), remaining: t.u32() }),
+  (ctx, input) => ctx.withTx((tx) => trash.purgeDue(tx, input)));
+export const expire_content = spacetimedb.reducer({ onSchedule: retentionExpiry }, { event: retentionExpiry.rowType }, (ctx, { event }) => {
+  if (!ctx.sender.isEqual(ctx.identity)) throw new SenderError('Solo el programador interno puede limpiar contenido vencido.');
+  trash.expireContent(ctx, event);
+});
+
+/** Avisos personales: endpoints y claves de dispositivos permanecen privados. */
+export const my_notifications = spacetimedb.view({ name: 'my_notifications', public: true }, t.array(notification.rowType),
+  (ctx) => [...ctx.db.notification.memberId.filter(ctx.sender)].filter((row) => notifications.readableNotification(ctx.db, ctx.sender, row)));
+export const my_notification_preferences = spacetimedb.view({ name: 'my_notification_preferences', public: true }, t.array(notificationPreference.rowType),
+  (ctx) => isActive(ctx.db, ctx.sender) ? [...ctx.db.notificationPreference.iter()].filter((row) => row.memberId.isEqual(ctx.sender)) : []);
+export const my_push_installations = spacetimedb.view({ name: 'my_push_installations', public: true },
+  t.array(t.object('NotificationInstallationSummary', { id: t.string(), label: t.string(), enabled: t.bool(), createdAt: t.timestamp(), updatedAt: t.timestamp() })),
+  (ctx) => isActive(ctx.db, ctx.sender) ? [...ctx.db.pushInstallation.memberId.filter(ctx.sender)].map(({ id, label, enabled, createdAt, updatedAt }) => ({ id, label, enabled, createdAt, updatedAt })) : []);
+export const set_notification_service = spacetimedb.reducer({ identity: t.identity(), enabled: t.bool() }, notifications.setNotificationService);
+export const save_notification_preferences = spacetimedb.reducer({ expectedVersion: t.u32().optional(), timeZone: t.string(), enabledKinds: t.array(t.string()), pushEnabled: t.bool(), quietStartMinute: t.u32(), quietEndMinute: t.u32(), reminderMinute: t.u32() },
+  (ctx, input) => notifications.saveNotificationPreferences(ctx, input as Parameters<typeof notifications.saveNotificationPreferences>[1]));
+export const register_push_installation = spacetimedb.reducer({ id: t.string(), label: t.string(), endpoint: t.string(), p256dh: t.string(), auth: t.string() }, notifications.registerPushInstallation);
+export const remove_push_installation = spacetimedb.reducer({ installationId: t.string() }, (ctx, { installationId }) => notifications.removePushInstallation(ctx, installationId));
+export const mark_notification_read = spacetimedb.reducer({ notificationId: t.u64() }, (ctx, { notificationId }) => notifications.markNotificationRead(ctx, notificationId));
+export const mark_all_notifications_read = spacetimedb.reducer({}, (ctx) => notifications.markNotificationRead(ctx));
+export const request_notification_test = spacetimedb.reducer({}, notifications.requestNotificationTest);
+
+function notificationPayload(payload: string): Record<string, unknown> {
+  if (payload.length > 8192) throw new SenderError('La solicitud de avisos supera el límite.');
+  let parsed: unknown; try { parsed = JSON.parse(payload); } catch { throw new SenderError('Solicitud de avisos inválida.'); }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new SenderError('Solicitud de avisos inválida.');
+  return parsed as Record<string, unknown>;
+}
+function notificationNumber(input: Record<string, unknown>, key: string, min: number, max: number, fallback?: number): number {
+  const value = input[key] ?? fallback;
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < min || value > max) throw new SenderError('Solicitud de avisos inválida.');
+  return value;
+}
+function notificationText(input: Record<string, unknown>, key: string): string {
+  const value = input[key]; if (typeof value !== 'string' || value.length > 200) throw new SenderError('Solicitud de avisos inválida.'); return value;
+}
+export const notifications_sweep = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => {
+  const input = notificationPayload(payload); return JSON.stringify(notifications.sweepNotifications(tx, notificationNumber(input, 'limit', 1, 100, 100)));
+}));
+export const notifications_claim = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => {
+  const input = notificationPayload(payload); return JSON.stringify(notifications.claimNotifications(tx, { leaseId: notificationText(input, 'leaseId'), limit: notificationNumber(input, 'limit', 1, 25, 25) }));
+}));
+export const notifications_authorize = spacetimedb.procedure({ payload: t.string() }, t.bool(), (ctx, { payload }) => ctx.withTx((tx) => {
+  const input = notificationPayload(payload); return notifications.authorizeNotification(tx, { jobId: notificationText(input, 'jobId'), leaseId: notificationText(input, 'leaseId') });
+}));
+export const notifications_finish = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => {
+  const input = notificationPayload(payload); notifications.finishNotification(tx, { jobId: notificationText(input, 'jobId'), leaseId: notificationText(input, 'leaseId'), outcome: notificationText(input, 'outcome'), retryAfterSeconds: input.retryAfterSeconds === undefined ? undefined : notificationNumber(input, 'retryAfterSeconds', 0, 86400) }); return '{}';
+}));
+export const notification_reminder_context = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => {
+  const input = notificationPayload(payload); return JSON.stringify(notifications.reminderContext(tx, notificationNumber(input, 'limit', 1, 10, 4)));
+}));
+export const notification_commit_reminders = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => {
+  const input = notificationPayload(payload); return JSON.stringify(notifications.commitReminders(tx, { memberId: notificationText(input, 'memberId'), day: notificationText(input, 'day'), startAt: notificationNumber(input, 'startAt', 0, Number.MAX_SAFE_INTEGER), endAt: notificationNumber(input, 'endAt', 0, Number.MAX_SAFE_INTEGER) }));
+}));

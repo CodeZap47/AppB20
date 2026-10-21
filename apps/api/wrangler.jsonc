@@ -15,9 +15,10 @@
     "SPACETIMEDB_MODULE": "app-b20-34245",
     "AI_ENABLED": "false",
     "AI_MASTER_VERSION": "v1",
-    "GEMINI_MODEL": ""
+    "GEMINI_MODEL": "",
+    "NOTIFICATIONS_ENABLED": "false"
   },
   "secrets": { "required": ["FILE_SERVICE_TOKEN"] },
   "r2_buckets": [{ "binding": "FILES", "bucket_name": "app-b20-files" }],
-  "triggers": { "crons": ["23 9 * * *"] }
+  "triggers": { "crons": ["* * * * *", "23 9 * * *"] }
 }

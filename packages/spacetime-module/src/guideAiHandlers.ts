@@ -577,6 +577,32 @@ function guideAiDispatch(ctx: Ctx, payload: string): string {
   return fail('invalid', 'Operación de Guías no admitida.');
 }
 
+/** Retention removes copied originals while keeping independently published guides. */
+export function purgeGuideAiSource(ctx: Ctx, kind: string, targetId: bigint): void {
+  const refId = String(targetId);
+  const matches = (source: { kind: string; refId: string; field?: string }) => source.kind === kind && source.refId === refId
+    || kind === 'answer' && source.kind === 'question' && source.field?.startsWith(`respuesta:${refId}:v`) === true;
+  for (const row of [...ctx.db.guideAiTranscription.iter()]) {
+    if (row.targetKind === kind && row.targetId === targetId) ctx.db.guideAiTranscription.id.delete(row.id);
+  }
+  for (const row of [...ctx.db.guideAiDraft.iter()]) {
+    const draft = JSON.parse(row.json) as GuideAiDraft;
+    if (kind === 'guide' && draft.publishedGuideId === refId || draft.preparation.sources.some(matches)
+      || draft.preparation.fragments.some((fragment) => fragment.origins.some(matches))) ctx.db.guideAiDraft.id.delete(row.id);
+  }
+  for (const row of [...ctx.db.guideAiProvenance.iter()]) {
+    if (kind === 'guide' && row.guideId === targetId) { ctx.db.guideAiProvenance.key.delete(row.key); continue; }
+    const provenance = JSON.parse(row.json) as { sources: GuideAiDraft['preparation']['sources']; fragments: GuideAiFragment[]; citations?: { citations: string[] }[] };
+    const removed = new Set(provenance.fragments.filter((fragment) => fragment.origins.some(matches)).map((fragment) => fragment.id));
+    if (!removed.size && !provenance.sources.some(matches)) continue;
+    ctx.db.guideAiProvenance.key.update({ ...row, json: JSON.stringify({ ...provenance,
+      sources: provenance.sources.filter((source) => !matches(source)).map((source) => ({ ...source, fragmentIds: source.fragmentIds.filter((fragmentId) => !removed.has(fragmentId)) })),
+      fragments: provenance.fragments.filter((fragment) => !removed.has(fragment.id)),
+      ...(provenance.citations ? { citations: provenance.citations.map((section) => ({ ...section, citations: section.citations.filter((fragmentId) => !removed.has(fragmentId)) })) } : {}),
+    }) });
+  }
+}
+
 export function guideAiResponse(ctx: Ctx, payload: string): string {
   try { return guideAiDispatch(ctx, payload); }
   catch (error) {

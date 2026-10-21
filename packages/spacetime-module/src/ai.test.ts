@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Identity, Timestamp } from 'spacetimedb';
 import { AI_CONSENT_VERSION, type AiPreparation } from '../../core/src/ai';
+import { GUIDE_SECTIONS } from '../../core/src/guides';
 
 vi.mock('spacetimedb/server', () => {
   const builder: unknown = new Proxy({}, { get: () => () => builder });
@@ -9,7 +10,8 @@ vi.mock('spacetimedb/server', () => {
     table: () => ({ rowType: builder }), schema: () => ({ reducer: handler, procedure: handler, init: handler, clientConnected: handler, view: handler }) };
 });
 import { ai_status, ai_key_status, ai_set_consent, ai_authorize_key, ai_commit_key, ai_delete_key, ai_prepare,
-  ai_authorize_generation, ai_claim_generation, ai_finish_generation, ai_get_generation, on_connect, set_ai_service, set_file_service } from './index';
+  ai_authorize_generation, ai_claim_generation, ai_finish_generation, ai_get_generation, ai_publish_generation, ai_list_generations, on_connect, set_ai_service, set_file_service } from './index';
+import { purgeAiSource } from './aiHandlers';
 const person = (digit: string) => Identity.fromString(digit.repeat(64));
 const owner = person('a'); const alice = person('b'); const bob = person('c'); const removed = person('d'); const aiService = person('e'); const fileService = person('f');
 const uid = (n: number) => `10000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -17,7 +19,8 @@ type Row = Record<string, unknown>;
 const keyOf = (v: unknown) => typeof v === 'object' && v !== null && 'toHexString' in v ? (v as Identity).toHexString() : String(v);
 function store(key: string, initial: Row[] = []) {
   const rows = new Map(initial.map((row) => [keyOf(row[key]), row]));
-  return new Proxy({ rows, iter: () => rows.values(), insert: (row: Row) => { rows.set(keyOf(row[key]), row); return row; } }, {
+  let next = 1000n;
+  return new Proxy({ rows, iter: () => rows.values(), insert: (value: Row) => { const row: Row = { ...value, ...(value.id === 0n ? { id: next++ } : {}) }; rows.set(keyOf(row[key]), row); return row; } }, {
     get(target, property) {
       if (property in target) return target[property as keyof typeof target];
       return { find: (v: unknown) => rows.get(keyOf(v)), update: (row: Row) => { rows.set(keyOf(row[key]), row); return row; },
@@ -28,7 +31,7 @@ function store(key: string, initial: Row[] = []) {
 function setup() {
   const timestamp = new Timestamp(1_790_000_000_000_000n);
   const keys: Record<string, string> = { member: 'identity', aiKey: 'actor', aiConsent: 'actor', noteDetail: 'noteId',
-    assignmentDetail: 'assignmentId', workDetail: 'workId', evidenceDetail: 'evidenceId', contentStatus: 'key' };
+    assignmentDetail: 'assignmentId', workDetail: 'workId', evidenceDetail: 'evidenceId', contentStatus: 'key', aiPublication: 'generationId' };
   const initial: Record<string, Row[]> = {
     appConfig: [{ id: 0, owner }], authConfig: [{ id: 0, issuer: 'https://issuer.test', audiences: ['test'] }],
     member: [owner, alice, bob, removed].map((identity) => ({ identity, status: identity === removed ? 'removed' : 'active', isCreator: identity === owner })),
@@ -56,7 +59,11 @@ function setup() {
   const as = (identity: Identity) => { state.sender = identity; };
   const tick = (seconds: number) => { state.timestamp = new Timestamp(state.timestamp.microsSinceUnixEpoch + BigInt(seconds) * 1_000_000n); };
   const rows = (name: string) => [...(db as Record<string, ReturnType<typeof store>>)[name].rows.values()];
-  const call = <T = Record<string, unknown>>(fn: typeof ai_status, input: unknown = {}) => JSON.parse(fn(proc, { payload: JSON.stringify(input) })) as T;
+  const call = <T = Record<string, unknown>>(fn: typeof ai_status, input: unknown = {}) => {
+    const result = JSON.parse(fn(proc, { payload: JSON.stringify(input) }));
+    if (result?.ok === false) throw new Error(`${result.code}:${result.message ?? ''}`);
+    return result as T;
+  };
   const configure = (enabled = true, budget = 100_000) => { as(owner); set_ai_service(ctx, { identity: aiService, enabled, dailyTokenBudget: budget }); as(alice); };
   const configureKey = (n = 1) => {
     call(ai_set_consent, { version: AI_CONSENT_VERSION, accepted: true });
@@ -68,10 +75,45 @@ function setup() {
   const generation = (preparation: AiPreparation, n = 600) => ({ id: uid(n), preparationId: preparation.id, fingerprint: preparation.fingerprint,
     model: preparation.model, confirmed: true, config: { questionCount: 1, types: ['single'], difficulty: 'basic' } });
   const ready = () => { configure(); configureKey(); call(ai_set_consent, { version: AI_CONSENT_VERSION, accepted: true }); const preparation = prep(); return { preparation, request: generation(preparation) }; };
-  return { ctx, call, as, rows, tick, configure, configureKey, prep, generation, ready };
+  const insert = (name: string, row: Row) => (db as Record<string, ReturnType<typeof store>>)[name].insert(row);
+  return { ctx, call, as, rows, insert, tick, configure, configureKey, prep, generation, ready };
 }
 
 describe('EX1 IA: procedimientos reales y tablas privadas', () => {
+  it('extrae adjuntos UTF8 autorizados, registra omisiones y detecta su sustitución antes del envío', () => {
+    const s = setup(); const bytes = new TextEncoder().encode('const ejemplo = 123;');
+    s.insert('resourceFile', { id: 'text-file', targetKind: 'note', targetId: 1n, name: 'codigo.ts', size: BigInt(bytes.length), contentType: 'text/plain', storageKey: 'stdb:text-file', etag: 'a' });
+    s.insert('resourceFile', { id: 'pdf-file', targetKind: 'note', targetId: 1n, name: 'escaneo.pdf', size: 30n, contentType: 'application/pdf', storageKey: 'stdb:pdf-file', etag: 'b' });
+    s.insert('resourceUpload', { id: 'text-file', state: 'ready', chunkCount: 1 }); s.insert('resourceChunk', { id: 'text-file:0', bytes });
+    const prep = s.prep(); expect(prep.fragments.some((fragment) => fragment.text.includes('const ejemplo = 123;'))).toBe(true);
+    expect(prep.omissions.some((omission) => omission.includes('formato no compatible'))).toBe(true);
+    s.configure(); s.configureKey(); const request = s.generation(prep);
+    s.call(ai_authorize_generation, request); s.rows('resourceFile')[0].etag = 'changed'; s.as(aiService);
+    expect(() => s.call(ai_claim_generation, { id: request.id, actor: alice.toHexString() })).toThrow('cambió');
+  });
+  it('genera y publica una guía citada una sola vez; los borradores personales no pueden publicarse', () => {
+    const s = setup(); s.configure(); s.configureKey();
+    const config = { purpose: 'guide', questionCount: 1, types: ['single'], difficulty: 'basic' };
+    const prep = s.call<AiPreparation>(ai_prepare, { id: uid(701), subjectId: '1', termId: '11', topics: ['Ciclos'], config, model: 'fake',
+      sources: [{ kind: 'note', refId: '1', topics: ['Ciclos'], includeUnplaced: true }] });
+    const request = { id: uid(702), preparationId: prep.id, fingerprint: prep.fingerprint, config, model: 'fake', confirmed: true };
+    s.call(ai_authorize_generation, request); s.as(aiService); s.call(ai_claim_generation, { id: request.id, actor: alice.toHexString() });
+    s.call(ai_finish_generation, { id: request.id, actor: alice.toHexString(), state: 'succeeded', result: { purpose: 'guide', title: 'Guía IA',
+      sections: GUIDE_SECTIONS.map((section) => ({ heading: section.title, text: 'Desarrollo razonado.', citations: [prep.fragments[0]!.id] })) } });
+    s.as(bob); expect(() => s.call(ai_publish_generation, { id: request.id })).toThrow('disponible');
+    s.as(alice); expect(s.call<unknown[]>(ai_list_generations)).toHaveLength(1);
+    const publication = s.call(ai_publish_generation, { id: request.id }); expect(s.call(ai_publish_generation, { id: request.id })).toEqual(publication);
+    expect(s.rows('aiPublication')).toHaveLength(1); expect(s.rows('studyGuide').at(-1)?.title).toBe('Guía IA');
+    expect(s.rows('guideSource').at(-1)).toMatchObject({ kind: 'nota', refId: 1n, sourceVersion: 1, status: 'processed' });
+    const personal = s.call<AiPreparation>(ai_prepare, { id: uid(704), subjectId: '1', termId: '11', topics: ['Ciclos'], config, model: 'fake', sources: [{ kind: 'note', refId: '2', topics: ['Ciclos'], includeUnplaced: true }] });
+    s.insert('aiGeneration', { ...s.rows('aiGeneration')[0], id: uid(703), preparationId: personal.id });
+    expect(() => s.call(ai_publish_generation, { id: uid(703) })).toThrow('personales');
+    purgeAiSource(s.ctx, 'note', 1n);
+    expect(s.rows('aiPreparation').some((row) => row.id === prep.id)).toBe(false);
+    expect(s.rows('aiGeneration').find((row) => row.id === request.id)).toMatchObject({ status: 'failed', resultJson: '' });
+    expect(() => s.call(ai_get_generation, { id: request.id })).toThrow('disponible');
+    expect(s.rows('studyGuide').some((row) => String(row.id) === publication.targetId)).toBe(true);
+  });
   it('no habilita por defecto y devuelve solo metadatos de clave y actor DB', () => {
     const s = setup(); expect(s.call(ai_status)).toMatchObject({ actor: alice.toHexString(), enabled: false, configured: false, consented: false });
     s.configure(); s.configureKey(); expect(s.call(ai_key_status)).toMatchObject({ configured: true, provider: 'gemini', keyId: uid(101) });
@@ -83,6 +125,19 @@ describe('EX1 IA: procedimientos reales y tablas privadas', () => {
     s.as(owner); for (const identity of [owner, alice, fileService]) expect(() => set_ai_service(s.ctx, { identity, enabled: true, dailyTokenBudget: 100_000 })).toThrow('exclusiva');
     s.configure(); s.as(owner); expect(() => set_file_service(s.ctx, { identity: aiService })).toThrow('distintas');
     s.as(aiService); expect(() => on_connect(s.ctx, {})).not.toThrow(); expect(() => s.call(ai_status)).toThrow('activo');
+  });
+  it('no puede compartir identidad de IA con notificaciones ni mantenimiento', () => {
+    const s = setup(); s.as(owner);
+    const notifications = person('1'); const maintenance = person('2');
+    s.insert('notificationServiceConfig', { id: 0, identity: notifications, enabled: true });
+    s.insert('maintenanceService', { id: 0, identity: maintenance });
+    for (const identity of [notifications, maintenance]) expect(() => set_ai_service(s.ctx, { identity, enabled: true, dailyTokenBudget: 100_000 })).toThrow('exclusiva');
+  });
+  it('la preparación de guía no revela referencias a originales personales inaccesibles', () => {
+    const s = setup(); s.rows('note')[0].visibility = 'personal'; s.as(bob);
+    const prep = s.prep(505, [{ kind: 'guide', refId: '50', topics: ['Ciclos'], includeUnplaced: false }]);
+    expect(prep.sources[0].origins).toEqual([]);
+    expect(prep.omissions.some((omission) => omission.includes('no está disponible'))).toBe(true);
   });
   it('impide confirmar intenciones ajenas, sustituciones antiguas y borrado revoca pendientes', () => {
     const s = setup(); s.configure(); s.call(ai_set_consent, { version: AI_CONSENT_VERSION, accepted: true }); s.call(ai_authorize_key, { intentId: uid(1), keyId: uid(101), provider: 'gemini' });

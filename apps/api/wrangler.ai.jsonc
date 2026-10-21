@@ -4,10 +4,15 @@
   "account_id": "ab3a0c0641ce296cd9f38fab76f6d90b",
   "main": "src/guideWorker.ts",
   "compatibility_date": "2026-10-21",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "workers_dev": true,
   "preview_urls": false,
-  "observability": { "enabled": true, "head_sampling_rate": 1 },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
   "vars": {
     "CORS_ORIGINS": "https://app-b20.pages.dev,http://localhost:5173,capacitor://localhost,https://localhost",
     "OIDC_ISSUER": "https://auth.spacetimedb.com/oidc",
@@ -15,9 +20,24 @@
     "OIDC_JWKS_URI": "https://auth.spacetimedb.com/oidc/jwks",
     "SPACETIMEDB_URI": "https://maincloud.spacetimedb.com",
     "SPACETIMEDB_MODULE": "app-b20-34245",
-    "AI_ENABLED": "false",
+    "AI_ENABLED": "true",
     "AI_MASTER_VERSION": "v1",
-    "GEMINI_MODEL": "gemini-3.8-flash"
+    "GEMINI_MODEL": "gemini-3.8-flash",
+    "NOTIFICATIONS_ENABLED": "true",
+    "VAPID_PUBLIC_KEY": "BDcU2DLr4bYXsOFyDIR5GJIPFDP8lg0UTdSUg4T7HhSvrO0fIK_YEuXE1cxySQIjYANBXvGBxmL-r6t4bN6nBBo",
+    "VAPID_SUBJECT": "https://app-b20.pages.dev"
   },
-  "secrets": { "required": ["AI_SERVICE_TOKEN", "AI_MASTER_KEYS_JSON"] }
+  "secrets": {
+    "required": [
+      "AI_SERVICE_TOKEN",
+      "AI_MASTER_KEYS_JSON",
+      "NOTIFICATION_SERVICE_TOKEN",
+      "VAPID_PRIVATE_KEY"
+    ]
+  },
+  "triggers": {
+    "crons": [
+      "* * * * *"
+    ]
+  }
 }

@@ -9,7 +9,7 @@ import { AiPreparationPanel } from './AiPreparationPanel';
 import './ai.css';
 
 type UiAiStatus = AiStatus & { serviceConfigured?: boolean };
-const demoStatus = (): UiAiStatus => ({ actor: 'simulado', enabled: false, configured: true, reason: 'Simulación local: Gemini real está desactivado.',
+const demoStatus = (): UiAiStatus => ({ actor: 'simulado', enabled: false, configured: true, serviceConfigured: true, reason: 'Simulación local: Gemini real está desactivado.',
   model: 'simulado', limits: AI_LIMITS, consentVersion: AI_CONSENT_VERSION, consented: false });
 
 export function ByokSettings() {
@@ -96,7 +96,7 @@ function ByokAccountSettings({ token, simulated, active }: { token?: string; sim
       {status && <>
         <p className="ai-notice" role="status">{status.enabled ? 'La generación con IA está habilitada para el grupo.' : status.reason || 'La generación con IA todavía no está habilitada para el grupo.'}</p>
         <p>Modelo previsto: <strong>{status.model || 'Pendiente de configurar'}</strong>. Clave propia: <strong>{keyState.configured ? 'Configurada' : 'Sin configurar'}</strong>.</p>
-        <p className="field__hint">Hasta {status.limits.maxSources} fuentes para preguntas y {status.limits.maxCharacters.toLocaleString('es-MX')} caracteres por preparación de preguntas; {status.limits.maxQuestions} preguntas y {status.limits.maxOutputTokens.toLocaleString('es-MX')} tokens de salida por generación.</p>
+        <p className="field__hint">Hasta {status.limits.maxSources} fuentes y {status.limits.maxCharacters.toLocaleString('es-MX')} caracteres por preparación; {status.limits.maxOutputTokens.toLocaleString('es-MX')} tokens de salida por generación.</p>
         <p className="field__hint">Límites de la app por persona: {status.limits.maxConcurrent} generación simultánea, {status.limits.requestsPerHour} por hora, {status.limits.requestsPerDay} por día y {status.limits.dailyEstimatedTokens.toLocaleString('es-MX')} tokens estimados diarios. Son controles de consumo, no una garantía de cargos del proveedor.</p>
       </>}
       {simulated ? <div className="form__actions"><button type="button" disabled={keyState.configured || !active || busy} onClick={() => { setKeyState({ configured: true }); setNotice('Clave ficticia configurada solo durante esta simulación.'); }}>Usar clave simulada</button>
@@ -110,7 +110,7 @@ function ByokAccountSettings({ token, simulated, active }: { token?: string; sim
       </form>}
       {status && <fieldset disabled={busy || loading || !active || status.serviceConfigured === false} className="ai-consent">
         <legend>Consentimiento para usar IA · versión {status.consentVersion}</legend>
-        <label><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />Entiendo que, al confirmar una generación, el texto que revise y mi clave se usarán para solicitar preguntas o guías de estudio a Google Gemini. Revisaré los fragmentos antes de enviarlos.</label>
+        <label><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />Entiendo que, al confirmar una generación, el texto que revise y mi clave se usarán para solicitar guías, explicaciones o preguntas a Google Gemini. Revisaré los fragmentos antes de enviarlos.</label>
         <p className="field__hint">Este consentimiento es individual. La administración debe confirmar por separado la elegibilidad del grupo y habilitar el servicio. La generación real comienza desactivada.</p>
         <button type="button" disabled={consent === status.consented} onClick={saveConsent}>{consent ? 'Guardar consentimiento' : 'Retirar consentimiento'}</button>
       </fieldset>}

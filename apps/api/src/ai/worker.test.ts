@@ -3,7 +3,7 @@ import { Miniflare, convertV4MiniflareOptions, Response as MfResponse } from 'mi
 import { build } from 'esbuild';
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { fileURLToPath } from 'node:url';
-import { AI_CONSENT_VERSION, AI_LIMITS, aiHash, buildAiPreparation, type AiGeneration, type AiGenerationConfig, type AiPreparation } from '@b20/core';
+import { AI_CONSENT_VERSION, AI_LIMITS, GUIDE_SECTIONS, aiHash, buildAiPreparation, type AiGeneration, type AiGenerationConfig, type AiPreparation } from '@b20/core';
 import { createWorkerApp } from '../workerApp.ts';
 import type { AuthOptions } from '../lib/auth.ts';
 import { AiApiError, type AiDatabase, type AiWorkerEnv } from './database.ts';
@@ -27,10 +27,11 @@ let finishFailure: 'none' | 'before' | 'after' = 'none';
 let scenario: 'ok' | 'invalid-key' | 'quota' | 'uncertain' | 'invalid-json' | 'invalid-cite' | 'oversized' = 'ok';
 let lastPrepare: Record<string, unknown> | undefined;
 let lastProviderBody = '';
+let revokeAfterProvider = false;
 
 function dto(value: unknown) { return MfResponse.json(JSON.stringify(value)); }
 function denied(code: string) { return new MfResponse(`${code}: backend-detail-must-stay-private ${personalKey}`, { status: 530 }); }
-function question(prep: AiPreparation) { return { questions: [{ id: 'q1', type: 'boolean', text: 'Una variable almacena un valor.',
+function question(prep: AiPreparation) { if (config.purpose === 'guide' || config.purpose === 'explanation') return { purpose: config.purpose, title: 'Variables y ejemplos', sections: (config.purpose === 'guide' ? GUIDE_SECTIONS.map((section) => section.title) : ['Concepto y ejemplo']).map((heading) => ({ heading, text: 'Una variable almacena un valor. Ejemplo: contador = 1.', citations: [scenario === 'invalid-cite' ? 'unseen-fragment' : prep.fragments[0]!.id] })) }; return { questions: [{ id: 'q1', type: 'boolean', text: 'Una variable almacena un valor.',
   options: [{ id: 'yes', text: 'Verdadero' }, { id: 'no', text: 'Falso' }], correctOptionId: 'yes', explanation: 'El material explica cómo almacenar valores.',
   topic: 'Variables', citations: [scenario === 'invalid-cite' ? 'unseen-fragment' : prep.fragments[0]!.id] }] }; }
 
@@ -40,7 +41,7 @@ beforeAll(async () => {
   const jwt = (sub: string) => new SignJWT({ email: 'student@example.test', email_verified: true }).setProtectedHeader({ alg: 'RS256', kid: 'ai-test' })
     .setIssuer(issuer).setSubject(sub).setAudience('ai-test').setIssuedAt().setExpirationTime('1h').sign(pair.privateKey);
   token = await jwt('oidc-sub-is-not-database-actor'); otherToken = await jwt('another-oidc-user');
-  const bundle = await build({ entryPoints: [fileURLToPath(new URL('../worker.ts', import.meta.url))], bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2022' });
+  const bundle = await build({ entryPoints: [fileURLToPath(new URL('../worker.ts', import.meta.url))], bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2022', external: ['node:*'] });
   mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: bundle.outputFiles[0]!.text,
     compatibilityDate: '2026-10-21', compatibilityFlags: ['nodejs_compat'], r2Buckets: ['FILES'],
     bindings: { CORS_ORIGINS: 'https://app.example.test', OIDC_ISSUER: issuer, OIDC_AUDIENCE: 'ai-test', OIDC_JWKS_URI: `${issuer}/jwks`,
@@ -59,6 +60,7 @@ beforeAll(async () => {
           return MfResponse.json({ error: { code, message: `private provider error ${personalKey}`, status: 'TEST' } }, { status: code });
         }
         const prep = [...preparations.values()][0]!;
+        if (revokeAfterProvider) access = false;
         const text = scenario === 'invalid-json' ? 'not JSON' : scenario === 'oversized' ? 'x'.repeat(300_000) : JSON.stringify(question(prep));
         return MfResponse.json({ candidates: [{ content: { parts: [{ text }], role: 'model' }, finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 30 } });
       }
@@ -129,7 +131,7 @@ beforeAll(async () => {
 }, 30_000);
 afterAll(async () => { await mf?.dispose(); });
 beforeEach(() => { key = undefined; intentions.clear(); preparations.clear(); generations.clear(); consent = true; policy = true; active = true; access = true; quota = false;
-  providerCalls = 0; commits = 0; failCommitAfter = false; finishFailure = 'none'; scenario = 'ok'; lastPrepare = undefined; lastProviderBody = ''; });
+  providerCalls = 0; commits = 0; failCommitAfter = false; finishFailure = 'none'; scenario = 'ok'; lastPrepare = undefined; lastProviderBody = ''; revokeAfterProvider = false; delete config.purpose; });
 
 function api(path: string, method = 'GET', body?: unknown, bearer = token) {
   return mf.dispatchFetch(`https://api.example.test/ai/${path}`, { method, headers: { Authorization: `Bearer ${bearer}`, ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
@@ -228,6 +230,22 @@ describe('BYOK en runtime Cloudflare con Gemini interceptado localmente', () => 
     expect((await api('generations', 'POST', request)).status).toBe(200); expect(providerCalls).toBe(1);
     expect((await api('generations', 'POST', { ...request, config: { ...config, questionCount: 2 } })).status).toBe(409);
     expect(providerCalls).toBe(1);
+  });
+  it.each(['guide', 'explanation'] as const)('genera %s con esquema y citas, sin usar el formato de exámenes', async (purpose) => {
+    config.purpose = purpose;
+    const prep = await ready(); const request = generationRequest(prep);
+    const response = await api('generations', 'POST', request);
+    expect(response.status, await response.clone().text()).toBe(200);
+    const saved = await response.json() as AiGeneration;
+    expect(saved.state).toBe('succeeded'); expect(saved.result).toEqual(question(prep));
+    expect(lastProviderBody).toContain('sections'); expect(lastProviderBody).not.toContain('correctOptionId');
+    if (purpose === 'guide') for (const section of GUIDE_SECTIONS) expect(lastProviderBody).toContain(section.title);
+  });
+  it('retirar acceso durante la inferencia impide entregar el borrador terminado', async () => {
+    config.purpose = 'explanation'; const prep = await ready(); revokeAfterProvider = true;
+    const response = await api('generations', 'POST', generationRequest(prep));
+    expect(response.status).toBe(403); expect(providerCalls).toBe(1);
+    expect(await response.text()).not.toContain('contador = 1');
   });
   it.each(['invalid-key', 'quota', 'invalid-json', 'invalid-cite', 'oversized'] as const)('guarda fallo %s sin reintento ni filtrar datos privados', async (failure) => {
     const prep = await ready(); scenario = failure; const request = generationRequest(prep);
