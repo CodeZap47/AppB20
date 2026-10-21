@@ -81,7 +81,7 @@ function GuideAiAccountPanel() {
     <p>Selecciona material compartido, revisa el texto y genera un borrador privado. Se comparte con el grupo únicamente cuando lo publiques.</p>
     {simulated && <p className="ai-notice">Simulación local: textos y resultados ficticios. No se usan claves reales ni se llama a Gemini.</p>}
     {!active && <p className="ai-notice">Necesitas acceso vigente al grupo para preparar guías.</p>}
-    <p><Link to="/m/ajustes">Configurar mi clave y consentimiento en Ajustes</Link>. Las guías manuales siguen disponibles sin IA.</p>
+    <p><Link to="/ajustes">Configurar mi clave y consentimiento en Ajustes</Link>. Las guías manuales siguen disponibles sin IA.</p>
     {status && <p>Modelo: <strong>{status.status.model || 'Pendiente de configurar'}</strong> · Clave de <strong>{data.me?.displayName ?? 'mi cuenta'}</strong>: {status.key.configured ? 'configurada' : 'sin configurar'} · Consentimiento: {status.status.consented ? 'vigente' : 'pendiente'}.</p>}
     {status && !status.status.enabled && <p className="ai-notice">{status.status.reason || 'La generación todavía no está habilitada. Puedes revisar y preparar material.'}</p>}
     <details open={!draft || Boolean(refreshing)}>
