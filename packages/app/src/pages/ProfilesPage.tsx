@@ -12,7 +12,7 @@ import type { Id, Member, Snapshot, Subject } from '../data/types';
 import { Avatar } from '../components/Avatar';
 import { AvatarStack } from '../components/AvatarStack';
 import { BirthdayForm } from '../components/BirthdayForm';
-import { ProfilePhoto, ProfilePresentationEditor } from '../components/ProfilePresentation';
+import { ProfileCover, ProfileEditor, ProfilePhoto } from '../components/ProfilePresentation';
 import { Empty } from '../components/Empty';
 import { Icon } from '../components/Icon';
 import { useAction } from '../components/useAction';
@@ -863,7 +863,7 @@ export function ProfilePage() {
           <Icon name="forward" size={14} />
           <span aria-current="page">{profile?.preferredName || member.displayName}</span>
         </nav>
-        <div className="profile-cover" aria-hidden="true" />
+        <ProfileCover cover={profile?.cover} />
         <div className="profile-hero__photo">
           <ProfilePhoto member={member} profile={profile} size={120} />
           {member.isCreator && (
@@ -926,7 +926,7 @@ export function ProfilePage() {
                   <button
                     type="button"
                     className="secondary"
-                    onClick={() => setEditingPresentation((current) => !current)}
+                    onClick={() => setEditingPresentation(true)}
                   >
                     Editar presentación y foto
                   </button>
@@ -958,7 +958,7 @@ export function ProfilePage() {
           {error}
         </p>
       )}
-      {editingPresentation && isMe && <ProfilePresentationEditor profile={profile} onDone={() => setEditingPresentation(false)} />}
+      {editingPresentation && isMe && <ProfileEditor member={member} profile={profile} onDone={() => setEditingPresentation(false)} />}
       {profile && <section className="panel">
         <h2>Presentación</h2>
         {profile.bio && <p style={{ whiteSpace: 'pre-wrap' }}>{profile.bio}</p>}

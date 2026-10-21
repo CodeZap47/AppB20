@@ -1,8 +1,8 @@
 import type { Id, MaybePromise, MessageScope } from './types';
 import type { CreateChatChannelInput, ReportMessageInput } from './chatTypes';
-import type { MemberProfileInput } from './communityTypes';
+import type { MemberProfileInput, ProfileCoverInput } from './communityTypes';
 export type { ChatChannel, ChannelMessage, ConversationState, BlockedMember, MessageReport, CreateChatChannelInput, ReportMessageInput } from './chatTypes';
-export type { MemberProfile, MemberProfileInput } from './communityTypes';
+export type { MemberProfile, MemberProfileInput, ProfileCover, ProfileCoverInput } from './communityTypes';
 export type { NoteVersion, GuideVersion, GuideVersionSource, QuestionComment, AnswerUsefulness, QuestionLink } from './knowledgeTypes';
 export type WithdrawableKind = 'note' | 'guide' | 'question' | 'answer' | 'work' | 'evidence';
 export interface Delivery2Actions {
@@ -16,6 +16,7 @@ export interface Delivery2Actions {
   reportMessage(input: ReportMessageInput): MaybePromise<Id>;
   resolveMessageReport(reportId: Id): MaybePromise<void>;
   saveMemberProfile(input: MemberProfileInput): MaybePromise<Id>;
+  saveProfileCover(input: ProfileCoverInput): MaybePromise<void>;
   publishNoteVersion(noteId: Id, expectedVersion: number): MaybePromise<Id>;
   restoreNoteVersion(noteId: Id, version: number, expectedVersion: number): MaybePromise<void>;
   restoreGuideVersion(guideId: Id, version: number, expectedVersion: number): MaybePromise<void>;

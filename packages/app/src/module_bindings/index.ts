@@ -158,6 +158,7 @@ import SaveNotificationPreferencesReducer from "./save_notification_preferences_
 import SavePresentationAttemptReducer from "./save_presentation_attempt_reducer";
 import SavePresentationFeedbackReducer from "./save_presentation_feedback_reducer";
 import SavePresentationPracticeReducer from "./save_presentation_practice_reducer";
+import SaveProfileCoverReducer from "./save_profile_cover_reducer";
 import SaveQuestionLinksReducer from "./save_question_links_reducer";
 import SaveSpacedCardReducer from "./save_spaced_card_reducer";
 import SaveSpacedCollectionReducer from "./save_spaced_collection_reducer";
@@ -285,6 +286,7 @@ import GuideVersionsRow from "./guide_versions_table";
 import HelpPostVersionsRow from "./help_post_versions_table";
 import HelpPostsRow from "./help_posts_table";
 import InvitationsRow from "./invitations_table";
+import MemberProfileCoversRow from "./member_profile_covers_table";
 import MemberProfilesRow from "./member_profiles_table";
 import MembersRow from "./members_table";
 import MessageReactionsRow from "./message_reactions_table";
@@ -598,6 +600,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, InvitationsRow),
+  memberProfileCovers: __table({
+    name: 'member_profile_covers',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MemberProfileCoversRow),
   memberProfiles: __table({
     name: 'member_profiles',
     indexes: [
@@ -1216,6 +1225,7 @@ const reducersSchema = __reducers(
   __reducerSchema("save_presentation_attempt", SavePresentationAttemptReducer),
   __reducerSchema("save_presentation_feedback", SavePresentationFeedbackReducer),
   __reducerSchema("save_presentation_practice", SavePresentationPracticeReducer),
+  __reducerSchema("save_profile_cover", SaveProfileCoverReducer),
   __reducerSchema("save_question_links", SaveQuestionLinksReducer),
   __reducerSchema("save_spaced_card", SaveSpacedCardReducer),
   __reducerSchema("save_spaced_collection", SaveSpacedCollectionReducer),
@@ -1367,6 +1377,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "help_post_versions": Omit<typeof tablesSchema.schemaType.tables["helpPostVersions"], "accessorName"> & { readonly accessorName: "help_post_versions" };
     /** @deprecated Use `helpPosts` instead. This alias will be removed in the next major version. */
     readonly "help_posts": Omit<typeof tablesSchema.schemaType.tables["helpPosts"], "accessorName"> & { readonly accessorName: "help_posts" };
+    /** @deprecated Use `memberProfileCovers` instead. This alias will be removed in the next major version. */
+    readonly "member_profile_covers": Omit<typeof tablesSchema.schemaType.tables["memberProfileCovers"], "accessorName"> & { readonly accessorName: "member_profile_covers" };
     /** @deprecated Use `memberProfiles` instead. This alias will be removed in the next major version. */
     readonly "member_profiles": Omit<typeof tablesSchema.schemaType.tables["memberProfiles"], "accessorName"> & { readonly accessorName: "member_profiles" };
     /** @deprecated Use `messageReactions` instead. This alias will be removed in the next major version. */
@@ -1534,6 +1546,7 @@ const tableAccessorAliases = {
   "guide_versions": "guideVersions",
   "help_post_versions": "helpPostVersions",
   "help_posts": "helpPosts",
+  "member_profile_covers": "memberProfileCovers",
   "member_profiles": "memberProfiles",
   "message_reactions": "messageReactions",
   "museum_entries": "museumEntries",
@@ -1669,6 +1682,8 @@ export type DbView = __DbViewBase & {
   readonly "help_post_versions": __DbViewBase["helpPostVersions"];
   /** @deprecated Use `helpPosts` instead. This alias will be removed in the next major version. */
   readonly "help_posts": __DbViewBase["helpPosts"];
+  /** @deprecated Use `memberProfileCovers` instead. This alias will be removed in the next major version. */
+  readonly "member_profile_covers": __DbViewBase["memberProfileCovers"];
   /** @deprecated Use `memberProfiles` instead. This alias will be removed in the next major version. */
   readonly "member_profiles": __DbViewBase["memberProfiles"];
   /** @deprecated Use `messageReactions` instead. This alias will be removed in the next major version. */
@@ -1849,6 +1864,8 @@ export type Tables = __TablesBase & {
   readonly "help_post_versions": __TablesBase["helpPostVersions"];
   /** @deprecated Use `helpPosts` instead. This alias will be removed in the next major version. */
   readonly "help_posts": __TablesBase["helpPosts"];
+  /** @deprecated Use `memberProfileCovers` instead. This alias will be removed in the next major version. */
+  readonly "member_profile_covers": __TablesBase["memberProfileCovers"];
   /** @deprecated Use `memberProfiles` instead. This alias will be removed in the next major version. */
   readonly "member_profiles": __TablesBase["memberProfiles"];
   /** @deprecated Use `messageReactions` instead. This alias will be removed in the next major version. */

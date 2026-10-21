@@ -345,7 +345,7 @@ export type ProgressTargetKind = 'assignment' | 'activity';
 export type ProgressStatus = 'pending' | 'in_progress' | 'done';
 export type WorkPublicationStatus = 'draft' | 'final';
 export type WorkStatus = WorkPublicationStatus | 'reviewed';
-export type ResourceTargetKind = ProgressTargetKind | 'work' | 'evidence' | 'note' | 'guide' | 'question' | 'answer' | 'profile' | 'group_message' | 'direct_message' | 'channel_message';
+export type ResourceTargetKind = ProgressTargetKind | 'work' | 'evidence' | 'note' | 'guide' | 'question' | 'answer' | 'profile' | 'profile_cover' | 'group_message' | 'direct_message' | 'channel_message';
 
 /** Se obtiene exclusivamente a través de la vista privada del alumno. */
 export interface AcademicProgress {

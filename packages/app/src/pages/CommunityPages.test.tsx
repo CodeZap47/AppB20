@@ -87,6 +87,46 @@ describe('perfiles y cumpleaños', () => {
     expect(source.saveMemberProfile).toHaveBeenCalledWith({ preferredName: profile.preferredName, bio: profile.bio, interests: profile.interests, learningGoals: profile.learningGoals, skills: profile.skills, helpTopics: profile.helpTopics, portfolioLinks: profile.portfolioLinks, subjectIds: [], photoFileId: 'private-photo', expectedVersion: 1 });
   });
 
+  it('el editor cambia la portada por un degradado y la guarda aparte del perfil', async () => {
+    source.saveProfileCover = vi.fn().mockResolvedValue(undefined);
+    await mount('/perfil/me'); await click('Editar presentación y foto');
+    const dialog = container.querySelector('dialog.profile-editor')!;
+    expect(dialog.textContent).toContain('Portada');
+    const oceano = dialog.querySelector<HTMLInputElement>('input[name="cover-preset"][value="oceano"]')!;
+    await act(async () => oceano.click());
+    expect(dialog.querySelector<HTMLElement>('.profile-editor__preview-cover')?.style.backgroundImage).toContain('rgb(127, 179, 245)');
+    await act(async () => dialog.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+    expect(source.saveMemberProfile).toHaveBeenCalled();
+    expect(source.saveProfileCover).toHaveBeenCalledWith({ preset: 'oceano', fileId: undefined, expectedVersion: 1 });
+  });
+
+  it('muestra la portada guardada en el perfil y rechaza imágenes de portada no permitidas', async () => {
+    snapshot.memberProfiles = [{ ...profile, cover: { preset: 'atardecer' } }];
+    await mount('/perfil/me');
+    expect(container.querySelector<HTMLElement>('.profile-hero .profile-cover')?.style.backgroundImage).toContain('rgb(247, 169, 120)');
+    await click('Editar presentación y foto');
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="Imagen de portada"]')!;
+    const svg = new File(['<svg/>'], 'portada.svg', { type: 'image/svg+xml' });
+    Object.defineProperty(input, 'files', { value: [svg] });
+    await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
+    expect(container.querySelector('dialog [role="alert"]')?.textContent).toContain('PNG, JPEG o WebP');
+  });
+
+  it('agrega y quita etiquetas, y pide confirmar antes de descartar cambios', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    await mount('/perfil/me'); await click('Editar presentación y foto');
+    const input = container.querySelector<HTMLInputElement>('.tag-field input')!;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => { setValue.call(input, 'Música'); input.dispatchEvent(new Event('input', { bubbles: true })); });
+    await act(async () => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+    expect([...container.querySelectorAll('.tag-field')][0]!.textContent).toContain('Música');
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Quitar Robótica"]')!.click());
+    expect([...container.querySelectorAll('.tag-field')][0]!.textContent).not.toContain('Robótica');
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Cerrar"]')!.click());
+    expect(confirm).toHaveBeenCalled();
+    expect(container.querySelector('dialog.profile-editor')).not.toBeNull();
+  });
+
   it('la vista anual muestra doce meses y conserva el 29 de febrero sin publicar edad', async () => {
     snapshot.birthdays = [{ memberId: 'me', day: 29, month: 2, remind: false }];
     await mount('/m/cumpleanos?mes=2027-02&vista=ano');

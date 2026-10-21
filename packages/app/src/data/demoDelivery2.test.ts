@@ -40,6 +40,24 @@ describe('integración de stores de la segunda entrega en la demo', () => {
     await expect(source.downloadResourceFile(photo)).rejects.toThrow(/acceso/);
     await expect(source.attachResourceFile('profile', profileId, new File(['x'], 'foto.png', { type: 'image/png' }), 3)).rejects.toThrow(/autor/);
   });
+  it('guarda la portada sin tocar la foto y solo comparte la imagen vigente', async () => {
+    const input: MemberProfileInput = { preferredName: 'Luis', bio: '', interests: [], learningGoals: '', skills: [], helpTopics: [], portfolioLinks: [], subjectIds: [], expectedVersion: 0 };
+    const image = (name: string) => new File([new Uint8Array([137, 80, 78, 71])], name, { type: 'image/png' });
+    const profileId = source.saveMemberProfile(input);
+    const photo = await source.attachResourceFile('profile', profileId, image('foto.png'), 1);
+    const old = await source.attachResourceFile('profile_cover', profileId, image('vieja.png'), 2);
+    const cover = await source.attachResourceFile('profile_cover', profileId, image('portada.png'), 3);
+    expect(source.getSnapshot().memberProfiles.find((row) => row.id === profileId)).toMatchObject({ photoFileId: photo, cover: { preset: 'lavanda', fileId: cover }, version: 4 });
+    expect(() => source.saveProfileCover({ preset: 'neon', expectedVersion: 4 })).toThrow(/portadas disponibles/);
+    expect(() => source.saveProfileCover({ preset: 'oceano', fileId: photo, expectedVersion: 4 })).toThrow(/portada/);
+    source.saveProfileCover({ preset: 'oceano', fileId: cover, expectedVersion: 4 });
+    source.saveMemberProfile({ ...input, bio: 'Hola', photoFileId: photo, expectedVersion: 5 });
+    expect(source.getSnapshot().memberProfiles.find((row) => row.id === profileId)?.cover).toEqual({ preset: 'oceano', fileId: cover });
+    source.setViewer('demo-4');
+    expect(source.getSnapshot().resourceFiles.some((file) => file.id === cover)).toBe(true);
+    expect(source.getSnapshot().resourceFiles.some((file) => file.id === old)).toBe(false);
+    await expect(source.attachResourceFile('profile_cover', profileId, image('ajena.png'), 6)).rejects.toThrow(/autor/);
+  });
   it('mantiene el historial directo privado tras bloquear y al recibir un reporte seleccionado', async () => {
     const conversation = source.openDirectConversation('demo-3');
     const message = source.sendDirectMessage(conversation, 'Elegir evidencia');

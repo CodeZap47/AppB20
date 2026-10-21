@@ -28,3 +28,4 @@ export * from './aiStudyModules';
 export * from './guideAi';
 export * from './agent';
 export * from './agentStyle';
+export * from './profiles';

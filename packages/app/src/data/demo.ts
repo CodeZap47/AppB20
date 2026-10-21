@@ -56,6 +56,7 @@ import {
   MAX_SPACED_QUESTION_LENGTH,
   MAX_SPACED_EXPLANATION_LENGTH,
   MAX_SPACED_HINT_LENGTH,
+  DEFAULT_PROFILE_COVER,
 } from '@b20/core';
 import type {
   HelpPost,
@@ -124,6 +125,7 @@ import type {
   SpacedReviewInput,
   MemberProfile,
   MemberProfileInput,
+  ProfileCoverInput,
   CreateChatChannelInput,
   ReportMessageInput,
   WithdrawableKind,
@@ -135,7 +137,7 @@ import { DemoPresentationStore, emptyPresentationsSnapshot, type PresentationDem
 import type { PresentationPracticeInput, PresentationAttemptInput, PresentationFeedbackInput } from './presentationTypes';
 import { DemoChatStore } from './demoChat';
 import { DemoKnowledgeStore } from './demoKnowledge';
-import { saveDemoMemberProfile } from './communityDemo';
+import { saveDemoMemberProfile, saveDemoProfileCover } from './communityDemo';
 import { emptyDelivery2 } from './delivery2Snapshot';
 import { DemoTrashStore } from './demoTrash';
 import { DemoNotificationsStore } from './demoNotifications';
@@ -601,9 +603,9 @@ export class DemoDataSource implements DataSource {
     combined.resourceFiles = combined.resourceFiles.filter((file) => {
       if (this.#chat.handles(file.targetKind)) return true;
       if (!this.#canReadResource(file.targetKind, file.targetId)) return false;
-      if (file.targetKind === 'profile') {
+      if (file.targetKind === 'profile' || file.targetKind === 'profile_cover') {
         const profile = this.#profiles.find((row) => row.id === file.targetId);
-        return profile?.memberId === me.id || profile?.photoFileId === file.id;
+        return profile?.memberId === me.id || (file.targetKind === 'profile' ? profile?.photoFileId : profile?.cover?.fileId) === file.id;
       }
       return true;
     });
@@ -657,7 +659,7 @@ export class DemoDataSource implements DataSource {
           : kind === 'answer' ? this.#state.answers.find((row) => row.id === id)
             : kind === 'work' ? this.#state.works.find((row) => row.id === id)
               : kind === 'evidence' ? this.#state.evidences.find((row) => row.id === id)
-                : kind === 'profile' ? this.#profiles.find((row) => row.id === id) : undefined;
+                : kind === 'profile' || kind === 'profile_cover' ? this.#profiles.find((row) => row.id === id) : undefined;
   }
   #contentAuthors(kind: string, id: Id): Id[] {
     const row = this.#contentRow(kind, id);
@@ -673,7 +675,7 @@ export class DemoDataSource implements DataSource {
     if (kind === 'activity') return this.#state.activities.some((row) => row.id === id);
     const row = this.#contentRow(kind, id); if (!row) return false;
     if (kind === 'note' && (row as Note).visibility === 'personal' && (row as Note).authorId !== me.id) return false;
-    if (kind === 'profile' && !this.#isActive((row as MemberProfile).memberId)) return false;
+    if ((kind === 'profile' || kind === 'profile_cover') && !this.#isActive((row as MemberProfile).memberId)) return false;
     if (kind === 'answer' && !this.#canReadResource('question', (row as Answer).questionId)) return false;
     const withdrawn = this.#withdrawals.get(`${kind}:${id}`)?.withdrawnAt ?? ('withdrawnAt' in row ? row.withdrawnAt : undefined);
     return !withdrawn || this.#contentAuthors(kind, id).includes(me.id) || me.isCreator;
@@ -698,6 +700,10 @@ export class DemoDataSource implements DataSource {
     else if (kind === 'profile') {
       const latest = this.#academic.resources().filter((file) => file.targetKind === 'profile' && file.targetId === id && !file.removedAt).at(-1);
       this.#profiles = this.#profiles.map((row) => row.id === id ? { ...row, photoFileId: latest?.id, version: row.version + 1, updatedAt: now } : row);
+    } else if (kind === 'profile_cover') {
+      const latest = this.#academic.resources().filter((file) => file.targetKind === 'profile_cover' && file.targetId === id && !file.removedAt).at(-1);
+      this.#profiles = this.#profiles.map((row) => row.id === id
+        ? { ...row, cover: { preset: row.cover?.preset ?? DEFAULT_PROFILE_COVER, fileId: latest?.id }, version: row.version + 1, updatedAt: now } : row);
     }
     if (kind === 'note') this.#knowledge.captureNote(id, me.id);
     else if (kind === 'guide') { this.#knowledge.captureGuide(id, me.id); if (previousGuide) this.#guideAi.inheritProvenance(id, previousGuide.version, previousGuide.version + 1, previousGuide.sections); }
@@ -708,6 +714,11 @@ export class DemoDataSource implements DataSource {
     const me = this.#activeMember();
     const next = saveDemoMemberProfile(input, { memberId: me.id, profiles: this.#profiles, subjects: this.#state.subjects, resourceFiles: this.#academic.resources(), createId: () => this.#id(), now: this.#now() });
     this.#profiles = [...this.#profiles.filter((profile) => profile.memberId !== me.id), next]; this.#emit(); return next.id;
+  }
+  saveProfileCover(input: ProfileCoverInput) {
+    const me = this.#activeMember();
+    const next = saveDemoProfileCover(input, { memberId: me.id, profiles: this.#profiles, resourceFiles: this.#academic.resources(), now: this.#now() });
+    this.#profiles = this.#profiles.map((profile) => profile.id === next.id ? next : profile); this.#emit();
   }
   withdrawContent(kind: WithdrawableKind, targetId: Id, withdrawn: boolean, expectedVersion: number, reason = '') {
     if (!withdrawn) this.#trash.assertRestorable(kind, targetId);
@@ -1119,7 +1130,7 @@ export class DemoDataSource implements DataSource {
     this.#activeMember();
     if (this.#chat.handles(kind)) return this.#chat.attachResourceFile(kind, id, file, expectedVersion, transfer);
     if (!this.#canReadResource(kind, id) || this.#withdrawals.get(`${kind}:${id}`)?.withdrawnAt) return Promise.reject(new Error('El recurso no está disponible.'));
-    if (kind === 'profile' && (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size <= 0 || file.size > 5 * 1024 * 1024)) return Promise.reject(new Error('La foto debe ser PNG, JPEG o WebP de hasta 5 MB.'));
+    if ((kind === 'profile' || kind === 'profile_cover') && (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size <= 0 || file.size > 5 * 1024 * 1024)) return Promise.reject(new Error(kind === 'profile' ? 'La foto debe ser PNG, JPEG o WebP de hasta 5 MB.' : 'La portada debe ser PNG, JPEG o WebP de hasta 5 MB.'));
     return this.#academic.attachResourceFile(kind, id, file, expectedVersion, transfer);
   }
   #resourceFile(id: Id) {

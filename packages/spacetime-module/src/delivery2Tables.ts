@@ -64,6 +64,10 @@ export const memberProfile = table({ name: 'member_profile' }, {
   portfolioLinks: t.array(t.string()), subjectIds: t.array(t.u64()), photoFileId: t.string().optional(),
   version: t.u32(), updatedAt: t.timestamp(),
 });
+/** Portada del perfil: degradado elegido y, si la hay, la imagen vigente (archivo `profile_cover`). */
+export const memberProfileCover = table({ name: 'member_profile_cover' }, {
+  profileId: t.u64().primaryKey(), preset: t.string(), fileId: t.string().optional(), updatedAt: t.timestamp(),
+});
 export const contentStatus = table({ name: 'content_status' }, {
   key: t.string().primaryKey(), kind: t.string(), targetId: t.u64(),
   withdrawnAt: t.timestamp().optional(), withdrawnBy: t.identity().optional(), reason: t.string(),
@@ -77,5 +81,5 @@ export const stickerImport = table({ name: 'sticker_import' }, {
 });
 
 export const delivery2Tables = { chatChannel, channelMessage, conversationState, memberBlock, messageReport,
-  noteDetail, noteVersion, guideVersion, questionComment, answerUsefulness, questionLink, resourceVersion, memberProfile, contentStatus,
+  noteDetail, noteVersion, guideVersion, questionComment, answerUsefulness, questionLink, resourceVersion, memberProfile, memberProfileCover, contentStatus,
   stickerBlob, stickerImport };

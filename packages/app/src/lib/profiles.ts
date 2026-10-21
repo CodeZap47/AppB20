@@ -3,11 +3,14 @@ import type { MemberProfileInput } from '../data/communityTypes';
 export const PROFILE_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 export const PROFILE_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
 
-export function profilePhotoError(file: Pick<File, 'type' | 'size'>): string | undefined {
+/** La foto y la portada comparten formato y límite de tamaño. */
+export function profileImageError(file: Pick<File, 'type' | 'size'>, kind: 'foto' | 'portada' = 'foto'): string | undefined {
   if (!(PROFILE_PHOTO_TYPES as readonly string[]).includes(file.type)) return 'Elige una imagen PNG, JPEG o WebP.';
-  if (!file.size || file.size > PROFILE_PHOTO_MAX_BYTES) return 'La foto debe ocupar entre 1 byte y 5 MiB.';
+  if (!file.size || file.size > PROFILE_PHOTO_MAX_BYTES) return `La ${kind} debe ocupar entre 1 byte y 5 MiB.`;
   return undefined;
 }
+
+export const profilePhotoError = (file: Pick<File, 'type' | 'size'>) => profileImageError(file, 'foto');
 
 export const profileList = (text: string): string[] =>
   [...new Set(text.split(/[,\n]/).map((part) => part.trim()).filter(Boolean))];
