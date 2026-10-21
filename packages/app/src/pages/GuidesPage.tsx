@@ -293,6 +293,9 @@ export function GuidePage() {
           <Link to={`/m/aprende-ensenando/nueva?guia=${encodeURIComponent(guide.id)}`} className="button secondary">
             Practicar explicándolo
           </Link>
+          {!guide.withdrawnAt && <Link to={`/m/exposiciones/nueva?guia=${encodeURIComponent(guide.id)}`} className="button secondary">
+            Ensayar exposición
+          </Link>}
           {!guide.withdrawnAt && <Link to={`/m/salas?guia=${encodeURIComponent(guide.id)}`} className="button secondary">Estudiar en una sala</Link>}
           {!guide.withdrawnAt && <Link to={`/m/guias/${guide.id}/editar`} className="button secondary with-icon">
             <Icon name="edit" size={16} /> Editar

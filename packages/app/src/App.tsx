@@ -29,6 +29,7 @@ import { AskQuestionPage, QuestionPage, QuestionsPage } from './pages/QuestionsP
 import { TeachingFormPage, TeachingPage, TeachingPracticePage } from './pages/TeachingPage';
 import { RoomFormPage, RoomPage, RoomsPage } from './pages/RoomsPage';
 import { SpacedPage, SpacedCollectionPage, SpacedCollectionFormPage, SpacedCardFormPage, SpacedSessionPage } from './pages/SpacedPage';
+import { PresentationsPage, PresentationFormPage, PresentationPracticePage, PresentationAttemptPage } from './pages/PresentationsPage';
 import { SpacetimeProvider } from './lib/spacetime';
 import { AuthProvider, useSession, useSessionStore } from './auth/AuthContext';
 import { SignInPage } from './auth/SignInPage';
@@ -114,6 +115,11 @@ const router = createHashRouter([
           { path: 'm/repaso/tarjetas/nueva', element: <SpacedCardFormPage /> },
           { path: 'm/repaso/tarjetas/:cardId/editar', element: <SpacedCardFormPage /> },
           { path: 'm/repaso/sesion', element: <SpacedSessionPage /> },
+          { path: 'm/exposiciones', element: <PresentationsPage /> },
+          { path: 'm/exposiciones/nueva', element: <PresentationFormPage /> },
+          { path: 'm/exposiciones/:practiceId', element: <PresentationPracticePage /> },
+          { path: 'm/exposiciones/:practiceId/editar', element: <PresentationFormPage /> },
+          { path: 'm/exposiciones/:practiceId/intentos/:attemptId', element: <PresentationAttemptPage /> },
           { path: 'm/leaderboard', element: <LeaderboardPage /> },
           { path: 'm/leaderboard/:memberId', element: <ContributorPage /> },
           { path: 'm/votaciones', element: <PollsPage /> },

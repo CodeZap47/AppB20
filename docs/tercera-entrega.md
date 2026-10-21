@@ -113,6 +113,13 @@ La verificación global del 21 de octubre de 2026 terminó correctamente:
 Estas comprobaciones usan Node 24.15.0 y bases locales aisladas; no sustituyen la aceptación
 con cuentas, claves del proveedor y dispositivos reales.
 
+Al integrar los cambios posteriores de `main` (`cda8030`) se conservaron Exposiciones y los
+registros de Tareas/Salas. La suite conjunta pasó con **1,098 pruebas** (app 562, core 110,
+módulo 271, API 104 y web 51), con bindings regenerados y el recorrido real aislado de
+Exposiciones aprobado. El total de 999 anterior corresponde a la entrega previa a esa integración.
+Los tipos globales y las compilaciones de web/PWA, extensión y Worker (`--dry-run`) también
+pasaron con el código integrado.
+
 ## Pendientes conservados
 
 - Configurar los servicios, publicar sin borrar datos y validar cuentas reales, cuotas del

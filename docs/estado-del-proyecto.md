@@ -70,7 +70,7 @@ publicación en Maincloud ni una prueba de aceptación con el grupo.
 | 7.7 Museo de bugs | Pendiente; se integrará en Preguntas. | Plantilla, etiquetas y referencias. | 4 |
 | 7.8 Aprende enseñando | Manual local: explicación, invitado, preguntas, reflexión privada y publicación de nota. | Validación real; preguntas con IA todavía pendientes de su integración específica. | 4 |
 | 7.9 Repaso espaciado | Manual local: colecciones, tarjetas, cola e historial privados; recordatorios integrados en la tercera entrega. | Validación real y borradores de tarjetas con Gemini en una entrega posterior. Mantener intervalos de 1/3/7/14/30/60/120 días. | 4 |
-| 7.10 Exposiciones | Pendiente. | Ensayos por texto, preguntas, observaciones y siguientes intentos privados. | 5 |
+| 7.10 Exposiciones | Texto manual: ensayos versionados, preguntas, observaciones privadas y revisor voluntario; ver [reglas](exposiciones.md). | Audio y generación con Gemini quedan para sus integraciones. La publicación se verifica por separado. | 5 |
 | 7.11 Préstamos | Pendiente. | Catálogo, acuerdo privado, reserva, entrega y devolución sin doble préstamo. | 5 |
 | 7.12 Oportunidades | Pendiente. | Fichas manuales, filtros, plazos, fuente, búsqueda de equipo y reportes. | 4 |
 
@@ -130,7 +130,7 @@ anterior se conserva por compatibilidad, sin activar facturación.
   no publican la segunda entrega ni Salas en Maincloud o Cloudflare Pages.
 
 
-### Tercera entrega — recorridos locales aislados
+### Tercera entrega — recorridos locales aislados previos a integrar Exposiciones
 
 - Suite global: **999 pruebas aprobadas** (app 504, core 94, módulo 246, API 104 y web 51).
 - Tipos globales y bindings CLI/SDK 2.12.0 correctos. Compilaciones de web/PWA, extensión,
@@ -152,15 +152,45 @@ anterior se conserva por compatibilidad, sin activar facturación.
 - El [registro de la tercera entrega](tercera-entrega.md) reúne el alcance y la
   configuración operativa; estos recorridos no acreditan un despliegue.
 
+### Integración de la tercera entrega con `main` — 2026-10-21
+
+Se conservaron los cambios de Exposiciones y los registros de Tareas/Salas ya incorporados
+en `cda8030`. La suite conjunta pasó con **1,098 pruebas**: app 562, core 110, módulo 271,
+API 104 y web 51. Los bindings se regeneraron desde el esquema combinado y el recorrido
+real aislado de Exposiciones volvió a pasar, con persistencia, privacidad y revocación.
+Los tipos globales y las compilaciones de web/PWA, extensión y Worker (`--dry-run`)
+terminaron correctamente; `git diff --check` no encontró errores.
+Estas comprobaciones locales no despliegan la tercera entrega ni activan Gemini o push.
+
 ## Registro de validación en producción
 
-La lectura del esquema de Maincloud y de la web pública del 21 de octubre de 2026 confirma
+La lectura previa a esta adaptación, el 21 de octubre de 2026, confirmó
 que el despliegue conserva una versión anterior: Maincloud incluye Ayuda, pero no las
 operaciones de archivos nativos ni `restore_resource_file`; Pages tampoco incorpora la
 pantalla de Ayuda. El código, los bindings y GitHub se verifican por separado de esa
 publicación. Un push a `main` no se registra como un despliegue completado.
 
-Esta entrega no incorpora todavía evidencia de publicación ni de recorridos con tres cuentas.
+El registro siguiente actualiza la publicación del módulo. Los recorridos con tres cuentas reales siguen pendientes.
 Al realizarlos, registrar fecha, versión publicada, presentación, escenario, resultado y
 referencia de evidencia sin tokens ni datos personales. Los resultados automatizados y de
 compilación se adjuntan al cierre de implementación, separados de la validación humana.
+
+
+### Adaptación de Tareas y Actividades — 2026-10-21
+
+- Módulo `e64bfc4` publicado en Maincloud `app-b20-34245` con `--delete-data=never`.
+  Se verificaron las tablas privadas nativas y la conservación íntegra de las filas de 22 tablas
+  académicas/configuración, incluidas invitaciones. No se importaron datos de la simulación.
+- Node `22.23.3`, CLI/SDK `2.12.0`: **622 pruebas aprobadas** (app 348, core 63,
+  módulo 116, API 50, web 45), tipos y compilaciones web/PWA, extensión y Worker heredado.
+- Prueba con servidor persistente y tres identidades sintéticas aprobada: archivo de 50 MiB,
+  interrupción/reanudación, dos reinicios, historial, cancelación, integridad y baja inmediata.
+  La prueba espera la actualización de la segunda sesión antes de comprobar su caché.
+- Se corrigieron reintentos de lotes con confirmación incierta, aislamiento de formularios entre
+  tareas y respuestas tardías al abandonar una pantalla. Las operaciones antiguas sin versión
+  conservan su firma y piden actualizar antes de editar o retirar adjuntos.
+- Pages usa la integración Git existente de `codex/pages-spacetimeauth`. Verificar su revisión
+  y resultado en Deployments; la compilación local o el push no acreditan por sí solos éxito.
+- La base aún no tiene miembros incorporados ni publicaciones académicas. La primera persona
+  invitada debe unirse; permanecen pendientes los recorridos humanos con cuentas reales y la
+  medición de transferencias grandes en dispositivos del grupo.

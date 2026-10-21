@@ -80,7 +80,8 @@ Las pruebas abarcan permisos, cupo, invitaciones, conflictos, temporizador, fuen
 publicación única y recorridos entre módulos. El ensayo `scripts/smoke-spacetime-rooms.mjs`
 usa un servidor persistente temporal y tres identidades sintéticas, sin cuentas ni datos de
 producción. Las comprobaciones locales se registran por separado del despliegue y del piloto
-con cuentas reales. Esta entrega no despliega, sincroniza Android ni activa Gemini o push.
+con cuentas reales. La publicación en Maincloud y Cloudflare Pages y su comprobación con
+la cuenta autorizada se registran más adelante. No sincroniza Android ni activa Gemini o push.
 
 Para repetir las comprobaciones, selecciona primero Node 22 con `nvm use` y ejecuta:
 
@@ -105,7 +106,8 @@ también el panel lateral, el ancho móvil de 390 píxeles y acciones mediante T
 - Node 22.23.3: revisión de tipos global y **814 pruebas aprobadas** (App 463, Core 72,
   servidor 184, API 50 y Web 45).
 - Compilaciones Web/PWA, extensión, API heredada en modo dry-run, Pages y web en modo
-  Capacitor aprobadas. No se ejecutó sincronización de Android ni despliegue.
+  Capacitor aprobadas. En esa validación local no se ejecutó sincronización de Android ni
+  despliegue.
 - Ensayo real de Salas aprobado con tres identidades y un reinicio; las pruebas de
   aplicación cubren Ayuda, Notas, Guías, prácticas privadas, publicación y revocación.
 - Sin errores bloqueantes. Persisten advertencias de empaquetado por bloques JavaScript
@@ -113,3 +115,57 @@ también el panel lateral, el ancho móvil de 390 píxeles y acciones mediante T
 - Evidencia visual local: `artifacts/rooms/mobile-published-summary.png` y
   `artifacts/rooms/side-panel.png`. Los archivos temporales de la revisión y su servidor
   local fueron retirados al terminar.
+
+### Integración y despliegue — 21 de octubre de 2026
+
+La integración parte de `2691430`, revisión de la rama de producción de Pages que conserva
+Tareas y archivos nativos, e incorpora `5f2e91f`, revisión de `main` con Salas y la segunda
+entrega. Se realizó en una copia aislada para conservar los cambios de IA que siguen en
+desarrollo en la carpeta original. La revisión de código publicada es `1640d53`; `main` y
+`codex/pages-spacetimeauth` quedaron sincronizadas con esa revisión.
+
+- La integración pasó **814 pruebas**, revisión global de tipos y compilaciones web/PWA,
+  extensión y Pages. Los ensayos persistentes de Salas, segunda entrega y archivos nativos
+  aprobaron. Los **218 bindings** coinciden semánticamente con el módulo.
+- Maincloud se actualizó con `--delete-data=never`. El programa publicado coincide byte
+  por byte con el generado localmente: **2.566.289 bytes**, SHA-256
+  `a482b6c32628f57e2f4bfcd0d607efbae755ef83f52aab90919ae76e4353ca25`.
+- Se conservaron las huellas y conteos de las **60 tablas anteriores y sus 257 registros**.
+  Se añadieron 23 tablas y quedaron 83 en total. No se reinició la base ni se importaron
+  ejemplos de la demo. La evidencia de conservación no guarda valores privados de filas.
+- Pages terminó correctamente en el despliegue `4c0df8d0-e065-4d8e-9d9f-e439ef7c6dc7`.
+  Los **13 archivos de ejecución** del dominio estable coinciden por SHA-256 con la
+  compilación preparada. El cliente usa datos reales de `app-b20-34245` en Maincloud e
+  incluye Salas. Inicio, retornos de acceso y `/m/salas` responden con HTTP 200 y la app.
+
+Las evidencias operativas están en `artifacts/rooms-release/`: comparación de datos,
+verificación del programa de Maincloud, comparación de bindings, resultados de pruebas y
+`pages-public-verification.json`. Esta carpeta permanece fuera de Git.
+
+### Comprobación con datos reales — 21 de octubre de 2026
+
+El recorrido en la web publicada utiliza una única cuenta autorizada. Se comprobó crear y
+editar una sala privada, recargar y conservar los cambios, iniciarla y usar el temporizador:
+cambiar de 25 a 1 minuto, iniciar, pausar, continuar, recargar, terminar el bloque en cero,
+iniciar manualmente el descanso y reiniciar. Se guardaron un mensaje, una duda y una
+conclusión. El resumen persistió y se publicó como una nota que contiene únicamente su
+texto. Tras finalizar la sala, la conversación quedó de consulta.
+
+La integración con Aprende enseñando precargó la materia y el tema, dejando la explicación
+vacía; no se guardó una práctica de prueba. Se creó una segunda sala desde la nota publicada,
+con materia y tema precargados, y se comprobó retirar y volver a añadir ese material. La
+nota de prueba se retiró de forma recuperable, con motivo, versión e historial conservados;
+su referencia desapareció inmediatamente de los materiales de la sala.
+
+La segunda sala se inició con un temporizador de 25 minutos. Al confirmar su cancelación
+quedó de consulta, con el temporizador detenido y sin formularios de conversación ni resumen
+editable. La primera sala quedó finalizada y la segunda cancelada; no quedaron salas de
+prueba activas. La vista móvil de **390 × 844 píxeles** mantuvo el ancho de la página y del
+contenido en 390 píxeles, sin desbordamiento horizontal. Evidencia de la web real:
+`artifacts/rooms-release/real-mobile-material.png`.
+
+Los permisos entre participantes, invitaciones, cupo concurrente y revocación se comprobaron
+con tres identidades sintéticas en un servidor local persistente. La prueba de producción
+con una cuenta no sustituye la validación entre varias personas reales; ese recorrido y la
+creación de una sala desde un contacto aceptado de Ayuda siguen pendientes de otra cuenta
+autorizada. No se activó IA ni se sincronizó Android.

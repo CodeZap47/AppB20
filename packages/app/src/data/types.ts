@@ -23,6 +23,9 @@ import type {
   OriginContributionKind,
 } from '@b20/core';
 
+import type { PresentationActions, PresentationsSnapshot } from './presentationTypes';
+export type * from './presentationTypes';
+
 export type Id = string;
 import type { Delivery2Actions, ChatChannel, ChannelMessage, ConversationState, BlockedMember, MessageReport,
   MemberProfile, NoteVersion, GuideVersion, QuestionComment, AnswerUsefulness, QuestionLink } from './delivery2Types';
@@ -687,7 +690,7 @@ export interface PollVote {
 }
 
 /** Lo que el usuario actual puede ver, igual que las vistas del servidor. */
-export interface Snapshot extends StudyRoomsSnapshot, NotificationsSnapshot {
+export interface Snapshot extends StudyRoomsSnapshot, NotificationsSnapshot, PresentationsSnapshot {
   trashEntries: TrashEntry[];
   contributionOrigins: { kind: OriginContributionKind; refId: Id; memberId: Id; creditedAt: Date; duplicateOf?: Id }[];
   chatChannels: ChatChannel[];
@@ -797,7 +800,7 @@ export interface PublishWorkInput {
 export type MaybePromise<T> = T | Promise<T>;
 
 /** Acciones: corresponden uno a uno con los reducers del módulo. */
-export interface Actions extends Delivery2Actions, StudyRoomActions, NotificationActions, TrashActions {
+export interface Actions extends Delivery2Actions, StudyRoomActions, NotificationActions, TrashActions, PresentationActions {
   replaceSpacedCardSource(cardId: Id, expectedVersion: number, sourceKind: SpacedSourceKind, sourceId: Id): MaybePromise<void>;
   saveSpacedCollection(input: SpacedCollectionInput): MaybePromise<Id>;
   publishSpacedCollection(collectionId: Id, expectedVersion: number): MaybePromise<void>;

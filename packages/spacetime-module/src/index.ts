@@ -16,6 +16,9 @@ import { schema, SenderError, t, table, type ReducerCtx } from 'spacetimedb/serv
 import { ScheduleAt, Timestamp } from 'spacetimedb';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { nextSpacedSchedule, type SpacedRating } from '../../core/src/spaced';
+import { normalizePresentationConfiguration, normalizePresentationBody, normalizePresentationObservations,
+  normalizePresentationNextSteps, normalizePresentationQuestion, normalizePresentationAnswer,
+  normalizePresentationFeedback, presentationGuidingQuestions } from '../../core/src/presentations';
 import { delivery2Tables, chatChannel, channelMessage, conversationState, memberBlock, messageReport,
   noteDetail, noteVersion, guideVersion, questionComment, answerUsefulness, questionLink, resourceVersion, memberProfile, contentStatus } from './delivery2Tables';
 import * as delivery2 from './delivery2Handlers';
@@ -723,6 +726,39 @@ const spacedReview = table({ name: 'spaced_review' }, {
   reviewedAt: t.timestamp(), dueAt: t.timestamp(),
 });
 
+/** Exposiciones: los borradores y las autoobservaciones permanecen siempre privados. */
+const presentationConfiguration = {
+  title: t.string(), topic: t.string(), audience: t.string(), targetMinutes: t.u32(), keyPoints: t.array(t.string()),
+};
+const presentationSource = {
+  sourceKind: t.string().optional(), sourceId: t.u64().optional(), sourceVersion: t.u32().optional(),
+};
+const presentationPractice = table({ name: 'presentation_practice' }, {
+  id: t.u64().primaryKey().autoInc(), ownerId: t.identity().index('btree'), subjectId: t.u64(),
+  termId: t.u64().optional(), reviewerId: t.identity().optional(), ...presentationConfiguration, ...presentationSource,
+  archived: t.bool(), version: t.u32(), requestId: t.string(), creationHash: t.string(),
+  createdAt: t.timestamp(), updatedAt: t.timestamp(),
+});
+const presentationAttempt = table({ name: 'presentation_attempt' }, {
+  id: t.u64().primaryKey().autoInc(), practiceId: t.u64().index('btree'), number: t.u32(),
+  subjectId: t.u64(), termId: t.u64().optional(), ...presentationConfiguration, ...presentationSource,
+  status: t.string(), body: t.string(), version: t.u32(), requestId: t.string(), creationVersion: t.u32(),
+  createdAt: t.timestamp(), updatedAt: t.timestamp(), completedAt: t.timestamp().optional(),
+});
+const presentationPersonal = table({ name: 'presentation_personal' }, {
+  attemptId: t.u64().primaryKey(), clarity: t.string(), examples: t.string(), decisions: t.string(), limitations: t.string(), nextSteps: t.string(),
+});
+const presentationQuestion = table({ name: 'presentation_question' }, {
+  id: t.u64().primaryKey().autoInc(), attemptId: t.u64().index('btree'), authorId: t.identity(),
+  kind: t.string(), text: t.string(), answer: t.string(), version: t.u32(), requestId: t.string(),
+  createdAt: t.timestamp(), answeredAt: t.timestamp().optional(),
+});
+const presentationFeedback = table({ name: 'presentation_feedback_entry' }, {
+  id: t.u64().primaryKey().autoInc(), attemptId: t.u64().index('btree'), authorId: t.identity(),
+  clarity: t.string(), examples: t.string(), decisions: t.string(), limitations: t.string(), comment: t.string(),
+  version: t.u32(), createdAt: t.timestamp(), updatedAt: t.timestamp(),
+});
+
 /** Binarios privados: nunca forman parte de una vista o suscripción del cliente. */
 const resourceUpload = table({ name: 'resource_upload' }, {
   id: t.string().primaryKey(), actor: t.identity().index('btree'),
@@ -748,6 +784,7 @@ const spacetimedb = schema({
   ...aiTables,
   ...notificationTables,
   ...trashTables,
+  presentationPractice, presentationAttempt, presentationPersonal, presentationQuestion, presentationFeedback,
   ...delivery2Tables,
   ...roomsTables,
   resourceUpload, resourceChunk, resourceCapacity, resourceExpiry, retentionExpiry,
@@ -3488,6 +3525,180 @@ export const read_resource_chunk = spacetimedb.procedure({ fileId: t.string(), i
 // Repaso espaciado: contenido colaborativo y aprendizaje estrictamente personal
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Exposiciones: ensayos por texto y revisión explícita, sin novedades comunitarias
+// ---------------------------------------------------------------------------
+
+function presentationValue<T>(read: () => T): T {
+  try { return read(); } catch (error) { throw new SenderError(error instanceof Error ? error.message : 'Los datos de la exposición no son válidos.'); }
+}
+function presentationRequest(value: string) { return requireText(value, 'La solicitud', 120); }
+function ownPresentation(ctx: Ctx, practiceId: bigint, allowArchived = false) {
+  activeMember(ctx);
+  const row = ctx.db.presentationPractice.id.find(practiceId);
+  if (!row || !row.ownerId.isEqual(ctx.sender)) throw new SenderError('La exposición no existe o no tienes acceso.');
+  if (row.archived && !allowArchived) throw new SenderError('La exposición está archivada.');
+  return row;
+}
+function presentationVersion(actual: number, expected: number | undefined) {
+  if (actual !== expected) throw new SenderError('El contenido cambió. Actualiza antes de guardar.');
+}
+function presentationSourceVersion(db: ViewDb, sender: Ctx['sender'], subjectId: bigint, kind?: string, id?: bigint): number | undefined {
+  if (kind === undefined && id === undefined) return undefined;
+  if (id === undefined || (kind !== 'note' && kind !== 'guide')) throw new SenderError('La fuente debe ser una nota o guía accesible.');
+  if (delivery2.withdrawn(db, kind, id)) throw new SenderError('La fuente está retirada o no está disponible.');
+  const row = kind === 'note' ? db.note.id.find(id) : db.studyGuide.id.find(id);
+  if (!row || row.subjectId !== subjectId || ('visibility' in row && row.visibility !== 'group' && !row.author.isEqual(sender))) {
+    throw new SenderError('La fuente no existe, no es accesible o pertenece a otra materia.');
+  }
+  return row.version;
+}
+function presentationVisibleSource<T extends { subjectId: bigint; sourceKind?: string; sourceId?: bigint; sourceVersion?: number }>(db: ViewDb, sender: Ctx['sender'], row: T): T {
+  try { presentationSourceVersion(db, sender, row.subjectId, row.sourceKind, row.sourceId); return row; }
+  catch { return { ...row, sourceKind: undefined, sourceId: undefined, sourceVersion: undefined }; }
+}
+function ownPresentationAttempt(ctx: Ctx, attemptId: bigint) {
+  activeMember(ctx);
+  const attempt = ctx.db.presentationAttempt.id.find(attemptId);
+  if (!attempt) throw new SenderError('El intento no existe.');
+  ownPresentation(ctx, attempt.practiceId);
+  return attempt;
+}
+function reviewablePresentationAttempt(ctx: Ctx, attemptId: bigint) {
+  activeMember(ctx);
+  const attempt = ctx.db.presentationAttempt.id.find(attemptId);
+  const practice = attempt && ctx.db.presentationPractice.id.find(attempt.practiceId);
+  if (!attempt || !practice || practice.archived || attempt.status !== 'completed' || !isActive(ctx.db, practice.ownerId)
+    || !practice.reviewerId?.isEqual(ctx.sender)) throw new SenderError('No tienes acceso para revisar este intento.');
+  return { attempt, practice };
+}
+
+export const save_presentation_practice = spacetimedb.reducer({
+  practiceId: t.u64().optional(), subjectId: t.u64(), termId: t.u64().optional(), ...presentationConfiguration,
+  sourceKind: t.string().optional(), sourceId: t.u64().optional(), expectedVersion: t.u32().optional(), requestId: t.string(),
+}, (ctx, input) => {
+  activeMember(ctx);
+  const config = presentationValue(() => normalizePresentationConfiguration(input));
+  const requestId = presentationRequest(input.requestId);
+  const creationHash = digest(new TextEncoder().encode(JSON.stringify({ ...config, subjectId: String(input.subjectId),
+    termId: input.termId?.toString(), sourceKind: input.sourceKind, sourceId: input.sourceId?.toString(), expectedVersion: input.expectedVersion })));
+  if (input.practiceId === undefined) {
+    const previous = [...ctx.db.presentationPractice.ownerId.filter(ctx.sender)].find((row) => row.requestId === requestId);
+    if (previous) {
+      if (previous.creationHash !== creationHash) throw new SenderError('La solicitud ya se usó con otro contenido.');
+      return;
+    }
+  }
+  requireSubject(ctx, input.subjectId);
+  if (input.termId !== undefined && ctx.db.term.id.find(input.termId)?.subjectId !== input.subjectId) throw new SenderError('El parcial no pertenece a esa materia.');
+  const sourceVersion = presentationSourceVersion(ctx.db, ctx.sender, input.subjectId, input.sourceKind, input.sourceId);
+  const source = { sourceKind: input.sourceKind, sourceId: input.sourceId, sourceVersion };
+  if (input.practiceId === undefined) {
+    if ([...ctx.db.presentationPractice.ownerId.filter(ctx.sender)].length >= 200) throw new SenderError('Has alcanzado el máximo de 200 exposiciones.');
+    ctx.db.presentationPractice.insert({ id: 0n, ownerId: ctx.sender, reviewerId: undefined,
+      subjectId: input.subjectId, termId: input.termId, ...config, ...source, archived: false, version: 1,
+      requestId, creationHash, createdAt: ctx.timestamp, updatedAt: ctx.timestamp });
+  } else {
+    const row = ownPresentation(ctx, input.practiceId); presentationVersion(row.version, input.expectedVersion);
+    ctx.db.presentationPractice.id.update({ ...row, subjectId: input.subjectId, termId: input.termId, ...config, ...source,
+      version: row.version + 1, updatedAt: ctx.timestamp });
+  }
+});
+
+export const set_presentation_reviewer = spacetimedb.reducer({ practiceId: t.u64(), reviewerId: t.identity().optional(), expectedVersion: t.u32() },
+  (ctx, { practiceId, reviewerId, expectedVersion }) => {
+    const row = ownPresentation(ctx, practiceId); presentationVersion(row.version, expectedVersion);
+    if (reviewerId && (reviewerId.isEqual(ctx.sender) || !isActive(ctx.db, reviewerId))) throw new SenderError('Elige a otro integrante activo como revisor.');
+    ctx.db.presentationPractice.id.update({ ...row, reviewerId, version: row.version + 1, updatedAt: ctx.timestamp });
+  });
+export const archive_presentation_practice = spacetimedb.reducer({ practiceId: t.u64(), archived: t.bool(), expectedVersion: t.u32() },
+  (ctx, { practiceId, archived, expectedVersion }) => {
+    const row = ownPresentation(ctx, practiceId, true); presentationVersion(row.version, expectedVersion);
+    ctx.db.presentationPractice.id.update({ ...row, archived, reviewerId: archived ? undefined : row.reviewerId,
+      version: row.version + 1, updatedAt: ctx.timestamp });
+  });
+export const create_presentation_attempt = spacetimedb.reducer({ practiceId: t.u64(), requestId: t.string(), expectedVersion: t.u32() },
+  (ctx, { practiceId, requestId: rawRequest, expectedVersion }) => {
+    const row = ownPresentation(ctx, practiceId); const requestId = presentationRequest(rawRequest);
+    const attempts = [...ctx.db.presentationAttempt.practiceId.filter(practiceId)];
+    const previous = [...ctx.db.presentationAttempt.iter()].find((attempt) => attempt.requestId === requestId &&
+      ctx.db.presentationPractice.id.find(attempt.practiceId)?.ownerId.isEqual(ctx.sender));
+    if (previous) { if (previous.practiceId !== practiceId || previous.creationVersion !== expectedVersion) throw new SenderError('La solicitud ya se usó con otra versión.'); return; }
+    presentationVersion(row.version, expectedVersion);
+    if (row.sourceKind && row.sourceId !== undefined && delivery2.withdrawn(ctx.db, row.sourceKind, row.sourceId)) {
+      throw new SenderError('La fuente está retirada. Cambia o elimina la referencia antes de crear otro intento.');
+    }
+    if (attempts.some((attempt) => attempt.status === 'draft')) throw new SenderError('Completa el borrador actual antes de crear otro intento.');
+    if (attempts.length >= 100) throw new SenderError('La exposición admite hasta 100 intentos.');
+    const last = attempts.sort((a, b) => b.number - a.number)[0];
+    const { title, topic, audience, targetMinutes, keyPoints, sourceKind, sourceId, sourceVersion, subjectId, termId } = row;
+    const attempt = ctx.db.presentationAttempt.insert({ id: 0n, practiceId, number: attempts.length + 1,
+      title, topic, audience, targetMinutes, keyPoints, sourceKind, sourceId, sourceVersion, subjectId, termId,
+      status: 'draft', body: last?.body ?? '', version: 1, requestId, creationVersion: expectedVersion,
+      createdAt: ctx.timestamp, updatedAt: ctx.timestamp, completedAt: undefined });
+    ctx.db.presentationPersonal.insert({ attemptId: attempt.id, clarity: '', examples: '', decisions: '', limitations: '', nextSteps: '' });
+    ctx.db.presentationPractice.id.update({ ...row, version: row.version + 1, updatedAt: ctx.timestamp });
+  });
+export const save_presentation_attempt = spacetimedb.reducer({ attemptId: t.u64(), body: t.string(), clarity: t.string(), examples: t.string(),
+  decisions: t.string(), limitations: t.string(), nextSteps: t.string(), expectedVersion: t.u32() }, (ctx, input) => {
+    const row = ownPresentationAttempt(ctx, input.attemptId); presentationVersion(row.version, input.expectedVersion);
+    if (row.status !== 'draft') throw new SenderError('El intento completado no se puede modificar. Crea uno nuevo.');
+    const fields = presentationValue(() => ({ ...normalizePresentationObservations(input), nextSteps: normalizePresentationNextSteps(input.nextSteps) }));
+    const body = presentationValue(() => normalizePresentationBody(input.body));
+    ctx.db.presentationAttempt.id.update({ ...row, body, version: row.version + 1, updatedAt: ctx.timestamp });
+    ctx.db.presentationPersonal.attemptId.update({ attemptId: row.id, ...fields });
+  });
+export const complete_presentation_attempt = spacetimedb.reducer({ attemptId: t.u64(), expectedVersion: t.u32() },
+  (ctx, { attemptId, expectedVersion }) => {
+    const row = ownPresentationAttempt(ctx, attemptId);
+    if (row.status === 'completed' && (row.version === expectedVersion + 1 || row.version === expectedVersion)) return;
+    presentationVersion(row.version, expectedVersion);
+    if (row.status !== 'draft') throw new SenderError('El intento ya está completado.');
+    const body = presentationValue(() => normalizePresentationBody(row.body, true));
+    const questions = presentationValue(() => presentationGuidingQuestions(row));
+    if ([...ctx.db.presentationQuestion.attemptId.filter(attemptId)].length + questions.length > 100) throw new SenderError('El intento admite hasta 100 preguntas, incluidas las cinco orientadoras.');
+    ctx.db.presentationAttempt.id.update({ ...row, body, status: 'completed', version: row.version + 1,
+      updatedAt: ctx.timestamp, completedAt: ctx.timestamp });
+    for (const text of questions) ctx.db.presentationQuestion.insert({ id: 0n, attemptId, authorId: ctx.sender,
+      kind: 'guided', text, answer: '', version: 1, requestId: '', createdAt: ctx.timestamp, answeredAt: undefined });
+  });
+export const ask_presentation_question = spacetimedb.reducer({ attemptId: t.u64(), text: t.string(), requestId: t.string() },
+  (ctx, { attemptId, text: rawText, requestId: rawRequest }) => {
+    activeMember(ctx);
+    const attempt = ctx.db.presentationAttempt.id.find(attemptId);
+    const practice = attempt && ctx.db.presentationPractice.id.find(attempt.practiceId);
+    if (!attempt || !practice) throw new SenderError('El intento no existe.');
+    const own = practice.ownerId.isEqual(ctx.sender);
+    if (own) ownPresentation(ctx, practice.id); else reviewablePresentationAttempt(ctx, attemptId);
+    const text = presentationValue(() => normalizePresentationQuestion(rawText)); const requestId = presentationRequest(rawRequest);
+    const questions = [...ctx.db.presentationQuestion.attemptId.filter(attemptId)];
+    const previous = [...ctx.db.presentationQuestion.iter()].find((question) => question.authorId.isEqual(ctx.sender) && question.requestId === requestId);
+    if (previous) { if (previous.attemptId !== attemptId || previous.text !== text) throw new SenderError('La solicitud ya se usó con otro contenido.'); return; }
+    const limit = attempt.status === 'draft' ? 95 : 100;
+    if (questions.length >= limit) throw new SenderError('El intento admite hasta 100 preguntas, incluidas las cinco orientadoras.');
+    ctx.db.presentationQuestion.insert({ id: 0n, attemptId, authorId: ctx.sender, kind: own ? 'personal' : 'peer', text,
+      answer: '', version: 1, requestId, createdAt: ctx.timestamp, answeredAt: undefined });
+  });
+export const answer_presentation_question = spacetimedb.reducer({ questionId: t.u64(), answer: t.string(), expectedVersion: t.u32() },
+  (ctx, { questionId, answer: rawAnswer, expectedVersion }) => {
+    activeMember(ctx);
+    const row = ctx.db.presentationQuestion.id.find(questionId); if (!row) throw new SenderError('La pregunta no existe.');
+    ownPresentationAttempt(ctx, row.attemptId); presentationVersion(row.version, expectedVersion);
+    const answer = presentationValue(() => normalizePresentationAnswer(rawAnswer));
+    ctx.db.presentationQuestion.id.update({ ...row, answer, version: row.version + 1, answeredAt: ctx.timestamp });
+  });
+export const save_presentation_feedback = spacetimedb.reducer({ attemptId: t.u64(), clarity: t.string(), examples: t.string(), decisions: t.string(),
+  limitations: t.string(), comment: t.string(), expectedVersion: t.u32().optional() }, (ctx, input) => {
+    reviewablePresentationAttempt(ctx, input.attemptId);
+    const fields = presentationValue(() => normalizePresentationFeedback(input));
+    const row = [...ctx.db.presentationFeedback.attemptId.filter(input.attemptId)].find((feedback) => feedback.authorId.isEqual(ctx.sender));
+    if (row) presentationVersion(row.version, input.expectedVersion);
+    else if (input.expectedVersion !== undefined) throw new SenderError('El contenido cambió. Actualiza antes de guardar.');
+    if (row) ctx.db.presentationFeedback.id.update({ ...row, ...fields, version: row.version + 1, updatedAt: ctx.timestamp });
+    else ctx.db.presentationFeedback.insert({ id: 0n, attemptId: input.attemptId, authorId: ctx.sender, ...fields,
+      version: 1, createdAt: ctx.timestamp, updatedAt: ctx.timestamp });
+  });
+
 type SpacedCollectionRow = NonNullable<ReturnType<Ctx['db']['spacedCollection']['id']['find']>>;
 type SpacedCardRow = NonNullable<ReturnType<Ctx['db']['spacedCard']['id']['find']>>;
 
@@ -4054,6 +4265,42 @@ export const resource_files = spacetimedb.view(
 function isActive(db: ViewDb, sender: Ctx['sender']): boolean {
   return db.member.identity.find(sender)?.status === 'active';
 }
+
+function visiblePresentationPractices(db: ViewDb, sender: Ctx['sender']) {
+  if (!isActive(db, sender)) return [];
+  return [...db.presentationPractice.iter()].flatMap((row) => {
+    if (row.ownerId.isEqual(sender)) return [row];
+    if (row.archived || !row.reviewerId?.isEqual(sender) || !isActive(db, row.ownerId)) return [];
+    const last = [...db.presentationAttempt.practiceId.filter(row.id)].filter((attempt) => attempt.status === 'completed')
+      .sort((a, b) => b.number - a.number)[0];
+    if (!last) return [];
+    const { title, topic, audience, targetMinutes, keyPoints, sourceKind, sourceId, sourceVersion, subjectId, termId } = last;
+    return [presentationVisibleSource(db, sender, { ...row, title, topic, audience, targetMinutes, keyPoints,
+      sourceKind, sourceId, sourceVersion, subjectId, termId, requestId: '', creationHash: '' })];
+  });
+}
+function visiblePresentationAttempts(db: ViewDb, sender: Ctx['sender']) {
+  return visiblePresentationPractices(db, sender).flatMap((practice) => [...db.presentationAttempt.practiceId.filter(practice.id)]
+    .filter((attempt) => practice.ownerId.isEqual(sender) || attempt.status === 'completed')
+    .map((attempt) => practice.ownerId.isEqual(sender) ? attempt : presentationVisibleSource(db, sender, { ...attempt, requestId: '' })));
+}
+export const presentation_practices = spacetimedb.view({ name: 'presentation_practices', public: true }, t.array(presentationPractice.rowType),
+  (ctx) => visiblePresentationPractices(ctx.db, ctx.sender));
+export const presentation_attempts = spacetimedb.view({ name: 'presentation_attempts', public: true }, t.array(presentationAttempt.rowType),
+  (ctx) => visiblePresentationAttempts(ctx.db, ctx.sender));
+export const my_presentation_personal = spacetimedb.view({ name: 'my_presentation_personal', public: true }, t.array(presentationPersonal.rowType),
+  (ctx) => isActive(ctx.db, ctx.sender) ? [...ctx.db.presentationPersonal.iter()].filter((row) => {
+    const attempt = ctx.db.presentationAttempt.id.find(row.attemptId);
+    return attempt && ctx.db.presentationPractice.id.find(attempt.practiceId)?.ownerId.isEqual(ctx.sender);
+  }) : []);
+export const presentation_questions = spacetimedb.view({ name: 'presentation_questions', public: true }, t.array(presentationQuestion.rowType),
+  (ctx) => visiblePresentationAttempts(ctx.db, ctx.sender).flatMap((attempt) => [...ctx.db.presentationQuestion.attemptId.filter(attempt.id)]
+    .map((row) => row.authorId.isEqual(ctx.sender) ? row : { ...row, requestId: '' })));
+export const presentation_feedback = spacetimedb.view({ name: 'presentation_feedback', public: true }, t.array(presentationFeedback.rowType),
+  (ctx) => visiblePresentationAttempts(ctx.db, ctx.sender).flatMap((attempt) => {
+    const practice = ctx.db.presentationPractice.id.find(attempt.practiceId)!;
+    return [...ctx.db.presentationFeedback.attemptId.filter(attempt.id)].filter((row) => practice.ownerId.isEqual(ctx.sender) || row.authorId.isEqual(ctx.sender));
+  }));
 
 function visibleSpacedCollections(db: ViewDb, sender: Ctx['sender']) {
   if (!isActive(db, sender)) return [];

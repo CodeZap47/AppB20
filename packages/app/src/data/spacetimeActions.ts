@@ -1,4 +1,5 @@
 import { CURRICULUM } from '@b20/core';
+import { createPresentationActions } from './presentationActions';
 import { createStudyRoomActions } from './roomsActions';
 import { createTrashActions } from './trashSnapshot';
 import { createNotificationActions } from './notificationActions';
@@ -101,6 +102,7 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
   };
 
   return {
+    ...createPresentationActions(getConnection, identity),
     ...createStudyRoomActions(getConnection, identity),
     ...createTrashActions(getConnection),
     ...createNotificationActions(getConnection),

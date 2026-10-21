@@ -1,6 +1,8 @@
 import type { DbConnection } from '../module_bindings';
 import type { Snapshot } from './types';
 import { enrichAcademicSnapshot } from './academicSnapshot';
+import { emptyPresentationsSnapshot } from './presentationDemo';
+import { readPresentationsSnapshot, PRESENTATION_VIEWS } from './presentationSnapshot';
 import { emptyDelivery2, enrichDelivery2Snapshot } from './delivery2Snapshot';
 import { emptyStudyRooms } from './roomTypes';
 import { enrichStudyRoomsSnapshot } from './roomsSnapshot';
@@ -12,6 +14,7 @@ import { readTrashEntries } from './trashSnapshot';
 export const PUBLIC_VIEWS = [
   'my_notifications', 'my_notification_preferences', 'my_push_installations',
   'my_trash_entries',
+  ...PRESENTATION_VIEWS,
   'chat_channels', 'channel_messages', 'my_conversation_states', 'my_blocked_members', 'my_message_reports', 'member_profiles',
   'note_details', 'note_versions', 'guide_versions', 'question_comments', 'answer_usefulness', 'question_links', 'resource_versions', 'content_statuses', 'contribution_origins',
   'my_member', 'members', 'invitations', 'subjects', 'terms', 'calendar',
@@ -32,6 +35,7 @@ export function emptySnapshot(connection: Snapshot['connection'], connectionErro
   return {
     ...emptyNotifications(),
     trashEntries: [],
+    ...emptyPresentationsSnapshot(),
     ...emptyStudyRooms(),
     ...emptyDelivery2(),
     connection,
@@ -137,6 +141,7 @@ export function readSnapshot(connection: Pick<DbConnection, 'db'>, identity: str
     ...emptyDelivery2(),
     myProgress: [], workRevisions: [], workReviews: [], academicComments: [],
     resourceFiles: [], activityLinks: [], pageSnapshots: [],
+    ...readPresentationsSnapshot(connection, identity, members),
     connection: 'ready',
     me,
     members,

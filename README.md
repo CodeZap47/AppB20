@@ -61,6 +61,7 @@ primera versión sin IA que también requiere comprobación con cuentas reales.
 | **Ayuda entre compañeros** | **Manual.** Ofertas y solicitudes de ayuda, contactos privados y conversación al aceptar el contacto. Pendiente de validación real. |
 | **Aprende enseñando** | **Manual.** Explicaciones, preguntas de un compañero invitado, reflexión privada y publicación voluntaria de una nota. Pendiente de validación real y asistencia con IA. |
 | **Repaso espaciado** | **Manual.** Colecciones, tarjetas, cola e historial privado, con recordatorios integrados localmente. Los borradores de tarjetas con Gemini y Exámenes siguen para una entrega posterior. |
+| **Exposiciones** | Ensayos por texto, preguntas, observaciones privadas y revisor voluntario. Audio y generación con Gemini siguen pendientes. |
 | **Votaciones y contribuciones** | Votaciones nominales con participantes elegibles y reglas de cierre; puntos con reglas y desglose de aportes. Falta validar con datos reales y acordar la puntuación con el grupo. |
 | **Perfiles y cumpleaños** | Presentación voluntaria, foto privada bajo demanda, portafolio y archivo de trabajos; calendario mensual/anual y recordatorios con preferencias y zona horaria, pendientes de activación y validación real. |
 | **Avisos y papelera** | Bandeja privada, lectura y Web Push configurable; recuperación de contenido retirado antes de 30 días y purga programada con limpieza de referencias y bytes sin uso. |
@@ -69,8 +70,8 @@ primera versión sin IA que también requiere comprobación con cuentas reales.
 Salas de estudio está implementada y probada localmente sin IA: acceso abierto o privado,
 materiales, chat, temporizador y resumen. Consulta [su documentación](docs/salas-de-estudio.md).
 
-Retos, revisión de código, museo de bugs, oportunidades, microproyectos,
-simulador de exposiciones y préstamos pertenecen al alcance futuro. El módulo 3.11,
+Retos, revisión de código, museo de bugs, oportunidades, microproyectos
+y préstamos pertenecen al alcance futuro. El módulo 3.11,
 Lenguaje de señales, conserva su alcance y corresponde a la entrega 5.
 Consulta la [definición del proyecto](docs/definicion-del-proyecto.md) para conocer su propósito.
 
@@ -201,6 +202,7 @@ Para publicar servicios y configurar producción, sigue la [guía de despliegue]
 - [Arquitectura](docs/arquitectura.md): componentes, datos y permisos.
 - [Autenticación y acceso](docs/spacetimeauth.md): clientes, retornos e invitaciones.
 - [Tareas y Actividades](docs/tareas-actividades.md): consignas, trabajos, evidencias e historial.
+- [Exposiciones](docs/exposiciones.md): ensayos por texto, preguntas y siguientes intentos privados.
 - [Archivos en SpacetimeDB](docs/archivos-spacetime.md): límites, transferencias y compatibilidad.
 - [Cloudflare Pages](docs/cloudflare-pages.md): configuración de la web/PWA.
 - [Despliegue](docs/despliegue.md): publicación de servicios y comprobaciones de producción.

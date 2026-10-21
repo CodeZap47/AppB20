@@ -312,3 +312,13 @@ activación y aceptación en dispositivos siguen pendientes de configuración y 
 Exámenes, generación de tarjetas de Repaso con IA y push nativo del APK no forman parte de
 esta implementación. El SDK del cliente y del módulo está fijado en `2.12.0`, con bindings
 regenerados; las pruebas y compilaciones se registran al verificar cada entrega.
+
+## Exposiciones por texto
+
+`PresentationActions` y `PresentationsSnapshot` incorporan prácticas, intentos, preguntas,
+retroalimentación y autoobservaciones separadas. Cinco tablas privadas y sus vistas exigen
+membresía activa y propiedad o invitación expresa. Los revisores solo reciben intentos
+concluidos; `my_presentation_personal` es exclusiva del autor, sin excepción administrativa.
+Las versiones y los identificadores de petición evitan sobrescrituras y duplicados. Las
+preguntas locales y la validación se comparten entre demo y servidor mediante `@b20/core`.
+No hay puntos ni novedades comunitarias por ensayar. Ver [reglas](exposiciones.md).

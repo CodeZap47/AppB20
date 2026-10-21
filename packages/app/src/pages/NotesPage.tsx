@@ -251,6 +251,9 @@ export function NotePage() {
         <Link to={`/m/aprende-ensenando/nueva?nota=${encodeURIComponent(note.id)}`} className="button secondary">
           Practicar explicándolo
         </Link>
+        {!note.withdrawnAt && <Link to={`/m/exposiciones/nueva?nota=${encodeURIComponent(note.id)}`} className="button secondary">
+          Ensayar exposición
+        </Link>}
         {!note.withdrawnAt && note.visibility === 'group' && <Link to={`/m/salas?nota=${encodeURIComponent(note.id)}`} className="button secondary">Estudiar en una sala</Link>}
         {note.authorId === me?.id && !note.withdrawnAt && (
           <Link to={`/m/notas/${note.id}/editar`} className="button secondary">

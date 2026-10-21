@@ -13,6 +13,7 @@ export * from './polls';
 export * from './teaching';
 export * from './help';
 export * from './spaced';
+export * from './presentations';
 export * from './rooms';
 
 export * from './ai';

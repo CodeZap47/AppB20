@@ -5215,6 +5215,36 @@ a.ref-card:hover {
 
 /* ---- Puedo ayudarte / necesito ayuda ---- */
 
+/* Ensayos por texto y versiones personales de exposiciones. */
+.presentation-filters { margin-top: 1.25rem; }
+.presentation-toggle { display: flex; align-items: center; gap: .5rem; margin: 0 0 1.25rem; font-size: .9rem; }
+.presentation-toggle input { width: auto; }
+.presentation-detail, .presentation-detail .panel, .presentation-detail .detail__main, .presentation-detail .detail__side { min-width: 0; }
+.presentation-detail textarea, .presentation-detail select, .presentation-detail input { width: 100%; min-width: 0; }
+.presentation-detail .panel { overflow-wrap: anywhere; }
+.presentation-detail .panel > h2:first-child { margin-top: 0; }
+.presentation-context { margin-bottom: 0; }
+.presentation-context > div + div { margin-top: 1rem; }
+.presentation-context dt { font-weight: 600; font-size: .85rem; color: var(--muted); }
+.presentation-context dd { margin: .3rem 0 0; }
+.presentation-context ul { margin: .3rem 0 0; padding-left: 1.2rem; }
+.presentation-context li + li { margin-top: .3rem; }
+.presentation-notice { padding: .8rem 1rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: .9rem; }
+.presentation-attempts { padding: 0; list-style: none; margin-bottom: 0; }
+.presentation-attempts li + li { border-top: 1px solid var(--border); }
+.presentation-attempts a { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; padding: 1rem 0; color: inherit; text-decoration: none; }
+.presentation-attempts a:hover strong { text-decoration: underline; }
+.presentation-comparison summary { font-weight: 600; cursor: pointer; }
+.presentation-feedback + .presentation-feedback, .presentation-feedback + form { border-top: 1px solid var(--border); margin-top: 1.25rem; padding-top: 1.25rem; }
+.presentation-feedback h4 { font-size: .9rem; margin: 1rem 0 .3rem; }
+.presentation-feedback h3 { font-size: 1rem; }
+@media (max-width: 480px) {
+  .presentation-detail .form__actions { align-items: stretch; }
+  .presentation-detail .form__actions button { width: 100%; }
+  .presentation-attempts a { gap: .5rem; }
+  .presentation-attempts .muted { flex-basis: 100%; }
+}
+
 .help-views {
   margin-bottom: 1rem;
   flex-wrap: wrap;
