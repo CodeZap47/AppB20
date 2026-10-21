@@ -185,6 +185,26 @@ La publicación de Pages compila el monorepo y sirve `apps/web/dist`; `app-b20` 
 actualizándose mediante Git. El ZIP local queda como alternativa para otro proyecto de
 subida directa. La guía de Pages también registra el fallo inicial por variables ausentes.
 
+### 4.1. Publicación comprobada de la tercera entrega
+
+El 21 de octubre de 2026 se publicó la revisión operativa `e75edfbe`, integrada con Guías y
+los cambios posteriores de `main`, en el orden Maincloud → Worker dedicado → Pages. Las dos
+ramas remotas estaban sincronizadas en esa revisión. Maincloud conserva las 98 tablas y
+291 registros anteriores y añade 14 tablas; el programa remoto coincide con el bundle validado.
+No se ejecutaron purgas de producción ni se configuró el mantenimiento de respaldo.
+
+El Worker `app-b20-ai` quedó en `a9d81832-b113-419f-b9c7-75bf0e502cdd`, con cron real de
+avisos observado a las 19:41 UTC. Pages aprobó el despliegue
+`4440d39a-fb92-4e0f-86fb-0f38a8d71215`; coinciden los 16 archivos públicos de ejecución y
+ocho rutas respondieron HTTP 200. Se comprobaron preferencias, lectura de un aviso,
+retirada/restauración y preparación privada de IA con la cuenta titular. No se llamó a
+Gemini ni se enviaron avisos push a dispositivos.
+
+El [registro común de la tercera entrega](tercera-entrega.md#publicación-verificada-del-21-de-octubre-de-2026)
+recoge las 1 225 pruebas aprobadas, compilaciones, huellas, recorridos reales y límites de
+aceptación con una sola cuenta. La recepción push y el consumo real de Gemini siguen
+requiriendo las acciones y credenciales de sus titulares.
+
 ### 5. Dominio (opcional)
 
 El subdominio gratuito `*.pages.dev` sirve la web sin comprar dominio. Si más adelante se usa

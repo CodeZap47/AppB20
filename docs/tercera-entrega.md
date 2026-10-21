@@ -1,6 +1,6 @@
 # Tercera entrega: IA, notificaciones y papelera
 
-Esta entrega implementa localmente tres recorridos completos sobre SpacetimeDB y Cloudflare:
+Esta entrega implementa tres recorridos sobre SpacetimeDB y Cloudflare:
 Gemini con clave personal, avisos con recordatorios y Web Push, y conservación del contenido
 retirado durante 30 días. Conserva la colaboración de la [segunda entrega](segunda-entrega.md)
 y la implementación de [Salas de estudio](salas-de-estudio.md).
@@ -10,15 +10,15 @@ proveedor de IA elegido expresamente; no se incorporan otras bases de datos, alm
 o proveedores de IA. La ruta R2 heredada permanece por compatibilidad y los archivos nuevos
 siguen en SpacetimeDB.
 
-El registro de implementación local no acredita publicación en Maincloud, Cloudflare Pages
-ni Workers. La integración posterior conserva el servicio de Guías y su activación anterior;
-los resultados de publicación de la tercera entrega se registran al final de este documento.
-Las pruebas de implementación usan proveedores simulados y no realizan inferencias ni envíos
-push reales.
+La tercera entrega integrada quedó publicada y verificada el 21 de octubre de 2026 en
+Maincloud, el Worker dedicado de IA y Cloudflare Pages. Se conservó el servicio de Guías y
+su activación anterior. El [registro de publicación](#publicación-verificada-del-21-de-octubre-de-2026)
+distingue las comprobaciones con la cuenta real de las pruebas aisladas y los pendientes de
+generación y recepción push.
 
 ## Alcance implementado
 
-| Bloque | Recorrido disponible localmente | Documentación específica |
+| Bloque | Recorrido implementado | Documentación específica |
 | --- | --- | --- |
 | Gemini BYOK | Consentimiento, clave cifrada por persona, vista previa de fuentes/versiones/omisiones, límites y presupuesto, guía o explicación privada, historial y publicación expresa. | [Gemini con clave personal](gemini-byok.md) |
 | Avisos y recordatorios | Bandeja privada, preferencias y zona horaria, lectura, descanso, recordatorios, instalaciones propias, cola persistente, leases, reintentos y Web Push configurable. | [Avisos y recordatorios](avisos-recordatorios.md) |
@@ -122,52 +122,85 @@ Exposiciones aprobado. El total de 999 anterior corresponde a la entrega previa 
 Los tipos globales y las compilaciones de web/PWA, extensión y Worker (`--dry-run`) también
 pasaron con el código integrado.
 
-## Publicación de la integración: en verificación
+## Publicación verificada del 21 de octubre de 2026
 
-La revisión preparada integra la tercera entrega de `main`, las Guías publicadas desde
-`ff98cc87` y la navegación incorporada posteriormente en `1989745`. Conserva las rutas de
-Guías, sus lotes, borradores y procedencia, junto al historial y publicación expresa de las
-guías y explicaciones de la entrega genérica. Los bindings se regeneran desde el módulo
-combinado; no se sustituye la configuración de autenticación ni se importan datos demo.
+La revisión operativa [`e75edfbe`](https://github.com/CodeZap47/AppB20/commit/e75edfbe0b6ecc54d28ba614d37eee9502317082)
+integra la tercera entrega de `main`, las Guías publicadas desde `ff98cc87` y la navegación
+incorporada posteriormente en `1989745`. `main` y `codex/pages-spacetimeauth` estaban
+sincronizadas en esa revisión al verificar la publicación. El cierre documental posterior
+no cambia el programa ni los archivos de ejecución comprobados.
 
-El inventario anterior al despliegue contiene **98 tablas y 291 registros**. Las definiciones
-del módulo integrado conservan las 98 tablas anteriores sin cambios y añaden 14. Esto acredita
-que el esquema preparado es aditivo; la conservación de filas debe confirmarse comparando los
-inventarios inmediatamente anteriores y posteriores a la publicación con `--delete-data=never`.
+Se conservaron las rutas de Guías, sus lotes, borradores y procedencia, junto al historial y
+publicación expresa de las guías y explicaciones de la entrega genérica. Los bindings se
+regeneraron desde el módulo combinado. La autenticación y los datos anteriores se conservaron;
+no se importaron los ejemplos demo.
 
-La IA y el cron de avisos se configuran en el Worker dedicado `app-b20-ai`, sin R2,
-mediante `apps/api/wrangler.ai.jsonc`. Se conservan el token técnico y las maestras de IA,
-`AI_ENABLED=true` y el modelo `gemini-3.8-flash`. Los avisos añaden una identidad técnica
-exclusiva, dos secretos propios y VAPID. La misma clave pública se incluye en Pages; no se
-concede permiso del navegador ni se registran dispositivos por cuenta del titular. El Worker
+Maincloud se actualizó con `--delete-data=never`. La comparación inmediatamente anterior y
+posterior confirmó que **las 98 tablas previas y sus 291 registros conservaron sus huellas
+SHA-256 sin cambios**. Se añadieron 14 tablas, para un total de 112. El programa remoto coincide
+exactamente con el bundle validado, SHA-256
+`116cc34c3a9f646e0cf58ab8f3ea2e700c11396e6a204d2166c9fdbb110ce8b1`.
+Las comprobaciones posteriores de la cuenta añadieron sus propios registros de prueba; no
+sustituyeron ni eliminaron las filas conservadas en esta comparación.
+
+La IA y el cron de avisos se publicaron en el Worker dedicado `app-b20-ai`, sin R2,
+mediante `apps/api/wrangler.ai.jsonc`. Se conservaron el token técnico y las maestras de IA,
+`AI_ENABLED=true` y el modelo `gemini-3.8-flash`. Se registró una identidad técnica exclusiva
+de avisos y se añadieron sus dos secretos; la clave VAPID pública coincide con la de Pages.
+La versión activa del Worker es `a9d81832-b113-419f-b9c7-75bf0e502cdd`, con tráfico al 100 %.
+
+Se observó un **cron real a las 19:41 UTC**, con `notifications ok:true`, resultado correcto
+y cero excepciones. El respaldo de retención devolvió desactivado al no tener credencial de
+mantenimiento. No se configuró `MAINTENANCE_SERVICE_TOKEN`, no se llamó a `purge_due` y no se
+adelantó el vencimiento normal de 30 días del programador interno de SpacetimeDB. El Worker
 anterior `app-b20-api` conserva las descargas R2 y `appb20` mantiene sus builds desactivados.
 
-No se configura la credencial de mantenimiento de respaldo ni se ejecuta `purge_due` durante
-este despliegue. El programador interno conserva el vencimiento normal de 30 días.
+Cloudflare Pages aprobó el despliegue `4440d39a-fb92-4e0f-86fb-0f38a8d71215` en el dominio
+estable. Sus **16 archivos públicos de ejecución** coinciden con los compilados y ocho rutas
+respondieron HTTP 200. La configuración sigue apuntando a Maincloud y al Worker dedicado.
 
-| Comprobación de esta publicación | Estado por completar con evidencia |
+| Comprobación de esta publicación | Resultado |
 | --- | --- |
-| Commit final y ramas `main` / `codex/pages-spacetimeauth` | Pendiente de registrar la revisión final y confirmar igualdad remota |
-| Pruebas, tipos y compilaciones del código integrado | En ejecución; registrar resultados finales y ensayos persistentes |
-| Maincloud sin borrado y programa remoto | Pendiente de recibo y coincidencia SHA-256 del bundle |
-| Conservación de 98 tablas y 291 registros anteriores | Pendiente de comparación posterior de filas y huellas |
-| Worker IA, secretos conservados y servicio de avisos | Pendiente de registro y publicación comprobados |
-| Cron de recordatorios y VAPID | Pendiente de observar el cron; recepción push requiere suscripción consentida |
-| Pages y dominio estable | Pendiente de despliegue aprobado y coincidencia de los archivos públicos |
-| Recorrido con la cuenta real titular | Pendiente de registrar las acciones efectivamente comprobadas |
+| Pruebas del código integrado | **1 225 aprobadas**: app 627, core 125, módulo 298, API 124 y web 51 |
+| Tipos y compilaciones | Aprobados: web/PWA, extensión, API heredada, Worker dedicado y Pages |
+| Ensayos con servidor persistente aislado | IA, Guías, avisos y retención aprobados; cero llamadas reales a Gemini o Web Push |
+| Maincloud y conservación | Programa idéntico al bundle; 98 tablas/291 registros anteriores intactos; 112 tablas después de la actualización |
+| Worker y autenticación | Versión activa comprobada; cuatro secretos presentes sin revelar sus valores; salud, CORS y rechazo sin sesión aprobados |
+| Recordatorios | Cron real observado y servicio de avisos operativo |
+| Pages | Despliegue aprobado; 16 huellas coincidentes y ocho rutas HTTP 200 |
+| Escritorio y móvil | Vistas de 1 440 px y 390 px sin desbordamiento; menú móvil aprobado |
 
-No se realizará una inferencia Gemini como comprobación de despliegue. La aceptación con
-varias cuentas reales, las cuotas del proveedor y la recepción en cada navegador/dispositivo
-se conservan como verificaciones independientes. Los permisos entre identidades se comprueban
-en bases locales aisladas; no se atribuyen a un recorrido realizado con una sola cuenta.
+La primera ejecución de la suite de la app se repitió con dos workers por contención de
+recursos, sin cambiar los tiempos límite de las pruebas. Esa ejecución completa aprobó
+los 627 casos de la app.
+
+Con la **única cuenta real autorizada** se guardaron las preferencias de avisos con zona
+`America/Tijuana`, se comprobaron al recargar y se marcó un aviso como leído. Se creó una
+nota ficticia personal (ID 3), se retiró y restauró con el mismo ID, versión 3 e historial;
+quedó activa en la cuenta. Su vista previa de IA se preparó de forma privada sin llamar a
+Gemini. Guías excluyó correctamente esa nota personal; al no haber fuentes compartidas
+seleccionables no se creó otro borrador.
+
+La clave personal de Gemini sigue sin configurar en esa cuenta, por lo que no se probó
+una generación real ni el consumo del proveedor. Hay cero instalaciones push; no se pidió
+permiso al navegador, no se registró ningún dispositivo y no se comprobó recepción real.
+Los permisos entre remitente, destinatario, tercero y otros roles se comprobaron con
+identidades sintéticas en bases aisladas, no con varias personas en producción.
+
+Los recibos, comparaciones de datos y programa, huellas de Pages y capturas de los recorridos
+quedan en `artifacts/third-release/`, como evidencia local excluida de Git. Este apartado es
+el registro común al que remiten las guías de despliegue, Pages y Worker heredado.
 
 ## Pendientes conservados
 
-- Configurar los servicios, publicar sin borrar datos y validar cuentas reales, cuotas del
-  modelo elegido, recepción push y persistencia en producción.
-- Generación con Gemini de tarjetas de Repaso, Exámenes, preguntas específicas de Aprende
-  enseñando y resumen de novedades. La versión manual de Repaso y sus intervalos existentes
-  se conservan; los recordatorios ya están integrados localmente.
+- Validar una generación con la clave personal y confirmación de su titular, las cuotas
+  reales del modelo y la recepción push en dispositivos que hayan concedido permiso.
+- Aceptación con varias cuentas reales del grupo y validación propia de cada navegador,
+  extensión y dispositivo. La comprobación con una cuenta no sustituye esos recorridos.
+- Generación con Gemini de tarjetas de Repaso, preguntas específicas de Aprende enseñando
+  y resumen de novedades. La versión manual de Repaso y sus intervalos se conservan; los
+  recordatorios están publicados. Exámenes mantiene su registro de alcance independiente
+  en [examenes-ia.md](examenes-ia.md).
 - Lenguaje de señales, módulo **3.11**, permanece en la **entrega 5**, con el alcance íntegro
   de la [definición funcional](definicion-del-proyecto.md).
 - Push nativo del APK con la app cerrada, firma/distribución y validación real de Android y

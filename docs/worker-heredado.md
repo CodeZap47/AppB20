@@ -81,3 +81,14 @@ que el código y las configuraciones sean idénticos a los de su padre.
   esquema de SpacetimeDB. Se comprueba el diff y los identificadores de esos árboles;
   repetir las pruebas funcionales del código sin cambios no aporta evidencia del
   control de builds remoto.
+
+## Cierre posterior de la tercera entrega
+
+Después de esta corrección se integró y publicó la tercera entrega junto con Guías y los
+cambios posteriores de `main`. La revisión operativa comprobada es `e75edfbe`, con ambas
+ramas remotas sincronizadas al verificarla. Este despliegue utilizó Maincloud, el Worker
+dedicado `app-b20-ai` y Pages; los builds automáticos de `appb20` continúan desactivados y
+no fue necesario modificarlos. Se conserva íntegro el historial anterior del arreglo.
+
+El [registro común de la tercera entrega](tercera-entrega.md#publicación-verificada-del-21-de-octubre-de-2026)
+documenta la conservación de datos, las versiones publicadas y las comprobaciones posteriores.

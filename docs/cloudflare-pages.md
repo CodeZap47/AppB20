@@ -196,10 +196,10 @@ Pages mantiene la integración Git, la rama y los campos de la primera tabla. Cl
 publica `apps/web/dist` después de `npm run build:pages`; `npx wrangler deploy` desde la
 raíz no sustituye ese flujo.
 
-La corrección documental se aplica por separado a `main` y a la revisión publicada de
-`codex/pages-spacetimeauth`. En esta revisión, `main` ya contiene la tercera entrega aún
-sin publicar; no se incorpora a producción para resolver la configuración de `appb20`.
-Consultar el registro antes de comparar SHA de ramas o ampliar el despliegue.
+La corrección documental se aplicó por separado a `main` y a la revisión publicada de
+`codex/pages-spacetimeauth`. Durante aquella corrección, `main` ya contenía la tercera entrega
+aún sin publicar; no se incorporó a producción para resolver la configuración de `appb20`.
+La publicación posterior de la tercera entrega se registra al final de este documento.
 
 ### Variables ausentes durante `build:pages`
 
@@ -256,10 +256,24 @@ Los recordatorios y Web Push usan una identidad técnica exclusiva y se activan 
 [avisos-recordatorios.md](avisos-recordatorios.md). Publicar la web en Pages no activa esos
 servicios automáticamente ni concede el permiso del navegador.
 
-La tercera entrega integrada conserva Guías y los cambios posteriores de `main`. Su
-publicación y sincronización se registran en [tercera-entrega.md](tercera-entrega.md) una vez
-comprobados el programa remoto, la conservación de datos y los archivos del dominio estable.
-Los registros históricos de este documento no sustituyen esas comprobaciones.
+## Publicación verificada del 21 de octubre de 2026
+
+La tercera entrega integrada con Guías y los cambios posteriores de `main` quedó publicada
+en la revisión operativa `e75edfbe`. Al verificarla, `main` y `codex/pages-spacetimeauth`
+estaban sincronizadas en esa revisión. Pages aprobó el despliegue
+`4440d39a-fb92-4e0f-86fb-0f38a8d71215`; los 16 archivos públicos de ejecución del dominio
+estable coinciden con el build validado y ocho rutas respondieron HTTP 200. La navegación
+se comprobó en escritorio y a 390 px, sin desbordamiento y con menú móvil funcional.
+
+La web mantiene autenticación real, datos en Maincloud, IA en el Worker dedicado y la misma
+clave VAPID pública del backend. La configuración de push no concede permiso ni suscribe
+un dispositivo; la cuenta comprobada conserva cero instalaciones. No se llamó a Gemini.
+Maincloud conservó las 98 tablas previas y sus 291 registros al actualizarse sin borrado.
+
+El [registro común de la tercera entrega](tercera-entrega.md#publicación-verificada-del-21-de-octubre-de-2026)
+contiene las huellas de programa y web, versión del Worker, cron observado, pruebas y
+limitaciones de aceptación con una sola cuenta. Los registros históricos anteriores se
+conservan como antecedentes, no como descripción de la versión actual.
 
 Fuentes oficiales consultadas el 20 de octubre de 2026; los enlaces de cada apartado respaldan
 las opciones y campos del servicio.
