@@ -291,10 +291,21 @@ function expireGenerations(ctx: Ctx, actor: Identity) {
   for (const row of ctx.db.aiGeneration.actor.filter(actor)) {
     if (row.status === 'running' && row.claimedAt && row.claimedAt.microsSinceUnixEpoch + 90n * 1_000_000n <= ctx.timestamp.microsSinceUnixEpoch) {
       ctx.db.aiGeneration.id.update({ ...row, status: 'unknown', errorCode: 'unknown', errorMessage: 'No se conoce el resultado del envío. No se volverá a enviar automáticamente.' });
-    } else if (row.status === 'queued' && row.createdAt.microsSinceUnixEpoch + 5n * 60n * 1_000_000n <= ctx.timestamp.microsSinceUnixEpoch) {
-      ctx.db.aiGeneration.id.update({ ...row, status: 'failed', errorCode: 'expired', errorMessage: 'La operación venció antes de enviarse.' });
-      const reservation = ctx.db.aiReservation.id.find(row.id);
-      if (reservation) ctx.db.aiReservation.id.update({ ...reservation, status: 'released' });
+    } else if (row.status === 'queued') {
+      let invalid = row.createdAt.microsSinceUnixEpoch + 5n * 60n * 1_000_000n <= ctx.timestamp.microsSinceUnixEpoch;
+      if (!invalid) {
+        try { validPreparation(ctx, row.preparationId, actor, true); }
+        catch (error) {
+          // A stale queued snapshot has never reached the provider and can safely release its slot.
+          if (!(error instanceof SenderError)) throw error;
+          invalid = true;
+        }
+      }
+      if (invalid) {
+        ctx.db.aiGeneration.id.update({ ...row, status: 'failed', errorCode: 'expired', errorMessage: 'La operación venció o sus fuentes cambiaron antes de enviarse.' });
+        const reservation = ctx.db.aiReservation.id.find(row.id);
+        if (reservation) ctx.db.aiReservation.id.update({ ...reservation, status: 'released' });
+      }
     }
   }
 }
@@ -302,9 +313,8 @@ export function aiAuthorizeGeneration(ctx: Ctx, raw: Record<string, unknown>) {
   activeMember(ctx);
   const id = uuid(raw.id, 'La generación'); const preparationId = uuid(raw.preparationId, 'La preparación');
   const config = validateAiGenerationConfig(raw.config); const fingerprint = text(raw.fingerprint, 'La huella', 64);
-  const model = text(raw.model, 'El modelo');
   if (raw.confirmed !== true) fail('consent_required', 'Confirma expresamente el envío de estos fragmentos.');
-  const requestHash = aiHash({ preparationId, fingerprint, config, model });
+  const requestHash = aiHash({ preparationId, fingerprint, config });
   const previous = ctx.db.aiGeneration.id.find(id);
   if (previous) {
     if (!previous.actor.isEqual(ctx.sender) || previous.requestHash !== requestHash) fail('conflict', 'Este UUID ya pertenece a otra solicitud.');
@@ -312,6 +322,8 @@ export function aiAuthorizeGeneration(ctx: Ctx, raw: Record<string, unknown>) {
     expireGenerations(ctx, ctx.sender);
     return generationDto(ctx, ctx.db.aiGeneration.id.find(id)!);
   }
+  if (raw.allowNew === false) fail('ai_disabled', 'La IA real todavía no está habilitada para este grupo.');
+  const model = text(raw.model, 'El modelo');
   enabled(ctx); consent(ctx);
   const { row, prep } = validPreparation(ctx, preparationId, ctx.sender, true);
   if (row.fingerprint !== fingerprint || row.model !== model || aiHash(prep.config) !== aiHash(config)) fail('conflict', 'La vista previa o el modelo cambió. Prepara de nuevo.');

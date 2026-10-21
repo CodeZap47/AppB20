@@ -1,6 +1,81 @@
 import { SenderError } from 'spacetimedb/server';
 import { activeMember, attachmentIds, expectVersion, log, requireGuide, requireSubject, requireText, restoreAttachments, sourceVersion, type Ctx } from './moduleContext';
-import { canReadTarget, captureGuide, captureNote, withdrawn } from './delivery2Handlers';
+import { bumpExtra, canReadTarget, captureGuide, captureNote, withdrawn } from './delivery2Handlers';
+
+/** Manual selection is explicit; an unplaced source is allowed, a different parcial is not. */
+export function validateGuideSourceClassification(ctx: Ctx, kind: string, refId: bigint, subjectId: bigint, termId?: bigint, includeUnplaced = true) {
+  sourceVersion(ctx, kind, refId, subjectId);
+  let sourceTerm: bigint | undefined;
+  if (kind === 'trabajo') {
+    const work = ctx.db.work.id.find(refId)!; const parent = ctx.db.assignment.id.find(work.assignmentId);
+    if (!parent || withdrawn(ctx.db, 'assignment', parent.id)) throw new SenderError('La consigna de esta fuente ya no está disponible.');
+    sourceTerm = parent.termId;
+  } else if (kind === 'tarea') sourceTerm = ctx.db.assignment.id.find(refId)?.termId;
+  else if (kind === 'actividad') sourceTerm = ctx.db.activity.id.find(refId)?.termId;
+  else if (kind === 'nota') sourceTerm = ctx.db.noteDetail.noteId.find(refId)?.termId;
+  // Questions currently have no parcial field and therefore require explicit selection in IA.
+  if (termId !== undefined && sourceTerm !== undefined && sourceTerm !== termId) throw new SenderError('Las fuentes deben pertenecer al parcial de la guía.');
+  if (sourceTerm === undefined && !includeUnplaced) throw new SenderError('Confirma la selección de material sin parcial.');
+}
+
+function mutableGuide(ctx: Ctx, guideId: bigint, expectedVersion: number) {
+  activeMember(ctx); const guide = requireGuide(ctx, guideId);
+  if (withdrawn(ctx.db, 'guide', guideId)) throw new SenderError('La guía está retirada.');
+  expectVersion(guide.version, expectedVersion); return guide;
+}
+function mutableSource(ctx: Ctx, sourceId: bigint, expectedVersion: number) {
+  activeMember(ctx); const source = ctx.db.guideSource.id.find(sourceId);
+  if (!source) throw new SenderError('La fuente no existe.');
+  return { source, guide: mutableGuide(ctx, source.guideId, expectedVersion) };
+}
+export function addGuideSourcesV3(ctx: Ctx, input: { guideId: bigint; expectedVersion: number; sources: { kind: string; refId: bigint }[] }) {
+  const guide = mutableGuide(ctx, input.guideId, input.expectedVersion);
+  if (input.sources.length > 100) throw new SenderError('Selecciona hasta 100 fuentes por operación.');
+  const refs = input.sources.map((ref) => { validateGuideSourceClassification(ctx, ref.kind, ref.refId, guide.subjectId, guide.termId); return { ...ref, version: sourceVersion(ctx, ref.kind, ref.refId, guide.subjectId) }; });
+  captureGuide(ctx, guide.id); let changed = false;
+  for (const ref of refs) {
+    if ([...ctx.db.guideSource.guideId.filter(guide.id)].some((row) => row.kind === ref.kind && row.refId === ref.refId)) continue;
+    ctx.db.guideSource.insert({ id: 0n, guideId: guide.id, kind: ref.kind, refId: ref.refId, sourceVersion: ref.version,
+      status: 'pending', reason: 'Falta revisarla.', topics: [], addedBy: ctx.sender, addedAt: ctx.timestamp }); changed = true;
+  }
+  if (changed) { bumpExtra(ctx, 'guide', guide.id); log(ctx, 'update', 'study_guide', guide.id); }
+}
+export function updateGuideSourceV3(ctx: Ctx, input: { sourceId: bigint; expectedVersion: number; status: string; reason: string; topics: string[] }) {
+  const { source, guide } = mutableSource(ctx, input.sourceId, input.expectedVersion);
+  if (!['pending', 'processed'].includes(input.status)) throw new SenderError('Estado de fuente inválido.');
+  const reason = input.reason.trim();
+  if (reason.length > 200 || (input.status === 'pending' && !reason)) throw new SenderError('Indica una razón de hasta 200 caracteres.');
+  if (input.topics.some((topic) => !guide.topics.includes(topic))) throw new SenderError('Un tema no está en el temario de la guía.');
+  if (input.status === 'processed') {
+    validateGuideSourceClassification(ctx, source.kind, source.refId, guide.subjectId, guide.termId);
+    if (source.sourceVersion !== sourceVersion(ctx, source.kind, source.refId, guide.subjectId)) throw new SenderError('La fuente cambió; actualízala y vuelve a procesarla antes de marcarla como utilizada.');
+  }
+  captureGuide(ctx, guide.id);
+  ctx.db.guideSource.id.update({ ...source, status: input.status, reason: input.status === 'pending' ? reason : '', topics: guide.topics.filter((topic) => input.topics.includes(topic)) });
+  bumpExtra(ctx, 'guide', guide.id); log(ctx, 'update', 'guide_source', source.id);
+}
+export function refreshGuideSourceV3(ctx: Ctx, input: { sourceId: bigint; expectedVersion: number }) {
+  const { source, guide } = mutableSource(ctx, input.sourceId, input.expectedVersion);
+  validateGuideSourceClassification(ctx, source.kind, source.refId, guide.subjectId, guide.termId);
+  const version = sourceVersion(ctx, source.kind, source.refId, guide.subjectId);
+  captureGuide(ctx, guide.id);
+  ctx.db.guideSource.id.update({ ...source, sourceVersion: version, status: 'pending', reason: 'La fuente se actualizó; vuelve a procesarla.' });
+  bumpExtra(ctx, 'guide', guide.id); log(ctx, 'update', 'guide_source', source.id);
+}
+export function removeGuideSourceV3(ctx: Ctx, input: { sourceId: bigint; expectedVersion: number }) {
+  const { source, guide } = mutableSource(ctx, input.sourceId, input.expectedVersion);
+  captureGuide(ctx, guide.id); ctx.db.guideSource.id.delete(source.id); bumpExtra(ctx, 'guide', guide.id); log(ctx, 'delete', 'guide_source', source.id);
+}
+export function reviewGuideV3(ctx: Ctx, input: { guideId: bigint; expectedVersion: number; verdict: string; comment: string }) {
+  const guide = mutableGuide(ctx, input.guideId, input.expectedVersion);
+  if (guide.updatedBy.isEqual(ctx.sender)) throw new SenderError('Guardaste esta versión; la revisa otro compañero.');
+  if (!['approved', 'changes'].includes(input.verdict)) throw new SenderError('Resultado de revisión inválido.');
+  const comment = input.comment.trim();
+  if (!comment || comment.length > 2000) throw new SenderError('Escribe un comentario de revisión de hasta 2000 caracteres.');
+  if ([...ctx.db.guideReview.guideId.filter(guide.id)].some((row) => row.guideVersion === guide.version && row.reviewer.isEqual(ctx.sender))) throw new SenderError('Ya revisaste esta versión. Una revisión no se sobrescribe.');
+  ctx.db.guideReview.insert({ id: 0n, guideId: guide.id, guideVersion: guide.version, reviewer: ctx.sender, verdict: input.verdict, comment, createdAt: ctx.timestamp });
+  log(ctx, 'review', 'study_guide', guide.id);
+}
 
 export interface SaveNoteV2Input {
   noteId?: bigint; expectedVersion?: number; subjectId: bigint; termId?: bigint; session: string;
@@ -104,7 +179,7 @@ export function restoreGuideVersion(ctx: Ctx, input: { guideId: bigint; version:
   if (previous.subjectId !== guide.subjectId) throw new SenderError('La materia de la guía no cambia.');
   if (previous.termId !== undefined && ctx.db.term.id.find(previous.termId)?.subjectId !== guide.subjectId) throw new SenderError('El parcial de esta versión ya no está disponible.');
   for (const source of previous.sources) {
-    sourceVersion(ctx, source.kind, source.refId, guide.subjectId);
+    validateGuideSourceClassification(ctx, source.kind, source.refId, guide.subjectId, previous.termId);
     const kind = ({ trabajo: 'work', tarea: 'assignment', actividad: 'activity', nota: 'note', pregunta: 'question' } as Record<string, string>)[source.kind];
     if (!kind || !canReadTarget(ctx.db, ctx.sender, kind, source.refId) || withdrawn(ctx.db, kind, source.refId)) throw new SenderError('Una fuente de esta versión ya no está disponible.');
   }
@@ -113,6 +188,8 @@ export function restoreGuideVersion(ctx: Ctx, input: { guideId: bigint; version:
   for (const source of previous.sources) ctx.db.guideSource.insert({ id: 0n, guideId: guide.id, ...source, addedBy: source.addedBy ?? ctx.sender, addedAt: source.addedAt ?? ctx.timestamp });
   ctx.db.studyGuide.id.update({ ...guide, termId: previous.termId, title: previous.title, topics: previous.topics, sections: previous.sections,
     version: guide.version + 1, updatedBy: ctx.sender, updatedAt: ctx.timestamp });
+  const provenance = ctx.db.guideAiProvenance.key.find(`${guide.id}:${input.version}`);
+  if (provenance) ctx.db.guideAiProvenance.insert({ ...provenance, key: `${guide.id}:${guide.version + 1}`, guideVersion: guide.version + 1 });
   captureGuide(ctx, guide.id, ctx.sender, input.version); log(ctx, 'restaurar versión', 'guide', guide.id);
 }
 

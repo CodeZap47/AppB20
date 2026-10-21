@@ -415,6 +415,51 @@ export type GroupMessage = __Infer<typeof GroupMessage>;
 export const GroupMessages = __t.object("GroupMessages", {});
 export type GroupMessages = __Infer<typeof GroupMessages>;
 
+export const GuideAiAvailabilityRow = __t.object("GuideAiAvailabilityRow", {
+  sourceId: __t.u64(),
+  guideId: __t.u64(),
+  guideVersion: __t.u32(),
+  available: __t.bool(),
+  outdated: __t.bool(),
+  reason: __t.string(),
+});
+export type GuideAiAvailabilityRow = __Infer<typeof GuideAiAvailabilityRow>;
+
+export const GuideAiDraft = __t.object("GuideAiDraft", {
+  id: __t.string(),
+  actor: __t.identity(),
+  revision: __t.u32(),
+  state: __t.string(),
+  json: __t.string(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type GuideAiDraft = __Infer<typeof GuideAiDraft>;
+
+export const GuideAiProvenance = __t.object("GuideAiProvenance", {
+  key: __t.string(),
+  guideId: __t.u64(),
+  guideVersion: __t.u32(),
+  json: __t.string(),
+});
+export type GuideAiProvenance = __Infer<typeof GuideAiProvenance>;
+
+export const GuideAiSourceAvailability = __t.object("GuideAiSourceAvailability", {});
+export type GuideAiSourceAvailability = __Infer<typeof GuideAiSourceAvailability>;
+
+export const GuideAiTranscription = __t.object("GuideAiTranscription", {
+  id: __t.string(),
+  actor: __t.identity(),
+  fileId: __t.string(),
+  fileHash: __t.string(),
+  targetKind: __t.string(),
+  targetId: __t.u64(),
+  targetVersion: __t.u32(),
+  json: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type GuideAiTranscription = __Infer<typeof GuideAiTranscription>;
+
 export const GuideReview = __t.object("GuideReview", {
   id: __t.u64(),
   guideId: __t.u64(),

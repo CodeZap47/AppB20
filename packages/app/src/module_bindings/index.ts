@@ -37,6 +37,7 @@ import {
 import AcceptAnswerReducer from "./accept_answer_reducer";
 import AddEvidenceReducer from "./add_evidence_reducer";
 import AddGuideSourcesReducer from "./add_guide_sources_reducer";
+import AddGuideSourcesV3Reducer from "./add_guide_sources_v_3_reducer";
 import AddStickerReducer from "./add_sticker_reducer";
 import AnswerPresentationQuestionReducer from "./answer_presentation_question_reducer";
 import AnswerQuestionReducer from "./answer_question_reducer";
@@ -98,9 +99,11 @@ import PublishWorkV2Reducer from "./publish_work_v_2_reducer";
 import PutResourceChunkReducer from "./put_resource_chunk_reducer";
 import RecordPollDecisionReducer from "./record_poll_decision_reducer";
 import RefreshGuideSourceReducer from "./refresh_guide_source_reducer";
+import RefreshGuideSourceV3Reducer from "./refresh_guide_source_v_3_reducer";
 import RegisterPushInstallationReducer from "./register_push_installation_reducer";
 import RemoveChatCommandReducer from "./remove_chat_command_reducer";
 import RemoveGuideSourceReducer from "./remove_guide_source_reducer";
+import RemoveGuideSourceV3Reducer from "./remove_guide_source_v_3_reducer";
 import RemoveMemberReducer from "./remove_member_reducer";
 import RemovePushInstallationReducer from "./remove_push_installation_reducer";
 import RemoveResourceFileReducer from "./remove_resource_file_reducer";
@@ -121,6 +124,7 @@ import RestorePageSnapshotReducer from "./restore_page_snapshot_reducer";
 import RestoreResourceFileReducer from "./restore_resource_file_reducer";
 import RestoreWorkVersionReducer from "./restore_work_version_reducer";
 import ReviewGuideReducer from "./review_guide_reducer";
+import ReviewGuideV3Reducer from "./review_guide_v_3_reducer";
 import ReviewSpacedCardReducer from "./review_spaced_card_reducer";
 import ReviewWorkReducer from "./review_work_reducer";
 import RevokeInvitationReducer from "./revoke_invitation_reducer";
@@ -173,6 +177,7 @@ import UpdateAssignmentReducer from "./update_assignment_reducer";
 import UpdateAssignmentV2Reducer from "./update_assignment_v_2_reducer";
 import UpdateGuideReducer from "./update_guide_reducer";
 import UpdateGuideSourceReducer from "./update_guide_source_reducer";
+import UpdateGuideSourceV3Reducer from "./update_guide_source_v_3_reducer";
 import UpdateGuideV2Reducer from "./update_guide_v_2_reducer";
 import UpdatePollReducer from "./update_poll_reducer";
 import UpdateProfileReducer from "./update_profile_reducer";
@@ -204,6 +209,7 @@ import * as GetFileUploadStatusProcedure from "./get_file_upload_status_procedur
 import * as GetResourceManifestProcedure from "./get_resource_manifest_procedure";
 import * as GetResourceUploadStatusProcedure from "./get_resource_upload_status_procedure";
 import * as GetTrashClockProcedure from "./get_trash_clock_procedure";
+import * as GuideAiProcedure from "./guide_ai_procedure";
 import * as NotificationCommitRemindersProcedure from "./notification_commit_reminders_procedure";
 import * as NotificationReminderContextProcedure from "./notification_reminder_context_procedure";
 import * as NotificationsAuthorizeProcedure from "./notifications_authorize_procedure";
@@ -233,6 +239,7 @@ import ContributionOriginsRow from "./contribution_origins_table";
 import EvidenceDetailsRow from "./evidence_details_table";
 import EvidencesRow from "./evidences_table";
 import GroupMessagesRow from "./group_messages_table";
+import GuideAiSourceAvailabilityRow from "./guide_ai_source_availability_table";
 import GuideReviewsRow from "./guide_reviews_table";
 import GuideSourcesRow from "./guide_sources_table";
 import GuideVersionsRow from "./guide_versions_table";
@@ -424,6 +431,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, GroupMessagesRow),
+  guideAiSourceAvailability: __table({
+    name: 'guide_ai_source_availability',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, GuideAiSourceAvailabilityRow),
   guideReviews: __table({
     name: 'guide_reviews',
     indexes: [
@@ -900,6 +914,7 @@ const reducersSchema = __reducers(
   __reducerSchema("accept_answer", AcceptAnswerReducer),
   __reducerSchema("add_evidence", AddEvidenceReducer),
   __reducerSchema("add_guide_sources", AddGuideSourcesReducer),
+  __reducerSchema("add_guide_sources_v_3", AddGuideSourcesV3Reducer),
   __reducerSchema("add_sticker", AddStickerReducer),
   __reducerSchema("answer_presentation_question", AnswerPresentationQuestionReducer),
   __reducerSchema("answer_question", AnswerQuestionReducer),
@@ -961,9 +976,11 @@ const reducersSchema = __reducers(
   __reducerSchema("put_resource_chunk", PutResourceChunkReducer),
   __reducerSchema("record_poll_decision", RecordPollDecisionReducer),
   __reducerSchema("refresh_guide_source", RefreshGuideSourceReducer),
+  __reducerSchema("refresh_guide_source_v_3", RefreshGuideSourceV3Reducer),
   __reducerSchema("register_push_installation", RegisterPushInstallationReducer),
   __reducerSchema("remove_chat_command", RemoveChatCommandReducer),
   __reducerSchema("remove_guide_source", RemoveGuideSourceReducer),
+  __reducerSchema("remove_guide_source_v_3", RemoveGuideSourceV3Reducer),
   __reducerSchema("remove_member", RemoveMemberReducer),
   __reducerSchema("remove_push_installation", RemovePushInstallationReducer),
   __reducerSchema("remove_resource_file", RemoveResourceFileReducer),
@@ -984,6 +1001,7 @@ const reducersSchema = __reducers(
   __reducerSchema("restore_resource_file", RestoreResourceFileReducer),
   __reducerSchema("restore_work_version", RestoreWorkVersionReducer),
   __reducerSchema("review_guide", ReviewGuideReducer),
+  __reducerSchema("review_guide_v_3", ReviewGuideV3Reducer),
   __reducerSchema("review_spaced_card", ReviewSpacedCardReducer),
   __reducerSchema("review_work", ReviewWorkReducer),
   __reducerSchema("revoke_invitation", RevokeInvitationReducer),
@@ -1036,6 +1054,7 @@ const reducersSchema = __reducers(
   __reducerSchema("update_assignment_v_2", UpdateAssignmentV2Reducer),
   __reducerSchema("update_guide", UpdateGuideReducer),
   __reducerSchema("update_guide_source", UpdateGuideSourceReducer),
+  __reducerSchema("update_guide_source_v_3", UpdateGuideSourceV3Reducer),
   __reducerSchema("update_guide_v_2", UpdateGuideV2Reducer),
   __reducerSchema("update_poll", UpdatePollReducer),
   __reducerSchema("update_profile", UpdateProfileReducer),
@@ -1069,6 +1088,7 @@ const proceduresSchema = __procedures(
   __procedureSchema("get_resource_manifest", GetResourceManifestProcedure.params, GetResourceManifestProcedure.returnType),
   __procedureSchema("get_resource_upload_status", GetResourceUploadStatusProcedure.params, GetResourceUploadStatusProcedure.returnType),
   __procedureSchema("get_trash_clock", GetTrashClockProcedure.params, GetTrashClockProcedure.returnType),
+  __procedureSchema("guide_ai", GuideAiProcedure.params, GuideAiProcedure.returnType),
   __procedureSchema("notification_commit_reminders", NotificationCommitRemindersProcedure.params, NotificationCommitRemindersProcedure.returnType),
   __procedureSchema("notification_reminder_context", NotificationReminderContextProcedure.params, NotificationReminderContextProcedure.returnType),
   __procedureSchema("notifications_authorize", NotificationsAuthorizeProcedure.params, NotificationsAuthorizeProcedure.returnType),
@@ -1105,6 +1125,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "evidence_details": Omit<typeof tablesSchema.schemaType.tables["evidenceDetails"], "accessorName"> & { readonly accessorName: "evidence_details" };
     /** @deprecated Use `groupMessages` instead. This alias will be removed in the next major version. */
     readonly "group_messages": Omit<typeof tablesSchema.schemaType.tables["groupMessages"], "accessorName"> & { readonly accessorName: "group_messages" };
+    /** @deprecated Use `guideAiSourceAvailability` instead. This alias will be removed in the next major version. */
+    readonly "guide_ai_source_availability": Omit<typeof tablesSchema.schemaType.tables["guideAiSourceAvailability"], "accessorName"> & { readonly accessorName: "guide_ai_source_availability" };
     /** @deprecated Use `guideReviews` instead. This alias will be removed in the next major version. */
     readonly "guide_reviews": Omit<typeof tablesSchema.schemaType.tables["guideReviews"], "accessorName"> & { readonly accessorName: "guide_reviews" };
     /** @deprecated Use `guideSources` instead. This alias will be removed in the next major version. */
@@ -1250,6 +1272,7 @@ const tableAccessorAliases = {
   "contribution_origins": "contributionOrigins",
   "evidence_details": "evidenceDetails",
   "group_messages": "groupMessages",
+  "guide_ai_source_availability": "guideAiSourceAvailability",
   "guide_reviews": "guideReviews",
   "guide_sources": "guideSources",
   "guide_versions": "guideVersions",
@@ -1350,6 +1373,8 @@ export type DbView = __DbViewBase & {
   readonly "evidence_details": __DbViewBase["evidenceDetails"];
   /** @deprecated Use `groupMessages` instead. This alias will be removed in the next major version. */
   readonly "group_messages": __DbViewBase["groupMessages"];
+  /** @deprecated Use `guideAiSourceAvailability` instead. This alias will be removed in the next major version. */
+  readonly "guide_ai_source_availability": __DbViewBase["guideAiSourceAvailability"];
   /** @deprecated Use `guideReviews` instead. This alias will be removed in the next major version. */
   readonly "guide_reviews": __DbViewBase["guideReviews"];
   /** @deprecated Use `guideSources` instead. This alias will be removed in the next major version. */
@@ -1492,6 +1517,8 @@ export type Tables = __TablesBase & {
   readonly "evidence_details": __TablesBase["evidenceDetails"];
   /** @deprecated Use `groupMessages` instead. This alias will be removed in the next major version. */
   readonly "group_messages": __TablesBase["groupMessages"];
+  /** @deprecated Use `guideAiSourceAvailability` instead. This alias will be removed in the next major version. */
+  readonly "guide_ai_source_availability": __TablesBase["guideAiSourceAvailability"];
   /** @deprecated Use `guideReviews` instead. This alias will be removed in the next major version. */
   readonly "guide_reviews": __TablesBase["guideReviews"];
   /** @deprecated Use `guideSources` instead. This alias will be removed in the next major version. */

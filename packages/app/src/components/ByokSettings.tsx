@@ -23,7 +23,7 @@ export function ByokSettings() {
 
 function ByokAccountSettings({ token, simulated, active }: { token?: string; simulated: boolean; active: boolean }) {
   const tokenRef = useRef(token); tokenRef.current = token;
-  const client = useMemo(() => simulated ? undefined : new AiClient({ apiUrl: config.apiUrl, getToken: () => tokenRef.current }), [token, simulated]);
+  const client = useMemo(() => simulated ? undefined : new AiClient({ apiUrl: config.aiApiUrl, getToken: () => tokenRef.current }), [token, simulated]);
   const [status, setStatus] = useState<UiAiStatus | undefined>(simulated ? demoStatus : undefined);
   const [keyState, setKeyState] = useState<AiKeyStatus>({ configured: false });
   const [apiKey, setApiKey] = useState('');
@@ -110,7 +110,7 @@ function ByokAccountSettings({ token, simulated, active }: { token?: string; sim
       </form>}
       {status && <fieldset disabled={busy || loading || !active || status.serviceConfigured === false} className="ai-consent">
         <legend>Consentimiento para usar IA · versión {status.consentVersion}</legend>
-        <label><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />Entiendo que, al confirmar una generación, el texto que revise y mi clave se usarán para solicitar guías o explicaciones a Google Gemini. Revisaré los fragmentos antes de enviarlos.</label>
+        <label><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />Entiendo que, al confirmar una generación, el texto que revise y mi clave se usarán para solicitar guías, explicaciones o preguntas a Google Gemini. Revisaré los fragmentos antes de enviarlos.</label>
         <p className="field__hint">Este consentimiento es individual. La administración debe confirmar por separado la elegibilidad del grupo y habilitar el servicio. La generación real comienza desactivada.</p>
         <button type="button" disabled={consent === status.consented} onClick={saveConsent}>{consent ? 'Guardar consentimiento' : 'Retirar consentimiento'}</button>
       </fieldset>}

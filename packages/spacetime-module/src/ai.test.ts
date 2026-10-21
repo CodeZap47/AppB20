@@ -200,6 +200,12 @@ describe('EX1 IA: procedimientos reales y tablas privadas', () => {
     s.as(aiService); expect(() => s.call(ai_claim_generation, { id: request.id, actor: alice.toHexString() })).toThrow('cambió');
     s.as(alice); expect(() => s.call(ai_get_generation, { id: request.id })).toThrow('cambió');
   });
+  it('preparar fuentes nuevas libera una operación obsoleta que nunca se envió', () => {
+    const s = setup(); const { request } = s.ready(); s.call(ai_authorize_generation, request);
+    s.rows('note')[0].body = 'Contenido corregido';
+    const current = s.prep(501); expect(s.call(ai_authorize_generation, s.generation(current, 601))).toMatchObject({ state: 'prepared' });
+    expect(s.rows('aiGeneration')[0].status).toBe('failed'); expect(s.rows('aiReservation')[0].status).toBe('released');
+  });
   it('rechaza trabajos si su tarea padre cambia de materia', () => {
     const s = setup(); const p = s.prep(500, [{ kind: 'work', refId: '30', topics: ['Ciclos'], includeUnplaced: false }]);
     s.configure(); s.configureKey(); s.call(ai_set_consent, { version: AI_CONSENT_VERSION, accepted: true }); const req = s.generation(p); s.call(ai_authorize_generation, req);
@@ -242,6 +248,18 @@ describe('EX1 IA: procedimientos reales y tablas privadas', () => {
     s.as(aiService); const claimed = s.call(ai_claim_generation, { id: request.id, actor: alice.toHexString() });
     expect(claimed).toMatchObject({ claimed: true, generation: { state: 'running' }, key: { keyId: uid(101) } });
     const replay = s.call(ai_claim_generation, { id: request.id, actor: alice.toHexString() }); expect(replay).toMatchObject({ claimed: false }); expect(replay.key).toBeUndefined();
+  });
+  it('replay consulta el resultado con IA desactivada y sin modelo; otro payload conserva conflicto', () => {
+    const s = setup(); const { request, preparation } = s.ready(); s.call(ai_authorize_generation, request); s.as(aiService);
+    s.call(ai_claim_generation, { id: request.id, actor: alice.toHexString() });
+    const result = { questions: [{ id: 'q1', type: 'single', text: '¿Qué hace un ciclo?', options: ['Repite', 'Borra', 'Duerme', 'Nada'].map((text, i) => ({ id: String(i), text })), correctOptionId: '0', explanation: 'Repite instrucciones.', topic: 'Ciclos', citations: [preparation.fragments[0].id] }] };
+    s.call(ai_finish_generation, { id: request.id, actor: alice.toHexString(), state: 'succeeded', result });
+    s.configure(false);
+    const cached = { ...request, allowNew: false, model: '' };
+    expect(s.call(ai_authorize_generation, cached)).toMatchObject({ state: 'succeeded', result });
+    expect(s.rows('aiReservation')).toHaveLength(1);
+    expect(() => s.call(ai_authorize_generation, { ...cached, config: { ...request.config, questionCount: 2 } })).toThrow('UUID');
+    expect(() => s.call(ai_authorize_generation, { ...cached, id: uid(601) })).toThrow('habilitada');
   });
   it('estado incierto no se reenvía, conserva reserva y permite consultar tras reinicio', () => {
     const s = setup(); const { request } = s.ready(); s.call(ai_authorize_generation, request); s.as(aiService); s.call(ai_claim_generation, { id: request.id, actor: alice.toHexString() });

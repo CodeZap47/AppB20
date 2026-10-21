@@ -27,6 +27,7 @@ import * as GetFileUploadStatusProcedure from "../get_file_upload_status_procedu
 import * as GetResourceManifestProcedure from "../get_resource_manifest_procedure";
 import * as GetResourceUploadStatusProcedure from "../get_resource_upload_status_procedure";
 import * as GetTrashClockProcedure from "../get_trash_clock_procedure";
+import * as GuideAiProcedure from "../guide_ai_procedure";
 import * as NotificationCommitRemindersProcedure from "../notification_commit_reminders_procedure";
 import * as NotificationReminderContextProcedure from "../notification_reminder_context_procedure";
 import * as NotificationsAuthorizeProcedure from "../notifications_authorize_procedure";
@@ -80,6 +81,8 @@ export type GetResourceUploadStatusArgs = __Infer<typeof GetResourceUploadStatus
 export type GetResourceUploadStatusResult = __Infer<typeof GetResourceUploadStatusProcedure.returnType>;
 export type GetTrashClockArgs = __Infer<typeof GetTrashClockProcedure.params>;
 export type GetTrashClockResult = __Infer<typeof GetTrashClockProcedure.returnType>;
+export type GuideAiArgs = __Infer<typeof GuideAiProcedure.params>;
+export type GuideAiResult = __Infer<typeof GuideAiProcedure.returnType>;
 export type NotificationCommitRemindersArgs = __Infer<typeof NotificationCommitRemindersProcedure.params>;
 export type NotificationCommitRemindersResult = __Infer<typeof NotificationCommitRemindersProcedure.returnType>;
 export type NotificationReminderContextArgs = __Infer<typeof NotificationReminderContextProcedure.params>;

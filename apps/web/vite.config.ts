@@ -24,6 +24,7 @@ export default defineConfig(({ mode }) => {
     const urls = [
       ['VITE_SPACETIME_URI', 'wss:'],
       ['VITE_API_URL', 'https:'],
+      ['VITE_AI_API_URL', 'https:'],
       ['VITE_SPACETIMEAUTH_REDIRECT_URI', 'https:'],
       ['VITE_SPACETIMEAUTH_POST_LOGOUT_REDIRECT_URI', 'https:'],
     ] as const;

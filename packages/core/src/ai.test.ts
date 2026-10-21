@@ -62,6 +62,12 @@ describe('preparación IA de contenido académico autorizado', () => {
     const result = prepare(input, [{ ...source, omissions: ['Adjuntos omitidos en EX-1.'] }]);
     expect(result.omissions).toContain('note:3: Adjuntos omitidos en EX-1.');
   });
+  it('fija modelo y configuración de preguntas en la huella de la vista previa', () => {
+    expect(prepare().config.questionCount).toBe(10);
+    const next = prepare({ ...input, config: { questionCount: 1, types: ['single'], difficulty: 'basic' } });
+    expect(next.fingerprint).not.toBe(prepare().fingerprint);
+    expect(buildAiPreparation(input, [source], { id, model: 'other-model', now: 1000 }).fingerprint).not.toBe(prepare().fingerprint);
+  });
 });
 
 describe('contrato de preguntas cerradas generadas', () => {
@@ -80,5 +86,11 @@ describe('contrato de preguntas cerradas generadas', () => {
     const outside = draft(); outside.questions[0]!.topic = 'Objetos';
     expect(() => validateAiQuestionDraft(outside, prepare(), config)).toThrow();
     expect(() => validateAiQuestionDraft({ questions: [] }, prepare(), config)).toThrow();
+  });
+  it('verdadero/falso exige dos opciones correspondientes a sus valores', () => {
+    const question = { ...draft().questions[0]!, type: 'boolean', options: [{ id: 'yes', text: 'Verdadero' }, { id: 'no', text: 'Falso' }], correctOptionId: 'yes' };
+    const booleanConfig = { ...config, types: ['boolean' as const] };
+    expect(validateAiQuestionDraft({ questions: [question] }, prepare(), booleanConfig).questions[0]?.type).toBe('boolean');
+    expect(() => validateAiQuestionDraft({ questions: [{ ...question, options: [{ id: 'yes', text: 'Manzana' }, { id: 'no', text: 'Pera' }] }] }, prepare(), booleanConfig)).toThrow();
   });
 });

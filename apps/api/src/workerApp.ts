@@ -8,6 +8,8 @@ import { createFileDatabase, FileApiError, type FileDatabase, type TargetKind } 
 import { matchesMetadata, MAX_FILE_BYTES, metadata, objectKey, storeFile } from './files/storage.ts';
 import { createAiDatabase, type AiDatabase, type AiWorkerEnv } from './ai/database.ts';
 import { aiWorkerRoutes, aiPublicError } from './ai/routes.ts';
+import { guideAiRoutes } from './ai/guideRoutes.ts';
+import type { GuideProvider } from './ai/guideProvider.ts';
 import type { AiProvider } from './ai/provider.ts';
 
 type WorkerContext = { Bindings: AiWorkerEnv; Variables: AuthVariables & { sessionToken: string; files: FileDatabase; ai: AiDatabase } };
@@ -16,6 +18,7 @@ interface WorkerOptions {
   database?: (env: FileWorkerEnv) => FileDatabase;
   aiDatabase?: (env: AiWorkerEnv) => AiDatabase;
   aiProvider?: AiProvider;
+  guideProvider?: GuideProvider;
 }
 const kinds = new Set(['assignment', 'activity', 'work', 'evidence']);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -59,7 +62,7 @@ export function createWorkerApp(options: WorkerOptions = {}) {
     allowMethods: ['GET', 'PUT', 'POST', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Authorization', 'Content-Type', 'X-File-Name', 'X-File-Size'],
     exposeHeaders: ['Content-Disposition', 'Content-Length'] })(c, next));
-  app.get('/health', (c) => c.json({ ok: true, files: 'r2', ai: false }));
+  app.get('/health', (c) => c.json({ ok: true, files: c.env.FILES ? 'r2' : 'unconfigured', ai: c.env.AI_ENABLED === 'true' }));
   app.use('/ai/*', async (c, next) => {
     c.header('Cache-Control', 'private, no-store');
     let auth: AuthOptions;
@@ -71,8 +74,10 @@ export function createWorkerApp(options: WorkerOptions = {}) {
       await next();
     });
   });
+  app.route('/ai/study-guides', guideAiRoutes({ provider: options.guideProvider }));
   app.route('/ai', aiWorkerRoutes({ provider: options.aiProvider }));
   app.use('/files/*', async (c, next) => {
+    if (!c.env.FILES) return c.json({ error: 'La compatibilidad con archivos anteriores no está configurada en este servicio.' }, 503);
     let auth: AuthOptions;
     try { auth = options.auth ?? configAuth(c.env); }
     catch { return c.json({ error: 'El acceso todavía no está configurado.' }, 503); }

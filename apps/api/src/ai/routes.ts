@@ -14,13 +14,16 @@ function model(env: AiWorkerEnv): string {
   if (!selected || selected.length > 200 || !/^[a-zA-Z0-9._-]+$/.test(selected)) throw new AiApiError(503, 'configuration', 'Configura el modelo de Gemini antes de preparar material.');
   return selected;
 }
+function configuredModel(env: AiWorkerEnv): string {
+  try { return model(env); } catch { return ''; }
+}
 function uuid(value: unknown): string {
   if (!aiUuid(value)) throw new AiApiError(400, 'invalid', 'El identificador de la operación no es válido.');
   return value.toLowerCase();
 }
 async function effectiveStatus(db: AiDatabase, token: string, env: AiWorkerEnv): Promise<AiStatus & { serviceConfigured: boolean }> {
   const status = await db.user<AiStatus>(token, 'ai_status', {});
-  const modelName = env.GEMINI_MODEL?.trim() ?? '';
+  const modelName = configuredModel(env);
   const configured = !!env.AI_SERVICE_TOKEN && !!modelName && await canEncrypt(env);
   const enabled = env.AI_ENABLED === 'true' && status.enabled && configured;
   return { actor: status.actor, configured: status.configured, consentVersion: status.consentVersion, consented: status.consented,
@@ -81,11 +84,14 @@ export function aiWorkerRoutes(options: AiRouteOptions = {}) {
     }
     const db = c.get('ai'); const token = c.get('sessionToken');
     const status = await effectiveStatus(db, token, c.env);
-    if (!status.enabled) throw new AiApiError(503, 'disabled', status.reason ?? 'La generación con IA aún no está habilitada.');
-    await db.user<AiGeneration>(token, 'ai_authorize_generation', { id, preparationId, fingerprint: body.fingerprint, config,
-      confirmed: true, acknowledgeUnknown: body.acknowledgeUnknown === true, model: model(c.env) });
+    const generation = await db.user<AiGeneration>(token, 'ai_authorize_generation', { id, preparationId, fingerprint: body.fingerprint, config,
+      confirmed: true, acknowledgeUnknown: body.acknowledgeUnknown === true, allowNew: status.enabled,
+      model: c.env.GEMINI_MODEL?.trim() ?? '' });
+    // A replay remains readable after disabling IA or rotating/removing its configuration.
+    // The procedure validates ownership, request identity and current source access first.
+    if (!status.enabled || generation.state !== 'prepared') return c.json(generation);
     const claim = await db.service<ClaimedGeneration>('ai_claim_generation', { id, actor: status.actor });
-    if (!claim.claimed) return c.json(await db.user<AiGeneration>(token, 'ai_get_generation', { id }));
+    if (!claim.claimed) return c.json(claim.generation);
     if (!claim.key || !claim.preparation) throw new AiApiError(503, 'protocol', 'No se pudo confirmar la preparación. Consulta el estado de la operación.');
     let terminal: { state: 'succeeded' | 'failed' | 'unknown'; result?: unknown; errorCode?: string; errorMessage?: string; usage?: unknown };
     let apiKey: string | undefined;

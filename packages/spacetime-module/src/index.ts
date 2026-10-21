@@ -35,6 +35,8 @@ import { notificationTables, notification, notificationPreference } from './noti
 import * as notifications from './notificationHandlers';
 import { trashTables } from './trashTables';
 import * as trash from './trashHandlers';
+import { guideAiTables } from './guideAiTables';
+import { guideAiResponse, guideAiSourceAvailability } from './guideAiHandlers';
 
 // ---------------------------------------------------------------------------
 // Tablas
@@ -785,6 +787,8 @@ const spacetimedb = schema({
   ...notificationTables,
   ...trashTables,
   presentationPractice, presentationAttempt, presentationPersonal, presentationQuestion, presentationFeedback,
+  ...aiTables,
+  ...guideAiTables,
   ...delivery2Tables,
   ...roomsTables,
   resourceUpload, resourceChunk, resourceCapacity, resourceExpiry, retentionExpiry,
@@ -2282,10 +2286,11 @@ function sourceVersion(ctx: Ctx, kind: string, refId: bigint, subjectId: bigint)
 
 function addGuideSources(
   ctx: Ctx,
-  guide: { id: bigint; subjectId: bigint },
+  guide: { id: bigint; subjectId: bigint; termId?: bigint },
   refs: { kind: string; refId: bigint }[],
 ) {
   for (const ref of refs) {
+    knowledge.validateGuideSourceClassification(ctx, ref.kind, ref.refId, guide.subjectId, guide.termId);
     const version = sourceVersion(ctx, ref.kind, ref.refId, guide.subjectId);
     const duplicate = [...ctx.db.guideSource.guideId.filter(guide.id)].some(
       (row) => row.kind === ref.kind && row.refId === ref.refId,
@@ -2335,6 +2340,7 @@ function applyGuideUpdate(ctx: Ctx, { guideId, ...input }: Parameters<typeof che
   if (checked.subjectId !== row.subjectId) {
     throw new SenderError('La materia de una guía no cambia.');
   }
+  if (checked.termId !== row.termId) for (const source of ctx.db.guideSource.guideId.filter(guideId)) knowledge.validateGuideSourceClassification(ctx, source.kind, source.refId, checked.subjectId, checked.termId);
   delivery2.captureGuide(ctx, guideId);
   ctx.db.studyGuide.id.update({
     ...row,
@@ -2361,110 +2367,18 @@ export const update_guide = spacetimedb.reducer(
   },
 );
 
-export const add_guide_sources = spacetimedb.reducer(
-  { guideId: t.u64(), sources: t.array(GUIDE_SOURCE_REF) },
-  (ctx, { guideId, sources }) => {
-    activeMember(ctx);
-    delivery2.captureGuide(ctx, guideId);
-    addGuideSources(ctx, requireGuide(ctx, guideId), sources);
-    delivery2.bumpExtra(ctx, 'guide', guideId);
-    log(ctx, 'update', 'study_guide', guideId);
-  },
-);
-
-function requireGuideSource(ctx: Ctx, sourceId: bigint) {
-  const row = ctx.db.guideSource.id.find(sourceId);
-  if (row && delivery2.withdrawn(ctx.db, 'guide', row.guideId)) throw new SenderError('La guía está retirada.');
-  if (!row) throw new SenderError('La fuente no existe.');
-  return row;
-}
-
-export const update_guide_source = spacetimedb.reducer(
-  { sourceId: t.u64(), status: t.string(), reason: t.string(), topics: t.array(t.string()) },
-  (ctx, { sourceId, status, reason, topics }) => {
-    activeMember(ctx);
-    const row = requireGuideSource(ctx, sourceId);
-    const guide = requireGuide(ctx, row.guideId);
-    delivery2.captureGuide(ctx, guide.id);
-    if (status !== 'processed' && status !== 'pending') {
-      throw new SenderError('Estado de fuente inválido.');
-    }
-    const why = reason.trim();
-    if (why.length > 200) throw new SenderError('La razón es demasiado larga.');
-    if (status === 'pending' && !why) throw new SenderError('Di por qué la fuente sigue pendiente.');
-    if (topics.some((topic) => !guide.topics.includes(topic))) {
-      throw new SenderError('Un tema no está en el temario de la guía.');
-    }
-    ctx.db.guideSource.id.update({
-      ...row,
-      status,
-      reason: status === 'pending' ? why : '',
-      topics: guide.topics.filter((topic) => topics.includes(topic)),
-    });
-    delivery2.bumpExtra(ctx, 'guide', guide.id);
-    log(ctx, 'update', 'guide_source', sourceId);
-  },
-);
-
-/** Toma la versión actual del material, después de revisar lo que cambió. */
-export const refresh_guide_source = spacetimedb.reducer(
-  { sourceId: t.u64() },
-  (ctx, { sourceId }) => {
-    activeMember(ctx);
-    const row = requireGuideSource(ctx, sourceId);
-    const guide = requireGuide(ctx, row.guideId);
-    const version = sourceVersion(ctx, row.kind, row.refId, guide.subjectId);
-    delivery2.captureGuide(ctx, guide.id);
-    ctx.db.guideSource.id.update({ ...row, sourceVersion: version });
-    delivery2.bumpExtra(ctx, 'guide', guide.id);
-    log(ctx, 'update', 'guide_source', sourceId);
-  },
-);
-
-export const remove_guide_source = spacetimedb.reducer(
-  { sourceId: t.u64() },
-  (ctx, { sourceId }) => {
-    activeMember(ctx);
-    const row = requireGuideSource(ctx, sourceId);
-    delivery2.captureGuide(ctx, row.guideId);
-    ctx.db.guideSource.id.delete(sourceId);
-    delivery2.bumpExtra(ctx, 'guide', row.guideId);
-    log(ctx, 'delete', 'guide_source', sourceId);
-  },
-);
-
-/** Un compañero revisa la versión actual; quien la guardó no puede. Una por persona y versión. */
-export const review_guide = spacetimedb.reducer(
-  { guideId: t.u64(), verdict: t.string(), comment: t.string() },
-  (ctx, { guideId, verdict, comment }) => {
-    activeMember(ctx);
-    const guide = requireGuide(ctx, guideId);
-    if (guide.updatedBy.isEqual(ctx.sender)) {
-      throw new SenderError('Guardaste esta versión; la revisa otro compañero.');
-    }
-    if (verdict !== 'approved' && verdict !== 'changes') {
-      throw new SenderError('Resultado de revisión inválido.');
-    }
-    const text = comment.trim();
-    if (text.length > 2000) throw new SenderError('El comentario es demasiado largo.');
-    if (verdict === 'changes' && !text) throw new SenderError('Di qué cambios propones.');
-    for (const row of [...ctx.db.guideReview.guideId.filter(guideId)]) {
-      if (row.guideVersion === guide.version && row.reviewer.isEqual(ctx.sender)) {
-        ctx.db.guideReview.id.delete(row.id);
-      }
-    }
-    ctx.db.guideReview.insert({
-      id: 0n,
-      guideId,
-      guideVersion: guide.version,
-      reviewer: ctx.sender,
-      verdict,
-      comment: text,
-      createdAt: ctx.timestamp,
-    });
-    log(ctx, 'review', 'study_guide', guideId);
-  },
-);
+/** Legacy clients must refresh before mutating sources or reviewing an unread version. */
+function outdatedGuideClient(ctx: Ctx) { activeMember(ctx); throw new SenderError('Actualiza la aplicación para usar la versión actual de la guía.'); }
+export const add_guide_sources = spacetimedb.reducer({ guideId: t.u64(), sources: t.array(GUIDE_SOURCE_REF) }, outdatedGuideClient);
+export const update_guide_source = spacetimedb.reducer({ sourceId: t.u64(), status: t.string(), reason: t.string(), topics: t.array(t.string()) }, outdatedGuideClient);
+export const refresh_guide_source = spacetimedb.reducer({ sourceId: t.u64() }, outdatedGuideClient);
+export const remove_guide_source = spacetimedb.reducer({ sourceId: t.u64() }, outdatedGuideClient);
+export const review_guide = spacetimedb.reducer({ guideId: t.u64(), verdict: t.string(), comment: t.string() }, outdatedGuideClient);
+export const add_guide_sources_v3 = spacetimedb.reducer({ guideId: t.u64(), sources: t.array(GUIDE_SOURCE_REF), expectedVersion: t.u32() }, knowledge.addGuideSourcesV3);
+export const update_guide_source_v3 = spacetimedb.reducer({ sourceId: t.u64(), status: t.string(), reason: t.string(), topics: t.array(t.string()), expectedVersion: t.u32() }, knowledge.updateGuideSourceV3);
+export const refresh_guide_source_v3 = spacetimedb.reducer({ sourceId: t.u64(), expectedVersion: t.u32() }, knowledge.refreshGuideSourceV3);
+export const remove_guide_source_v3 = spacetimedb.reducer({ sourceId: t.u64(), expectedVersion: t.u32() }, knowledge.removeGuideSourceV3);
+export const review_guide_v3 = spacetimedb.reducer({ guideId: t.u64(), verdict: t.string(), comment: t.string(), expectedVersion: t.u32() }, knowledge.reviewGuideV3);
 
 // ---------------------------------------------------------------------------
 // Puedo ayudarte / necesito ayuda
@@ -3178,6 +3092,35 @@ export const backfill_academic_v2 = spacetimedb.reducer((ctx) => {
   }
   if (!ctx.db.academicMigration.id.find(2)) ctx.db.academicMigration.insert({ id: 2, completedAt: ctx.timestamp });
 });
+
+export const guide_ai = spacetimedb.procedure({ payload: t.string() }, t.string(),
+  (ctx, { payload }) => ctx.withTx((tx) => guideAiResponse(tx, payload)));
+
+/** IA usa procedimientos privados; sus tablas nunca se exponen mediante vistas. */
+export const set_ai_service = spacetimedb.reducer({ identity: t.identity(), enabled: t.bool(), dailyTokenBudget: t.u32().optional() },
+  (ctx, input) => ai.setAiService(ctx, { ...input, dailyTokenBudget: input.dailyTokenBudget ?? 100_000 }));
+export const ai_status = spacetimedb.procedure({ payload: t.string() }, t.string(),
+  (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, ai.aiStatus)));
+export const ai_key_status = spacetimedb.procedure({ payload: t.string() }, t.string(),
+  (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, ai.aiKeyStatus)));
+export const ai_set_consent = spacetimedb.procedure({ payload: t.string() }, t.string(),
+  (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, ai.aiSetConsent)));
+export const ai_authorize_key = spacetimedb.procedure({ payload: t.string() }, t.string(),
+  (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, ai.aiAuthorizeKey)));
+export const ai_commit_key = spacetimedb.procedure({ payload: t.string() }, t.string(),
+  (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, ai.aiCommitKey)));
+export const ai_delete_key = spacetimedb.procedure({ payload: t.string() }, t.string(),
+  (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, ai.aiDeleteKey)));
+export const ai_prepare = spacetimedb.procedure({ payload: t.string() }, t.string(),
+  (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, ai.aiPrepare)));
+export const ai_authorize_generation = spacetimedb.procedure({ payload: t.string() }, t.string(),
+  (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, ai.aiAuthorizeGeneration)));
+export const ai_claim_generation = spacetimedb.procedure({ payload: t.string() }, t.string(),
+  (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, ai.aiClaimGeneration)));
+export const ai_finish_generation = spacetimedb.procedure({ payload: t.string() }, t.string(),
+  (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, ai.aiFinishGeneration)));
+export const ai_get_generation = spacetimedb.procedure({ payload: t.string() }, t.string(),
+  (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, ai.aiGetGeneration)));
 
 export const set_file_service = spacetimedb.reducer({ identity: t.identity() }, (ctx, { identity }) => {
   if (!isOwner(ctx)) throw new SenderError('Solo el propietario configura el servicio de archivos.');
@@ -4653,6 +4596,13 @@ export const study_guides = spacetimedb.view(
   (ctx) => (isActive(ctx.db, ctx.sender) ? [...ctx.db.studyGuide.iter()].filter((r) => delivery2.canReadTarget(ctx.db, ctx.sender, 'guide', r.id)) : []),
 );
 
+/** Derived citation availability: contains no prepared text, private draft or key. */
+export const guide_ai_source_availability = spacetimedb.view(
+  { public: true }, t.array(t.object('GuideAiAvailabilityRow', {
+    sourceId: t.u64(), guideId: t.u64(), guideVersion: t.u32(), available: t.bool(), outdated: t.bool(), reason: t.string(),
+  })), (ctx) => isActive(ctx.db, ctx.sender) ? guideAiSourceAvailability(ctx.db, ctx.sender) : [],
+);
+
 export const guide_sources = spacetimedb.view(
   { name: 'guide_sources', public: true },
   t.array(guideSource.rowType),
@@ -4774,19 +4724,6 @@ export const contribution_origins = spacetimedb.view({ name: 'contribution_origi
   t.array(t.object('ContributionOrigin', { kind: t.string(), refId: t.u64(), memberId: t.identity(), creditedAt: t.timestamp(), duplicateOf: t.u64().optional() })),
   (ctx) => readContributionOrigins(ctx.db, ctx.sender));
 
-/** IA privada con consentimiento, cuota y publicación voluntaria. */
-export const set_ai_service = spacetimedb.reducer({ identity: t.identity(), enabled: t.bool(), dailyTokenBudget: t.u32() }, ai.setAiService);
-export const ai_status = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, (inner) => ai.aiStatus(inner))));
-export const ai_key_status = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, (inner) => ai.aiKeyStatus(inner))));
-export const ai_set_consent = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, (inner, input) => ai.aiSetConsent(inner, input))));
-export const ai_authorize_key = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, (inner, input) => ai.aiAuthorizeKey(inner, input))));
-export const ai_commit_key = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, (inner, input) => ai.aiCommitKey(inner, input))));
-export const ai_delete_key = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, (inner) => ai.aiDeleteKey(inner))));
-export const ai_prepare = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, (inner, input) => ai.aiPrepare(inner, input))));
-export const ai_authorize_generation = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, (inner, input) => ai.aiAuthorizeGeneration(inner, input))));
-export const ai_claim_generation = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, (inner, input) => ai.aiClaimGeneration(inner, input))));
-export const ai_finish_generation = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, (inner, input) => ai.aiFinishGeneration(inner, input))));
-export const ai_get_generation = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, (inner, input) => ai.aiGetGeneration(inner, input))));
 export const ai_list_generations = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, (inner) => ai.aiListGenerations(inner))));
 export const ai_publish_generation = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, (inner, input) => ai.aiPublishGeneration(inner, input))));
 

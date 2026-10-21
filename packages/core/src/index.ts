@@ -20,3 +20,4 @@ export * from './ai';
 export * from './exam';
 export * from './aiStudyDraft';
 export * from './notifications';
+export * from './guideAi';

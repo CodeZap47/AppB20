@@ -13,5 +13,5 @@ import {
 export default {
   identity: __t.identity(),
   enabled: __t.bool(),
-  dailyTokenBudget: __t.u32(),
+  dailyTokenBudget: __t.option(__t.u32()),
 };

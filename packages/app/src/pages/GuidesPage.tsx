@@ -17,6 +17,8 @@ import { Icon } from '../components/Icon';
 import { ResourceDownloads, ResourceSection } from '../components/AcademicTools';
 import { StructuredEditor, StructuredText } from '../components/StructuredText';
 import { ContentWithdrawal } from '../components/ContentWithdrawal';
+import { GuideAiPanel } from '../components/GuideAiPanel';
+import { GuideAiProvenance } from '../components/GuideAiProvenance';
 import { useAction } from '../components/useAction';
 import { formatTime, memberName } from '../lib/format';
 import { candidateSources, describeSource, guideStatus, isOutdated, type SourceInfo } from '../lib/guides';
@@ -79,6 +81,7 @@ export function GuidesPage() {
   const data = useSnapshot();
   const { guides, subjects, members } = data;
   const [withdrawn, setWithdrawn] = useState(false);
+  const [showAi, setShowAi] = useState(false);
   const [params, setParams] = useSearchParams();
   const period = Number(params.get('cuatri')) || 0;
   const subjectId = params.get('materia') ?? '';
@@ -115,6 +118,7 @@ export function GuidesPage() {
           </p>
         </div>
         <div className="row">
+          <button type="button" className="button secondary" aria-expanded={showAi} onClick={() => setShowAi(!showAi)}>Preparar guía con IA</button>
           {guides.length > 0 && (
             <Link
               to={`/m/guias/compendio${compendiumPeriod ? `?cuatri=${compendiumPeriod}` : ''}`}
@@ -128,6 +132,7 @@ export function GuidesPage() {
           </Link>
         </div>
       </header>
+      {showAi && <GuideAiPanel />}
       <label className="check"><input type="checkbox" checked={withdrawn} onChange={(event) => setWithdrawn(event.target.checked)} />Ver guías retiradas que puedo recuperar</label>
 
       {guides.length === 0 ? (
@@ -346,6 +351,7 @@ export function GuidePage() {
                     <StructuredText text={s.text} />
                   </section>
                 ))}
+              <GuideAiProvenance guideId={guide.id} version={guide.version} />
               {missingSections.length > 0 && (
                 <p className="muted guide-missing">
                   Sin escribir todavía: {missingSections.map((s) => s.title).join(', ')}.{' '}
@@ -441,6 +447,7 @@ function GuideHistory({ guide }: { guide: StudyGuide }) {
         return <li key={`${item.kind}:${item.refId}`}>{described ? <Link to={described.link}>{described.title}</Link> : 'Material de origen no disponible'} · v{item.sourceVersion} · {item.status === 'processed' ? 'Procesada' : `Pendiente: ${item.reason}`}{item.topics.length ? ` · ${item.topics.join(', ')}` : ''}</li>;
       })}</ul>
       <ResourceDownloads files={data.resourceFiles.filter((file) => revision.attachmentIds.includes(file.id))} />
+      <GuideAiProvenance guideId={guide.id} version={revision.version} />
       {revision.version !== guide.version && data.me && !guide.withdrawnAt && <button type="button" className="secondary" disabled={pending} onClick={() => void run(() => source.restoreGuideVersion(guide.id, revision.version, guide.version))}>Restaurar guía completa como versión nueva</button>}
     </details>)}
     {!history.length && <p className="muted">Las versiones se conservarán desde la activación del historial; no se reconstruyen ediciones antiguas que nunca se guardaron.</p>}
@@ -468,6 +475,7 @@ function SourcesTab({ guide }: { guide: StudyGuide }) {
   const source = useDataSource();
   const { error, run } = useAction();
   const [adding, setAdding] = useState(false);
+  const [addingVersion, setAddingVersion] = useState(guide.version);
   const status = guideStatus(guide, data);
   const sorted = [...status.sources].sort(
     (a, b) =>
@@ -485,7 +493,7 @@ function SourcesTab({ guide }: { guide: StudyGuide }) {
         <button
           type="button"
           className="secondary with-icon"
-          onClick={() => setAdding(!adding)}
+          onClick={() => { setAddingVersion(guide.version); setAdding(!adding); }}
           aria-expanded={adding}
         >
           <Icon name="plus" size={16} /> Agregar fuentes
@@ -502,7 +510,7 @@ function SourcesTab({ guide }: { guide: StudyGuide }) {
           onDone={async (refs) => {
             if (
               refs.length &&
-              !(await run(async () => (await source.addGuideSources(guide.id, refs), true)))
+              !(await run(async () => (await source.addGuideSources(guide.id, refs, addingVersion), true)))
             ) {
               return;
             }
@@ -540,11 +548,12 @@ function SourceRow({
   const [status, setStatus] = useState<GuideSourceStatus>(s.status);
   const [reason, setReason] = useState(s.reason);
   const [topics, setTopics] = useState(s.topics);
+  const [editingVersion, setEditingVersion] = useState(guide.version);
   const outdated = isOutdated(s, info);
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
-    if (await run(async () => (await data.updateGuideSource(s.id, { status, reason, topics }), true))) {
+    if (await run(async () => (await data.updateGuideSource(s.id, { status, reason, topics }, editingVersion), true))) {
       setEditing(false);
     }
   };
@@ -581,22 +590,22 @@ function SourceRow({
             <button
               type="button"
               className="link-button"
-              onClick={() => run(() => data.refreshGuideSource(s.id))}
+              onClick={() => run(() => data.refreshGuideSource(s.id, guide.version))}
             >
-              Ya la revisé
+              Actualizar fuente para volver a procesarla
             </button>
           </span>
         )}
       </div>
       {!editing && (
         <div className="source__actions">
-          <button type="button" className="link-button" onClick={() => setEditing(true)}>
+          <button type="button" className="link-button" onClick={() => { setEditingVersion(guide.version); setEditing(true); }}>
             Editar
           </button>
           <button
             type="button"
             className="link-button source__remove"
-            onClick={() => run(() => data.removeGuideSource(s.id))}
+            onClick={() => run(() => data.removeGuideSource(s.id, guide.version))}
           >
             Quitar
           </button>
@@ -785,19 +794,22 @@ function ReviewsTab({ guide }: { guide: StudyGuide }) {
   const { error, run } = useAction();
   const [verdict, setVerdict] = useState<GuideReviewVerdict>('approved');
   const [comment, setComment] = useState('');
+  const [reviewedVersion, setReviewedVersion] = useState(guide.version);
   const { reviews } = guideStatus(guide, data);
-  const canReview = Boolean(data.me && !guide.withdrawnAt && canReviewGuide(data.me.id, guide.updatedBy));
+  const alreadyReviewed = reviews.some((review) => review.guideVersion === guide.version && review.reviewerId === data.me?.id);
+  const canReview = Boolean(data.me && !guide.withdrawnAt && !alreadyReviewed && canReviewGuide(data.me.id, guide.updatedBy));
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (await run(async () => (await source.reviewGuide(guide.id, verdict, comment), true))) setComment('');
+    if (await run(async () => (await source.reviewGuide(guide.id, verdict, comment, reviewedVersion), true))) setComment('');
   };
 
   return (
     <section className="guide-reviews">
       {canReview ? (
         <form className="panel review-form" onSubmit={submit}>
-          <h2 className="label">Revisar la versión {guide.version}</h2>
+          <h2 className="label">Revisar la versión {reviewedVersion}</h2>
+          {reviewedVersion !== guide.version && <p role="alert" className="error">La guía cambió mientras la revisabas. Lee la versión actual antes de continuar. <button type="button" onClick={() => { setReviewedVersion(guide.version); setComment(''); }}>Revisar la versión {guide.version}</button></p>}
           <div className="segmented" role="group" aria-label="Resultado">
             <button
               type="button"
@@ -816,14 +828,14 @@ function ReviewsTab({ guide }: { guide: StudyGuide }) {
           </div>
           <label className="field">
             <span className="field__label">
-              Comentario{' '}
-              {verdict === 'approved' && <span className="field__optional">opcional</span>}
+              Comentario de revisión
             </span>
             <textarea
               value={comment}
               onChange={(e) => setComment(e.target.value)}
               rows={3}
               maxLength={2000}
+              required
               placeholder={
                 verdict === 'changes'
                   ? 'Qué corregirías, qué falta o qué está mal.'
@@ -842,7 +854,7 @@ function ReviewsTab({ guide }: { guide: StudyGuide }) {
         </form>
       ) : (
         <p className="muted panel">
-          {guide.withdrawnAt ? 'Restaura la guía para que el grupo pueda revisarla de nuevo.' : `Guardaste la versión ${guide.version}, así que la revisa otro compañero. Cuando alguien más la edite, podrás revisarla tú.`}
+          {guide.withdrawnAt ? 'Restaura la guía para que el grupo pueda revisarla de nuevo.' : alreadyReviewed ? `Ya revisaste la versión ${guide.version}. Tu revisión se conserva en el historial.` : `Guardaste la versión ${guide.version}, así que la revisa otro compañero. Cuando alguien más la edite, podrás revisarla tú.`}
         </p>
       )}
       {reviews.length === 0 ? (
@@ -966,7 +978,7 @@ function GuideForm({ guide }: { guide: StudyGuide | undefined }) {
           <p className="muted">
             {guide
               ? `Es del grupo. Tu cambio se guarda como versión ${guide.version + 1} a tu nombre, y las revisiones de la versión anterior se conservan.`
-              : 'Esta primera versión se escribe a mano. El borrador con Gemini llegará cuando se active la IA con tu propia clave.'}
+              : 'Escribe una guía manual para el grupo. También puedes preparar un borrador privado con Gemini desde la lista de guías.'}
           </p>
         </div>
       </header>

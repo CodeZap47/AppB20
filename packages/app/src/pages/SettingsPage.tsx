@@ -1,6 +1,6 @@
 import { Link } from 'react-router';
-import { ByokSettings } from '../components/ByokSettings';
 import { CalendarSettings } from '../components/CalendarSettings';
+import { ByokSettings } from '../components/ByokSettings';
 import { MembershipSettings } from '../components/MembershipSettings';
 import { NotificationSettings } from '../components/NotificationSettings';
 import { useSession, useSessionStore } from '../auth/AuthContext';

@@ -30,6 +30,8 @@ export function validateAiQuestionDraft(value: unknown, preparation: AiPreparati
       if (!aiRecord(o) || !text(o.id, 80) || optionIds.has(o.id) || !text(o.text, 1500) || optionTexts.has(o.text.trim().toLocaleLowerCase('es'))) throw invalid();
       optionIds.add(o.id); optionTexts.add(o.text.trim().toLocaleLowerCase('es')); return { id: o.id, text: o.text };
     });
+    if (q.type === 'boolean' && !(['verdadero', 'falso'].every((label) => optionTexts.has(label)) ||
+      ['true', 'false'].every((label) => optionTexts.has(label)))) throw invalid();
     if (typeof q.correctOptionId !== 'string' || !optionIds.has(q.correctOptionId)) throw invalid();
     ids.add(q.id);
     return { id: q.id, type: q.type, text: q.text, options, correctOptionId: q.correctOptionId,
