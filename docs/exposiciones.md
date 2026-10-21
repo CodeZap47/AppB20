@@ -80,3 +80,25 @@ con CLI y SDK 2.12.0, publicar el módulo con `--delete-data=never` y después a
 web principal. Comparar esquema y conteos antes y después sin imprimir contenido privado.
 Una compilación o push no sustituye la confirmación del dominio principal ni el recorrido
 autenticado. El audio y la generación con Gemini quedan para sus integraciones posteriores.
+
+## Verificación del 21 de octubre de 2026
+
+- 913 pruebas verificadas: 912 de la versión integrada y una regresión adicional que
+  mantiene el orden de preguntas aunque una suscripción llegue en otro orden. Tipos de
+  todos los workspaces, compilaciones y smoke local de SpacetimeDB con cuatro identidades
+  sintéticas correctos.
+- Maincloud actualizado con `--delete-data=never`: 83 tablas anteriores y sus 275 filas
+  conservadas exactamente; cinco tablas privadas añadidas, sin alterar contratos previos.
+- Web principal publicada con el modo de datos reales. Los archivos HTML, JavaScript,
+  CSS, service worker y manifiesto coinciden con la compilación verificada por SHA-256.
+- Recorrido autenticado: creación desde una nota personal, borrador y observaciones tras
+  recargar, dos intentos concluidos, cinco preguntas por intento, respuesta conservada,
+  comparación con el intento anterior y filtros con resultados vacíos. Vista móvil
+  comprobada a 390 × 844. Las entradas desde guías y los permisos de revisión se cubren
+  también con pruebas; la base de producción no tenía guías ni otro revisor disponible.
+- Se conserva una práctica personal identificada como verificación, sin compartirla con
+  el grupo. No se borraron datos para probar o publicar.
+
+El check de GitHub del servicio independiente `appb20` ya fallaba antes de esta entrega.
+Cloudflare Pages `app-b20` publica correctamente y la API `app-b20-api` responde en salud;
+Exposiciones se conecta directamente a SpacetimeDB. No se modificó ese otro servicio.

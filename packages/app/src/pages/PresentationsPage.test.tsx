@@ -211,6 +211,20 @@ describe('Exposiciones', () => {
     expect(input('Tu respuesta').value).toBe('Llega al caso base'); actions.answerPresentationQuestion.mockRejectedValueOnce(new Error('La respuesta cambió.'));
     await click('Guardar respuesta'); expect(actions.answerPresentationQuestion).toHaveBeenCalledWith('question-1', 'Llega al caso base', 1); expect(input('Tu respuesta').value).toBe('Llega al caso base');
   });
+  it('conserva el orden de preguntas con la misma fecha aunque cambie el orden de suscripción', async () => {
+    snapshot.presentationAttempts = [attempt({ status: 'completed' })];
+    const question = snapshot.presentationQuestions[0]!;
+    snapshot.presentationQuestions = ['11', '2', '10', '1', '3'].map((id) => ({ ...question, id, text: `Pregunta ${id}` }));
+    const order = () => [...container.querySelectorAll('.teaching-question-list h3')].map((heading) => heading.textContent);
+    await mount(); expect(order()).toEqual(['Pregunta 1', 'Pregunta 2', 'Pregunta 3', 'Pregunta 10', 'Pregunta 11']);
+    await update({ presentationQuestions: [...snapshot.presentationQuestions].reverse() });
+    expect(order()).toEqual(['Pregunta 1', 'Pregunta 2', 'Pregunta 3', 'Pregunta 10', 'Pregunta 11']);
+    const demo = ['demo-c', 'demo-a', 'demo-b'].map((id) => ({ ...question, id, text: `Pregunta ${id}` }));
+    await update({ presentationQuestions: demo });
+    expect(order()).toEqual(['Pregunta demo-a', 'Pregunta demo-b', 'Pregunta demo-c']);
+    await update({ presentationQuestions: [...demo].reverse() });
+    expect(order()).toEqual(['Pregunta demo-a', 'Pregunta demo-b', 'Pregunta demo-c']);
+  });
   it('el revisor solo recibe controles de preguntas y rúbrica, nunca datos personales', async () => {
     snapshot.me = reviewer; snapshot.presentationAttempts = [attempt({ status: 'completed', sourceKind: 'note', sourceId: 'private-note', sourceVersion: 1 })]; await mount();
     expect(container.textContent).toContain('La recursión usa un caso base'); expect(container.textContent).not.toMatch(/Observación secreta|Pasos secretos|Nota personal|Contenido privado|Siguientes pasos|Observaciones personales/);

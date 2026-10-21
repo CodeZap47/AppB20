@@ -276,7 +276,16 @@ export function PresentationAttemptPage() {
 
 function AttemptDetail({ data, practice, attempt }: { data: Snapshot; practice: PresentationPractice; attempt: PresentationAttempt }) {
   const owner = practice.ownerId === data.me?.id;
-  const questions = data.presentationQuestions.filter((question) => question.attemptId === attempt.id);
+  const questions = data.presentationQuestions.filter((question) => question.attemptId === attempt.id).sort((a, b) => {
+    const byDate = a.createdAt.getTime() - b.createdAt.getTime();
+    if (byDate) return byDate;
+    // Las cinco plantillas comparten fecha; el orden de suscripción puede cambiar al recargar.
+    if (/^\d+$/.test(a.id) && /^\d+$/.test(b.id)) {
+      const first = BigInt(a.id); const second = BigInt(b.id);
+      return first < second ? -1 : first > second ? 1 : 0;
+    }
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
   const previous = owner ? data.presentationAttempts.filter((item) => item.practiceId === practice.id && item.number < attempt.number && item.status === 'completed').sort((a, b) => b.number - a.number)[0] : undefined;
   return <>
     <Link to={path(practice.id)} className="back">← {practice.title}</Link>
