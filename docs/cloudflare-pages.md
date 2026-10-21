@@ -170,11 +170,27 @@ Los pasos completos están en [Tareas y Actividades](tareas-actividades.md),
 
 ### Worker creado desde el flujo inicial
 
-El intento del Worker `appb20` usaba la rama antigua `main`, sin comando de compilación, y
-`npx wrangler deploy` desde la raíz del monorepo. Esa configuración no construye ni publica
-esta web de Pages. El proyecto preparado es **Pages `app-b20`**, con la rama y los campos de
-la primera tabla. No uses `npx wrangler deploy` como comando de despliegue de este proyecto
-Pages con integración Git; Cloudflare publica la carpeta `apps/web/dist` al terminar el build.
+El Worker `appb20` tenía una integración independiente con `main`, sin comando de
+compilación y con `npx wrangler deploy` desde la raíz del monorepo. Su log del 21 de octubre
+de 2026 confirma: «The Cloudflare application detection logic has been run in the root of
+a workspace instead of targeting a specific project.» La raíz contiene la configuración
+de **Pages `app-b20`**, no una entrada desplegable del Worker `appb20`.
+
+La corrección operativa quedó guardada y comprobada tras recargar el panel: **Disable
+builds** de producción está activado y **Builds for Preview branches** está desactivado.
+Se conservan el servicio y su historial. No se modifica el comando de Pages ni se
+despliega `apps/api` con el nombre `appb20`. El Worker de archivos anterior es otro
+servicio: **`app-b20-api`**. El inventario,
+las comprobaciones y el resultado final se registran en [worker-heredado.md](worker-heredado.md).
+
+Pages mantiene la integración Git, la rama y los campos de la primera tabla. Cloudflare
+publica `apps/web/dist` después de `npm run build:pages`; `npx wrangler deploy` desde la
+raíz no sustituye ese flujo.
+
+La corrección documental se aplica por separado a `main` y a la revisión publicada de
+`codex/pages-spacetimeauth`. En esta revisión, `main` ya contiene la tercera entrega aún
+sin publicar; no se incorpora a producción para resolver la configuración de `appb20`.
+Consultar el registro antes de comparar SHA de ramas o ampliar el despliegue.
 
 ### Variables ausentes durante `build:pages`
 
