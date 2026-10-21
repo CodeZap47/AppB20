@@ -35,13 +35,14 @@ publicación en Maincloud ni una prueba de aceptación con el grupo.
 | 3.2 Tareas y Actividades | Parcial con avance privado, estados, revisión y versiones académicas. | Validación completa de permisos, coautorías e historial con archivos reales; cerrar huecos del recorrido del grupo. | 1–2 |
 | 3.3 Actividades de clase | Integradas en Tareas; evidencias, comentarios, vínculos y recuperación de adjuntos retirados por su autor. | Verificar archivos reales, versiones y permisos por equipo. La recuperación de adjuntos no implica historial completo del texto. | 1–2 |
 | 3.4 Notas de clase | Editor estructurado con listas/tablas/código e imágenes privadas bajo demanda, sesión/parcial, vínculos y versiones completas. Publicar una nota personal crea una copia independiente. | Recorrido de aceptación con el grupo. | 2: validación |
-| 3.5 Guías integrales | Manual: fuentes versionadas, cobertura, revisiones, compendio e historial recuperable que conserva autoría y fecha originales de fuentes. | Extracción de archivos, generación BYOK y borradores privados con fuentes. | 3 |
+| 3.5 Guías integrales | Guías manuales y preparación local de archivos, generación BYOK, borradores privados, fuentes versionadas, cobertura, revisiones, compendio e historial. [Entrega publicada](guias-estudio-ia.md). | Prueba real de Gemini y aceptación con cuentas del grupo, pendientes por separado. | Validación humana |
 | 3.6 Contribuciones | Desglose verificable; excluye borradores y retirados, copias idénticas del mismo autor/contexto y registros repetidos. Conserva el primer crédito y su fecha aunque el original esté retirado; mantiene límites entre periodos y recupera puntos al restaurar. | Ajustar los puntos mediante una prueba con el grupo; registrar la validación real. | 2: validación |
 | 3.7 Preguntas | Adjuntos privados, aclaraciones separadas, utilidad por integrante y referencias a notas/guías compartidas; aceptación y reapertura preservadas. | Recorrido de aceptación con el grupo. | 2: validación |
 | 3.8 Votaciones | Nominales con elegibles y cierre; las abiertas aparecen en novedades. | Avisos y validación con datos reales. | 3 |
 | 3.9 Perfiles | Presentación voluntaria, foto privada en SpacetimeDB bajo demanda, intereses, conocimientos, portafolio HTTPS, materias, guías, equipo y contribuciones. Archivo con filtros por parcial, tema, fecha y tipo. | Recorrido con nombres, fotos y trabajos aportados por cada alumno; microproyectos cuando exista 7.6. | 2: validación; 5: microproyectos |
 | 3.10 Cumpleaños | Día/mes voluntarios, calendario mensual y anual, próximos cumpleaños y tratamiento del 29 de febrero. | Recordatorios efectivos, zona y preferencias de avisos con control de duplicados; validación real. | 3 |
 | 3.11 Lenguaje de señales | Pendiente: catálogo etapa 3, sin pantalla propia. | Diccionario/versiones para tres medios, constructor, ejercicios, parejas, historial privado y fichas con fuentes. | 5 |
+| 3.12 Exámenes de estudio | EX-2: configuración, generación BYOK y borradores privados, revisión, versiones, práctica/simulacro, tiempo del servidor y resultados privados. [Registro de cierre](examenes-entrega.md). | Prueba real de Gemini y aceptación con titulares de cuentas/dispositivos; OCR y respuestas abiertas pertenecen a EX-3 y quedan fuera del alcance confirmado. | EX-2: publicación y aceptación; EX-3: ampliaciones |
 
 ## Funciones adicionales (sección 7)
 
@@ -66,7 +67,7 @@ publicación en Maincloud ni una prueba de aceptación con el grupo.
 | --- | --- |
 | Acceso, permisos y membresía | Código de invitaciones, vistas y acciones existente. Verificar tres identidades, bajas, caducidad y lectura/descarga privada en datos reales. |
 | Datos académicos y versiones | Preservar referencias y migraciones aditivas; no reiniciar base ni importar ejemplos de la demo. Restaurar sin perder archivos históricos. |
-| BYOK y Gemini | Pendiente de entrega 3: claves cifradas por persona en SpacetimeDB, maestra en Cloudflare Secrets, consentimiento, presupuesto y publicación voluntaria. |
+| BYOK y Gemini | Base común publicada con Guías y reutilizada por Exámenes: claves cifradas por persona en SpacetimeDB, maestras en Cloudflare Secrets, consentimiento y presupuesto compartidos. Prueba real de Gemini pendiente por decisión del usuario. |
 | Avisos y programación | Pendiente de entrega 3: bandeja, preferencias, descanso, cola persistente, reintentos y deduplicación; Web Push en PWA. |
 | Papelera y conservación | Papelera de 30 días pendiente. La primera entrega limpia subidas pendientes; conserva bytes confirmados y versiones vigentes. |
 | Moderación y retiro | Completar según cada módulo, con autor, motivo y permisos; no publicar conversaciones privadas al reportar sin selección de evidencia. |

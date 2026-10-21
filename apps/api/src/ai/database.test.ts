@@ -17,6 +17,9 @@ describe('Puente IA de procedimientos autorizados', () => {
     expect(requests[0]!.url).toContain('module%2Fencoded/call/ai_prepare');
     expect(() => db.service('ai_key_status', {})).toThrow(AiApiError);
     expect(() => db.user('student', 'ai_commit_key', {})).toThrow(AiApiError);
+    await db.user('student-only', 'exam_action', { action: 'getAttempt', attemptId: 'saved-attempt' });
+    expect(requests[2]!.headers.get('authorization')).toBe('Bearer student-only');
+    expect(() => db.service('exam_action', { action: 'getAttempt' })).toThrow(AiApiError);
   });
   it('rechaza configuración incompleta y respuestas inválidas sin exponer logs', async () => {
     expect(() => createAiDatabase({ ...env, SPACETIMEDB_URI: 'https://secret:pw@db.example.test' })).toThrow(AiApiError);

@@ -1,9 +1,8 @@
 # Exámenes con IA (BYOK): alcance y tareas
 
-Estado: **EX-1 implementado y verificado localmente; EX-2 y EX-3 pendientes**. Corresponde al módulo
+Estado: **EX-1 publicado con Guías; EX-2 implementado y validado; EX-3 pendiente**. El registro vigente de pruebas, despliegue y aceptación está en [examenes-entrega.md](examenes-entrega.md). Corresponde al módulo
 **3.12**, de la **etapa 2: colaboración y estudio**, según la
-[definición del proyecto](definicion-del-proyecto.md). La evidencia de EX-1 se registra al final de su entrega; la prueba con Gemini real y la
-publicación permanecen pendientes. Fecha de implementación local: 21 de octubre de 2026.
+[definición del proyecto](definicion-del-proyecto.md). La evidencia histórica de EX-1 se conserva al final de su entrega; la prueba con Gemini real sigue pendiente por decisión del usuario. Fecha de implementación local: 21 de octubre de 2026.
 
 Los hitos **EX-1, EX-2 y EX-3** pertenecen únicamente a Exámenes; no renumeran las entregas
 globales. EX-1 comparte la base BYOK de la entrega global 3 y consume los contenidos y
@@ -114,7 +113,7 @@ automáticamente todos los errores académicos.
 | `exam_answer` | Respuesta, orden del intento, confirmación y corrección; solo su dueño, con escritura validada por el servidor. |
 
 EX-1 implementa claves, consentimiento, intenciones, preparaciones, generaciones y reservas
-en tablas privadas. Las entidades `exam*` siguen siendo propuestas de EX-2. No se mezclan
+en tablas privadas. Las entidades de Exámenes se implementan en EX-2 mediante cinco tablas privadas aditivas y `exam_action`; el registro vigente describe la separación de contenido e intentos. No se mezclan
 solucionarios o resultados con vistas del catálogo. El esquema es aditivo; no se reinicia la
 base ni se importan ejemplos de la simulación.
 
@@ -225,49 +224,47 @@ preparación redactada, UUID concurrente con una sola llamada simulada, reinicio
 eliminación y política desactivada. **Cero llamadas reales a Gemini.** El detalle operativo
 está en [examenes-ia-operacion.md](examenes-ia-operacion.md).
 
-**Pendiente operativo:** elegibilidad real del grupo, modelo y secretos del entorno,
-publicación aditiva y prueba con una clave real. Estas comprobaciones no se marcan como
-completadas por las pruebas sintéticas.
+**Actualización operativa:** elegibilidad del grupo adulto, modelo y secretos quedaron configurados al publicar Guías. La prueba con una clave real continúa pendiente. Las pruebas sintéticas no acreditan esa prueba ni la aceptación humana.
 
 ## EX-2 — Primera versión completa con texto
 
-- [ ] **EX2-01 — Registrar navegación y contrato de datos del módulo.**
+- [x] **EX2-01 — Registrar navegación y contrato de datos del módulo.**
   Componente: `packages/core/src/modules.ts`, `packages/app/src/App.tsx`, tipos de `data/`.
   Resultado/aceptación: entrada `examenes`, sección 3.12, etapa 2; catálogo y ruta de
   detalle con estados de carga, sin clave y sin materiales; no marcar disponible antes de integrar.
   Dependencias: EX1-01/02.
 
-- [ ] **EX2-02 — Implementar configuración y plano del examen.**
+- [x] **EX2-02 — Implementar configuración y plano del examen.**
   Componente: `packages/app/src/pages/ExamsPage.tsx` nuevo y funciones de core.
   Resultado/aceptación: materia, parcial, temario, cantidad, dificultad, tipos, pesos por
   tema y tiempo opcional; cantidades consistentes y bloqueo por cobertura insuficiente.
   Dependencias: EX2-01, EX1-07.
 
-- [ ] **EX2-03 — Generar y guardar borradores privados.**
+- [x] **EX2-03 — Generar y guardar borradores privados.**
   Componente: ruta IA especializada, handlers y entidades `exam`/`exam_version`/`exam_question`.
   Resultado/aceptación: opción única y V/F con respuesta, explicación y citas; conservar
   parámetros/procedencia; no aprobar preguntas inválidas, sin evidencia o fuera del temario.
   Dependencias: EX2-02, EX1-08/09.
 
-- [ ] **EX2-04 — Revisar, editar y regenerar preguntas.**
+- [x] **EX2-04 — Revisar, editar y regenerar preguntas.**
   Componente: editor nuevo en `packages/app/src/components/`; handlers de exámenes.
   Resultado/aceptación: editar/eliminar y regenerar selección con consumo previo visible;
   conflicto de versión detectado, validación repetida y acción explícita de aprobar borrador.
   Dependencias: EX2-03; reutilizar `StructuredText.tsx` para texto y código.
 
-- [ ] **EX2-05 — Fijar versiones y compartir con fuentes de grupo.**
+- [x] **EX2-05 — Fijar versiones y compartir con fuentes de grupo.**
   Componente: handlers y vistas filtradas en `packages/spacetime-module/src/`.
   Resultado/aceptación: versión lista inmutable; edición crea otra; solo dueño publica/archiva;
   fuente privada bloquea publicación y guía a crear nueva versión desde copias publicadas.
   Dependencias: EX2-04, EX1-05. Revalidar acceso y retiro al publicar.
 
-- [ ] **EX2-06 — Iniciar intentos y proteger el solucionario.**
+- [x] **EX2-06 — Iniciar intentos y proteger el solucionario.**
   Componente: entidades de intento/respuesta/solución; vistas y reducers de exámenes.
   Resultado/aceptación: versión y orden fijos, modalidad y vencimiento decididos en servidor;
   participante solo recibe soluciones según fase; autor revisa su propio borrador completo.
   Dependencias: EX2-05. Sin acceso al examen/fuentes no se inicia un intento.
 
-- [ ] **EX2-07 — Resolver en práctica y simulacro con reanudación.**
+- [x] **EX2-07 — Resolver en práctica y simulacro con reanudación.**
   Componente: pantalla de intento nueva, `data/spacetimeActions.ts` y adaptadores.
   Resultado/aceptación: guardado idempotente, recarga y continuidad en otra presentación;
   confirmar en práctica revela explicación y fija respuesta; simulacro conserva respuestas
@@ -275,7 +272,7 @@ completadas por las pruebas sintéticas.
   del servidor al reanudar; el tiempo opcional no se reinicia al recargar.
   Dependencias: EX2-06. Revalidar acceso al reanudar y mostrar pérdida de acceso sin filtrar texto.
 
-- [ ] **EX2-08 — Corregir y mostrar resultados privados.**
+- [x] **EX2-08 — Corregir y mostrar resultados privados.**
   Componente: función pura nueva en core, handlers y pantalla de resultados.
   Resultado/aceptación: corrección determinista en servidor, cierre idempotente, puntaje y
   desempeño por tema con explicaciones/enlaces; sin llamada IA, ranking ni lectura ajena.
@@ -283,28 +280,28 @@ completadas por las pruebas sintéticas.
   incorrecta. Mostrar aciertos/total y porcentaje; evaluar usando IDs estables de opciones.
   Dependencias: EX2-06/07. Los cambios posteriores del origen no recalifican el intento.
 
-- [ ] **EX2-09 — Implementar historial y vigencia de fuentes.**
+- [x] **EX2-09 — Implementar historial y vigencia de fuentes.**
   Componente: catálogo/detalle de exámenes y vistas de intentos y fuentes.
   Resultado/aceptación: historial propio, fecha/versión, fuentes desactualizadas y archivo;
   retiro o revocación bloquea nuevos intentos y oculta contenido afectado también en históricos,
   conservando el resultado privado ya calculado y sin otorgar acceso por la instantánea.
   Dependencias: EX2-05/08, EX1-05.
 
-- [ ] **EX2-10 — Integrar accesos desde materiales y paridad demo.**
+- [x] **EX2-10 — Integrar accesos desde materiales y paridad demo.**
   Componente: `NotesPage.tsx`, `ActivitiesPage.tsx`, `WorksPage.tsx`, `GuidesPage.tsx`;
   `data/demo.ts`, `spacetime.ts`, `spacetimeSnapshot.ts` y bindings regenerados.
   Resultado/aceptación: «Crear examen con este material» conserva selección; simulación
   reproduce reglas con datos ficticios y sin llamadas Gemini ni importación a la base real.
   Dependencias: EX2-01/09. Generar bindings desde esquema, sin editarlos manualmente.
 
-- [ ] **EX2-11 — Verificar permisos, concurrencia y recorrido persistente.**
+- [x] **EX2-11 — Verificar permisos, concurrencia y recorrido persistente.**
   Componente: pruebas de core, módulo, API y app; prueba de servidor aislado en `scripts/`.
   Resultado/aceptación: autor A, miembro B y tercero C; nota personal inaccesible, publicación,
   solucionario por fase, intento ajeno, baja, retiro, reinicio, reanudación y timeout cubiertos;
   confirmar que demo, logs, caché y novedades no filtran datos ni soluciones anticipadas.
   Dependencias: EX2-10. Usar identidades sintéticas; no copiar tokens/cuentas reales a fixtures.
 
-- [ ] **EX2-12 — Preparar cierre y validación de publicación.**
+- [x] **EX2-12 — Preparar cierre y validación de publicación.**
   Componente: `docs/estado-del-proyecto.md`, `docs/despliegue.md` y este documento.
   Resultado/aceptación: registrar pruebas, tipos, compilaciones y migración aditiva; preparar
   recorrido humano web/PWA, extensión y Android con tres identidades y datos identificados.
@@ -394,5 +391,4 @@ de las presentaciones afectadas); no se registran como aprobadas antes de ejecut
 
 La validación publicada registrará versión del módulo y de cada presentación, tres
 identidades, escenario y resultado sin secretos ni datos personales. Una compilación, push
-o publicación del backend por sí sola no acredita el recorrido humano. **EX-1 está implementado y verificado localmente;
-Gemini real y la publicación permanecen pendientes. EX-2 y EX-3 aún no están implementados.**
+o publicación del backend por sí sola no acredita el recorrido humano. **EX-1 está publicado; EX-2 tiene implementación y validación persistente con tres miembros sintéticos. La prueba real de Gemini y la aceptación del grupo permanecen pendientes. EX-3 no está implementado.** Consultar [el registro de entrega](examenes-entrega.md) para el estado de la publicación.

@@ -34,6 +34,8 @@ import type { StudyRoomActions, StudyRoomsSnapshot } from './roomTypes';
 export type * from './roomTypes';
 import type { GuideAiActions } from './guideAiTypes';
 export type * from './guideAiTypes';
+import type { ExamActions } from './examTypes';
+export type * from './examTypes';
 
 export interface SpacedCollection {
   id: Id;
@@ -808,7 +810,7 @@ export interface PublishWorkInput {
 export type MaybePromise<T> = T | Promise<T>;
 
 /** Acciones: corresponden uno a uno con los reducers del módulo. */
-export interface Actions extends Delivery2Actions, StudyRoomActions, PresentationActions, GuideAiActions {
+export interface Actions extends Delivery2Actions, StudyRoomActions, PresentationActions, GuideAiActions, ExamActions {
   replaceSpacedCardSource(cardId: Id, expectedVersion: number, sourceKind: SpacedSourceKind, sourceId: Id): MaybePromise<void>;
   saveSpacedCollection(input: SpacedCollectionInput): MaybePromise<Id>;
   publishSpacedCollection(collectionId: Id, expectedVersion: number): MaybePromise<void>;

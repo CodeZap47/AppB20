@@ -40,7 +40,7 @@ export interface AiStatus {
   limits: AiLimits; consentVersion: string; consented: boolean; serviceConfigured?: boolean;
 }
 export type AiGenerationState = 'prepared' | 'running' | 'succeeded' | 'failed' | 'unknown';
-export interface AiGenerationConfig { questionCount: number; types: ('single' | 'boolean')[]; difficulty: 'basic' | 'intermediate' | 'advanced' }
+export interface AiGenerationConfig { questionCount: number; types: ('single' | 'boolean')[]; difficulty: 'basic' | 'intermediate' | 'advanced'; topicWeights?: { topic: string; weight: number }[] }
 export const AI_DEFAULT_GENERATION_CONFIG: AiGenerationConfig = { questionCount: 10, types: ['single', 'boolean'], difficulty: 'intermediate' };
 export interface AiGenerationRequest { id: string; preparationId: string; fingerprint: string; config: AiGenerationConfig; confirmed: boolean; acknowledgeUnknown?: boolean }
 export interface AiGeneration {
@@ -83,8 +83,9 @@ export function validateAiPrepareInput(value: unknown): AiPrepareInput {
     return { kind: source.kind as AiSourceKind, refId: source.refId, topics: [...new Set(source.topics as string[])], includeUnplaced: source.includeUnplaced };
   });
   if (new Set(sources.map(aiSourceKey)).size !== sources.length) throw new AiError('invalid', 'No repitas fuentes.');
-  return { subjectId: value.subjectId, ...(value.termId ? { termId: value.termId } : {}), topics, sources,
-    config: validateAiGenerationConfig(value.config ?? AI_DEFAULT_GENERATION_CONFIG) };
+  const config = validateAiGenerationConfig(value.config ?? AI_DEFAULT_GENERATION_CONFIG);
+  if (config.topicWeights) aiTopicDistribution(topics, config.questionCount, config.topicWeights);
+  return { subjectId: value.subjectId, ...(value.termId ? { termId: value.termId } : {}), topics, sources, config };
 }
 /** Redacción conservadora; la vista previa permite revisar lo que los patrones no detectan. */
 export function sanitizeAiText(text: string): string {
@@ -143,15 +144,47 @@ export function buildAiPreparation(rawInput: unknown, snapshots: AiSourceSnapsho
     source.status === 'prepared' && source.topics.includes(topic)).map(aiSourceKey) }));
   const model = options.model.trim();
   const fingerprint = aiHash({ input, sources, fragments, model });
+  const assessedTopics = input.config!.topicWeights ? new Set(aiTopicDistribution(input.topics, input.config!.questionCount, input.config!.topicWeights).filter((item) => item.count > 0).map((item) => item.topic)) : undefined;
   return { id: options.id, subjectId: input.subjectId, ...(input.termId ? { termId: input.termId } : {}),
     topics: input.topics, sources, fragments, coverage, omissions, fingerprint, model, config: input.config!,
-    estimatedInputTokens: Math.ceil(new TextEncoder().encode(fragments.map((f) => f.text).join('\n')).length / 3) + 1024,
+    estimatedInputTokens: estimateAiQuestionInputTokens({ topics: input.topics, fragments }, input.config!),
     estimatedOutputTokens: AI_LIMITS.maxOutputTokens, createdAt: options.now, expiresAt: options.now + AI_LIMITS.preparationTtlMs,
-    canGenerate: sources.every((s) => s.status === 'prepared') && coverage.every((c) => c.sourceIds.length > 0) };
+    canGenerate: sources.every((s) => s.status === 'prepared') && coverage.every((c) => assessedTopics && !assessedTopics.has(c.topic) || c.sourceIds.length > 0) };
 }
 export function validateAiGenerationConfig(value: unknown): AiGenerationConfig {
   if (!aiRecord(value) || !Number.isInteger(value.questionCount) || Number(value.questionCount) < 1 || Number(value.questionCount) > AI_LIMITS.maxQuestions ||
     !Array.isArray(value.types) || !value.types.length || value.types.length > 2 || value.types.some((t) => t !== 'single' && t !== 'boolean') ||
     !['basic', 'intermediate', 'advanced'].includes(String(value.difficulty))) throw new AiError('invalid', 'La configuración de preguntas no es válida.');
-  return { questionCount: Number(value.questionCount), types: [...new Set(value.types as ('single' | 'boolean')[])], difficulty: value.difficulty as AiGenerationConfig['difficulty'] };
+  let topicWeights: AiGenerationConfig['topicWeights'];
+  if (value.topicWeights !== undefined) {
+    if (!Array.isArray(value.topicWeights) || !value.topicWeights.length || value.topicWeights.length > 40) throw new AiError('invalid', 'Revisa los pesos del temario.');
+    topicWeights = value.topicWeights.map((item) => {
+      if (!aiRecord(item) || typeof item.topic !== 'string' || !item.topic.trim() || item.topic.length > 120 || !Number.isInteger(item.weight) || Number(item.weight) < 0 || Number(item.weight) > 1000) throw new AiError('invalid', 'Los pesos deben ser enteros entre 0 y 1000.');
+      return { topic: item.topic.trim(), weight: Number(item.weight) };
+    });
+    if (new Set(topicWeights.map((item) => item.topic)).size !== topicWeights.length || !topicWeights.some((item) => item.weight > 0)) throw new AiError('invalid', 'Los pesos no pueden repetirse ni ser todos cero.');
+  }
+  return { questionCount: Number(value.questionCount), types: [...new Set(value.types as ('single' | 'boolean')[])], difficulty: value.difficulty as AiGenerationConfig['difficulty'], ...(topicWeights ? { topicWeights } : {}) };
+}
+
+export function aiTopicDistribution(topics: readonly string[], count: number, weights?: readonly { topic: string; weight: number }[]) {
+  if (!Number.isInteger(count) || count < 1 || count > 20 || !topics.length || new Set(topics).size !== topics.length) throw new AiError('invalid', 'Revisa la cantidad y los temas del examen.');
+  const values = topics.map((topic) => ({ topic, weight: weights ? weights.find((item) => item.topic === topic)?.weight : 1 }));
+  if (weights && (weights.length !== topics.length || new Set(weights.map((item) => item.topic)).size !== topics.length || weights.some((item) => !topics.includes(item.topic)))) throw new AiError('invalid', 'Asigna un peso a cada tema sin repetirlos.');
+  if (values.some((item) => !Number.isInteger(item.weight) || Number(item.weight) < 0 || Number(item.weight) > 1000)) throw new AiError('invalid', 'Los pesos deben ser enteros de 0 a 1000.');
+  const total = values.reduce((sum, item) => sum + Number(item.weight), 0); if (!total) throw new AiError('invalid', 'Al menos un tema debe tener peso positivo.');
+  const rows = values.map((item, index) => ({ topic: item.topic, count: Math.floor(count * Number(item.weight) / total), remainder: count * Number(item.weight) % total, index }));
+  let remaining = count - rows.reduce((sum, item) => sum + item.count, 0);
+  for (const item of [...rows].sort((a, b) => b.remainder - a.remainder || a.index - b.index)) if (remaining-- > 0) item.count++;
+  return rows.map(({ topic, count }) => ({ topic, count }));
+}
+export function aiQuestionPayload(preparation: Pick<AiPreparation, 'topics' | 'fragments'>, config: AiGenerationConfig) {
+  return { requested: config, topics: preparation.topics, fragments: preparation.fragments.map(({ id, text }) => ({ id, text })),
+    ...(config.topicWeights ? { topicDistribution: aiTopicDistribution(preparation.topics, config.questionCount, config.topicWeights) } : {}) };
+}
+export function estimateAiQuestionInputTokens(preparation: Pick<AiPreparation, 'topics' | 'fragments'>, config: AiGenerationConfig) {
+  return Math.ceil(new TextEncoder().encode(JSON.stringify(aiQuestionPayload(preparation, config))).length / 3) + 1024;
+}
+export function estimateAiQuestionTokens(preparation: Pick<AiPreparation, 'topics' | 'fragments'>, config: AiGenerationConfig) {
+  return estimateAiQuestionInputTokens(preparation, config) + AI_LIMITS.maxOutputTokens;
 }

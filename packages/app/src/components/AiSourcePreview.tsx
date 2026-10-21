@@ -33,6 +33,6 @@ export function AiSourcePreview({ preparation }: { preparation: AiPreparation })
       <pre>{fragment.text}</pre>
     </details>)}
     {!preparation.fragments.length && <p>No hay fragmentos preparados.</p>}
-    <p role="status">{expired ? 'Preparación vencida.' : preparation.canGenerate ? 'Material listo para revisar. La creación de exámenes llegará en la siguiente entrega.' : 'El material requiere revisión antes de poder generar preguntas.'}</p>
+    <p role="status">{expired ? 'Preparación vencida.' : preparation.canGenerate ? 'Material listo para revisar y confirmar.' : 'El material requiere revisión antes de poder generar preguntas.'}</p>
   </div>;
 }

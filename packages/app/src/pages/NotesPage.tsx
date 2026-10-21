@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { ExamMaterialLink } from '../components/ExamMaterialLink';
 import { Link, useNavigate, useParams } from 'react-router';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import type { Note, NoteSource, NoteVisibility } from '../data/types';
@@ -244,6 +245,7 @@ export function NotePage() {
       <div className="row row--between">
         <h1>{note.title}</h1>
         <div className="row">
+        {!note.withdrawnAt && <ExamMaterialLink kind="note" id={note.id} />}
         <Link to={`/m/repaso/tarjetas/nueva?nota=${encodeURIComponent(note.id)}`} className="button secondary">
           Crear tarjeta
         </Link>

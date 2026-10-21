@@ -89,6 +89,15 @@ export const MODULES: readonly ModuleInfo[] = [
     worksWithoutAi: false,
   },
   {
+    id: 'examenes',
+    title: 'Exámenes de estudio',
+    section: '3.12',
+    summary: 'Autoevaluaciones y simulacros con fuentes y resultados privados.',
+    stage: 2,
+    worksWithoutAi: true,
+    ready: true,
+  },
+  {
     id: 'votaciones',
     title: 'Votaciones',
     section: '3.8',

@@ -19,6 +19,7 @@ import { StructuredEditor, StructuredText } from '../components/StructuredText';
 import { ContentWithdrawal } from '../components/ContentWithdrawal';
 import { GuideAiPanel } from '../components/GuideAiPanel';
 import { GuideAiProvenance } from '../components/GuideAiProvenance';
+import { ExamMaterialLink } from '../components/ExamMaterialLink';
 import { useAction } from '../components/useAction';
 import { formatTime, memberName } from '../lib/format';
 import { candidateSources, describeSource, guideStatus, isOutdated, type SourceInfo } from '../lib/guides';
@@ -294,6 +295,7 @@ export function GuidePage() {
           <Link to={`/m/repaso/tarjetas/nueva?guia=${encodeURIComponent(guide.id)}`} className="button secondary">
             Crear tarjeta
           </Link>
+          {!guide.withdrawnAt && <ExamMaterialLink kind="guide" id={guide.id} />}
           <Link to={`/m/aprende-ensenando/nueva?guia=${encodeURIComponent(guide.id)}`} className="button secondary">
             Practicar explicándolo
           </Link>

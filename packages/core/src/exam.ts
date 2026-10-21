@@ -1,4 +1,4 @@
-import { AiError, aiRecord, type AiGenerationConfig, type AiPreparation } from './ai';
+import { AiError, aiRecord, aiTopicDistribution, type AiGenerationConfig, type AiPreparation } from './ai';
 
 export interface AiQuestion {
   id: string; type: 'single' | 'boolean'; text: string; options: { id: string; text: string }[];
@@ -37,5 +37,6 @@ export function validateAiQuestionDraft(value: unknown, preparation: AiPreparati
     return { id: q.id, type: q.type, text: q.text, options, correctOptionId: q.correctOptionId,
       explanation: q.explanation, topic: q.topic, citations: [...new Set(q.citations as string[])] };
   });
+  if (config.topicWeights && aiTopicDistribution(preparation.topics, config.questionCount, config.topicWeights).some((item) => questions.filter((question) => question.topic === item.topic).length !== item.count)) throw invalid();
   return { questions };
 }

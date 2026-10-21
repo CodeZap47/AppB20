@@ -29,6 +29,8 @@ import { TeachingFormPage, TeachingPage, TeachingPracticePage } from './pages/Te
 import { RoomFormPage, RoomPage, RoomsPage } from './pages/RoomsPage';
 import { SpacedPage, SpacedCollectionPage, SpacedCollectionFormPage, SpacedCardFormPage, SpacedSessionPage } from './pages/SpacedPage';
 import { PresentationsPage, PresentationFormPage, PresentationPracticePage, PresentationAttemptPage } from './pages/PresentationsPage';
+import { ExamsPage, ExamCreatePage } from './pages/ExamsPage';
+import { ExamPage, ExamAttemptPage } from './pages/ExamDetailPage';
 import { SpacetimeProvider } from './lib/spacetime';
 import { AuthProvider, useSession, useSessionStore } from './auth/AuthContext';
 import { SignInPage } from './auth/SignInPage';
@@ -118,6 +120,11 @@ const router = createHashRouter([
           { path: 'm/exposiciones/:practiceId', element: <PresentationPracticePage /> },
           { path: 'm/exposiciones/:practiceId/editar', element: <PresentationFormPage /> },
           { path: 'm/exposiciones/:practiceId/intentos/:attemptId', element: <PresentationAttemptPage /> },
+          { path: 'm/examenes', element: <ExamsPage /> },
+          { path: 'm/examenes/nuevo', element: <ExamCreatePage /> },
+          { path: 'm/examenes/intentos/:attemptId', element: <ExamAttemptPage /> },
+          { path: 'm/examenes/:examId/regenerar', element: <ExamCreatePage /> },
+          { path: 'm/examenes/:examId', element: <ExamPage /> },
           { path: 'm/leaderboard', element: <LeaderboardPage /> },
           { path: 'm/leaderboard/:memberId', element: <ContributorPage /> },
           { path: 'm/votaciones', element: <PollsPage /> },

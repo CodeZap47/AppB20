@@ -1,4 +1,6 @@
 import { DemoGuideAiStore } from './demoGuideAi';
+import { DemoExamStore } from './demoExams';
+import type { ExamActions } from './examTypes';
 import type { GuideAiActions } from './guideAiTypes';
 import {
   presentationGuidingQuestions,
@@ -250,6 +252,7 @@ export class DemoDataSource implements DataSource {
   #knowledge: DemoKnowledgeStore;
   #rooms: DemoRoomsStore;
   #guideAi: DemoGuideAiStore;
+  #exams: DemoExamStore;
   #profiles: MemberProfile[] = [];
   #withdrawals: Map<string, DemoWithdrawal>;
   #invalidate = () => { this.#snapshot = undefined; for (const listener of this.#listeners) listener(); };
@@ -277,6 +280,7 @@ export class DemoDataSource implements DataSource {
       files: () => this.#academic.resources(), restoreFiles: (kind, id, ids) => this.#academic.restoreFiles(kind, id, ids), copyFiles: (from, to) => this.#academic.copyFiles(from, to) });
     this.#rooms = new DemoRoomsStore({ state: () => this.#state, active: () => this.#activeMember(), id: () => this.#id(), now: () => this.#now(), emit: () => this.#emit(),
       sourceAvailable: (kind, sourceId) => !this.#withdrawals.get(`${kind}:${sourceId}`)?.withdrawnAt });
+    this.#exams = new DemoExamStore({ snapshot: () => this.getSnapshot(), now: () => this.#now() }, this.#state);
     this.#guideAi = new DemoGuideAiStore({ snapshot: () => this.getSnapshot(), now: () => this.#now(), changed: () => this.#emit(),
       publish: (input, refs, target) => {
         const me = this.#activeMember(); const checked = this.#checkGuide(input); const now = this.#now();
@@ -297,6 +301,10 @@ export class DemoDataSource implements DataSource {
   }
 
   getGuideAiStatus = () => this.#guideAi.getGuideAiStatus();
+  examAction: ExamActions['examAction'] = (request) => this.#exams.examAction(request);
+  prepareExamMaterial = (...args: Parameters<ExamActions['prepareExamMaterial']>) => this.#exams.prepareExamMaterial(...args);
+  generateExamQuestions = (...args: Parameters<ExamActions['generateExamQuestions']>) => this.#exams.generateExamQuestions(...args);
+  getExamGeneration = (...args: Parameters<ExamActions['getExamGeneration']>) => this.#exams.getExamGeneration(...args);
   prepareGuideAiDraft = (...args: Parameters<GuideAiActions['prepareGuideAiDraft']>) => this.#guideAi.prepareGuideAiDraft(...args);
   refreshGuideAiDraft = (...args: Parameters<GuideAiActions['refreshGuideAiDraft']>) => this.#guideAi.refreshGuideAiDraft(...args);
   listGuideAiDrafts = () => this.#guideAi.listGuideAiDrafts();
@@ -352,6 +360,7 @@ export class DemoDataSource implements DataSource {
     this.#objectUrls.clear();
     this.#academic.dispose();
     this.#guideAi.dispose();
+    this.#exams.dispose();
     this.#chat.dispose();
     this.#profiles = [];
     sharedDemoListeners.get(this.#state)?.delete(this.#invalidate);

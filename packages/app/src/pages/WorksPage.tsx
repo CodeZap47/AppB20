@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { ExamMaterialLink } from '../components/ExamMaterialLink';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   canEditWork,
@@ -438,6 +439,7 @@ function SubmissionCard({ work, members, meId, highlighted, initialErrors }: {
       <RichText text={work.description} />
     </>}
     <ResourceSection kind="work" id={work.id} version={work.version} canEdit={canEdit} />
+    {!work.withdrawnAt && <ExamMaterialLink kind="work" id={work.id} />}
     {initialErrors.length > 0 && <ul className="file-picker__errors error" role="alert">{initialErrors.map((problem) => <li key={problem}>{problem}</li>)}</ul>}
     <WorkHistoryAndReview work={work} />
     <AcademicComments kind="work" id={work.id} />
@@ -527,6 +529,7 @@ export function AssignmentPage() {
           <Link to={`/m/tareas/${assignment.id}/editar`} className="button secondary with-icon">
             <Icon name="edit" size={16} /> Editar página
           </Link>
+          <ExamMaterialLink kind="assignment" id={assignment.id} />
           <Link to={`/m/tareas/${assignment.id}/subir`} className="button with-icon">
             <Icon name="upload" size={18} /> {alreadyMine ? 'Subir otro trabajo' : 'Subir mi trabajo'}
           </Link>

@@ -194,6 +194,7 @@ import * as AiSetConsentProcedure from "./ai_set_consent_procedure";
 import * as AiStatusProcedure from "./ai_status_procedure";
 import * as AuthorizeFileUploadProcedure from "./authorize_file_upload_procedure";
 import * as CreateStickerPackNativeProcedure from "./create_sticker_pack_native_procedure";
+import * as ExamActionProcedure from "./exam_action_procedure";
 import * as GetFileDownloadAccessProcedure from "./get_file_download_access_procedure";
 import * as GetFileUploadStatusProcedure from "./get_file_upload_status_procedure";
 import * as GetResourceManifestProcedure from "./get_resource_manifest_procedure";
@@ -1023,6 +1024,7 @@ const proceduresSchema = __procedures(
   __procedureSchema("ai_status", AiStatusProcedure.params, AiStatusProcedure.returnType),
   __procedureSchema("authorize_file_upload", AuthorizeFileUploadProcedure.params, AuthorizeFileUploadProcedure.returnType),
   __procedureSchema("create_sticker_pack_native", CreateStickerPackNativeProcedure.params, CreateStickerPackNativeProcedure.returnType),
+  __procedureSchema("exam_action", ExamActionProcedure.params, ExamActionProcedure.returnType),
   __procedureSchema("get_file_download_access", GetFileDownloadAccessProcedure.params, GetFileDownloadAccessProcedure.returnType),
   __procedureSchema("get_file_upload_status", GetFileUploadStatusProcedure.params, GetFileUploadStatusProcedure.returnType),
   __procedureSchema("get_resource_manifest", GetResourceManifestProcedure.params, GetResourceManifestProcedure.returnType),

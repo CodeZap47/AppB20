@@ -1,5 +1,7 @@
 # Operación local de EX-1: BYOK y fuentes
 
+Estado vigente: la base BYOK ya se publicó con Guías, con modelo, secretos y elegibilidad del grupo configurados. Estas instrucciones conservan los valores seguros para instalaciones nuevas. La continuación de Exámenes, sus pruebas y su publicación se registran en [la entrega EX-2](examenes-entrega.md). La prueba real de Gemini sigue pendiente por decisión del usuario.
+
 Implementación local del 21 de octubre de 2026. Gemini real y la política de grupo permanecen
 desactivados por defecto. La validación usa datos e identidades sintéticas y un proveedor
 inyectado; no requiere una clave real ni consume Gemini. La publicación y la elegibilidad

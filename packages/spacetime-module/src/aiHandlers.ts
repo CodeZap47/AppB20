@@ -6,7 +6,7 @@ import { canReadTarget, withdrawn } from './delivery2Handlers';
 import { GUIDE_SECTIONS } from '../../core/src/guides';
 import {
   AI_CONSENT_VERSION, AI_LIMITS, buildAiPreparation, validateAiGenerationConfig,
-  aiHash, aiSourceFingerprint, sanitizeAiText, validateAiPrepareInput, type AiPreparation, type AiPrepareInput, type AiSourceSnapshot,
+  aiHash, aiSourceFingerprint, estimateAiQuestionTokens, sanitizeAiText, validateAiPrepareInput, type AiPreparation, type AiPrepareInput, type AiSourceSnapshot,
 } from '../../core/src/ai';
 import { validateAiQuestionDraft } from '../../core/src/exam';
 
@@ -311,7 +311,7 @@ export function aiAuthorizeGeneration(ctx: Ctx, raw: Record<string, unknown>) {
   const sinceHour = ctx.timestamp.microsSinceUnixEpoch - HOUR; const sinceDay = ctx.timestamp.microsSinceUnixEpoch - DAY;
   if (reservations.filter((reservation) => reservation.createdAt.microsSinceUnixEpoch > sinceHour).length >= AI_LIMITS.requestsPerHour
     || reservations.filter((reservation) => reservation.createdAt.microsSinceUnixEpoch > sinceDay).length >= AI_LIMITS.requestsPerDay) fail('quota', 'Alcanzaste el límite de generaciones.');
-  const estimatedTokens = prep.estimatedInputTokens + AI_LIMITS.maxOutputTokens;
+  const estimatedTokens = estimateAiQuestionTokens(prep, config);
   const spent = reservations.filter((reservation) => reservation.createdAt.microsSinceUnixEpoch > sinceDay && reservation.status !== 'released').reduce((total, reservation) => total + reservation.estimatedTokens, 0);
   if (spent + estimatedTokens > (ctx.db.aiServiceConfig.id.find(0)?.dailyTokenBudget ?? AI_LIMITS.dailyEstimatedTokens)) fail('quota', 'La generación supera el presupuesto diario estimado.');
   ctx.db.aiReservation.insert({ id, actor: ctx.sender, estimatedTokens, status: 'reserved', createdAt: ctx.timestamp });
