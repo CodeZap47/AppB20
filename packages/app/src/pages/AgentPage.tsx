@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { agentOwnerName, renderAgentPremises } from '@b20/core';
 import { useSnapshot } from '../data/DataContext';
-import { agentStyleCandidates, simulateHelp, simulateOriginality, simulateReview, simulateStyleProfile, type AgentOriginalityMatch, type AgentStyleProfile, type AgentSuggestion } from '../data/agentDemo';
+import { agentStyleCandidates, agentOriginality, simulateHelp, simulateReview, simulateStyleProfile, type AgentOriginalityMatch, type AgentStyleProfile, type AgentSuggestion } from '../data/agentDemo';
 import { Avatar } from '../components/Avatar';
 import { agentNameFor } from '../components/AgentHelpLink';
 import '../components/ai.css';
@@ -76,14 +76,23 @@ function AgentHelp({ bot, profile }: { bot: string; profile: AgentStyleProfile |
       <div className="chips" role="tablist" aria-label="Etapas">{STAGES.map(([id, label]) => <button key={id} type="button" role="tab" className="chip" aria-selected={stage === id} aria-pressed={stage === id} onClick={() => setStage(id)}>{label}</button>)}</div>
       {stage !== 'review' ? <div className="agent-output"><p className="badges"><span className="badge badge--personal">Borrador privado</span><span className="badge badge--ai">Generado con {bot}</span></p><ul>{simulateHelp(stage, assignment, profile).map((line, i) => <li key={i}>{line}</li>)}</ul><p className="muted">Fuente: consigna «{assignment.title}», versión {assignment.version}.</p></div> : <>
         <label className="field"><span>Mi borrador</span><textarea rows={10} value={draft} onChange={(e) => edit(e.target.value)} placeholder={`Escribe aquí tu respuesta. ${bot} la revisa, no la escribe por ti.`} /></label>
-        <div className="agent-actions"><button type="button" disabled={!draft.trim()} onClick={() => setSuggestions(simulateReview(draft, profile))}>Pedir sugerencias a {bot}</button><button type="button" className="secondary" disabled={!draft.trim()} onClick={() => { setMatches(simulateOriginality(draft, data)); setOwn([]); }}>Comparar con el grupo</button></div>
+        <div className="agent-actions"><button type="button" disabled={!draft.trim()} onClick={() => setSuggestions(simulateReview(draft, profile))}>Pedir sugerencias a {bot}</button><button type="button" className="secondary" disabled={!draft.trim()} onClick={() => { setMatches(agentOriginality(draft, data, assignment)); setOwn([]); }}>Comparar con el grupo</button></div>
         {suggestions && <><h3>Sugerencias de {bot}</h3>{!suggestions.length ? <p className="muted">Sin sugerencias: tu borrador ya se lee como tú.</p> : <ul className="agent-suggestions">{suggestions.map((s) => <li key={s.id} data-state={s.state}><p>{s.reason}</p>{s.original && <p className="agent-diff"><del>{s.original}</del> <ins>{s.replacement}</ins></p>}
           {s.state === 'proposed' ? s.original ? <div className="agent-actions"><button type="button" className="secondary" onClick={() => resolve(s, true)}>Aceptar</button><button type="button" className="secondary" onClick={() => resolve(s, false)}>Rechazar</button></div> : <button type="button" className="secondary" onClick={() => resolve(s, false)}>Entendido</button> : <span className="muted">{s.state === 'accepted' ? 'Aceptada' : 'Descartada'}</span>}</li>)}</ul>}</>}
         {matches && <><h3>Alerta de originalidad</h3>{!matches.length ? <p className="muted">Tu borrador no se parece a lo que el grupo ya publicó.</p> : <><p className="ai-notice">Tu texto se parece a trabajos publicados. {bot} no lo reescribe por ti: revisa cada parte y escríbela con tus propias ideas.</p>
-          <ul className="agent-matches">{matches.map((m) => <li key={m.refKey}><p><strong>{m.score}% parecido</strong> con «{m.title}» de {m.authorName}</p><div className="agent-compare"><blockquote><span className="label">Tu texto</span>{m.mine}</blockquote><blockquote><span className="label">Texto publicado</span>{m.theirs}</blockquote></div>
+          <ul className="agent-matches">{matches.map((m) => <li key={m.refKey} data-level={m.level}><p><strong>{m.status === 'too_short' ? 'Oración copiada' : `${m.score}% parecido${m.level === 'block' ? ' (alto)' : ''}`}</strong> con «{m.title}» de {m.authorName}</p>
+            {m.status === 'too_short' && <p className="muted">Tu texto es demasiado corto para calcular un porcentaje confiable; solo se buscan oraciones copiadas.</p>}
+            {m.pairs.length ? m.pairs.map((pair, i) => <div key={i} className="agent-compare"><blockquote><span className="label">Tu texto</span>{pair.mine}</blockquote><blockquote><span className="label">Texto publicado · coincide el {Math.round(pair.ratio * 100)}% de tu oración</span>{pair.theirs}</blockquote></div>) : <p className="muted">El parecido está repartido en frases cortas; revisa el texto completo.</p>}
+            <ExcludedNote excluded={m.excluded} />
             {own.includes(m.refKey) ? <span className="muted">Marcaste que reescribirás esta parte.</span> : <button type="button" className="secondary" onClick={() => setOwn((keys) => [...keys, m.refKey])}>Reescribiré esta parte</button>}</li>)}</ul></>}</>}
       </>}
       <div className="agent-actions"><button type="button" disabled title="El plug-in para subir tareas está pendiente (AG-5).">Subir tarea (plug-in, pendiente)</button></div>
     </>}
   </section>;
+}
+
+function ExcludedNote({ excluded }: { excluded: AgentOriginalityMatch['excluded'] }) {
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const parts = [excluded.codeLines && plural(excluded.codeLines, 'línea de código', 'líneas de código'), excluded.quotes && plural(excluded.quotes, 'cita entre comillas', 'citas entre comillas'), excluded.instructionGroups && 'el texto de la consigna'].filter(Boolean);
+  return parts.length ? <p className="muted">No se contaron como parecido: {parts.join(', ')}.</p> : null;
 }

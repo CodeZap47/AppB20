@@ -1,22 +1,19 @@
 /**
  * Simulación del agente personal (7.13, AG-1). Todo se calcula en el navegador a partir de lo
- * que la persona ya puede leer: no llama a Gemini, no guarda nada en el servidor y se
- * sustituirá por las métricas y la comparación de `@b20/core` en AG-2.
+ * que la persona ya puede leer: no llama a Gemini ni guarda nada en el servidor. Las métricas
+ * y la comparación ya son las definitivas de `@b20/core` (AG-2); la ayuda y las sugerencias
+ * siguen simuladas hasta AG-4.
  */
+import { compareWithPublished, describeStyle, proseSentences, styleFeatures, type OriginalityLevel, type OriginalityThresholds, type SimilarityPair, type SimilarityResult } from '@b20/core';
 import type { Assignment, Id, Snapshot } from './types';
-
-/** Porcentaje de trigramas compartidos a partir del cual se muestra la alerta. */
-export const AGENT_ORIGINALITY_WARN = 25;
 
 export type AgentSourceKind = 'work' | 'evidence' | 'note';
 export interface AgentStyleCandidate { key: string; kind: AgentSourceKind; refId: Id; title: string; text: string; coauthored: boolean; updatedAt: Date }
 export interface AgentStyleProfile { trainedAt: Date; sourceKeys: string[]; sentenceLength: number; words: number; tone: string; structure: string; technical: string; vocabulary: string[]; examples: string[] }
 export interface AgentSuggestion { id: string; reason: string; original: string; replacement: string; state: 'proposed' | 'accepted' | 'rejected' }
-export interface AgentOriginalityMatch { refKey: string; title: string; authorName: string; score: number; mine: string; theirs: string }
+export interface AgentOriginalityMatch { refKey: string; title: string; authorName: string; status: SimilarityResult['status']; score: number | null; level: OriginalityLevel; pairs: SimilarityPair[]; excluded: SimilarityResult['excluded'] }
 
-const STOPWORDS = new Set('a al algo ante como con de del el ella en entre es esa ese esta este hay la las lo los más me mi muy no o para pero por que se si sin sobre su sus también te tu un una uno y ya'.split(' '));
-const sentences = (text: string) => text.split(/(?<=[.!?¿¡])\s+|\n+/).map((s) => s.trim()).filter((s) => s.split(/\s+/).length >= 3);
-const tokens = (text: string) => text.toLocaleLowerCase('es-MX').normalize('NFD').replace(/\p{M}/gu, '').match(/[\p{L}\p{N}]+/gu) ?? [];
+const sentences = proseSentences;
 
 export function agentStyleCandidates(data: Snapshot): AgentStyleCandidate[] {
   const me = data.me?.id; if (!me) return [];
@@ -30,19 +27,8 @@ export function agentStyleCandidates(data: Snapshot): AgentStyleCandidate[] {
 }
 
 export function simulateStyleProfile(sources: AgentStyleCandidate[], now = new Date()): AgentStyleProfile {
-  const text = sources.map((s) => s.text).join('\n');
-  const all = sentences(text); const words = tokens(text);
-  const sentenceLength = all.length ? Math.round(words.length / all.length) : 0;
-  const counts = new Map<string, number>(); for (const word of text.toLocaleLowerCase('es-MX').match(/[\p{L}\p{N}]+/gu) ?? []) if (word.length > 3 && !STOPWORDS.has(word)) counts.set(word, (counts.get(word) ?? 0) + 1);
-  const vocabulary = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 8).map(([word]) => word);
-  const lists = (text.match(/^\s*([-*•]|\d+[.)])\s/gm) ?? []).length; const code = /[{};=]|function|const |def |class /.test(text);
-  return {
-    trainedAt: now, sourceKeys: sources.map((s) => s.key), sentenceLength, words: words.length, vocabulary,
-    tone: /\b(yo|creo|pienso|me|mi)\b/i.test(text) ? 'Cercano, en primera persona' : 'Impersonal y descriptivo',
-    structure: lists >= 2 ? 'Usa listas y pasos numerados' : 'Párrafos corridos',
-    technical: code ? 'Incluye código o notación técnica' : 'Explica con lenguaje cotidiano',
-    examples: all.slice(0, 2),
-  };
+  const texts = sources.map((s) => s.text); const features = styleFeatures(texts);
+  return { trainedAt: now, sourceKeys: sources.map((s) => s.key), sentenceLength: features.sentenceLength, words: features.words, vocabulary: features.vocabulary, ...describeStyle(features), examples: texts.flatMap(sentences).slice(0, 2) };
 }
 
 /** Ayuda simulada por etapa; en AG-4b la producirá Gemini con el perfil y la consigna. */
@@ -66,18 +52,14 @@ export function simulateReview(draft: string, profile: AgentStyleProfile | undef
   return result;
 }
 
-/** Parecido simulado por trigramas contra lo que el grupo ya publicó; AG-2 lo sustituye. */
-export function simulateOriginality(draft: string, data: Snapshot): AgentOriginalityMatch[] {
-  const me = data.me?.id; const grams = (text: string) => { const t = tokens(text); return new Set(t.slice(0, Math.max(0, t.length - 2)).map((_, i) => t.slice(i, i + 3).join(' '))); };
-  const mine = grams(draft); if (!me || mine.size < 3) return [];
+/** Parecido con lo que el grupo ya publicó, sin contar el texto de la consigna. */
+export function agentOriginality(draft: string, data: Snapshot, assignment?: Assignment, thresholds?: Partial<OriginalityThresholds>): AgentOriginalityMatch[] {
+  const me = data.me?.id; if (!me || !draft.trim()) return [];
   const name = (id: Id) => data.members.find((m) => m.id === id)?.displayName ?? 'Compañero';
   const published = [
     ...data.works.filter((w) => !w.withdrawnAt && !w.authorIds.includes(me) && w.description.trim()).map((w) => ({ refKey: `work:${w.id}`, title: w.title || data.assignments.find((a) => a.id === w.assignmentId)?.title || 'Trabajo', authorName: w.authorIds.map(name).join(', '), text: w.description })),
     ...data.evidences.filter((e) => !e.withdrawnAt && e.authorId !== me && e.content.trim()).map((e) => ({ refKey: `evidence:${e.id}`, title: 'Evidencia', authorName: name(e.authorId), text: e.content })),
   ];
-  return published.map((entry) => {
-    const theirs = grams(entry.text); const shared = [...mine].filter((g) => theirs.has(g)).length; const score = Math.round((shared / mine.size) * 100);
-    const best = (text: string) => sentences(text).map((s) => ({ s, n: [...grams(s)].filter((g) => (text === draft ? theirs : mine).has(g)).length })).sort((a, b) => b.n - a.n)[0]?.s ?? '';
-    return { refKey: entry.refKey, title: entry.title, authorName: entry.authorName, score, mine: best(draft), theirs: best(entry.text) };
-  }).filter((m) => m.score >= AGENT_ORIGINALITY_WARN).sort((a, b) => b.score - a.score);
+  return compareWithPublished(draft, published, { ignore: assignment ? [assignment.title, assignment.instructions] : [], thresholds })
+    .map(({ refKey, title, authorName, result }) => ({ refKey, title, authorName, status: result.status, score: result.score, level: result.level, pairs: result.pairs, excluded: result.excluded }));
 }

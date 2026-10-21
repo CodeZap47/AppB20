@@ -24,3 +24,5 @@
 .agent-compare blockquote { padding: 0.6rem 0.8rem; border-inline-start: 3px solid var(--border); background: var(--surface); overflow-wrap: anywhere; }
 .agent-compare .label { display: block; margin: 0 0 0.3rem; }
 .agent-panel > h2:first-child { margin-top: 0; }
+.agent-matches > li[data-level='block'] { border-color: currentColor; }
+.agent-compare + .agent-compare { margin-top: 0.5rem; }

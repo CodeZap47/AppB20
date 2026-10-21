@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DataProvider } from '../data/DataContext';
 import { DemoDataSource, createDemoState } from '../data/demo';
+import { agentOriginality } from '../data/agentDemo';
 import { AgentPage } from './AgentPage';
 
 let root: Root, container: HTMLDivElement, source: DemoDataSource;
@@ -49,7 +50,7 @@ describe('agente personal simulado (AG-1)', () => {
     expect(container.querySelectorAll('.agent-suggestions [data-state="proposed"]')).toHaveLength(0);
 
     await type(draft, theirs.description); await click('Comparar con el grupo');
-    expect(container.textContent).toContain('Alerta de originalidad'); expect(container.textContent).toContain('100% parecido');
+    expect(container.textContent).toContain('Alerta de originalidad'); expect(container.textContent).toContain('Oración copiada');
     expect(draft.value).toBe(theirs.description);
     await click('Reescribiré esta parte'); expect(container.textContent).toContain('Marcaste que reescribirás esta parte.');
     expect(button('Subir tarea (plug-in, pendiente)')?.disabled).toBe(true);
@@ -62,5 +63,21 @@ describe('agente personal simulado (AG-1)', () => {
     await act(async () => source.setViewer('demo-2'));
     expect(container.querySelector('h1')?.textContent).toBe('Alumno_DP2_BOT');
     expect(button('Entrenar a Alumno_DP2_BOT')?.disabled).toBe(true);
+  });
+});
+
+describe('originalidad contra lo publicado', () => {
+  const essay = 'Un ciclo while repite instrucciones mientras su condición sea verdadera. Si el índice nunca cambia, el ciclo no termina y el programa se queda congelado. Por eso conviene revisar el incremento antes de ejecutar el programa completo.';
+  const withWork = (description: string, authorIds: string[]) => { const data = source.getSnapshot(); const base = data.works[0]!; return { ...data, works: [...data.works, { ...base, id: 'w-extra', title: 'Ensayo de ciclos', description, authorIds }] }; };
+  it('da porcentaje con textos largos, excluye los propios y la consigna', () => {
+    expect(agentOriginality(essay, withWork(essay, ['demo-2']))[0]).toMatchObject({ refKey: 'work:w-extra', status: 'compared', score: 100, level: 'block' });
+    expect(agentOriginality(essay, withWork(essay, ['demo-1']))).toEqual([]);
+    const assignment = { ...source.getSnapshot().assignments[0]!, instructions: essay };
+    expect(agentOriginality(essay, withWork(essay, ['demo-2']), assignment)).toEqual([]);
+  });
+  it('respeta umbrales configurados', () => {
+    const half = `${essay} Las listas enlazadas guardan nodos con una referencia al siguiente elemento y se recorren uno por uno hasta encontrar el valor buscado en la estructura.`;
+    expect(agentOriginality(half, withWork(essay, ['demo-2']))[0]?.level).toBe('warn');
+    expect(agentOriginality(half, withWork(essay, ['demo-2']), undefined, { warn: 10, block: 40 })[0]?.level).toBe('block');
   });
 });

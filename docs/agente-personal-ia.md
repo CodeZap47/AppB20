@@ -1,6 +1,6 @@
 # Agente personal de escritura (NOMBRE_BOT): alcance y plan
 
-Estado: **AG-1 implementado localmente (interfaz con datos simulados, sin publicar)**; AG-2 a AG-5 pendientes. Fecha de planeación: 21 de octubre de 2026.
+Estado: **AG-1 y AG-2 implementados localmente (interfaz simulada y lógica en `@b20/core`, sin publicar)**; AG-3 a AG-5 pendientes. Fecha de planeación: 21 de octubre de 2026.
 Se propone como función adicional **7.13** de la [definición del proyecto](definicion-del-proyecto.md)
 y aplica sin excepciones las reglas de BYOK, consentimiento, costos y revisión de la sección 4
 y de [Gemini con clave personal](gemini-byok.md).
@@ -114,6 +114,31 @@ Objetivo: recorrer toda la experiencia con la simulación de datos existente.
   `Empty`/`useAction` existentes. Pruebas de componentes en Vitest.
 
 ### AG-2. Lógica de dominio (`@b20/core`, funciones puras)
+
+**Implementado localmente el 21 de octubre de 2026** en `packages/core/src/agentStyle.ts`, con
+pruebas en `agentStyle.test.ts`. La pantalla ya usa estas funciones; la ayuda por etapas y las
+sugerencias siguen simuladas hasta AG-4.
+
+| Función | Comportamiento |
+| --- | --- |
+| `styleFeatures` / `describeStyle` | Palabras, oraciones, largo medio, vocabulario con acentos, proporción en primera persona, listas, preguntas y líneas de código. El código no cuenta para el largo de frase. |
+| `similarity` | Grupos de 5 palabras normalizadas (sin mayúsculas, acentos ni puntuación). `score` = porcentaje del texto propio presente en el otro; `jaccard` sobre la unión. Empareja oraciones cuando al menos la mitad de la propia aparece en una ajena. |
+| `compareWithPublished` | Devuelve solo lo que merece alerta, ordenado por nivel y porcentaje. |
+| `originalityThresholds` | Por omisión: aviso 25 %, alto 60 %, mínimo 25 palabras, grupos de 5. Valida 1 ≤ aviso < alto ≤ 100 y grupos de 3 a 8 palabras. |
+
+Casos difíciles resueltos:
+
+- **Código:** bloques con triple acento grave, código en línea y líneas con forma de código se
+  separan de la prosa y no cuentan como parecido. La prosa que termina en punto y coma no se
+  confunde con código.
+- **Citas de la consigna:** el título y las instrucciones de la tarea se pasan como `ignore`;
+  sus grupos de palabras se descartan en ambos textos. Las citas entre «», “” o "" tampoco cuentan.
+- **Textos muy cortos:** con menos de 25 palabras de prosa no se da porcentaje (`too_short`),
+  pero una oración copiada completa sí genera aviso. Sin grupos comparables el resultado es
+  `nothing_to_compare`.
+- Una oración copiada completa avisa aunque el porcentaje total quede bajo el umbral.
+
+Plan original:
 
 - `agentName(member, members)`: regla del nombre y desempate.
 - `AGENT_PREMISES` y `renderPremises(name, owner)`: texto versionado.

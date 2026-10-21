@@ -26,3 +26,4 @@ export * from './community4';
 export * from './aiStudyModules';
 export * from './guideAi';
 export * from './agent';
+export * from './agentStyle';
