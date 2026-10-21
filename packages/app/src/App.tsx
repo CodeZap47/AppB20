@@ -31,6 +31,7 @@ import { NoteFormPage, NotePage, NotesPage } from './pages/NotesPage';
 import { AskQuestionPage, QuestionPage, QuestionsPage } from './pages/QuestionsPage';
 import { TeachingFormPage, TeachingPage, TeachingPracticePage } from './pages/TeachingPage';
 import { RoomFormPage, RoomPage, RoomsPage } from './pages/RoomsPage';
+import { AgentPage } from './pages/AgentPage';
 import { SpacedPage, SpacedCollectionPage, SpacedCollectionFormPage, SpacedCardFormPage, SpacedSessionPage } from './pages/SpacedPage';
 import { PresentationsPage, PresentationFormPage, PresentationPracticePage, PresentationAttemptPage } from './pages/PresentationsPage';
 import { ExamsPage, ExamCreatePage } from './pages/ExamsPage';
@@ -113,6 +114,7 @@ const router = createHashRouter([
           { path: 'm/salas/nueva', element: <RoomFormPage /> },
           { path: 'm/salas/:roomId', element: <RoomPage /> },
           { path: 'm/salas/:roomId/editar', element: <RoomFormPage /> },
+          { path: 'm/agente', element: <AgentPage /> },
           { path: 'm/repaso', element: <SpacedPage /> },
           { path: 'm/repaso/nueva', element: <SpacedCollectionFormPage /> },
           { path: 'm/repaso/colecciones/:collectionId', element: <SpacedCollectionPage /> },

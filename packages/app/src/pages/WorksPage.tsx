@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { ExamMaterialLink } from '../components/ExamMaterialLink';
+import { AgentHelpLink } from '../components/AgentHelpLink';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   canEditWork,
@@ -530,6 +531,7 @@ export function AssignmentPage() {
             <Icon name="edit" size={16} /> Editar página
           </Link>
           <ExamMaterialLink kind="assignment" id={assignment.id} />
+          <AgentHelpLink assignmentId={assignment.id} />
           <Link to={`/m/tareas/${assignment.id}/subir`} className="button with-icon">
             <Icon name="upload" size={18} /> {alreadyMine ? 'Subir otro trabajo' : 'Subir mi trabajo'}
           </Link>

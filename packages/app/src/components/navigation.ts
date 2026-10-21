@@ -3,14 +3,14 @@ import { navigableModules, type ModuleInfo } from '@b20/core';
 import {
   Award01, BarChartSquare02, BookOpen01, CalendarHeart01, CheckDone01,
   Download01, File02, GraduationHat01, HelpCircle, HomeLine, LifeBuoy01,
-  MessageChatCircle, NotificationBox, PresentationChart01, RefreshCw01, Settings01, User01, Users01,
+  MessageChatCircle, NotificationBox, PresentationChart01, RefreshCw01, Settings01, Stars01, User01, Users01,
 } from '@untitledui/icons';
 import type { NavItemType } from '@b20-ui/components/application/app-navigation/config';
 
 type NavigationIcon = FC<{ className?: string }>;
 export type NavigationItem = NavItemType & { icon: NavigationIcon };
 
-const STUDY_MODULES = ['tareas', 'notas', 'preguntas', 'guias', 'retos', 'revision-codigo', 'museo-bugs', 'aprende-ensenando', 'repaso', 'salas', 'exposiciones', 'examenes'];
+const STUDY_MODULES = ['tareas', 'notas', 'preguntas', 'guias', 'retos', 'revision-codigo', 'museo-bugs', 'aprende-ensenando', 'repaso', 'salas', 'exposiciones', 'examenes', 'agente'];
 const COMMUNITY_MODULES = ['perfiles', 'cumpleanos', 'votaciones', 'ayuda', 'oportunidades', 'leaderboard'];
 const MODULE_ICONS: Record<string, NavigationIcon> = {
   inicio: HomeLine,
@@ -27,6 +27,7 @@ const MODULE_ICONS: Record<string, NavigationIcon> = {
   salas: Users01,
   exposiciones: PresentationChart01,
   examenes: CheckDone01,
+  agente: Stars01,
   perfiles: User01,
   cumpleanos: CalendarHeart01,
   votaciones: BarChartSquare02,

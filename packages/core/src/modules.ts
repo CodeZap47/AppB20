@@ -170,6 +170,15 @@ export const MODULES: readonly ModuleInfo[] = [
     ready: true,
   },
   {
+    id: 'agente',
+    title: 'Mi agente',
+    section: '7.13',
+    summary: 'Agente personal que te ayuda a escribir con tu propio estilo.',
+    stage: 2,
+    worksWithoutAi: false,
+    ready: true,
+  },
+  {
     id: 'oportunidades',
     title: 'Radar de oportunidades',
     section: '7.12',

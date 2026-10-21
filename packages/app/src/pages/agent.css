@@ -1,0 +1,26 @@
+.agent-header { align-items: center; }
+.agent-header > .avatar { flex: none; }
+.agent-header > .badges { flex: none; margin: 0; }
+.agent-premises { margin: 1rem 0; }
+.agent-premises h2 { margin-top: 0; }
+.agent-premises__cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: 0.5rem 1.5rem; }
+.agent-premises ol { margin: 0; padding-inline-start: 1.6rem; display: grid; gap: 0.35rem; }
+.agent-tabs { margin: 0 0 1rem; }
+.agent-sources { list-style: none; padding: 0; display: grid; gap: 0.6rem; }
+.agent-sources .check { align-items: flex-start; }
+.agent-sources__excerpt { display: block; color: var(--muted); font-size: 0.85rem; overflow-wrap: anywhere; }
+.agent-traits .card { display: grid; gap: 0.2rem; padding: 0.8rem 1rem; }
+.agent-output { margin-top: 0.8rem; }
+.agent-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.6rem 0; }
+.agent-suggestions, .agent-matches { list-style: none; padding: 0; display: grid; gap: 0.75rem; }
+.agent-suggestions > li, .agent-matches > li { padding: 0.75rem 0.9rem; border: 1px solid var(--border); border-radius: 12px; }
+.agent-suggestions > li[data-state='accepted'], .agent-suggestions > li[data-state='rejected'] { opacity: 0.7; }
+.agent-suggestions p, .agent-matches p { margin: 0 0 0.4rem; }
+.agent-diff { overflow-wrap: anywhere; }
+.agent-diff del { color: var(--muted); }
+.agent-diff ins { text-decoration: none; font-weight: 600; }
+.agent-compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: 0.6rem; }
+.agent-compare blockquote { margin: 0; }
+.agent-compare blockquote { padding: 0.6rem 0.8rem; border-inline-start: 3px solid var(--border); background: var(--surface); overflow-wrap: anywhere; }
+.agent-compare .label { display: block; margin: 0 0 0.3rem; }
+.agent-panel > h2:first-child { margin-top: 0; }
