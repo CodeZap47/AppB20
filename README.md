@@ -6,6 +6,10 @@ App B20 es una plataforma colaborativa en desarrollo para el grupo B20 de Ingeni
 Desarrollo de Software. Reúne tareas, actividades, apuntes, guías y dudas para que los recursos
 académicos sean fáciles de encontrar y la ayuda entre compañeros tenga un lugar propio.
 
+Es una plataforma entre compañeros de software para colaborar, compartir y competir en un
+ranking de colaboración. Si el proyecto llega a generar ingresos, todos los compañeros
+tendrán un porcentaje.
+
 ## Qué es App B20
 
 - **Un archivo académico compartido:** materiales organizados por materia, cuatrimestre y
@@ -98,6 +102,10 @@ En módulos existentes, siguen pendientes estas ampliaciones:
   reutilizable y variantes; respuestas abiertas, rúbricas y evaluación asistida por IA.
   Estas ampliaciones quedan fuera del recorrido EX-2 ya publicado y se detallan en
   [el plan de Exámenes](docs/examenes-ia.md).
+
+Las [ideas pendientes](docs/ideas-pendientes.md) reúnen propuestas semilla del grupo
+todavía sin alcance ni prioridad: biblioteca externa y wiki, reglas del ranking, votación
+de decisiones, reglas del grupo, propuestas de creación, pool mensual y proveedor de IA.
 
 La publicación del código no cierra la aceptación humana. Siguen pendientes la prueba real
 de Gemini con clave personal y confirmación, los recorridos con varias cuentas del grupo,
