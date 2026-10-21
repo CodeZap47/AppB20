@@ -17,19 +17,17 @@ Aprende enseñando y Repaso se conserva como trabajo existente.
 | Módulo 3.11 | Incluido en catálogo de etapa 3 como `senales`, sin marcarlo disponible; alcance original conservado. | Pantalla y pruebas corresponden a entrega 5, no a esta entrega. |
 | Piloto | Configuración de producción apunta a SpacetimeDB; la demo sigue aislada. | Publicación sin borrar datos y recorridos con autor, compañero autorizado y tercero. Pendientes hasta registrarlos. |
 
-## Tercera entrega: implementación local
+## Tercera entrega: base publicada
 
 El [índice de la tercera entrega](tercera-entrega.md) reúne IA, notificaciones y conservación.
 El código incorpora Gemini BYOK cifrado, preparación de texto y adjuntos UTF8 compatibles,
 borradores privados de guías/explicaciones y publicación expresa; bandeja privada,
 preferencias, recordatorios y Web Push configurable; y papelera con plazo de 30 días,
-restauración y purga de datos dependientes. Los servicios externos comienzan desactivados.
+restauración y purga de datos dependientes. El registro de la tercera entrega documenta su publicación y la configuración activa de los servicios.
 
 Las comprobaciones locales con servidor real aislado usan identidades y claves sintéticas.
-No se han publicado estos cambios en Maincloud o Cloudflare ni se ha activado facturación.
-Los formatos binarios no admitidos para IA permanecen como omisiones explícitas. Las tarjetas
-de Repaso con Gemini, Exámenes y otras integraciones de IA siguen para entregas posteriores;
-el módulo 3.11 conserva su entrega 5 y el push nativo del APK permanece pendiente.
+La base de la tercera entrega y Guías están publicadas en Maincloud y Cloudflare; las pruebas reales de Gemini y la aceptación con compañeros se registran por separado.
+Los formatos binarios no admitidos para IA permanecen como omisiones explícitas. Exámenes EX-2 está publicado y tiene su [registro de cierre](examenes-entrega.md). Las tarjetas de Repaso con Gemini y otras integraciones conservan sus entregas posteriores; el módulo 3.11 conserva su entrega 5 y el push nativo del APK permanece pendiente.
 
 ## Módulos base (sección 3)
 
@@ -56,7 +54,7 @@ publicación en Maincloud ni una prueba de aceptación con el grupo.
 | 3.9 Perfiles | Presentación voluntaria, foto privada en SpacetimeDB bajo demanda, intereses, conocimientos, portafolio HTTPS, materias, guías, equipo y contribuciones. Archivo con filtros por parcial, tema, fecha y tipo. | Recorrido con nombres, fotos y trabajos aportados por cada alumno; microproyectos cuando exista 7.6. | 2: validación; 5: microproyectos |
 | 3.10 Cumpleaños | Día/mes voluntarios, calendario mensual/anual y 29 de febrero. Recordatorios con zona, preferencias, descanso, cursor persistente y deduplicación integrados localmente. | Activar el planificador y validar la recepción real con el grupo. | 3: validación |
 | 3.11 Lenguaje de señales | Pendiente: catálogo etapa 3, sin pantalla propia. | Diccionario/versiones para tres medios, constructor, ejercicios, parejas, historial privado y fichas con fuentes. | 5 |
-| 3.12 Exámenes de estudio | EX-2: configuración, generación BYOK y borradores privados, revisión, versiones, práctica/simulacro, tiempo del servidor y resultados privados. [Registro de cierre](examenes-entrega.md). | Prueba real de Gemini y aceptación con titulares de cuentas/dispositivos; OCR y respuestas abiertas pertenecen a EX-3 y quedan fuera del alcance confirmado. | EX-2: publicación y aceptación; EX-3: ampliaciones |
+| 3.12 Exámenes de estudio | EX-2 publicado: configuración, generación BYOK y borradores privados, revisión, versiones, práctica/simulacro, tiempo del servidor y resultados privados. [Registro de cierre](examenes-entrega.md). | Prueba real de Gemini y aceptación con titulares de cuentas/dispositivos; OCR y respuestas abiertas pertenecen a EX-3 y quedan fuera del alcance confirmado. | EX-2: aceptación; EX-3: ampliaciones |
 
 ## Funciones adicionales (sección 7)
 

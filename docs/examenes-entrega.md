@@ -30,9 +30,21 @@ La interfaz revalida el acceso al abrir o reanudar, al recuperar el foco y cada 
 | --- | --- |
 | Implementación y pruebas de EX-2 | Completada e integrada sobre producción `00f761d`: 1 266 pruebas, tipos y compilaciones con Node 22 (web/PWA, Pages, extensión y ambos Workers) |
 | Recorrido persistente con tres identidades sintéticas y reinicio | Aprobado sobre `00f761d`: once grupos, cinco generaciones simuladas y cero llamadas reales; también pasó el recorrido persistente de retención |
-| Migración aditiva conservando datos | Ensayo desde `00f761d` aprobado con `--delete-data=never`; comprobación de producción pendiente |
-| Publicación módulo → Worker → Pages | Pendiente de validación y publicación |
+| Migración aditiva conservando datos | Ensayo desde `00f761d` y producción aprobados con `--delete-data=never`: 112 → 117 tablas, cinco nuevas privadas; los 310 registros de las 112 tablas anteriores permanecieron idénticos |
+| Publicación módulo → Worker → Pages | Publicado el 21 de octubre de 2026; `/health` correcto, acceso anónimo rechazado y 16 archivos públicos idénticos a la compilación |
 | Prueba real de Gemini | No ejecutada; se mantiene pendiente por decisión del usuario |
 | Aceptación con cuentas del grupo y dispositivos | Pendiente de participación de sus titulares |
 
 Las pruebas sintéticas no acreditan una llamada real a Gemini ni la aceptación humana. Las evidencias locales se guardan en `artifacts/examenes/`, fuera de Git y sin claves o tokens reales.
+
+
+## Recibo de publicación
+
+- Revisión publicada: `03876936aa17a3461c460d938fee192821c3af15`, ramas `codex/examenes` y `codex/pages-spacetimeauth` en GitHub. La integración parte de `00f761d`, conserva Guías, navegación Slim, avisos y retención. No incorpora ni modifica los trabajos independientes todavía no publicados en otras ramas.
+- Módulo `app-b20-34245`: SHA-256 del bundle `fb74d8dcbb182351d959d6eea3baa2c8deac352f9eb1da3a554b658564015368`. Migración aditiva sin tablas eliminadas ni sustitución de IDs existentes.
+- Worker `app-b20-ai`: versión `df550c84-398b-4d9f-9624-9af77aadbc18`, conserva la configuración, secretos y programación de avisos existentes. El Worker heredado de R2 permanece independiente.
+- Pages: despliegue de producción `0f7b8620-554f-4c11-96a1-e0c78ef3733f`, dominio [Exámenes](https://app-b20.pages.dev/#/m/examenes). Comprobadas las huellas de sus 16 archivos públicos, incluido el HTML y el service worker.
+- Web real: acceso renovado con la sesión titular, catálogo privado consultado después de recargar, acceso desde navegación verificado y formulario de preparación visible; confirma `gemini-3.8-flash` y clave personal sin configurar. Guías y Avisos siguieron disponibles con la sesión real. No se crearon exámenes ni ejemplos en el grupo, ni se enviaron fuentes a Gemini.
+- Pruebas finales: app 641, core 130, módulo 311, API 133 y web 51 (1 266 en total); tipos y compilaciones con Node 22. Ensayo persistente de Exámenes desde producción, once grupos con tres identidades sintéticas y reinicio; ensayo persistente de retención aprobado. Cero llamadas reales de Gemini.
+
+El uso con varios compañeros y dispositivos sigue siendo aceptación humana pendiente; no se confunde con las pruebas automatizadas ni con la comprobación de una sesión titular.
