@@ -83,7 +83,8 @@ function native() {
   };
   const procedures = {
     getResourceUploadStatus: vi.fn(async ({ uploadId }: { uploadId: string }) => {
-      const upload = uploads.get(uploadId)!;
+      const upload = uploads.get(uploadId);
+      if (!upload) return 'null';
       return JSON.stringify({ uploadId, state: upload.state, fileId: upload.state === 'ready' ? uploadId : undefined,
         receivedIndexes: [...upload.parts.keys()], sha256: upload.input.sha256 });
     }),
@@ -158,7 +159,7 @@ describe('archivos nativos de SpacetimeDB', () => {
     const first = wire.reducers.beginResourceUpload.mock.calls[0]![0];
     expect(wire.receipts.size).toBe(1);
     expect(await new ResourceTransport(wire.options).upload('work', '8', new File(['datos'], 'datos.txt'), 4)).toBe(first.uploadId);
-    expect(wire.reducers.beginResourceUpload.mock.calls[1]![0].expectedVersion).toBe(3);
+    expect(wire.reducers.beginResourceUpload).toHaveBeenCalledTimes(1);
     expect(wire.reducers.finalizeResourceUpload).toHaveBeenCalledTimes(1);
     expect(wire.receipts.size).toBe(0);
   });
@@ -296,4 +297,90 @@ describe('archivos nativos de SpacetimeDB', () => {
     expect(await (await transport.download('legacy:3')).text()).toBe('anterior');
     expect(request).toHaveBeenCalledWith('https://api.example/files/legacy%3A3', { headers: { Authorization: 'Bearer renewed' } });
   });
+});
+
+
+it('desbloquea un recibo rechazado antes de que exista una subida en el servidor', async () => {
+  const wire = native();
+  wire.reducers.beginResourceUpload.mockRejectedValueOnce(new Error('Esta publicación cambió'));
+  const file = new File(['datos'], 'datos.txt');
+  await expect(wire.transport.upload('work', '8', file, 1)).rejects.toThrow('cambió');
+  expect(wire.receipts.size).toBe(0);
+  await new ResourceTransport(wire.options).upload('work', '8', new File(['datos'], 'datos.txt'), 2);
+  expect(wire.reducers.beginResourceUpload.mock.calls[1]![0].expectedVersion).toBe(2);
+});
+
+it('cancela un intento pendiente antes de adjuntar a una publicación que cambió de versión', async () => {
+  const wire = native();
+  wire.reducers.putResourceChunk.mockRejectedValueOnce(new Error('offline'));
+  const file = new File(['datos'], 'datos.txt');
+  await expect(wire.transport.upload('work', '8', file, 1)).rejects.toThrow('offline');
+  const reloaded = new ResourceTransport(wire.options);
+  await expect(reloaded.upload('work', '8', new File(['datos'], 'datos.txt'), 2)).rejects.toThrow('Se canceló la subida anterior');
+  expect(wire.reducers.cancelResourceUpload).toHaveBeenCalledTimes(1);
+  expect(wire.receipts.size).toBe(0);
+  await reloaded.upload('work', '8', file, 2);
+  expect(wire.reducers.beginResourceUpload.mock.calls.at(-1)![0].expectedVersion).toBe(2);
+});
+
+it('conserva el recibo incierto si no puede consultar la versión anterior antes de reanudar', async () => {
+  const wire = native();
+  wire.reducers.putResourceChunk.mockRejectedValueOnce(new Error('offline'));
+  await expect(wire.transport.upload('work', '8', new File(['datos'], 'datos.txt'), 1)).rejects.toThrow();
+  const originalReceipt = [...wire.receipts.values()];
+  wire.procedures.getResourceUploadStatus.mockRejectedValueOnce(new Error('conexión caída'));
+  await expect(new ResourceTransport(wire.options).upload('work', '8', new File(['datos'], 'datos.txt'), 2)).rejects.toThrow('conexión caída');
+  expect([...wire.receipts.values()]).toEqual(originalReceipt);
+  expect(wire.reducers.cancelResourceUpload).not.toHaveBeenCalled();
+});
+
+it('descarta bytes heredados si la cuenta cambió mientras esperaba la descarga HTTP', async () => {
+  const wire = native();
+  const request = vi.fn<typeof fetch>().mockImplementation(async () => { wire.setActor('member-2'); return new Response('privado de member-1'); });
+  wire.procedures.getResourceManifest.mockResolvedValueOnce(JSON.stringify({ storageKind: 'legacy', fileId: 'legacy:3' }));
+  const transport = new ResourceTransport({ ...wire.options, legacy: { apiUrl: '', getToken: () => 'token', fetch: request } });
+  await expect(transport.download('legacy:3')).rejects.toThrow('sesión cambió');
+});
+
+
+it('conserva el recibo si finalizar y cancelar pierden sus respuestas tras pedir cancelación', async () => {
+  const wire = native();
+  const controller = new AbortController();
+  wire.reducers.finalizeResourceUpload.mockImplementationOnce(async ({ uploadId }) => {
+    wire.uploads.get(uploadId)!.state = 'ready'; controller.abort();
+    wire.procedures.getResourceUploadStatus.mockRejectedValueOnce(new Error('offline'));
+    wire.reducers.cancelResourceUpload.mockRejectedValueOnce(new Error('offline'));
+    throw new Error('offline');
+  });
+  await expect(wire.transport.upload('work', '8', new File(['datos'], 'datos.txt'), 1,
+    { signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' });
+  expect(wire.receipts.size).toBe(1);
+  const firstId = wire.reducers.beginResourceUpload.mock.calls[0]![0].uploadId;
+  expect(await new ResourceTransport(wire.options).upload('work', '8', new File(['datos'], 'datos.txt'), 2)).toBe(firstId);
+  expect(wire.reducers.finalizeResourceUpload).toHaveBeenCalledTimes(1);
+});
+
+it('comprueba si otra pestaña finalizó antes de que la cancelación llegara al servidor', async () => {
+  const wire = native();
+  const controller = new AbortController();
+  const put = wire.reducers.putResourceChunk.getMockImplementation()!;
+  wire.reducers.putResourceChunk.mockImplementationOnce(async (input) => { await put(input); controller.abort(); });
+  wire.reducers.cancelResourceUpload.mockImplementationOnce(async ({ uploadId }) => { wire.uploads.get(uploadId)!.state = 'ready'; });
+  const fileId = await wire.transport.upload('work', '8', new File(['datos'], 'datos.txt'), 1, { signal: controller.signal });
+  expect(fileId).toBe(wire.reducers.beginResourceUpload.mock.calls[0]![0].uploadId);
+  expect(wire.receipts.size).toBe(0);
+});
+
+it('conserva un recibo si cancelar fue aceptado pero no se puede consultar su resultado', async () => {
+  const wire = native();
+  const controller = new AbortController();
+  const put = wire.reducers.putResourceChunk.getMockImplementation()!;
+  wire.reducers.putResourceChunk.mockImplementationOnce(async (input) => { await put(input); controller.abort(); });
+  wire.reducers.cancelResourceUpload.mockImplementationOnce(async ({ uploadId }) => {
+    wire.uploads.get(uploadId)!.state = 'cancelled';
+    wire.procedures.getResourceUploadStatus.mockRejectedValueOnce(new Error('offline'));
+  });
+  await expect(wire.transport.upload('work', '8', new File(['datos'], 'datos.txt'), 1,
+    { signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' });
+  expect(wire.receipts.size).toBe(1);
 });

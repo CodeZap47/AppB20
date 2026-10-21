@@ -3031,6 +3031,27 @@ export const remove_resource_file = spacetimedb.reducer(
   (ctx, { fileId, expectedVersion }) => { activeMember(ctx); removeResource(ctx, fileId, expectedVersion); },
 );
 
+/** Recupera un adjunto de evidencia, sin inventar un historial del texto de la evidencia. */
+export const restore_resource_file = spacetimedb.reducer(
+  { fileId: t.string(), expectedVersion: t.u32() },
+  (ctx, { fileId, expectedVersion }) => {
+    activeMember(ctx);
+    const file = ctx.db.resourceFile.id.find(fileId);
+    if (!file) throw new SenderError('El archivo no existe.');
+    if (file.targetKind !== 'evidence') {
+      throw new SenderError('Este archivo se restaura desde el historial de su trabajo o página.');
+    }
+    requireTargetWriter(ctx, file.targetKind, file.targetId);
+    // Un reintento autorizado no añade otra versión si ya se recuperó el adjunto.
+    if (file.removedAt === undefined) return;
+    expectVersion(targetVersion(ctx, file.targetKind, file.targetId), expectedVersion);
+    saveTargetBaseline(ctx, file.targetKind, file.targetId);
+    ctx.db.resourceFile.id.update({ ...file, removedAt: undefined });
+    bumpMaterial(ctx, file.targetKind, file.targetId);
+    log(ctx, 'restore', 'resource_file', fileId);
+  },
+);
+
 /** Una migración repetida nunca inventa el contenido anterior ni cambia IDs o versiones. */
 export const backfill_academic_v2 = spacetimedb.reducer((ctx) => {
   requireCreator(ctx);
@@ -3162,10 +3183,12 @@ function readableResource(tx: Ctx, fileId: string) {
     if (!file) throw new SenderError('El archivo no existe.');
     targetVersion(tx, file.targetKind, file.targetId);
     if (file.removedAt !== undefined) {
-      const historical = file.targetKind === 'work'
+      // Las evidencias conservan adjuntos retirados como registros recuperables propios;
+      // no tienen snapshots del texto. targetVersion ya comprobó que el destino existe.
+      const historical = file.targetKind === 'evidence' || (file.targetKind === 'work'
         ? [...tx.db.workRevision.workId.filter(file.targetId)].some((r) => r.attachmentIds.includes(fileId))
         : (file.targetKind === 'assignment' || file.targetKind === 'activity') &&
-          [...tx.db.pageSnapshot.pageId.filter(file.targetId)].some((r) => r.page === file.targetKind && r.attachmentIds.includes(fileId));
+          [...tx.db.pageSnapshot.pageId.filter(file.targetId)].some((r) => r.page === file.targetKind && r.attachmentIds.includes(fileId)));
       if (!historical) throw new SenderError('El archivo ya no está disponible.');
     }
     return file;
@@ -3327,6 +3350,9 @@ export const expire_resource_upload = spacetimedb.reducer(
 
 export const get_resource_upload_status = spacetimedb.procedure({ uploadId: t.string() }, t.string(),
   (ctx, { uploadId }) => ctx.withTx((tx) => {
+    activeMember(tx);
+    // Distingue un intento nunca aceptado/ya limpiado de una respuesta perdida. No revela bytes.
+    if (!tx.db.resourceUpload.id.find(uploadId)) return 'null';
     const upload = ownedUpload(tx, uploadId);
     const expired = upload.state === 'pending' && upload.expiresAt.microsSinceUnixEpoch <= tx.timestamp.microsSinceUnixEpoch;
     return JSON.stringify({ uploadId, state: expired ? 'expired' : upload.state, sha256: upload.sha256,

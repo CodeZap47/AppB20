@@ -14,7 +14,8 @@ export function useAction() {
       setError(null);
       return result;
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Algo salió mal.');
+      setError(e instanceof Error || (typeof DOMException !== 'undefined' && e instanceof DOMException)
+        ? e.message : 'Algo salió mal.');
       return undefined;
     } finally {
       setPending(false);

@@ -169,3 +169,27 @@ describe('datos académicos con versiones', () => {
       .map((row) => row.version)).toEqual([activity.version, activity.version + 1, activity.version + 2, activity.version + 3, activity.version + 4]);
   });
 });
+
+
+describe('recuperación de adjuntos de evidencias', () => {
+  it('mantiene permisos, versiones y bytes al restaurar y los reintentos no duplican cambios', async () => {
+    const data = source();
+    const activityId = data.getSnapshot().activities[0]!.id;
+    const evidenceId = data.addEvidence(activityId, 'Evidencia', []);
+    const fileId = await data.attachResourceFile('evidence', evidenceId, new File(['bytes'], 'archivo.txt'), 1);
+    data.removeResourceFile(fileId, 2);
+    data.setViewer('demo-3');
+    expect(() => data.restoreResourceFile(fileId, 3)).toThrow('Solo el autor');
+    data.setViewer('demo-1');
+    expect(() => data.restoreResourceFile(fileId, 2)).toThrow('cambió');
+    const activityVersion = data.getSnapshot().activities.find((row) => row.id === activityId)!.version;
+    data.restoreResourceFile(fileId, 3);
+    expect(data.getSnapshot().evidences.find((row) => row.id === evidenceId)?.version).toBe(4);
+    expect(data.getSnapshot().activities.find((row) => row.id === activityId)?.version).toBe(activityVersion + 1);
+    expect(await (await data.downloadResourceFile(fileId)).text()).toBe('bytes');
+    data.restoreResourceFile(fileId, 3);
+    expect(data.getSnapshot().evidences.find((row) => row.id === evidenceId)?.version).toBe(4);
+    data.setViewer('demo-3');
+    expect(() => data.restoreResourceFile(fileId, 3)).toThrow('Solo el autor');
+  });
+});

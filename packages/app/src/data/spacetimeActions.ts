@@ -190,6 +190,7 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
     }),
     restorePageSnapshot: (page, pageId, version, expectedVersion) => getConnection().reducers.restorePageSnapshot({ page, pageId: id(pageId), version, expectedVersion }),
     attachResourceFile, removeResourceFile,
+    restoreResourceFile: (fileId, expectedVersion) => getConnection().reducers.restoreResourceFile({ fileId, expectedVersion }),
     downloadResourceFile: async (fileId, options) => transfer().download(fileId, options),
     attachWorkFile: (workId, file) => attachResourceFile('work', workId, file),
     removeWorkFile: (fileId) => {

@@ -1,3 +1,4 @@
+/** Adaptador histórico sin registrar: el despliegue actual solo admite SpacetimeDB y Cloudflare. */
 import { createHash } from 'node:crypto';
 import type { SecretStore } from './secrets.ts';
 

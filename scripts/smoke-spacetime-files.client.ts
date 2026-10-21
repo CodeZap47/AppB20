@@ -26,7 +26,8 @@ export async function runSmoke(options: {
     connection.subscriptionBuilder().onApplied(() => resolve()).onError((_ctx, error) => reject(error)).subscribe(queries);
   }), 'suscripción');
   const close = () => { for (const connection of connections) connection.disconnect(); connections.clear(); };
-  const groupViews = ['subjects', 'assignments', 'works', 'resource_files', 'work_revisions', 'work_details'];
+  const groupViews = ['subjects', 'assignments', 'works', 'resource_files', 'work_revisions', 'work_details',
+    'activities', 'evidences', 'evidence_details'];
   const observe = (connection: DbConnection) => subscribe(connection, groupViews.map((name) => `SELECT * FROM ${name}`));
   try {
     let owner = await connect(options.tokens[0]);
@@ -113,6 +114,31 @@ export async function runSmoke(options: {
     await owner.reducers.setResourceCapacity({ bytes: 256n * BigInt(CHUNK_BYTES) });
     checks.push('historial recuperable, cancelación y reserva de capacidad');
 
+    await author.reducers.createActivity({ subjectId, termId: undefined, topic: 'Files', date: '2026-10-21',
+      title: 'Local evidence activity', objective: 'Recover evidence attachments', instructions: 'Synthetic data only' });
+    const activityId = [...author.db.activities.iter()][0].id;
+    await author.reducers.addEvidence({ activityId, content: 'Synthetic evidence', participants: [] });
+    const evidenceId = [...author.db.evidences.iter()][0].id;
+    const evidenceBytes = new TextEncoder().encode('Persistent evidence attachment');
+    const evidenceFileId = randomUUID();
+    await author.reducers.beginResourceUpload({ ...input, uploadId: evidenceFileId, targetKind: 'evidence',
+      targetId: evidenceId, expectedVersion: 1, name: 'evidence.txt', mime: 'text/plain',
+      bytes: BigInt(evidenceBytes.length), sha256: hash(evidenceBytes) });
+    await author.reducers.putResourceChunk({ uploadId: evidenceFileId, index: 0, bytes: evidenceBytes, sha256: hash(evidenceBytes) });
+    await author.reducers.finalizeResourceUpload({ uploadId: evidenceFileId });
+    await author.reducers.removeResourceFile({ fileId: evidenceFileId, expectedVersion: 2 });
+    assert.notEqual([...author.db.resourceFiles.iter()].find((row) => row.id === evidenceFileId)?.removedAt, undefined);
+    assert.equal((await owner.procedures.readResourceChunk({ fileId: evidenceFileId, index: 0 })).sha256, hash(evidenceBytes));
+    await assert.rejects(owner.reducers.restoreResourceFile({ fileId: evidenceFileId, expectedVersion: 3 }), /Solo el autor/);
+    await assert.rejects(outsider.reducers.restoreResourceFile({ fileId: evidenceFileId, expectedVersion: 3 }), /activo/);
+    await assert.rejects(author.reducers.restoreResourceFile({ fileId: evidenceFileId, expectedVersion: 2 }), /cambió/);
+    await author.reducers.restoreResourceFile({ fileId: evidenceFileId, expectedVersion: 3 });
+    await author.reducers.restoreResourceFile({ fileId: evidenceFileId, expectedVersion: 3 });
+    assert.equal([...author.db.resourceFiles.iter()].find((row) => row.id === evidenceFileId)?.removedAt, undefined);
+    assert.equal([...author.db.evidenceDetails.iter()].find((row) => row.evidenceId === evidenceId)?.version, 4);
+    assert.equal(hash((await owner.procedures.readResourceChunk({ fileId: evidenceFileId, index: 0 })).bytes), hash(evidenceBytes));
+    checks.push('adjuntos de evidencia retirados, legibles y recuperables solo por su autor sin duplicar versiones');
+
     // Prueba el mayor archivo permitido a través del protocolo binario real y del SHA-256 del servidor.
     const maximum = new Uint8Array(50 * CHUNK_BYTES); maximum.fill(97);
     const maximumId = randomUUID();
@@ -133,6 +159,7 @@ export async function runSmoke(options: {
     assert.equal(JSON.parse(await author.procedures.getResourceManifest({ fileId: maximumId })).chunkCount, 50);
     const recovered = await author.procedures.readResourceChunk({ fileId: uploadId, index: 0 });
     assert.equal(hash(recovered.bytes), first.sha256);
+    assert.equal(hash((await author.procedures.readResourceChunk({ fileId: evidenceFileId, index: 0 })).bytes), hash(evidenceBytes));
     await owner.reducers.removeMember({ identity: author.identity! });
     await assert.rejects(author.procedures.readResourceChunk({ fileId: uploadId, index: 0 }), /activo/);
     checks.push('archivos confirmados persistentes tras reinicio y acceso revocado inmediatamente');

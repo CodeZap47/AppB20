@@ -812,6 +812,7 @@ export interface Actions {
   restorePageSnapshot(page: ProgressTargetKind, pageId: Id, version: number, expectedVersion: number): MaybePromise<void>;
   attachResourceFile(targetKind: ResourceTargetKind, targetId: Id, file: File, expectedVersion?: number, transfer?: ResourceTransferOptions): Promise<Id>;
   removeResourceFile(fileId: Id, expectedVersion?: number): MaybePromise<void>;
+  restoreResourceFile(fileId: Id, expectedVersion: number): MaybePromise<void>;
   downloadResourceFile(fileId: Id, transfer?: ResourceTransferOptions): Promise<Blob>;
   /**
    * Sube un archivo y lo adjunta al trabajo; solo sus autores. Rechaza archivos vacíos o de

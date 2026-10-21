@@ -1,17 +1,10 @@
 import { serve } from '@hono/node-server';
 import { createApp } from './app.ts';
 import { EncryptedMemoryStore, type SecretStore } from './lib/secrets.ts';
-import { metadataTokenProvider, SecretManagerStore } from './lib/secretManager.ts';
 import { env } from './env.ts';
 
 function createStore(): SecretStore {
-  if (env.secretStore === 'gcp') {
-    return new SecretManagerStore({
-      projectId: env.gcpProjectId(),
-      getAccessToken: metadataTokenProvider(),
-    });
-  }
-  if (env.secretStore !== 'memory') throw new Error('SECRET_STORE debe ser gcp o memory');
+  if (env.secretStore !== 'memory') throw new Error('La API de desarrollo solo admite SECRET_STORE=memory. El despliegue usa SpacetimeDB y Cloudflare.');
   return new EncryptedMemoryStore(env.byokEncryptionKey());
 }
 

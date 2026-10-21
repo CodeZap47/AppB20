@@ -13,9 +13,8 @@ export const env = {
   oidcJwksUri: () => process.env.OIDC_JWKS_URI ?? 'https://auth.spacetimedb.com/oidc/jwks',
   spacetimeUri: () => required('SPACETIMEDB_URI'),
   spacetimeModule: () => required('SPACETIMEDB_MODULE'),
-  /** `gcp` guarda las claves BYOK en Secret Manager; `memory` (local) las cifra en memoria. */
-  secretStore: (process.env.SECRET_STORE ?? 'memory') as 'gcp' | 'memory',
-  gcpProjectId: () => required('GCP_PROJECT_ID'),
+  /** La API Node heredada es solo local; el despliegue nuevo usa SpacetimeDB + Cloudflare. */
+  secretStore: process.env.SECRET_STORE ?? 'memory',
   byokEncryptionKey: () => required('BYOK_ENCRYPTION_KEY'),
   geminiModel: () => required('GEMINI_MODEL'),
 };

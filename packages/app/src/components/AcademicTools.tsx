@@ -32,8 +32,8 @@ export function ProgressControl({ kind, id }: { kind: 'assignment' | 'activity';
   </section>;
 }
 
-export function ResourceDownloads({ files, onRemove, disabled }: {
-  files: ResourceFile[]; onRemove?: (file: ResourceFile) => void; disabled?: boolean;
+export function ResourceDownloads({ files, onRemove, onRestore, disabled }: {
+  files: ResourceFile[]; onRemove?: (file: ResourceFile) => void; onRestore?: (file: ResourceFile) => void; disabled?: boolean;
 }) {
   const source = useDataSource();
   const { error, pending, run } = useAction();
@@ -65,6 +65,8 @@ export function ResourceDownloads({ files, onRemove, disabled }: {
             onClick={() => void download(file)}>{file.name}</button>
           <span className="file__meta">{formatBytes(file.size)}</span>
         </span>
+        {onRestore && <button type="button" className="link-button" disabled={disabled}
+          aria-label={`Restaurar ${file.name}`} onClick={() => onRestore(file)}>Restaurar adjunto</button>}
         {onRemove && <button type="button" className="link-button" disabled={disabled}
           aria-label={`Quitar ${file.name}`} onClick={() => onRemove(file)}>Quitar</button>}
       </li>)}
@@ -86,6 +88,7 @@ export function ResourceSection({ kind, id, version, canEdit, title = 'Archivos 
   const [progress, setProgress] = useState<{ name: string; done: number; total: number } | null>(null);
   useEffect(() => () => controller.current?.abort(), []);
   const files = resourceFiles.filter((f) => f.targetKind === kind && f.targetId === id && !f.removedAt);
+  const retired = kind === 'evidence' ? resourceFiles.filter((f) => f.targetKind === kind && f.targetId === id && f.removedAt) : [];
   const upload = async (list: File[], firstVersion = version) => {
     if (busy) return;
     setBusy(true);
@@ -109,10 +112,15 @@ export function ResourceSection({ kind, id, version, canEdit, title = 'Archivos 
     {!files.length && <p className="muted">Sin archivos adjuntos.</p>}
     <ResourceDownloads files={files} disabled={busy || pending}
       onRemove={canEdit ? (file) => { void run(() => source.removeResourceFile(file.id, version)); } : undefined} />
+    {retired.length > 0 && <details className="academic-version-list">
+      <summary>Archivos retirados ({retired.length})</summary>
+      <ResourceDownloads files={retired} disabled={busy || pending}
+        onRestore={canEdit ? (file) => { void run(() => source.restoreResourceFile(file.id, version)); } : undefined} />
+    </details>}
     {canEdit && <>
       <FilePicker onFiles={(list) => void upload(list)} busy={busy || pending} disabled={Boolean(retry)} />
       {progress && <p role="status">Subiendo {progress.name}: {Math.round(progress.done / progress.total * 100)} % <button type="button" className="link-button" onClick={() => controller.current?.abort()}>Cancelar subida</button></p>}
-      {retry && <div className="academic-upload-retry"><p>Quedan por confirmar: {retry.files.map((file) => file.name).join(', ')}.</p><button type="button" disabled={busy || pending} onClick={() => void upload(retry.files, retry.version)}>Reintentar archivos pendientes</button><button type="button" className="secondary" disabled={busy || pending} onClick={() => setRetry(null)}>Descartar pendientes</button></div>}
+      {retry && <div className="academic-upload-retry"><p>Quedan por confirmar: {retry.files.map((file) => file.name).join(', ')}.</p><button type="button" disabled={busy || pending} onClick={() => void upload(retry.files, Math.max(retry.version, version))}>Reintentar archivos pendientes</button><button type="button" className="secondary" disabled={busy || pending} onClick={() => setRetry(null)}>Descartar pendientes</button></div>}
       <p className="field__hint">Hasta 50 MB por archivo. Los archivos de versiones anteriores se conservan en el historial.</p>
     </>}
     {error && <p className="error" role="alert">{error}</p>}

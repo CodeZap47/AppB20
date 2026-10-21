@@ -2,7 +2,7 @@ import { fileSizeError } from '@b20/core';
 import type {
   AcademicComment, AcademicProgress, Activity, ActivityLink, Assignment, AssignmentInput,
   CreateActivityInput, Evidence, Id, Member, Note, PageSnapshot, ProgressStatus,
-  ProgressTargetKind, ResourceFile, ResourceTargetKind, Work, WorkFile, WorkRevision,
+  ProgressTargetKind, ResourceFile, ResourceTargetKind, ResourceTransferOptions, Work, WorkFile, WorkRevision,
   WorkReview, WorkVersionInput,
 } from './types';
 
@@ -305,12 +305,15 @@ export class DemoAcademicStore {
     this.ctx.updateActivity(activityId, activity, activity.version);
   }
 
-  async attachResourceFile(kind: ResourceTargetKind, id: Id, file: File, expectedVersion?: number): Promise<Id> {
+  async attachResourceFile(kind: ResourceTargetKind, id: Id, file: File, expectedVersion?: number, transfer: ResourceTransferOptions = {}): Promise<Id> {
+    if (transfer.signal?.aborted) throw new DOMException('Cancelaste la transferencia.', 'AbortError');
     const row = this.target(kind, id, true);
     checkVersion(row.version ?? 1, expectedVersion);
     const problem = fileSizeError(file.name, file.size);
     if (problem) throw new Error(problem);
     const name = text(file.name, 'El nombre del archivo', 200, true);
+    transfer.onProgress?.(0, file.size);
+    if (transfer.signal?.aborted) throw new DOMException('Cancelaste la transferencia.', 'AbortError');
     if (kind === 'work') this.captureWork(id);
     else if (kind === 'evidence') this.capturePage('activity', (row as Evidence).activityId);
     else this.capturePage(kind, id);
@@ -322,6 +325,7 @@ export class DemoAcademicStore {
       contentType: file.type || 'application/octet-stream', uploadedBy: this.ctx.active().id,
       createdAt: this.ctx.now(), url }];
     this.changedFiles(kind, id);
+    transfer.onProgress?.(file.size, file.size);
     return fileId;
   }
 
@@ -337,14 +341,27 @@ export class DemoAcademicStore {
     this.changedFiles(file.targetKind, file.targetId);
   }
 
-  async downloadResourceFile(fileId: Id): Promise<Blob> {
+  restoreResourceFile(fileId: Id, expectedVersion: number) {
+    const file = this.resources().find((entry) => entry.id === fileId);
+    if (!file) throw new Error('El archivo no existe.');
+    if (file.targetKind !== 'evidence') throw new Error('Restaura este archivo desde el historial de la publicación.');
+    const row = this.target('evidence', file.targetId, true);
+    if (!file.removedAt) return;
+    checkVersion(row.version ?? 1, expectedVersion);
+    this.capturePage('activity', (row as Evidence).activityId);
+    this.files = this.files.map((entry) => entry.id === fileId ? { ...entry, removedAt: undefined } : entry);
+    this.changedFiles('evidence', file.targetId);
+  }
+
+  async downloadResourceFile(fileId: Id, transfer: ResourceTransferOptions = {}): Promise<Blob> {
+    if (transfer.signal?.aborted) throw new DOMException('Cancelaste la transferencia.', 'AbortError');
     this.ctx.active();
     const file = this.resources().find((entry) => entry.id === fileId);
     if (!file) throw new Error('El archivo no existe.');
     const blob = this.blobs.get(fileId);
-    if (blob) return blob;
+    if (blob) { transfer.onProgress?.(blob.size, blob.size); return blob; }
     if (!file.url) throw new Error('Este archivo de ejemplo no tiene contenido descargable.');
-    const response = await fetch(file.url);
+    const response = await fetch(file.url, { signal: transfer.signal });
     if (!response.ok) throw new Error('No se pudo descargar el archivo.');
     return response.blob();
   }

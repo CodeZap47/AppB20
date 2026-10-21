@@ -112,7 +112,10 @@ Las nuevas tablas son aditivas: avance privado, metadatos, revisiones de trabajo
 completos de páginas, revisiones nominales, comentarios, recursos y vínculos. Cada cambio
 material conserva un snapshot y requiere la versión esperada. Los archivos históricos no se
 borran al retirarlos de la versión actual. Las evidencias y sus archivos actualizan la versión
-de la actividad para que las guías avisen del cambio; comentar no la modifica.
+de la actividad para que las guías avisen del cambio; comentar no la modifica. Los adjuntos
+retirados de evidencias siguen descargables para miembros activos mientras exista su destino;
+solo el autor de la evidencia puede recuperarlos con su versión actual. Esto conserva archivos
+y referencias, sin presentar un historial completo del texto de la evidencia.
 
 ### Guías de estudio (3.5)
 

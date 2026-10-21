@@ -92,6 +92,7 @@ import ReopenTeachingPracticeReducer from "./reopen_teaching_practice_reducer";
 import ReplaceSpacedCardSourceReducer from "./replace_spaced_card_source_reducer";
 import RespondHelpContactReducer from "./respond_help_contact_reducer";
 import RestorePageSnapshotReducer from "./restore_page_snapshot_reducer";
+import RestoreResourceFileReducer from "./restore_resource_file_reducer";
 import RestoreWorkVersionReducer from "./restore_work_version_reducer";
 import ReviewGuideReducer from "./review_guide_reducer";
 import ReviewSpacedCardReducer from "./review_spaced_card_reducer";
@@ -632,6 +633,7 @@ const reducersSchema = __reducers(
   __reducerSchema("replace_spaced_card_source", ReplaceSpacedCardSourceReducer),
   __reducerSchema("respond_help_contact", RespondHelpContactReducer),
   __reducerSchema("restore_page_snapshot", RestorePageSnapshotReducer),
+  __reducerSchema("restore_resource_file", RestoreResourceFileReducer),
   __reducerSchema("restore_work_version", RestoreWorkVersionReducer),
   __reducerSchema("review_guide", ReviewGuideReducer),
   __reducerSchema("review_spaced_card", ReviewSpacedCardReducer),

@@ -106,6 +106,7 @@ import type {
   ProgressTargetKind,
   ProgressStatus,
   ResourceTargetKind,
+  ResourceTransferOptions,
   WorkVersionInput,
   SpacedCollection,
   SpacedCard,
@@ -769,9 +770,10 @@ export class DemoDataSource implements DataSource {
   commentAcademic(kind: 'work' | 'evidence', id: Id, value: string) { return this.#academic.commentAcademic(kind, id, value); }
   saveActivityLinks(id: Id, assignments: Id[], notes: Id[], expectedVersion?: number) { return this.#academic.saveActivityLinks(id, assignments, notes, expectedVersion); }
   restorePageSnapshot(page: ProgressTargetKind, id: Id, version: number, expectedVersion: number) { return this.#academic.restorePageSnapshot(page, id, version, expectedVersion); }
-  attachResourceFile(kind: ResourceTargetKind, id: Id, file: File, expectedVersion?: number) { return this.#academic.attachResourceFile(kind, id, file, expectedVersion); }
+  attachResourceFile(kind: ResourceTargetKind, id: Id, file: File, expectedVersion?: number, transfer?: ResourceTransferOptions) { return this.#academic.attachResourceFile(kind, id, file, expectedVersion, transfer); }
   removeResourceFile(id: Id, expectedVersion?: number) { return this.#academic.removeResourceFile(id, expectedVersion); }
-  downloadResourceFile(id: Id) { return this.#academic.downloadResourceFile(id); }
+  restoreResourceFile(id: Id, expectedVersion: number) { return this.#academic.restoreResourceFile(id, expectedVersion); }
+  downloadResourceFile(id: Id, transfer?: ResourceTransferOptions) { return this.#academic.downloadResourceFile(id, transfer); }
 
   /**
    * En modo de prueba el archivo no sale del navegador: se guarda un enlace local que dura

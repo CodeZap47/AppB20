@@ -26,7 +26,7 @@ Aprende enseñando y Repaso se conserva como trabajo existente.
 | --- | --- | --- | --- |
 | 3.1 Mensajes y stickers | Parcial: canal, directos, reacciones y herramientas de stickers. | Canales por materia/proyecto, adjuntos con bytes reales, lectura por conversación, menciones, silenciado, bloqueo y reportes. | 2 |
 | 3.2 Tareas y Actividades | Parcial con avance privado, estados, revisión y versiones académicas. | Validación completa de permisos, coautorías e historial con archivos reales; cerrar huecos del recorrido del grupo. | 1–2 |
-| 3.3 Actividades de clase | Integradas en Tareas; evidencias, comentarios y vínculos académicos. | Verificar archivos reales, versiones y permisos de evidencias por equipo. | 1–2 |
+| 3.3 Actividades de clase | Integradas en Tareas; evidencias, comentarios, vínculos y recuperación de adjuntos retirados por su autor. | Verificar archivos reales, versiones y permisos por equipo. La recuperación de adjuntos no implica historial completo del texto. | 1–2 |
 | 3.4 Notas de clase | Parcial: notas personales/de grupo, revisiones y comentarios. | Editor con tablas/imágenes, clasificación por sesión y restauración completa; publicación voluntaria. | 2 |
 | 3.5 Guías integrales | Manual local: fuentes, cobertura, revisiones y compendio. | Historial recuperable, extracción de archivos, generación BYOK y borradores privados con fuentes versionadas. | 2–3 |
 | 3.6 Contribuciones | Desglose calculado con reglas y límites locales. | Validación con el grupo y pruebas contra duplicados, retirada y restauración. | 2 |
@@ -66,7 +66,28 @@ Aprende enseñando y Repaso se conserva como trabajo existente.
 | PWA, extensión y APK | Compilar y probar autenticación, apertura de contenidos y actualizaciones en dispositivos reales. Push nativo Android cerrado sigue pendiente bajo la restricción de proveedores; no añadir Firebase automáticamente. |
 | Operación gratuita | Medir almacenamiento, transferencia y procesamiento; mostrar límites y detener la operación afectada al agotarse. No prometer cuota ilimitada ni activar pagos. |
 
-## Registro de validación real
+## Validación automatizada local — 2026-10-21
+
+- Node.js `24.15.0`; CLI y SDK SpacetimeDB `2.12.0`; bindings regenerados desde el módulo.
+- `npm test`: **606 pruebas aprobadas** (app 336, core 63, módulo 112, API 50, web 45).
+- `npm run typecheck`, `npm run build` y `npm run build:pages`: correctos. Se compilaron
+  web/PWA y extensión; el Worker heredado se comprobó con `wrangler deploy --dry-run`.
+- `npm run test:spacetime:files` pasó con un servidor SpacetimeDB real, datos persistentes
+  aislados y tres identidades sintéticas. No usa cuentas ni tokens de producción.
+- Se comprobó la transferencia binaria de dos bloques, reintentos y hashes, rechazo de
+  suscripciones a tablas privadas, aislamiento de intentos y denegación a un tercero.
+- Un reinicio conservó una subida pendiente y permitió reanudarla; otro conservó los bytes
+  confirmados. Una baja revocó la lectura inmediatamente.
+- Se comprobaron cancelación y liberación de reserva, conflicto de versión, historial de
+  trabajos y recuperación de adjuntos retirados de evidencias con permisos del autor.
+- Se cargaron y confirmaron **52,428,800 bytes (50 MiB)** por el protocolo binario real,
+  incluida la comprobación SHA-256 del servidor. El tiempo local no estima el de Maincloud.
+
+La API Node de desarrollo ya no registra Google Secret Manager; BYOK de producción sigue
+pendiente de la entrega 3. El Worker R2 anterior se conserva para compatibilidad, sin crear
+recursos nuevos ni activar facturación.
+
+## Registro de validación en producción
 
 Esta entrega no incorpora todavía evidencia de publicación ni de recorridos con tres cuentas.
 Al realizarlos, registrar fecha, versión publicada, presentación, escenario, resultado y

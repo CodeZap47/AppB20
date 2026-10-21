@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DataProvider, useSnapshot } from '../data/DataContext';
 import { createDemoState, DemoDataSource } from '../data/demo';
-import { ActivityRelations, PageHistory, ProgressControl, ResourceSection, WorkHistoryAndReview } from './AcademicTools';
+import { ActivityRelations, PageHistory, ProgressControl, ResourceSection, ResourceDownloads, WorkHistoryAndReview } from './AcademicTools';
 
 let root: Root;
 let container: HTMLDivElement;
@@ -100,5 +100,66 @@ describe('concurrencia y recuperación de la interfaz', () => {
     expect(transfer.mock.calls[1]![2]).toBe(file);
     expect(transfer.mock.calls.map((args) => args[3])).toEqual([work.version, work.version]);
     expect(container.textContent).not.toContain('Quedan por confirmar:');
+  });
+});
+
+
+describe('transferencias y recuperación de evidencias', () => {
+  it('muestra progreso y permite cancelar una subida sin dejar una cola de reintentos', async () => {
+    const work = source.getSnapshot().works.find((item) => item.authorIds.includes('demo-1'))!;
+    let signal: AbortSignal | undefined;
+    vi.spyOn(source, 'attachResourceFile').mockImplementation(async (_kind, _id, file, _version, transfer) => {
+      signal = transfer?.signal;
+      transfer?.onProgress?.(file.size / 2, file.size);
+      return new Promise<string>((_resolve, reject) => signal?.addEventListener('abort', () => reject(new DOMException('Cancelaste la transferencia.', 'AbortError'))));
+    });
+    await show(<ResourceSection kind="work" id={work.id} version={work.version} canEdit />);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [new File(['hola'], 'ejemplo.txt')], configurable: true });
+    await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
+    expect(container.textContent).toContain('50 %');
+    const cancel = [...container.querySelectorAll('button')].find((item) => item.textContent === 'Cancelar subida')!;
+    await act(async () => cancel.click());
+    expect(signal?.aborted).toBe(true);
+    expect(container.textContent).not.toContain('Reintentar archivos pendientes');
+    expect(container.textContent).toContain('Cancelaste la transferencia');
+  });
+
+  it('permite cancelar descargas sin crear un enlace parcial', async () => {
+    let signal: AbortSignal | undefined;
+    vi.spyOn(source, 'downloadResourceFile').mockImplementation(async (_id, transfer) => {
+      signal = transfer?.signal;
+      transfer?.onProgress?.(2, 4);
+      return new Promise<Blob>((_resolve, reject) => signal?.addEventListener('abort', () => reject(new DOMException('Cancelaste la transferencia.', 'AbortError'))));
+    });
+    await show(<ResourceDownloads files={[{ id: 'file', targetKind: 'work', targetId: '1', name: 'datos.txt', size: 4,
+      contentType: 'text/plain', uploadedBy: 'demo-1', createdAt: new Date() }]} />);
+    await act(async () => container.querySelector<HTMLButtonElement>('.academic-file-name')!.click());
+    expect(container.textContent).toContain('50 %');
+    await act(async () => [...container.querySelectorAll('button')].find((item) => item.textContent === 'Cancelar descarga')!.click());
+    expect(signal?.aborted).toBe(true);
+    expect(container.querySelector('a[download]')).toBeNull();
+  });
+
+  it('ofrece archivos retirados de evidencia y restaura el mismo adjunto versionando la evidencia', async () => {
+    const activity = source.getSnapshot().activities[0]!;
+    const evidenceId = source.addEvidence(activity.id, 'Resultado', []);
+    const fileId = await source.attachResourceFile('evidence', evidenceId, new File(['datos'], 'retirado.txt'), 1);
+    source.removeResourceFile(fileId, 2);
+    function CurrentEvidence() {
+      const data = useSnapshot();
+      const evidence = data.evidences.find((item) => item.id === evidenceId)!;
+      return <ResourceSection kind="evidence" id={evidenceId} version={evidence.version ?? 1} canEdit={data.me?.id === evidence.authorId} />;
+    }
+    await show(<CurrentEvidence />);
+    expect(container.textContent).toContain('Archivos retirados (1)');
+    expect(container.querySelector('.academic-file-name')?.textContent).toBe('retirado.txt');
+    await act(async () => [...container.querySelectorAll('button')].find((item) => item.textContent === 'Restaurar adjunto')!.click());
+    expect(source.getSnapshot().resourceFiles.find((item) => item.id === fileId)?.removedAt).toBeUndefined();
+    expect(source.getSnapshot().evidences.find((item) => item.id === evidenceId)?.version).toBe(4);
+    expect(container.textContent).not.toContain('Archivos retirados');
+    await act(async () => { source.removeResourceFile(fileId, 4); source.setViewer('demo-4'); });
+    expect(container.textContent).toContain('Archivos retirados (1)');
+    expect(container.textContent).not.toContain('Restaurar adjunto');
   });
 });

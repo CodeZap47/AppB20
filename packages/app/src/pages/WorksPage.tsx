@@ -1009,7 +1009,7 @@ export function SubmitWorkPage() {
     setUploadErrors([]);
     const controller = new AbortController();
     uploadController.current = controller;
-    let expectedVersion = uploadVersion;
+    let expectedVersion = Math.max(uploadVersion, source.getSnapshot().works.find((work) => work.id === id)?.version ?? uploadVersion);
     for (let index = 0; index < files.length; index++) {
       const file = files[index]!;
       try {

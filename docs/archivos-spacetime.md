@@ -33,9 +33,10 @@ rechazo y permitir reintentar cuando haya espacio.
 | --- | --- |
 | `begin_resource_upload` | Validar identidad, permiso de edición, destino, versión, metadatos, hash y reserva; iniciar o recuperar el intento. |
 | `put_resource_chunk` | Aceptar un fragmento privado de tamaño e índice válidos; comprobar su hash y permitir repetir exactamente el mismo envío. |
-| `get_resource_upload_status` | Devolver el estado del intento al solicitante, sin exponerlo a otros integrantes. |
+| `get_resource_upload_status` | Devolver el estado del intento al solicitante; `null` si nunca se aceptó o ya se limpió, sin exponer intentos ajenos. |
 | `finalize_resource_upload` | Comprobar integridad, permiso y versión actuales; adjuntar una sola vez y conservar la referencia de almacenamiento. |
 | `cancel_resource_upload` | Cancelar un pendiente propio y liberar bytes y reserva; no borrar un archivo ya confirmado. |
+| `restore_resource_file` | Recuperar un adjunto retirado de una evidencia existente, comprobando autor y versión; conservar ID, bytes y referencia. |
 | `get_resource_manifest` | Comprobar acceso actual al archivo y devolver metadatos de descarga, con `storageKind: spacetime` o `legacy`. |
 | `read_resource_chunk` | Entregar un fragmento binario autorizado, bajo demanda y sin suscribir su tabla. |
 
@@ -67,6 +68,11 @@ es una referencia generada por el módulo, no una URL pública.
 5. Cancelar elimina únicamente el intento pendiente. Una confirmación previa no se deshace
    por una cancelación tardía; retirar un adjunto confirmado usa las reglas del recurso.
 
+El recibo local conserva únicamente metadatos y la versión original durante 24 horas, nunca
+los bytes. Si la página avanzó, primero se comprueba si la operación previa ya se confirmó;
+un intento inexistente puede iniciarse con la versión actual. Un conflicto de un pendiente
+requiere descartarlo y volver a intentar, sin cambiar silenciosamente su versión.
+
 Un cambio de permisos, baja, archivo distinto o versión obsoleta detiene la operación y debe
 mostrar un error recuperable. No sustituir automáticamente la versión esperada por la nueva
 ni reiniciar una subida silenciosamente. Los intentos caducados pueden limpiarse mediante la
@@ -81,6 +87,13 @@ No se entregan URLs públicas ni credenciales de almacenamiento.
 
 Los IDs de archivos y las referencias de versiones existentes se conservan. Retirar un archivo
 de la versión actual no borra los bytes si una revisión recuperable todavía los referencia.
+Los adjuntos retirados de evidencias siguen disponibles para descargar mientras exista la
+evidencia y quien consulta sea miembro activo. Su autor puede recuperarlos con
+`restore_resource_file`, comprobando la versión actual. La recuperación conserva el mismo
+ID y bytes, actualiza las versiones de evidencia y actividad y no se duplica al reintentar.
+Esto recupera adjuntos retirados; no proporciona un historial completo del texto de evidencias.
+Los trabajos y páginas restauran sus adjuntos mediante sus snapshots existentes.
+
 La papelera de 30 días es una entrega posterior; esta entrega no ejecuta una purga de archivos
 confirmados ni presenta esa política como ya implementada.
 
@@ -97,6 +110,12 @@ hashes y permisos; verificar descarga de versiones antiguas; conservar las copia
 hasta documentar el resultado. Esta entrega no ejecuta una migración R2 remota automática.
 
 ## Activación y comprobaciones
+
+La comprobación local reproducible es `npm run test:spacetime:files` (Node.js 22 o superior
+y CLI `spacetime` 2.12.0 en el PATH). Crea claves sintéticas y un servidor persistente
+temporal en `127.0.0.1:3300`, falla si el puerto ya está ocupado y elimina sus datos al pasar.
+No publica en Maincloud ni usa el perfil habitual de la CLI. `B20_SMOKE_PORT` permite elegir
+otro puerto local libre. En caso de fallo imprime la ruta de diagnóstico temporal.
 
 1. Revisar CLI, SDK y bindings compatibles; publicar el módulo actualizado con
    `npm run spacetime:publish:maincloud` y `--delete-data=never`. Si el esquema no admite la

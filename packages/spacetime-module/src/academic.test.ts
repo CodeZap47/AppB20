@@ -20,7 +20,7 @@ import {
   resource_files, restore_page_snapshot, restore_work_version, review_work, save_activity_links,
   save_work_version, set_file_service, set_progress, update_activity_v2, update_assignment_v2,
   work_details, work_revisions, work_reviews,
-  begin_resource_upload, put_resource_chunk, finalize_resource_upload, cancel_resource_upload,
+  begin_resource_upload, put_resource_chunk, finalize_resource_upload, cancel_resource_upload, restore_resource_file,
   get_resource_upload_status, get_resource_manifest, read_resource_chunk, set_resource_capacity, expire_resource_upload,
 } from './index';
 
@@ -110,6 +110,15 @@ const nativeUpload = { ...upload, name: 'prueba.bin', mime: 'application/octet-s
 const nativeChunk = { uploadId: upload.uploadId, index: 0, bytes: nativeBytes, sha256: hash(nativeBytes) };
 
 describe('archivos privados en SpacetimeDB', () => {
+  it('distingue un intento inexistente sin conceder estado a personas ajenas', () => {
+    const { ctx, proc, as } = setup();
+    expect(get_resource_upload_status(proc, upload)).toBe('null');
+    begin_resource_upload(ctx, nativeUpload);
+    as(coauthor);
+    expect(() => get_resource_upload_status(proc, upload)).toThrow('pertenece');
+    as(removed);
+    expect(() => get_resource_upload_status(proc, { uploadId: 'missing' })).toThrow('activo');
+  });
   it('reanuda sin duplicar bytes, confirmaciones ni versiones y conserva el historial', () => {
     const { ctx, proc, rows } = setup();
     begin_resource_upload(ctx, nativeUpload);
@@ -469,5 +478,88 @@ describe('Archivos: autorización, atestación del servicio e historial', () => 
     expect(() => get_file_download_access(proc, { fileId: 'legacy:8' })).toThrow('SpacetimeAuth');
     as(person('f'));
     expect(() => on_connect(ctx, {})).toThrow('SpacetimeAuth');
+  });
+});
+
+
+describe('adjuntos retirados de evidencias', () => {
+  const evidenceUpload = { ...nativeUpload, targetKind: 'evidence', targetId: 40n, expectedVersion: 1 };
+
+  it('conserva bytes y recupera el mismo adjunto una sola vez, sin crear historial de texto', () => {
+    const { ctx, proc, rows } = setup();
+    begin_resource_upload(ctx, evidenceUpload);
+    put_resource_chunk(ctx, nativeChunk);
+    finalize_resource_upload(ctx, upload);
+    remove_resource_file(ctx, { fileId: upload.uploadId, expectedVersion: 2 });
+    expect(rows('resourceFile')[0].removedAt).toBeDefined();
+    expect(JSON.parse(get_resource_manifest(proc, { fileId: upload.uploadId })))
+      .toMatchObject({ storageKind: 'spacetime', fileId: upload.uploadId, sha256: hash(nativeBytes) });
+    expect(read_resource_chunk(proc, { fileId: upload.uploadId, index: 0 }).bytes).toEqual(nativeBytes);
+    expect(rows('evidenceDetail')[0].version).toBe(3);
+    const restore = { fileId: upload.uploadId, expectedVersion: 3 };
+    restore_resource_file(ctx, restore);
+    restore_resource_file(ctx, restore);
+    expect(rows('resourceFile')).toHaveLength(1);
+    expect(rows('resourceFile')[0]).toMatchObject({ id: upload.uploadId, targetKind: 'evidence', targetId: 40n, removedAt: undefined });
+    expect(rows('resourceChunk')).toHaveLength(1);
+    expect(rows('resourceCapacity')[0].reservedBytes).toBe(5n);
+    expect(rows('evidenceDetail')[0].version).toBe(4);
+    expect(rows('activity')[0].version).toBe(4);
+    expect(rows('evidence')[0].content).toBe('Solución');
+    expect(rows('changeLog').filter((row) => row.action === 'restore' && row.entityId === upload.uploadId)).toHaveLength(1);
+  });
+
+  it('solo permite restaurar al autor activo y rechaza una versión obsoleta sin cambios', () => {
+    const { ctx, proc, as, rows } = setup();
+    begin_resource_upload(ctx, evidenceUpload); put_resource_chunk(ctx, nativeChunk); finalize_resource_upload(ctx, upload);
+    remove_resource_file(ctx, { fileId: upload.uploadId, expectedVersion: 2 });
+    const restore = { fileId: upload.uploadId, expectedVersion: 3 };
+    for (const identity of [coauthor, owner]) {
+      as(identity);
+      // Los adjuntos académicos son legibles para el grupo, pero no editables por el compañero o administrador.
+      expect(read_resource_chunk(proc, { fileId: upload.uploadId, index: 0 }).bytes).toEqual(nativeBytes);
+      expect(() => restore_resource_file(ctx, restore)).toThrow('Solo el autor');
+    }
+    as(removed);
+    expect(() => restore_resource_file(ctx, restore)).toThrow('activo');
+    expect(() => read_resource_chunk(proc, { fileId: upload.uploadId, index: 0 })).toThrow('activo');
+    as(author);
+    expect(() => restore_resource_file(ctx, { ...restore, expectedVersion: 2 })).toThrow('cambió');
+    expect(rows('resourceFile')[0].removedAt).toBeDefined();
+    expect(rows('evidenceDetail')[0].version).toBe(3);
+    restore_resource_file(ctx, restore);
+    as(coauthor);
+    expect(() => restore_resource_file(ctx, restore)).toThrow('Solo el autor');
+  });
+
+  it('no reasigna archivos de otro destino ni recupera un destino inexistente', () => {
+    const { ctx, proc, db } = setup();
+    begin_resource_upload(ctx, nativeUpload); put_resource_chunk(ctx, nativeChunk); finalize_resource_upload(ctx, upload);
+    remove_resource_file(ctx, { fileId: upload.uploadId, expectedVersion: 4 });
+    expect(() => restore_resource_file(ctx, { fileId: upload.uploadId, expectedVersion: 5 })).toThrow('historial');
+    expect(() => restore_resource_file(ctx, { fileId: 'no-existe', expectedVersion: 1 })).toThrow('no existe');
+
+    const otherId = '12345678-1234-4234-8234-123456789def';
+    begin_resource_upload(ctx, { ...evidenceUpload, uploadId: otherId });
+    put_resource_chunk(ctx, { ...nativeChunk, uploadId: otherId });
+    finalize_resource_upload(ctx, { uploadId: otherId });
+    remove_resource_file(ctx, { fileId: otherId, expectedVersion: 2 });
+    db.evidence.id.delete(40n);
+    expect(() => restore_resource_file(ctx, { fileId: otherId, expectedVersion: 3 })).toThrow('evidencia no existe');
+    expect(() => get_resource_manifest(proc, { fileId: otherId })).toThrow('evidencia no existe');
+    expect(() => read_resource_chunk(proc, { fileId: otherId, index: 0 })).toThrow('evidencia no existe');
+  });
+
+  it('recupera también la referencia anterior R2 sin cambiar ID o ubicación', () => {
+    const { ctx, proc, as, rows } = setup();
+    const request = { ...upload, targetKind: 'evidence', targetId: 40n, expectedVersion: 1 };
+    authorize_file_upload(proc, request); as(service);
+    finalize_file_upload(ctx, { ...finalUpload, ...request }); as(author);
+    remove_resource_file(ctx, { fileId: upload.uploadId, expectedVersion: 2 });
+    expect(JSON.parse(get_file_download_access(proc, { fileId: upload.uploadId })).storageKey).toBe('academic/verified-object');
+    restore_resource_file(ctx, { fileId: upload.uploadId, expectedVersion: 3 });
+    expect(rows('resourceFile')[0]).toMatchObject({ id: upload.uploadId, targetId: 40n,
+      storageKey: 'academic/verified-object', etag: 'verified-etag', removedAt: undefined });
+    expect(rows('resourceChunk')).toHaveLength(0);
   });
 });
