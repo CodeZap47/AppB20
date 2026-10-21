@@ -23,14 +23,16 @@ un servidor SpacetimeDB persistente aislado, tres identidades sintéticas, reini
 restauración de evidencias y transferencias de hasta 50 MiB. La migración se ensayó
 publicando el esquema anterior con datos y actualizando sin borrarlos, con backfill repetido.
 
-Comprobación del 21 de octubre de 2026: el código local y sus bindings incluyen el protocolo
-de archivos nativos y `restore_resource_file`; Maincloud todavía no expone esas operaciones.
-La web pública también conserva una versión anterior. Subir el código a GitHub no acredita
-la actualización de ninguno de esos servicios. Los resultados automatizados vigentes y el
-registro de validación en producción se mantienen en
-[estado-del-proyecto.md](estado-del-proyecto.md). Publicar requiere conservar los datos
-existentes y actualizar primero el módulo compatible y después Pages.
+Validación del 21 de octubre de 2026: el módulo de la revisión `e64bfc4` se publicó en
+Maincloud con `--delete-data=never`, incluyendo archivos nativos y `restore_resource_file`.
+Se compararon las filas de 22 tablas con el respaldo previo y se conservaron todos los
+registros. La adaptación pasó 622 pruebas, tipos, compilaciones con Node 22 y la prueba
+con servidor persistente y tres identidades sintéticas, incluido el archivo de 50 MiB.
 
+Pages se actualiza por la integración Git existente en `codex/pages-spacetimeauth`, después
+del módulo. Confirmar la revisión y el estado **Success** en Deployments y los assets del
+dominio estable; un push por sí solo no acredita publicación. La validación humana sigue
+pendiente; consultar [estado-del-proyecto.md](estado-del-proyecto.md).
 La activación real conserva las cuentas de SpacetimeAuth y exige invitación. Los ejemplos de la simulación no se importan. La primera cuenta invitada debe unirse; los creadores pueden importar las materias desde Ajustes y administrar invitaciones.
 
 La comprobación humana con cuentas reales, recarga y cambios de membresía sigue pendiente.

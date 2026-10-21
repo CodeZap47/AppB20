@@ -89,13 +89,33 @@ recursos nuevos ni activar facturación.
 
 ## Registro de validación en producción
 
-La lectura del esquema de Maincloud y de la web pública del 21 de octubre de 2026 confirma
+La lectura previa a esta adaptación, el 21 de octubre de 2026, confirmó
 que el despliegue conserva una versión anterior: Maincloud incluye Ayuda, pero no las
 operaciones de archivos nativos ni `restore_resource_file`; Pages tampoco incorpora la
 pantalla de Ayuda. El código, los bindings y GitHub se verifican por separado de esa
 publicación. Un push a `main` no se registra como un despliegue completado.
 
-Esta entrega no incorpora todavía evidencia de publicación ni de recorridos con tres cuentas.
+El registro siguiente actualiza la publicación del módulo. Los recorridos con tres cuentas reales siguen pendientes.
 Al realizarlos, registrar fecha, versión publicada, presentación, escenario, resultado y
 referencia de evidencia sin tokens ni datos personales. Los resultados automatizados y de
 compilación se adjuntan al cierre de implementación, separados de la validación humana.
+
+
+### Adaptación de Tareas y Actividades — 2026-10-21
+
+- Módulo `e64bfc4` publicado en Maincloud `app-b20-34245` con `--delete-data=never`.
+  Se verificaron las tablas privadas nativas y la conservación íntegra de las filas de 22 tablas
+  académicas/configuración, incluidas invitaciones. No se importaron datos de la simulación.
+- Node `22.23.3`, CLI/SDK `2.12.0`: **622 pruebas aprobadas** (app 348, core 63,
+  módulo 116, API 50, web 45), tipos y compilaciones web/PWA, extensión y Worker heredado.
+- Prueba con servidor persistente y tres identidades sintéticas aprobada: archivo de 50 MiB,
+  interrupción/reanudación, dos reinicios, historial, cancelación, integridad y baja inmediata.
+  La prueba espera la actualización de la segunda sesión antes de comprobar su caché.
+- Se corrigieron reintentos de lotes con confirmación incierta, aislamiento de formularios entre
+  tareas y respuestas tardías al abandonar una pantalla. Las operaciones antiguas sin versión
+  conservan su firma y piden actualizar antes de editar o retirar adjuntos.
+- Pages usa la integración Git existente de `codex/pages-spacetimeauth`. Verificar su revisión
+  y resultado en Deployments; la compilación local o el push no acreditan por sí solos éxito.
+- La base aún no tiene miembros incorporados ni publicaciones académicas. La primera persona
+  invitada debe unirse; permanecen pendientes los recorridos humanos con cuentas reales y la
+  medición de transferencias grandes en dispositivos del grupo.
