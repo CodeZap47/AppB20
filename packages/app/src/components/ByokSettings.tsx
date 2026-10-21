@@ -95,25 +95,28 @@ function ByokAccountSettings({ token, simulated, active }: { token?: string; sim
       {simulated && <p className="ai-notice">Simulación local: no introduzcas claves reales. Los cambios son ficticios y no se guardan ni se envían.</p>}
       {status && <>
         <p className="ai-notice" role="status">{status.enabled ? 'La generación con IA está habilitada para el grupo.' : status.reason || 'La generación con IA todavía no está habilitada para el grupo.'}</p>
+        <p className="badges"><span className={status.enabled ? 'badge badge--group' : 'badge'}>{status.enabled ? 'Servicio habilitado' : 'Servicio sin habilitar'}</span><span className={status.consented ? 'badge badge--group' : 'badge'}>{status.consented ? 'Consentimiento vigente' : 'Sin consentimiento'}</span></p>
         <p>Modelo previsto: <strong>{status.model || 'Pendiente de configurar'}</strong>. Clave propia: <strong>{keyState.configured ? 'Configurada' : 'Sin configurar'}</strong>.</p>
-        <p className="field__hint">Hasta {status.limits.maxSources} fuentes y {status.limits.maxCharacters.toLocaleString('es-MX')} caracteres por preparación; {status.limits.maxOutputTokens.toLocaleString('es-MX')} tokens de salida por generación.</p>
-        <p className="field__hint">Límites de la app por persona: {status.limits.maxConcurrent} generación simultánea, {status.limits.requestsPerHour} por hora, {status.limits.requestsPerDay} por día y {status.limits.dailyEstimatedTokens.toLocaleString('es-MX')} tokens estimados diarios. Son controles de consumo, no una garantía de cargos del proveedor.</p>
+        <details className="settings-details"><summary>Límites de uso</summary>
+          <p className="field__hint">Hasta {status.limits.maxSources} fuentes y {status.limits.maxCharacters.toLocaleString('es-MX')} caracteres por preparación; {status.limits.maxOutputTokens.toLocaleString('es-MX')} tokens de salida por generación.</p>
+          <p className="field__hint">Límites de la app por persona: {status.limits.maxConcurrent} generación simultánea, {status.limits.requestsPerHour} por hora, {status.limits.requestsPerDay} por día y {status.limits.dailyEstimatedTokens.toLocaleString('es-MX')} tokens estimados diarios. Son controles de consumo, no una garantía de cargos del proveedor.</p>
+        </details>
       </>}
-      {simulated ? <div className="form__actions"><button type="button" disabled={keyState.configured || !active || busy} onClick={() => { setKeyState({ configured: true }); setNotice('Clave ficticia configurada solo durante esta simulación.'); }}>Usar clave simulada</button>
-        {keyState.configured && <button type="button" disabled={busy} onClick={deleteKey}>Eliminar clave simulada</button>}</div> : <form className="form" onSubmit={saveKey} autoComplete="off">
-        <label className="field"><span>{keyState.configured ? 'Nueva clave de Gemini' : 'Clave personal de Gemini'}</span><input ref={keyInput} type="password" value={apiKey} autoComplete="new-password" spellCheck={false} autoCapitalize="none" minLength={20} maxLength={256}
-          disabled={loading || busy || !status || status.serviceConfigured === false || !active} onChange={(event) => setApiKey(event.target.value)} /></label>
-        <p className="field__hint">Registra abajo el consentimiento vigente antes de guardar una clave. Se borra del formulario al enviar, cancelar, cambiar de sesión o salir de esta pantalla. Guardarla no hace una llamada de prueba.</p>
-        <div className="form__actions"><button type="submit" disabled={!apiKey.trim() || busy || !status?.consented || status.serviceConfigured === false || !active}>{keyState.configured ? 'Sustituir clave' : 'Guardar clave'}</button>
-          <button type="button" className="button--secondary" onClick={() => { setApiKey(''); setNotice('Campo de clave limpiado.'); }}>Cancelar</button>
-          {keyState.configured && <button type="button" disabled={busy || !active} onClick={deleteKey}>Eliminar clave</button>}</div>
-      </form>}
       {status && <fieldset disabled={busy || loading || !active || status.serviceConfigured === false} className="ai-consent">
         <legend>Consentimiento para usar IA · versión {status.consentVersion}</legend>
         <label><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />Entiendo que, al confirmar una generación, el texto que revise y mi clave se usarán para solicitar borradores de estudio, guías, explicaciones, preguntas clarificadoras o tarjetas a Google Gemini. Revisaré los fragmentos antes de enviarlos.</label>
         <p className="field__hint">Este consentimiento es individual. La administración debe confirmar por separado la elegibilidad del grupo y habilitar el servicio. La generación real comienza desactivada.</p>
         <button type="button" disabled={consent === status.consented} onClick={saveConsent}>{consent ? 'Guardar consentimiento' : 'Retirar consentimiento'}</button>
       </fieldset>}
+      {simulated ? <div className="form__actions"><button type="button" disabled={keyState.configured || !active || busy} onClick={() => { setKeyState({ configured: true }); setNotice('Clave ficticia configurada solo durante esta simulación.'); }}>Usar clave simulada</button>
+        {keyState.configured && <button type="button" disabled={busy} onClick={deleteKey}>Eliminar clave simulada</button>}</div> : <form className="form" onSubmit={saveKey} autoComplete="off">
+        <label className="field"><span>{keyState.configured ? 'Nueva clave de Gemini' : 'Clave personal de Gemini'}</span><input ref={keyInput} type="password" value={apiKey} autoComplete="new-password" spellCheck={false} autoCapitalize="none" minLength={20} maxLength={256}
+          disabled={loading || busy || !status || status.serviceConfigured === false || !active} onChange={(event) => setApiKey(event.target.value)} /></label>
+        <p className="field__hint">Registra arriba el consentimiento vigente antes de guardar una clave. Se borra del formulario al enviar, cancelar, cambiar de sesión o salir de esta pantalla. Guardarla no hace una llamada de prueba.</p>
+        <div className="form__actions"><button type="submit" disabled={!apiKey.trim() || busy || !status?.consented || status.serviceConfigured === false || !active}>{keyState.configured ? 'Sustituir clave' : 'Guardar clave'}</button>
+          <button type="button" className="secondary" onClick={() => { setApiKey(''); setNotice('Campo de clave limpiado.'); }}>Cancelar</button>
+          {keyState.configured && <button type="button" disabled={busy || !active} onClick={deleteKey}>Eliminar clave</button>}</div>
+      </form>}
       {error && <p role="alert" className="error">{error}</p>}
       {notice && <p role="status">{notice}</p>}
     </section>

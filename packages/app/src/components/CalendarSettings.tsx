@@ -80,9 +80,11 @@ function PeriodForm({ period, calendar }: { period: number; calendar: TermDates[
       )}
       <div className="form__actions">
         <span className="muted form__note" role="status">
-          {done && !changed
-            ? 'Fechas guardadas.'
-            : 'Deja las dos fechas vacías en un parcial que todavía no quieras configurar.'}
+          {changed
+            ? 'Cambios sin guardar.'
+            : done
+              ? 'Fechas guardadas.'
+              : 'Deja las dos fechas vacías en un parcial que todavía no quieras configurar.'}
         </span>
         <button type="submit" disabled={!changed}>
           Guardar fechas
@@ -106,7 +108,10 @@ export function CalendarSettings() {
 
   return (
     <section className="panel settings">
-      <h2>Calendario de parciales</h2>
+      <div className="row row--between">
+        <h2>Calendario de parciales</h2>
+        {!admin && <span className="badge">Solo lectura</span>}
+      </div>
       <p className="muted">
         Con estas fechas la app sabe en qué cuatrimestre y parcial va el grupo. Al llegar el primer día
         de un parcial, los formularios de «Registrar actividad» y «Nueva tarea o actividad» abren ya
@@ -154,7 +159,7 @@ export function CalendarSettings() {
           ) : (
             <p className="muted">Este cuatrimestre todavía no tiene fechas.</p>
           )}
-          <p className="field__hint">Solo los administradores del grupo pueden cambiar estas fechas.</p>
+          <p className="field__hint">Las fechas las cambia la administración del grupo.</p>
         </>
       )}
     </section>
