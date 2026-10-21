@@ -2,7 +2,6 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   // Cambiar este nombre si Cloudflare asigna uno distinto al crear el proyecto.
   "name": "app-b20",
-  "account_id": "ab3a0c0641ce296cd9f38fab76f6d90b",
   "pages_build_output_dir": "./apps/web/dist",
   "compatibility_date": "2026-10-20",
   // Pages toma estas variables públicas como fuente de verdad del build.
