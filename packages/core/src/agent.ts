@@ -59,3 +59,52 @@ export function renderAgentPremises(owner: string, bot: string): AgentPremises {
     doesNot: DOES_NOT.map((text, index) => ({ number: DOES.length + index + 1, text: fill(text) })),
   };
 }
+
+/** Límites y retención del agente; los aplican el servidor y la simulación por igual (AG-3). */
+export const AGENT_LIMITS = { sources: 30, draftChars: 40_000, suggestions: 20, suggestionChars: 2_000, snapshotsKept: 5, checksKept: 10, sessionRetentionDays: 180 } as const;
+export const AGENT_STAGES = ['understand', 'approach', 'outline', 'review'] as const;
+export type AgentStage = typeof AGENT_STAGES[number];
+export const AGENT_SOURCE_KINDS = ['work', 'evidence', 'note'] as const;
+export type AgentSourceKind = typeof AGENT_SOURCE_KINDS[number];
+export interface AgentSourceRef { kind: AgentSourceKind; refId: string }
+export interface AgentSuggestionInput { reason: string; original: string; replacement: string }
+
+export function cleanAgentSources(value: unknown): AgentSourceRef[] {
+  if (!Array.isArray(value) || !value.length || value.length > AGENT_LIMITS.sources) throw new Error(`Elige entre 1 y ${AGENT_LIMITS.sources} textos propios.`);
+  const seen = new Set<string>();
+  return value.map((entry) => {
+    const { kind, refId } = (entry ?? {}) as Record<string, unknown>;
+    if (!AGENT_SOURCE_KINDS.includes(kind as AgentSourceKind) || typeof refId !== 'string' || !/^[0-9A-Za-z_-]{1,40}$/.test(refId)) throw new Error('Una fuente del estilo no es válida.');
+    const key = `${kind}:${refId}`; if (seen.has(key)) throw new Error('Una fuente está repetida.'); seen.add(key);
+    return { kind: kind as AgentSourceKind, refId };
+  });
+}
+
+export function cleanAgentDraft(value: string): string {
+  if (typeof value !== 'string' || value.length > AGENT_LIMITS.draftChars) throw new Error(`El borrador admite hasta ${AGENT_LIMITS.draftChars} caracteres.`);
+  return value;
+}
+
+export function cleanAgentStage(value: string): AgentStage {
+  if (!AGENT_STAGES.includes(value as AgentStage)) throw new Error('La etapa no es válida.');
+  return value as AgentStage;
+}
+
+/** Sugerencias sobre un borrador concreto: lo reemplazado debe existir en él. */
+export function cleanAgentSuggestions(value: unknown, draft: string): AgentSuggestionInput[] {
+  if (!Array.isArray(value) || value.length > AGENT_LIMITS.suggestions) throw new Error(`Se admiten hasta ${AGENT_LIMITS.suggestions} sugerencias.`);
+  return value.map((entry) => {
+    const { reason, original, replacement } = (entry ?? {}) as Record<string, unknown>;
+    if ([reason, original, replacement].some((text) => typeof text !== 'string' || text.length > AGENT_LIMITS.suggestionChars) || !(reason as string).trim()) throw new Error('Una sugerencia no es válida.');
+    if (original && !draft.includes(original as string)) throw new Error('Una sugerencia no corresponde a este borrador.');
+    if (!original && replacement) throw new Error('Una sugerencia sin texto original no puede reemplazar nada.');
+    return { reason: (reason as string).trim(), original: original as string, replacement: replacement as string };
+  });
+}
+
+/** Aplica una sugerencia aceptada; las que solo orientan dejan el borrador intacto. */
+export function applyAgentSuggestion(draft: string, suggestion: Pick<AgentSuggestionInput, 'original' | 'replacement'>): string {
+  if (!suggestion.original) return draft;
+  if (!draft.includes(suggestion.original)) throw new Error('El borrador cambió y la sugerencia ya no aplica.');
+  return draft.replace(suggestion.original, suggestion.replacement);
+}

@@ -6,6 +6,7 @@ import { createNotificationActions } from './notificationActions';
 import { createPracticeActions } from './practiceActions';
 import { createCommunity4Actions } from './community4Actions';
 import { createFeedActions } from './feedActions';
+import { createAgentActions } from './agentActions';
 import { helpResponse } from './helpResponse';
 import { Identity, Timestamp } from 'spacetimedb';
 import type { DbConnection } from '../module_bindings';
@@ -110,6 +111,7 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
     ...createPracticeActions(getConnection, identity),
     ...createCommunity4Actions(getConnection),
     ...createFeedActions(getConnection),
+    ...createAgentActions(getConnection),
     ...createPresentationActions(getConnection, identity),
     ...createStudyRoomActions(getConnection, identity),
     ...createTrashActions(getConnection),

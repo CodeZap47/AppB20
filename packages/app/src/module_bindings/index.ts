@@ -35,6 +35,7 @@ import {
 
 // Import all reducer arg schemas
 import AcceptAnswerReducer from "./accept_answer_reducer";
+import AcknowledgeAgentMatchReducer from "./acknowledge_agent_match_reducer";
 import AddEvidenceReducer from "./add_evidence_reducer";
 import AddGuideSourcesReducer from "./add_guide_sources_reducer";
 import AddGuideSourcesV3Reducer from "./add_guide_sources_v_3_reducer";
@@ -56,6 +57,7 @@ import CancelHelpContactReducer from "./cancel_help_contact_reducer";
 import CancelPollReducer from "./cancel_poll_reducer";
 import CancelResourceUploadReducer from "./cancel_resource_upload_reducer";
 import CastVoteReducer from "./cast_vote_reducer";
+import CheckAgentOriginalityReducer from "./check_agent_originality_reducer";
 import CloseHelpContactReducer from "./close_help_contact_reducer";
 import CommentAcademicReducer from "./comment_academic_reducer";
 import CommentFeedPostReducer from "./comment_feed_post_reducer";
@@ -79,11 +81,14 @@ import CreateStudyRoomReducer from "./create_study_room_reducer";
 import CreateSubjectReducer from "./create_subject_reducer";
 import CreateTeachingPracticeReducer from "./create_teaching_practice_reducer";
 import CreateTermReducer from "./create_term_reducer";
+import DeleteAgentSessionReducer from "./delete_agent_session_reducer";
 import DeleteFeedCommentReducer from "./delete_feed_comment_reducer";
 import DeleteFeedPostReducer from "./delete_feed_post_reducer";
 import DeleteMessageReducer from "./delete_message_reducer";
+import DisableAgentReducer from "./disable_agent_reducer";
 import EditFeedPostReducer from "./edit_feed_post_reducer";
 import EditMessageReducer from "./edit_message_reducer";
+import EnableAgentReducer from "./enable_agent_reducer";
 import FinalizeFileUploadReducer from "./finalize_file_upload_reducer";
 import FinalizeResourceUploadReducer from "./finalize_resource_upload_reducer";
 import ImportCurriculumReducer from "./import_curriculum_reducer";
@@ -107,6 +112,7 @@ import PracticeCreateCodeReviewReducer from "./practice_create_code_review_reduc
 import PracticeResolveCodeCommentReducer from "./practice_resolve_code_comment_reducer";
 import PracticeSaveSolutionReducer from "./practice_save_solution_reducer";
 import PracticeUnlockHintReducer from "./practice_unlock_hint_reducer";
+import ProposeAgentSuggestionsReducer from "./propose_agent_suggestions_reducer";
 import PublishNoteVersionReducer from "./publish_note_version_reducer";
 import PublishSpacedCollectionReducer from "./publish_spaced_collection_reducer";
 import PublishStudyRoomSummaryReducer from "./publish_study_room_summary_reducer";
@@ -132,6 +138,7 @@ import ReopenTeachingPracticeReducer from "./reopen_teaching_practice_reducer";
 import ReplaceSpacedCardSourceReducer from "./replace_spaced_card_source_reducer";
 import ReportMessageReducer from "./report_message_reducer";
 import RequestNotificationTestReducer from "./request_notification_test_reducer";
+import ResolveAgentSuggestionReducer from "./resolve_agent_suggestion_reducer";
 import ResolveMessageReportReducer from "./resolve_message_report_reducer";
 import ResolveOpportunityFeedbackReducer from "./resolve_opportunity_feedback_reducer";
 import RespondHelpContactReducer from "./respond_help_contact_reducer";
@@ -147,6 +154,7 @@ import ReviewSpacedCardReducer from "./review_spaced_card_reducer";
 import ReviewWorkReducer from "./review_work_reducer";
 import RevokeInvitationReducer from "./revoke_invitation_reducer";
 import SaveActivityLinksReducer from "./save_activity_links_reducer";
+import SaveAgentDraftReducer from "./save_agent_draft_reducer";
 import SaveCalendarReducer from "./save_calendar_reducer";
 import SaveChatCommandReducer from "./save_chat_command_reducer";
 import SaveHelpPostReducer from "./save_help_post_reducer";
@@ -189,10 +197,12 @@ import SetStudyRoomMaterialReducer from "./set_study_room_material_reducer";
 import SetStudyRoomStatusReducer from "./set_study_room_status_reducer";
 import SetTeachingReviewerReducer from "./set_teaching_reviewer_reducer";
 import ShareBirthdayReducer from "./share_birthday_reducer";
+import StartAgentSessionReducer from "./start_agent_session_reducer";
 import StartTeachingPracticeReducer from "./start_teaching_practice_reducer";
 import ToggleAnswerUsefulnessReducer from "./toggle_answer_usefulness_reducer";
 import ToggleFeedReactionReducer from "./toggle_feed_reaction_reducer";
 import ToggleReactionReducer from "./toggle_reaction_reducer";
+import TrainAgentReducer from "./train_agent_reducer";
 import UpdateActivityReducer from "./update_activity_reducer";
 import UpdateActivityV2Reducer from "./update_activity_v_2_reducer";
 import UpdateAssignmentReducer from "./update_assignment_reducer";
@@ -290,6 +300,12 @@ import MembersRow from "./members_table";
 import MessageReactionsRow from "./message_reactions_table";
 import MuseumEntriesRow from "./museum_entries_table";
 import MuseumRevisionsRow from "./museum_revisions_table";
+import MyAgentOriginalityChecksRow from "./my_agent_originality_checks_table";
+import MyAgentProfileRow from "./my_agent_profile_table";
+import MyAgentSessionsRow from "./my_agent_sessions_table";
+import MyAgentSourcesRow from "./my_agent_sources_table";
+import MyAgentStyleSnapshotsRow from "./my_agent_style_snapshots_table";
+import MyAgentSuggestionsRow from "./my_agent_suggestions_table";
 import MyBlockedMembersRow from "./my_blocked_members_table";
 import MyChallengeProgressRow from "./my_challenge_progress_table";
 import MyChatCommandsRow from "./my_chat_commands_table";
@@ -633,6 +649,48 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MuseumRevisionsRow),
+  myAgentOriginalityChecks: __table({
+    name: 'my_agent_originality_checks',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyAgentOriginalityChecksRow),
+  myAgentProfile: __table({
+    name: 'my_agent_profile',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyAgentProfileRow),
+  myAgentSessions: __table({
+    name: 'my_agent_sessions',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyAgentSessionsRow),
+  myAgentSources: __table({
+    name: 'my_agent_sources',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyAgentSourcesRow),
+  myAgentStyleSnapshots: __table({
+    name: 'my_agent_style_snapshots',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyAgentStyleSnapshotsRow),
+  myAgentSuggestions: __table({
+    name: 'my_agent_suggestions',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyAgentSuggestionsRow),
   myBlockedMembers: __table({
     name: 'my_blocked_members',
     indexes: [
@@ -1093,6 +1151,7 @@ const tablesSchema = __schema({
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
   __reducerSchema("accept_answer", AcceptAnswerReducer),
+  __reducerSchema("acknowledge_agent_match", AcknowledgeAgentMatchReducer),
   __reducerSchema("add_evidence", AddEvidenceReducer),
   __reducerSchema("add_guide_sources", AddGuideSourcesReducer),
   __reducerSchema("add_guide_sources_v_3", AddGuideSourcesV3Reducer),
@@ -1114,6 +1173,7 @@ const reducersSchema = __reducers(
   __reducerSchema("cancel_poll", CancelPollReducer),
   __reducerSchema("cancel_resource_upload", CancelResourceUploadReducer),
   __reducerSchema("cast_vote", CastVoteReducer),
+  __reducerSchema("check_agent_originality", CheckAgentOriginalityReducer),
   __reducerSchema("close_help_contact", CloseHelpContactReducer),
   __reducerSchema("comment_academic", CommentAcademicReducer),
   __reducerSchema("comment_feed_post", CommentFeedPostReducer),
@@ -1137,11 +1197,14 @@ const reducersSchema = __reducers(
   __reducerSchema("create_subject", CreateSubjectReducer),
   __reducerSchema("create_teaching_practice", CreateTeachingPracticeReducer),
   __reducerSchema("create_term", CreateTermReducer),
+  __reducerSchema("delete_agent_session", DeleteAgentSessionReducer),
   __reducerSchema("delete_feed_comment", DeleteFeedCommentReducer),
   __reducerSchema("delete_feed_post", DeleteFeedPostReducer),
   __reducerSchema("delete_message", DeleteMessageReducer),
+  __reducerSchema("disable_agent", DisableAgentReducer),
   __reducerSchema("edit_feed_post", EditFeedPostReducer),
   __reducerSchema("edit_message", EditMessageReducer),
+  __reducerSchema("enable_agent", EnableAgentReducer),
   __reducerSchema("finalize_file_upload", FinalizeFileUploadReducer),
   __reducerSchema("finalize_resource_upload", FinalizeResourceUploadReducer),
   __reducerSchema("import_curriculum", ImportCurriculumReducer),
@@ -1165,6 +1228,7 @@ const reducersSchema = __reducers(
   __reducerSchema("practice_resolve_code_comment", PracticeResolveCodeCommentReducer),
   __reducerSchema("practice_save_solution", PracticeSaveSolutionReducer),
   __reducerSchema("practice_unlock_hint", PracticeUnlockHintReducer),
+  __reducerSchema("propose_agent_suggestions", ProposeAgentSuggestionsReducer),
   __reducerSchema("publish_note_version", PublishNoteVersionReducer),
   __reducerSchema("publish_spaced_collection", PublishSpacedCollectionReducer),
   __reducerSchema("publish_study_room_summary", PublishStudyRoomSummaryReducer),
@@ -1190,6 +1254,7 @@ const reducersSchema = __reducers(
   __reducerSchema("replace_spaced_card_source", ReplaceSpacedCardSourceReducer),
   __reducerSchema("report_message", ReportMessageReducer),
   __reducerSchema("request_notification_test", RequestNotificationTestReducer),
+  __reducerSchema("resolve_agent_suggestion", ResolveAgentSuggestionReducer),
   __reducerSchema("resolve_message_report", ResolveMessageReportReducer),
   __reducerSchema("resolve_opportunity_feedback", ResolveOpportunityFeedbackReducer),
   __reducerSchema("respond_help_contact", RespondHelpContactReducer),
@@ -1205,6 +1270,7 @@ const reducersSchema = __reducers(
   __reducerSchema("review_work", ReviewWorkReducer),
   __reducerSchema("revoke_invitation", RevokeInvitationReducer),
   __reducerSchema("save_activity_links", SaveActivityLinksReducer),
+  __reducerSchema("save_agent_draft", SaveAgentDraftReducer),
   __reducerSchema("save_calendar", SaveCalendarReducer),
   __reducerSchema("save_chat_command", SaveChatCommandReducer),
   __reducerSchema("save_help_post", SaveHelpPostReducer),
@@ -1247,10 +1313,12 @@ const reducersSchema = __reducers(
   __reducerSchema("set_study_room_status", SetStudyRoomStatusReducer),
   __reducerSchema("set_teaching_reviewer", SetTeachingReviewerReducer),
   __reducerSchema("share_birthday", ShareBirthdayReducer),
+  __reducerSchema("start_agent_session", StartAgentSessionReducer),
   __reducerSchema("start_teaching_practice", StartTeachingPracticeReducer),
   __reducerSchema("toggle_answer_usefulness", ToggleAnswerUsefulnessReducer),
   __reducerSchema("toggle_feed_reaction", ToggleFeedReactionReducer),
   __reducerSchema("toggle_reaction", ToggleReactionReducer),
+  __reducerSchema("train_agent", TrainAgentReducer),
   __reducerSchema("update_activity", UpdateActivityReducer),
   __reducerSchema("update_activity_v_2", UpdateActivityV2Reducer),
   __reducerSchema("update_assignment", UpdateAssignmentReducer),
@@ -1375,6 +1443,18 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "museum_entries": Omit<typeof tablesSchema.schemaType.tables["museumEntries"], "accessorName"> & { readonly accessorName: "museum_entries" };
     /** @deprecated Use `museumRevisions` instead. This alias will be removed in the next major version. */
     readonly "museum_revisions": Omit<typeof tablesSchema.schemaType.tables["museumRevisions"], "accessorName"> & { readonly accessorName: "museum_revisions" };
+    /** @deprecated Use `myAgentOriginalityChecks` instead. This alias will be removed in the next major version. */
+    readonly "my_agent_originality_checks": Omit<typeof tablesSchema.schemaType.tables["myAgentOriginalityChecks"], "accessorName"> & { readonly accessorName: "my_agent_originality_checks" };
+    /** @deprecated Use `myAgentProfile` instead. This alias will be removed in the next major version. */
+    readonly "my_agent_profile": Omit<typeof tablesSchema.schemaType.tables["myAgentProfile"], "accessorName"> & { readonly accessorName: "my_agent_profile" };
+    /** @deprecated Use `myAgentSessions` instead. This alias will be removed in the next major version. */
+    readonly "my_agent_sessions": Omit<typeof tablesSchema.schemaType.tables["myAgentSessions"], "accessorName"> & { readonly accessorName: "my_agent_sessions" };
+    /** @deprecated Use `myAgentSources` instead. This alias will be removed in the next major version. */
+    readonly "my_agent_sources": Omit<typeof tablesSchema.schemaType.tables["myAgentSources"], "accessorName"> & { readonly accessorName: "my_agent_sources" };
+    /** @deprecated Use `myAgentStyleSnapshots` instead. This alias will be removed in the next major version. */
+    readonly "my_agent_style_snapshots": Omit<typeof tablesSchema.schemaType.tables["myAgentStyleSnapshots"], "accessorName"> & { readonly accessorName: "my_agent_style_snapshots" };
+    /** @deprecated Use `myAgentSuggestions` instead. This alias will be removed in the next major version. */
+    readonly "my_agent_suggestions": Omit<typeof tablesSchema.schemaType.tables["myAgentSuggestions"], "accessorName"> & { readonly accessorName: "my_agent_suggestions" };
     /** @deprecated Use `myBlockedMembers` instead. This alias will be removed in the next major version. */
     readonly "my_blocked_members": Omit<typeof tablesSchema.schemaType.tables["myBlockedMembers"], "accessorName"> & { readonly accessorName: "my_blocked_members" };
     /** @deprecated Use `myChallengeProgress` instead. This alias will be removed in the next major version. */
@@ -1538,6 +1618,12 @@ const tableAccessorAliases = {
   "message_reactions": "messageReactions",
   "museum_entries": "museumEntries",
   "museum_revisions": "museumRevisions",
+  "my_agent_originality_checks": "myAgentOriginalityChecks",
+  "my_agent_profile": "myAgentProfile",
+  "my_agent_sessions": "myAgentSessions",
+  "my_agent_sources": "myAgentSources",
+  "my_agent_style_snapshots": "myAgentStyleSnapshots",
+  "my_agent_suggestions": "myAgentSuggestions",
   "my_blocked_members": "myBlockedMembers",
   "my_challenge_progress": "myChallengeProgress",
   "my_chat_commands": "myChatCommands",
@@ -1677,6 +1763,18 @@ export type DbView = __DbViewBase & {
   readonly "museum_entries": __DbViewBase["museumEntries"];
   /** @deprecated Use `museumRevisions` instead. This alias will be removed in the next major version. */
   readonly "museum_revisions": __DbViewBase["museumRevisions"];
+  /** @deprecated Use `myAgentOriginalityChecks` instead. This alias will be removed in the next major version. */
+  readonly "my_agent_originality_checks": __DbViewBase["myAgentOriginalityChecks"];
+  /** @deprecated Use `myAgentProfile` instead. This alias will be removed in the next major version. */
+  readonly "my_agent_profile": __DbViewBase["myAgentProfile"];
+  /** @deprecated Use `myAgentSessions` instead. This alias will be removed in the next major version. */
+  readonly "my_agent_sessions": __DbViewBase["myAgentSessions"];
+  /** @deprecated Use `myAgentSources` instead. This alias will be removed in the next major version. */
+  readonly "my_agent_sources": __DbViewBase["myAgentSources"];
+  /** @deprecated Use `myAgentStyleSnapshots` instead. This alias will be removed in the next major version. */
+  readonly "my_agent_style_snapshots": __DbViewBase["myAgentStyleSnapshots"];
+  /** @deprecated Use `myAgentSuggestions` instead. This alias will be removed in the next major version. */
+  readonly "my_agent_suggestions": __DbViewBase["myAgentSuggestions"];
   /** @deprecated Use `myBlockedMembers` instead. This alias will be removed in the next major version. */
   readonly "my_blocked_members": __DbViewBase["myBlockedMembers"];
   /** @deprecated Use `myChallengeProgress` instead. This alias will be removed in the next major version. */
@@ -1857,6 +1955,18 @@ export type Tables = __TablesBase & {
   readonly "museum_entries": __TablesBase["museumEntries"];
   /** @deprecated Use `museumRevisions` instead. This alias will be removed in the next major version. */
   readonly "museum_revisions": __TablesBase["museumRevisions"];
+  /** @deprecated Use `myAgentOriginalityChecks` instead. This alias will be removed in the next major version. */
+  readonly "my_agent_originality_checks": __TablesBase["myAgentOriginalityChecks"];
+  /** @deprecated Use `myAgentProfile` instead. This alias will be removed in the next major version. */
+  readonly "my_agent_profile": __TablesBase["myAgentProfile"];
+  /** @deprecated Use `myAgentSessions` instead. This alias will be removed in the next major version. */
+  readonly "my_agent_sessions": __TablesBase["myAgentSessions"];
+  /** @deprecated Use `myAgentSources` instead. This alias will be removed in the next major version. */
+  readonly "my_agent_sources": __TablesBase["myAgentSources"];
+  /** @deprecated Use `myAgentStyleSnapshots` instead. This alias will be removed in the next major version. */
+  readonly "my_agent_style_snapshots": __TablesBase["myAgentStyleSnapshots"];
+  /** @deprecated Use `myAgentSuggestions` instead. This alias will be removed in the next major version. */
+  readonly "my_agent_suggestions": __TablesBase["myAgentSuggestions"];
   /** @deprecated Use `myBlockedMembers` instead. This alias will be removed in the next major version. */
   readonly "my_blocked_members": __TablesBase["myBlockedMembers"];
   /** @deprecated Use `myChallengeProgress` instead. This alias will be removed in the next major version. */

@@ -63,6 +63,85 @@ export type ActivityLink = __Infer<typeof ActivityLink>;
 export const ActivityLinks = __t.object("ActivityLinks", {});
 export type ActivityLinks = __Infer<typeof ActivityLinks>;
 
+export const AgentExpiry = __t.object("AgentExpiry", {
+  id: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  sessionId: __t.u64(),
+  generation: __t.u32(),
+});
+export type AgentExpiry = __Infer<typeof AgentExpiry>;
+
+export const AgentOriginalityCheck = __t.object("AgentOriginalityCheck", {
+  id: __t.u64(),
+  sessionId: __t.u64(),
+  owner: __t.identity(),
+  draftVersion: __t.u32(),
+  matches: __t.string(),
+  acknowledged: __t.array(__t.string()),
+  createdAt: __t.timestamp(),
+});
+export type AgentOriginalityCheck = __Infer<typeof AgentOriginalityCheck>;
+
+export const AgentProfile = __t.object("AgentProfile", {
+  owner: __t.identity(),
+  premisesVersion: __t.u32(),
+  consentAt: __t.timestamp(),
+  styleVersion: __t.u32(),
+  version: __t.u32(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type AgentProfile = __Infer<typeof AgentProfile>;
+
+export const AgentSession = __t.object("AgentSession", {
+  id: __t.u64(),
+  owner: __t.identity(),
+  assignmentId: __t.u64(),
+  requestId: __t.string(),
+  stage: __t.string(),
+  draft: __t.string(),
+  draftVersion: __t.u32(),
+  generation: __t.u32(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type AgentSession = __Infer<typeof AgentSession>;
+
+export const AgentStyleSnapshot = __t.object("AgentStyleSnapshot", {
+  id: __t.u64(),
+  owner: __t.identity(),
+  version: __t.u32(),
+  features: __t.string(),
+  examples: __t.string(),
+  sources: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type AgentStyleSnapshot = __Infer<typeof AgentStyleSnapshot>;
+
+export const AgentStyleSource = __t.object("AgentStyleSource", {
+  key: __t.string(),
+  owner: __t.identity(),
+  kind: __t.string(),
+  refId: __t.u64(),
+  refVersion: __t.u32(),
+  addedAt: __t.timestamp(),
+});
+export type AgentStyleSource = __Infer<typeof AgentStyleSource>;
+
+export const AgentSuggestion = __t.object("AgentSuggestion", {
+  id: __t.u64(),
+  sessionId: __t.u64(),
+  owner: __t.identity(),
+  draftVersion: __t.u32(),
+  reason: __t.string(),
+  original: __t.string(),
+  replacement: __t.string(),
+  state: __t.string(),
+  createdAt: __t.timestamp(),
+  resolvedAt: __t.option(__t.timestamp()),
+});
+export type AgentSuggestion = __Infer<typeof AgentSuggestion>;
+
 export const AiConsent = __t.object("AiConsent", {
   actor: __t.identity(),
   version: __t.string(),
@@ -963,6 +1042,24 @@ export type MuseumRevision = __Infer<typeof MuseumRevision>;
 
 export const MuseumRevisions = __t.object("MuseumRevisions", {});
 export type MuseumRevisions = __Infer<typeof MuseumRevisions>;
+
+export const MyAgentOriginalityChecks = __t.object("MyAgentOriginalityChecks", {});
+export type MyAgentOriginalityChecks = __Infer<typeof MyAgentOriginalityChecks>;
+
+export const MyAgentProfile = __t.object("MyAgentProfile", {});
+export type MyAgentProfile = __Infer<typeof MyAgentProfile>;
+
+export const MyAgentSessions = __t.object("MyAgentSessions", {});
+export type MyAgentSessions = __Infer<typeof MyAgentSessions>;
+
+export const MyAgentSources = __t.object("MyAgentSources", {});
+export type MyAgentSources = __Infer<typeof MyAgentSources>;
+
+export const MyAgentStyleSnapshots = __t.object("MyAgentStyleSnapshots", {});
+export type MyAgentStyleSnapshots = __Infer<typeof MyAgentStyleSnapshots>;
+
+export const MyAgentSuggestions = __t.object("MyAgentSuggestions", {});
+export type MyAgentSuggestions = __Infer<typeof MyAgentSuggestions>;
 
 export const MyBlockedMembers = __t.object("MyBlockedMembers", {});
 export type MyBlockedMembers = __Infer<typeof MyBlockedMembers>;

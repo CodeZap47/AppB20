@@ -142,6 +142,8 @@ import { DemoNotificationsStore } from './demoNotifications';
 import { DemoPracticeStore } from './demoPractice';
 import { emptyPractice, type PracticeActions } from './practiceTypes';
 import { DemoCommunity4Store } from './community4Demo';
+import { DemoAgentStore } from './agentStore';
+import { emptyAgent, type AgentActions } from './agentTypes';
 import { DemoFeedStore } from './feedDemo';
 import { DemoHelpVersions } from './demoHelpVersions';
 import { DemoTeachingVersions } from './demoTeachingVersions';
@@ -266,6 +268,7 @@ export class DemoDataSource implements DataSource {
   #notifications: DemoNotificationsStore;
   #practice: DemoPracticeStore;
   #community4: DemoCommunity4Store;
+  #agent: DemoAgentStore;
   #feed: DemoFeedStore;
   #helpVersions: DemoHelpVersions;
   #teachingVersions: DemoTeachingVersions;
@@ -302,9 +305,10 @@ export class DemoDataSource implements DataSource {
       files: () => this.#academic.resources(), restoreFiles: (kind, id, ids) => this.#academic.restoreFiles(kind, id, ids), copyFiles: (from, to) => this.#academic.copyFiles(from, to) });
     this.#practice = new DemoPracticeStore({ state: () => this.#state, active: () => this.#activeMember(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit() });
     this.#community4 = new DemoCommunity4Store({ state: () => this.#state, active: () => this.#activeMember(), current: () => this.getSnapshot(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit(), createQuestion: (input) => this.askQuestion(input) });
+    this.#agent = new DemoAgentStore({ state: () => this.#state, active: () => this.#activeMember(), current: () => this.getSnapshot(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit() });
     this.#feed = new DemoFeedStore({ state: () => this.#state, active: () => this.#activeMember(), current: () => this.getSnapshot(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit() });
     this.#trash = new DemoTrashStore({ state: () => this.#state, active: () => this.#activeMember(), now: () => this.#now(), emit: () => this.#emit(), resources: () => this.#academic.resources(),
-      purgePrivate: (targets) => { const references = this.#knowledge.purgeTargets(targets); this.#academic.purgeTargets(targets, references); this.#exams?.purgeTargets(targets); for (const key of targets) { const separator = key.indexOf(':'); this.#community4.purgeMuseum(key.slice(0, separator), key.slice(separator + 1)); } } });
+      purgePrivate: (targets) => { const references = this.#knowledge.purgeTargets(targets); this.#academic.purgeTargets(targets, references); this.#exams?.purgeTargets(targets); for (const key of targets) { const separator = key.indexOf(':'); this.#community4.purgeMuseum(key.slice(0, separator), key.slice(separator + 1)); this.#agent.purgeSource(key.slice(0, separator), key.slice(separator + 1)); } } });
     this.#notifications = new DemoNotificationsStore({ state: () => this.#state, active: () => this.#activeMember(), current: () => this.getSnapshot(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit() });
     this.#rooms = new DemoRoomsStore({ state: () => this.#state, active: () => this.#activeMember(), id: () => this.#id(), now: () => this.#now(), emit: () => this.#emit(),
       sourceAvailable: (kind, sourceId) => !this.#withdrawals.get(`${kind}:${sourceId}`)?.withdrawnAt });
@@ -346,6 +350,16 @@ export class DemoDataSource implements DataSource {
   setOpportunityInterest = (...args: Parameters<Community4Actions['setOpportunityInterest']>) => this.#community4.setOpportunityInterest(...args);
   sendOpportunityFeedback = (...args: Parameters<Community4Actions['sendOpportunityFeedback']>) => this.#community4.sendOpportunityFeedback(...args);
   resolveOpportunityFeedback = (...args: Parameters<Community4Actions['resolveOpportunityFeedback']>) => this.#community4.resolveOpportunityFeedback(...args);
+  enableAgent = (...args: Parameters<AgentActions['enableAgent']>) => this.#agent.enableAgent(...args);
+  disableAgent = () => this.#agent.disableAgent();
+  trainAgent = (...args: Parameters<AgentActions['trainAgent']>) => this.#agent.trainAgent(...args);
+  startAgentSession = (...args: Parameters<AgentActions['startAgentSession']>) => this.#agent.startAgentSession(...args);
+  saveAgentDraft = (...args: Parameters<AgentActions['saveAgentDraft']>) => this.#agent.saveAgentDraft(...args);
+  deleteAgentSession = (...args: Parameters<AgentActions['deleteAgentSession']>) => this.#agent.deleteAgentSession(...args);
+  proposeAgentSuggestions = (...args: Parameters<AgentActions['proposeAgentSuggestions']>) => this.#agent.proposeAgentSuggestions(...args);
+  resolveAgentSuggestion = (...args: Parameters<AgentActions['resolveAgentSuggestion']>) => this.#agent.resolveAgentSuggestion(...args);
+  checkAgentOriginality = (...args: Parameters<AgentActions['checkAgentOriginality']>) => this.#agent.checkAgentOriginality(...args);
+  acknowledgeAgentMatch = (...args: Parameters<AgentActions['acknowledgeAgentMatch']>) => this.#agent.acknowledgeAgentMatch(...args);
   toggleFeedReaction = (...args: Parameters<FeedActions['toggleFeedReaction']>) => this.#feed.toggleFeedReaction(...args);
   createFeedPost = (...args: Parameters<FeedActions['createFeedPost']>) => this.#feed.createFeedPost(...args);
   editFeedPost = (...args: Parameters<FeedActions['editFeedPost']>) => this.#feed.editFeedPost(...args);
@@ -453,6 +467,7 @@ export class DemoDataSource implements DataSource {
         trashEntries: [],
         ...emptyPractice(),
         ...emptyCommunity4(),
+        ...emptyAgent(),
         ...emptyFeed(),
         ...emptyPresentationsSnapshot(),
         ...emptyStudyRooms(),
@@ -533,6 +548,7 @@ export class DemoDataSource implements DataSource {
       trashEntries: [],
       ...emptyPractice(),
       ...emptyCommunity4(),
+      ...emptyAgent(),
       ...emptyFeed(),
       ...emptyStudyRooms(),
       ...emptyDelivery2(),
@@ -611,7 +627,7 @@ export class DemoDataSource implements DataSource {
     combined.trashEntries = this.#trash.snapshot(me.id);
     combined.guideAiSourceAvailability = this.#guideAi.sourceAvailability(combined);
     const result = { ...combined, ...this.#rooms.snapshot(me.id) };
-    return { ...result, ...this.#notifications.snapshot(result), ...this.#practice.snapshot(), ...this.#community4.snapshot(result), ...this.#feed.snapshot(result) };
+    return { ...result, ...this.#notifications.snapshot(result), ...this.#practice.snapshot(), ...this.#community4.snapshot(result), ...this.#agent.snapshot(result), ...this.#feed.snapshot(result) };
   }
 
   #emit() {
@@ -909,6 +925,7 @@ export class DemoDataSource implements DataSource {
       m.id === memberId ? { ...m, status: 'removed' as const } : m,
     );
     this.#rooms.memberRemoved(memberId);
+    this.#agent.purgeOwner(memberId);
     this.#emit();
   }
 

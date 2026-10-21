@@ -1,6 +1,6 @@
 # Agente personal de escritura (NOMBRE_BOT): alcance y plan
 
-Estado: **AG-1 y AG-2 implementados localmente (interfaz simulada y lógica en `@b20/core`, sin publicar)**; AG-3 a AG-5 pendientes. Fecha de planeación: 21 de octubre de 2026.
+Estado: **AG-1, AG-2 y AG-3 implementados localmente (interfaz, lógica en `@b20/core` y datos en SpacetimeDB; sin publicar en Maincloud)**; AG-4 y AG-5 pendientes. Fecha de planeación: 21 de octubre de 2026.
 Se propone como función adicional **7.13** de la [definición del proyecto](definicion-del-proyecto.md)
 y aplica sin excepciones las reglas de BYOK, consentimiento, costos y revisión de la sección 4
 y de [Gemini con clave personal](gemini-byok.md).
@@ -153,28 +153,41 @@ Plan original:
 
 ### AG-3. Backend y base de datos (SpacetimeDB)
 
-Tablas nuevas, aditivas y privadas en `agentTables.ts`, con handlers en `agentHandlers.ts`:
+**Implementado localmente el 21 de octubre de 2026** en `packages/spacetime-module/src/agentTables.ts`
+y `agentHandlers.ts`, con pruebas en `agent.test.ts` y la prueba con servidor persistente
+`npm run test:spacetime:agent` (`scripts/smoke-spacetime-agent.mjs`, requiere Node 22). Falta
+publicar el módulo en Maincloud con `--delete-data=never`; las tablas son aditivas.
 
-| Tabla | Contenido |
+| Tabla (privada) | Contenido |
 | --- | --- |
-| `agent_profile` | Una fila por miembro: nombre derivado, estado, versión del perfil, consentimiento y fecha. |
-| `agent_style_source` | Fuentes elegidas con huella de versión (mismo patrón de manifiesto que las guías). |
-| `agent_style_snapshot` | Métricas de `styleFeatures` y resumen de estilo; versiones conservadas. |
-| `agent_session` | Una ayuda sobre una tarea: consigna, etapa, borrador y operación de IA vinculada. |
-| `agent_suggestion` | Sugerencias con estado propuesta/aceptada/rechazada. |
-| `agent_originality_check` | Resultado por versión de borrador: pares de fragmentos y puntaje por trabajo publicado. |
+| `agent_profile` | Una fila por miembro: versión de premisas aceptada, fecha de consentimiento y versión del estilo. |
+| `agent_style_source` | Fuentes elegidas con la versión de cada una al entrenar. |
+| `agent_style_snapshot` | `styleFeatures` + `describeStyle`, ejemplos y fuentes; se conservan los 5 más recientes. |
+| `agent_session` | Una ayuda sobre una tarea: etapa, borrador, versión del borrador y generación para vencimiento. |
+| `agent_suggestion` | Sugerencias propuestas, aceptadas o rechazadas, ligadas a la versión del borrador. |
+| `agent_originality_check` | Coincidencias calculadas en el servidor y marcas «reescribiré esta parte»; 10 por sesión. |
+| `agent_expiry` | Tabla programada interna: vence sesiones sin uso tras 180 días. |
 
-- Vistas `my_agent_profile`, `my_agent_sessions` y `my_agent_suggestions`: solo la persona
-  dueña; ninguna vista expone el estilo de otro miembro.
-- Reducers con membresía activa y control de versión esperada: `enable_agent`,
-  `set_agent_sources`, `start_agent_session`, `save_agent_draft`, `resolve_agent_suggestion`,
-  `record_originality_check`, `disable_agent` (borra perfil y snapshots).
-- La comparación entre «bots» se resuelve en el servidor contra trabajos y evidencias **ya
-  publicados al grupo** y contra la versión publicada de los borradores de otros agentes; nunca
-  se leen borradores privados ajenos. Al publicar un trabajo que superó el umbral se exige
-  confirmar que se revisó la alerta.
-- Retención y purga con el mecanismo existente de `trashHandlers`; prueba de humo con servidor
-  persistente siguiendo `scripts/smoke-spacetime-ai.mjs`.
+- **Vistas** `my_agent_profile`, `my_agent_sources`, `my_agent_style_snapshots`, `my_agent_sessions`,
+  `my_agent_suggestions` y `my_agent_originality_checks`: solo filas de quien consulta y solo con
+  membresía activa. Las tablas no se pueden suscribir directamente.
+- **Reducers:** `enable_agent` (exige la versión vigente de las premisas), `train_agent` (solo
+  trabajos con autoría propia, evidencias propias y notas propias de estudiante, no retiradas),
+  `start_agent_session` (idempotente por `requestId`), `save_agent_draft`, `propose_agent_suggestions`,
+  `resolve_agent_suggestion` (la aceptación se aplica en el servidor y sube la versión),
+  `check_agent_originality`, `acknowledge_agent_match`, `delete_agent_session` y `disable_agent`.
+  Todos verifican membresía activa, dueño y versión esperada.
+- **Comparación en el servidor** con `compareWithPublished` contra trabajos y evidencias no
+  retirados de otras personas (se excluyen los propios, los coautorados y las evidencias donde
+  la persona participa), ignorando el título y las instrucciones de la tarea. Los borradores de
+  otros agentes son privados y no se comparan.
+- **Retención y purga:** desactivar el agente o dar de baja al miembro borra todo lo suyo; la
+  purga de contenido retirado (`trashHandlers`) lo quita de las fuentes y de las comparaciones
+  guardadas; las sesiones sin uso vencen a los 180 días.
+- **Cliente:** `agentTypes.ts`, `agentActions.ts`, `agentSnapshot.ts` y la simulación
+  `agentStore.ts` con las mismas reglas. La pantalla pide aceptar las premisas, guarda borrador,
+  etapa, sugerencias y comparaciones, y conserva todo al recargar.
+- Pendiente de decidir: confirmar la alerta al publicar un trabajo con parecido alto.
 
 ### AG-4. Sincronización gradual con Gemini BYOK
 

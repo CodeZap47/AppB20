@@ -26,3 +26,7 @@
 .agent-panel > h2:first-child { margin-top: 0; }
 .agent-matches > li[data-level='block'] { border-color: currentColor; }
 .agent-compare + .agent-compare { margin-top: 0.5rem; }
+.agent-consent { margin-top: 1rem; display: grid; gap: 0.6rem; justify-items: start; }
+.agent-disable { margin: 1.25rem 0 0.5rem; }
+.agent-disable summary { cursor: pointer; color: var(--muted); }
+.agent-disable[open] { display: grid; gap: 0.5rem; justify-items: start; }

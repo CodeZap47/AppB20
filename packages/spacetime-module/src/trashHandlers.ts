@@ -4,6 +4,7 @@ import { retentionDeadline, retentionExpired } from '../../core/src/retention';
 import { activeMember, isActive, type Ctx, type ViewDb } from './moduleContext';
 import { purgeAiSource } from './aiHandlers';
 import { purgeMuseum } from './community4Handlers';
+import { purgeAgentSource } from './agentHandlers';
 import { purgeGuideAiSource } from './guideAiHandlers';
 import { purgeExamSource } from './examHandlers';
 import { rememberContributionOrigins } from './contributionOrigins';
@@ -169,6 +170,7 @@ function purgeOne(ctx: Ctx, row: RetentionRow) {
     const split = target.indexOf(':'); const kind = target.slice(0, split); const id = BigInt(target.slice(split + 1));
     purgeAiSource(ctx, kind, id);
     purgeMuseum(ctx.db, kind, id);
+    purgeAgentSource(ctx.db, kind, id);
     purgeGuideAiSource(ctx, kind, id);
     purgeExamSource(ctx, kind, id);
     unlinkSources(ctx, kind, id);
