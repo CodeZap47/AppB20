@@ -51,12 +51,16 @@ no se importan automáticamente. Los detalles están en [`spacetimeauth.md`](spa
 
 ## Pendientes de la fase temporal
 
-1. **Completar la primera prueba humana por correo.** Los callbacks están guardados; probar
-   el enlace de SpacetimeAuth y el acceso de un correo verificado sin invitación en
-   https://app-b20.pages.dev. Sigue la [guía de Cloudflare Pages](cloudflare-pages.md).
+1. **Probar un correo sin invitación.** El acceso humano por enlace de SpacetimeAuth, la app
+   con datos de prueba y Ajustes con la cuenta real separada de los perfiles ficticios se
+   comprobaron el 20 de octubre de 2026 en https://app-b20.pages.dev. La cuenta usada ya tenía
+   una invitación guardada; el caso humano sin invitación sigue pendiente. Sigue la
+   [guía de Cloudflare Pages](cloudflare-pages.md).
 2. **Comprobar el aislamiento de la simulación.** Renovar la sesión conserva los cambios;
    recargar, cerrar sesión o cambiar de identidad los reinicia. No deben producirse conexiones
-   ni escrituras a Maincloud. Las cuentas reales y los perfiles ficticios deben distinguirse.
+   ni escrituras a Maincloud. La renovación esperando la expiración y el cambio a otra cuenta
+   siguen pendientes de prueba humana; esos casos y el acceso sin invitación tienen pruebas
+   automatizadas. La separación entre cuenta real y perfiles ficticios ya se comprobó.
 3. **Antes de activar datos reales**, probar persistencia, privacidad, invitaciones y bajas
    con dos cuentas en `VITE_DATA_MODE=spacetime`. Esta restricción no se usa en la demo actual.
 4. **IA, archivos y notificaciones.** La interfaz de IA/BYOK aún no conecta con la API. Su

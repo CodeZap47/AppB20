@@ -3,7 +3,9 @@
 El proyecto **Pages `app-b20`** ya está creado y conectado al repositorio
 `CodeZap47/AppB20`. La web está publicada en **https://app-b20.pages.dev**. El historial de
 **Deployments** identifica cada publicación y el commit que sirve el dominio estable. El acceso
-por enlace al correo aún requiere una prueba humana completa. La configuración temporal
+por enlace al correo y la visualización de datos de prueba se confirmaron el 20 de octubre
+de 2026. También se comprobó que Ajustes separa la cuenta real de los perfiles simulados.
+La configuración temporal
 usa autenticación real y datos simulados, sin invitaciones ni conexiones a Maincloud. Los
 retornos de producción ya están
 guardados en SpacetimeAuth. La URL recomendada para entrar y compartir es siempre
@@ -139,12 +141,15 @@ Las cuentas de SpacetimeAuth se conservarán; la simulación no migra sus cambio
    la URL HTTPS estable.
 2. Abrir directamente `/auth/callback` y `/auth/logout`: deben cargar B20 y manejar la ruta,
    en lugar de mostrar un 404 del hosting.
-3. Entrar mediante el enlace enviado a un correo verificado, incluyendo uno sin invitación;
-   debe abrir la interfaz de simulación. La primera prueba humana completa sigue pendiente.
-4. Comprobar que **Ajustes** identifica la cuenta real y que el selector de perfiles ficticios
-   indica simulación. Cambiar de perfil de prueba no debe cambiar la cuenta autenticada.
+3. El acceso humano por enlace al correo y la visualización de la simulación se confirmaron el
+   20 de octubre de 2026. Esa cuenta ya tenía una invitación guardada: todavía falta la prueba
+   humana con un correo verificado sin invitación.
+4. Se comprobó que **Ajustes** identifica la cuenta real separada de los perfiles y roles
+   ficticios de simulación. Cambiar un perfil ficticio no debe cambiar la cuenta autenticada.
 5. Modificar datos simulados, verificar que la renovación de sesión los conserva y que
    recargar, salir o cambiar de cuenta los reinicia. No deben aparecer conexiones a Maincloud.
+   La renovación esperando la expiración y el cambio a otra cuenta siguen pendientes de prueba
+   humana; esos casos y el acceso sin invitación cuentan con pruebas automatizadas.
 
 Antes de cambiar a `VITE_DATA_MODE=spacetime`, probar con dos cuentas la persistencia,
 invitaciones, bajas y privacidad del grupo real. Más información en

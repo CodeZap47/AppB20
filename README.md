@@ -19,7 +19,8 @@ de la **Etapa 0** (prototipo técnico) y del **MVP** (Etapa 1).
 La web usa **SpacetimeAuth real por enlace al correo** y **datos simulados**. Cualquier persona
 con correo verificado puede entrar sin invitación en esta fase. `VITE_DATA_MODE=demo` es el
 valor predeterminado y el configurado para Pages; no se conecta ni escribe en Maincloud.
-La prueba completa del acceso por correo todavía está pendiente.
+El 20 de octubre de 2026 se confirmó el acceso por enlace al correo y la visualización de la
+app con datos de prueba. Ajustes muestra la cuenta real separada de los perfiles simulados.
 
 Los cambios de prueba viven en memoria por la cuenta autenticada: una renovación de sesión
 los conserva; recargar, cerrar sesión o cambiar de cuenta los reinicia. No se guardan datos
@@ -199,8 +200,10 @@ trabajar con B20 usa `npm run dev`; para publicar, sigue la guía sobre el módu
 El módulo ya está publicado en esa base, con `auth_config` y la primera invitación de
 administrador preparados. Los callbacks locales, del dominio estable `app-b20.pages.dev` y
 del enlace anterior `af0dd1ec.app-b20.pages.dev` ya están registrados en el cliente
-`client_034jL0AHYYQ1bps8SupHU0`. La primera prueba humana completa por correo y las
-pruebas con dos cuentas siguen pendientes. La versión temporal no requiere invitación.
+`client_034jL0AHYYQ1bps8SupHU0`. El acceso humano por enlace al correo y la separación entre
+cuenta real y perfiles simulados se comprobaron el 20 de octubre de 2026. Siguen pendientes
+las pruebas humanas con un correo sin invitación, renovación al vencer la sesión y cambio de
+cuenta. La versión temporal no requiere invitación.
 La web ya está publicada en
 https://app-b20.pages.dev; la API todavía no está desplegada.
 
@@ -272,9 +275,11 @@ autorizar cada alias de despliegue. El subdominio `pages.dev` no necesita DNS ni
 
 ## Pendientes por validar
 
-- **SpacetimeAuth y simulación:** completar el enlace por correo, probar una cuenta verificada
-  sin invitación y comprobar renovación, cierre, cambio de cuenta y reinicio de los datos al
-  recargar. Los callbacks ya están guardados. Antes de activar `spacetime`, probar invitación,
+- **SpacetimeAuth y simulación:** el acceso por correo y la separación de la cuenta real ya se
+  comprobaron. Probar manualmente un correo sin invitación, la renovación al vencer la sesión,
+  cierre, cambio de cuenta y reinicio de datos al recargar. Los casos de acceso sin invitación,
+  renovación y cambio de cuenta tienen pruebas automatizadas; su prueba humana sigue
+  pendiente. Antes de activar `spacetime`, probar invitación,
   baja, persistencia y privacidad con dos cuentas. Extensión y Android requieren sus pruebas
   propias. Pasos en [`docs/spacetimeauth.md`](docs/spacetimeauth.md).
 - **IA y BYOK:** la interfaz aún no conecta con la API, que requiere despliegue y configuración

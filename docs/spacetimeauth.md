@@ -18,8 +18,12 @@ distinto no dispone del verificador PKCE original y debe iniciar su propio acces
 ## Estado actual
 
 La web está publicada en **https://app-b20.pages.dev**, con integración Git desde la rama
-`codex/pages-spacetimeauth`. El login humano completo con el enlace del correo sigue pendiente
-de prueba. Los callbacks locales y de producción ya están guardados; también se conservó el
+`codex/pages-spacetimeauth`. El 20 de octubre de 2026 el usuario confirmó que completó el
+acceso por enlace al correo y ve la app con datos de prueba. Se comprobó también en el
+navegador que Ajustes muestra la cuenta real separada de los perfiles simulados. Esa cuenta
+ya tenía una invitación guardada: quedan pendientes las pruebas humanas con un correo sin
+invitación, renovación esperando la expiración y cambio a otra cuenta; esos casos tienen
+pruebas automatizadas. Los callbacks locales y de producción ya están guardados; también se conservó el
 enlace anterior `af0dd1ec.app-b20.pages.dev`. El error previo `invalid_redirect_uri` se debió
 a que únicamente estaban registrados los retornos locales; esa configuración ya se corrigió.
 
@@ -230,13 +234,17 @@ control al primer visitante.
 
 ## 5. Comprobaciones de la fase temporal
 
-- Completar el enlace por correo de SpacetimeAuth con una cuenta verificada sin invitación y
-  comprobar que abre la interfaz. Esta prueba humana completa sigue pendiente.
+- El acceso humano por enlace al correo y la visualización de la app con datos de prueba se
+  confirmaron el 20 de octubre de 2026. La cuenta utilizada ya tenía una invitación guardada:
+  falta la prueba humana con un correo verificado sin invitación, cubierta automáticamente.
 - Una sesión ausente o un correo no verificado no deben abrir la simulación, incluso con
   `?demo`; una configuración de autenticación ausente muestra el error correspondiente.
-- Ajustes muestra la cuenta real, separada de los perfiles y roles ficticios de prueba.
+- Se comprobó en el navegador que Ajustes muestra la cuenta real separada de los perfiles y
+  roles ficticios de prueba.
 - Renovar el token conserva los cambios simulados de la misma identidad; recargar, cerrar
-  sesión o cambiar de cuenta los reinicia. No hay datos simulados en `localStorage`.
+  sesión o cambiar de cuenta los reinicia. No hay datos simulados en `localStorage`. La
+  renovación esperando la expiración y el cambio a otra cuenta tienen pruebas automatizadas,
+  pero siguen pendientes de prueba humana.
 - No se abre conexión ni se realizan lecturas o escrituras a Maincloud en modo `demo`.
 - El cierre de sesión y un nuevo acceso funcionan desde el dominio estable.
 
