@@ -39,6 +39,8 @@ import { practiceTables, codingChallenge, challengeHint, challengeProgress, chal
 import * as practice from './practiceHandlers';
 import { community4Tables, museumEntry, museumRevision, opportunity, opportunityRevision, opportunityInterest, opportunityFeedback } from './community4Tables';
 import * as community4 from './community4Handlers';
+import { feedTables, feedReaction, feedPost, feedComment } from './feedTables';
+import * as feed from './feedHandlers';
 import { teachingVersionTables, teachingHead } from './teachingVersioning';
 import * as teachingVersions from './teachingVersioning';
 import { helpVersionTables, helpVersion } from './helpVersioning';
@@ -795,6 +797,7 @@ const retentionExpiry = table({ name: 'retention_expiry' }, {
 const spacetimedb = schema({
   ...practiceTables,
   ...community4Tables,
+  ...feedTables,
   ...helpVersionTables,
   ...teachingVersionTables,
   ...aiTables,
@@ -4834,3 +4837,14 @@ export const help_post_versions = spacetimedb.view({ name: 'help_post_versions',
 export const teaching_save_v2 = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => teachingVersions.teachingResponse(() => ctx.withTx(tx => teachingVersions.saveTeachingVersion(tx, payload))));
 export const teaching_read_history = spacetimedb.procedure({ practiceId: t.u64() }, t.string(), (ctx, { practiceId }) => teachingVersions.teachingResponse(() => ctx.withTx(tx => teachingVersions.readTeachingHistory(tx, practiceId))));
 export const my_teaching_versions = spacetimedb.view({ name: 'my_teaching_versions', public: true }, t.array(teachingHead.rowType), (ctx) => teachingVersions.myTeachingVersions(ctx.db, ctx.sender));
+// Feed de la primera vista: reacciones al contenido del grupo y publicaciones con comentarios.
+export const toggle_feed_reaction = spacetimedb.reducer({ targetKind: t.string(), targetId: t.u64(), emoji: t.string() }, feed.toggleFeedReaction);
+export const create_feed_post = spacetimedb.reducer({ text: t.string(), subjectId: t.u64().optional(), requestId: t.string() }, feed.createFeedPost);
+export const edit_feed_post = spacetimedb.reducer({ postId: t.u64(), text: t.string() }, feed.editFeedPost);
+export const delete_feed_post = spacetimedb.reducer({ postId: t.u64() }, feed.deleteFeedPost);
+export const comment_feed_post = spacetimedb.reducer({ postId: t.u64(), text: t.string(), requestId: t.string() }, feed.commentFeedPost);
+export const delete_feed_comment = spacetimedb.reducer({ commentId: t.u64() }, feed.deleteFeedComment);
+export const feed_reactions = spacetimedb.view({ name: 'feed_reactions', public: true }, t.array(feedReaction.rowType), ctx => [...ctx.db.feedReaction.iter()].filter(row => isActive(ctx.db, row.member) && feed.feedTargetReadable(ctx.db, ctx.sender, row.targetKind, row.targetId)));
+export const feed_posts = spacetimedb.view({ name: 'feed_posts', public: true }, t.array(feedPost.rowType), ctx => [...ctx.db.feedPost.iter()].filter(row => feed.postReadable(ctx.db, ctx.sender, row.id)));
+export const feed_comments = spacetimedb.view({ name: 'feed_comments', public: true }, t.array(feedComment.rowType), ctx => [...ctx.db.feedComment.iter()].filter(row => feed.commentReadable(ctx.db, ctx.sender, row)));
+

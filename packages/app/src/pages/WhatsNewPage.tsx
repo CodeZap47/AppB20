@@ -1,15 +1,20 @@
 import { useMemo } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { useSearchParams } from 'react-router';
 import { useDataSource, useSnapshot } from '../data/DataContext';
-import { Avatar } from '../components/Avatar';
 import { Empty } from '../components/Empty';
 import { useAction } from '../components/useAction';
 import { Icon } from '../components/Icon';
-import { formatClock, formatDayLabel, memberName, peopleList } from '../lib/format';
+import { ClassicNewsList } from '../components/whatsNew/ClassicNewsList';
+import { FeedComposer } from '../components/whatsNew/FeedComposer';
+import { FeedView } from '../components/whatsNew/FeedView';
+import { NewsSidebar } from '../components/whatsNew/NewsSidebar';
+import { StoriesBar } from '../components/whatsNew/StoriesBar';
+import { formatClock, formatDayLabel } from '../lib/format';
 import {
   birthdaysToday,
   buildNews,
   NEWS_LABEL,
+  ownPostNews,
   summarizeNews,
   unreadMessages,
   upcomingDue,
@@ -17,13 +22,22 @@ import {
   type NewsKind,
 } from '../lib/whatsNew';
 import { bySubject } from '../lib/works';
+import './whatsNew.css';
+
+type View = 'feed' | 'clasica';
+const VIEW_KEY = 'b20:inicio:vista';
 
 const isKind = (value: string | null): value is NewsKind => Boolean(value && value in NEWS_LABEL);
+const isView = (value: string | null | undefined): value is View => value === 'feed' || value === 'clasica';
 
-function dueLabel(days: number): string {
-  if (days === 0) return 'Hoy';
-  if (days === 1) return 'Mañana';
-  return `En ${days} días`;
+/** La vista elegida se recuerda en este dispositivo; sin almacenamiento se usa el feed. */
+function storedView(): View {
+  try {
+    const value = localStorage.getItem(VIEW_KEY);
+    return isView(value) ? value : 'feed';
+  } catch {
+    return 'feed';
+  }
 }
 
 /** «hoy a las 9:30 a.m.», «ayer a las…» o «el lunes, 5 de octubre a las…». */
@@ -33,19 +47,10 @@ function seenLabel(date: Date): string {
   return `${prefix} a las ${formatClock(date)}`;
 }
 
-/** Agrupa por día para poner separadores como en un chat: «Hoy», «Ayer», «Lunes, 5 de octubre». */
-function byDay(items: NewsItem[]) {
-  const groups: { label: string; items: NewsItem[] }[] = [];
-  for (const item of items) {
-    const label = formatDayLabel(item.at);
-    const last = groups.at(-1);
-    if (last?.label === label) last.items.push(item);
-    else groups.push({ label, items: [item] });
-  }
-  return groups;
-}
-
-/** Pantalla de inicio: lo que pasó en el grupo desde tu última visita (7.1), sin IA. */
+/**
+ * Pantalla de inicio: lo que pasó en el grupo desde tu última visita (7.1), sin IA. Se ve como
+ * feed (tarjetas con vista previa, reacciones y publicaciones propias) o en la lista clásica.
+ */
 export function WhatsNewPage() {
   const source = useDataSource();
   const { error, pending: marking, run } = useAction();
@@ -53,9 +58,14 @@ export function WhatsNewPage() {
   const { me, members, subjects, lastSeenAt, assignments, birthdays } = snapshot;
   const [params, setParams] = useSearchParams();
   const news = useMemo(() => buildNews(snapshot), [snapshot]);
+  const mine = useMemo(() => ownPostNews(snapshot), [snapshot]);
   const now = new Date();
 
-  const isPending = (item: NewsItem) => !lastSeenAt || item.at > lastSeenAt;
+  const highlightPostId = params.get('publicacion') ?? undefined;
+  const requested = params.get('vista');
+  const view: View = highlightPostId ? 'feed' : isView(requested) ? requested : storedView();
+
+  const isPending = (item: NewsItem) => item.actorId !== me?.id && (!lastSeenAt || item.at > lastSeenAt);
   const pending = news.filter(isPending);
   // Sin pendientes no tiene caso abrir en una lista vacía: se muestra todo.
   const showAll = params.get('ver') === 'todo' || pending.length === 0;
@@ -71,7 +81,18 @@ export function WhatsNewPage() {
     setParams(next, { replace: true });
   };
 
-  const base = showAll ? news : pending;
+  const chooseView = (next: View) => {
+    try {
+      localStorage.setItem(VIEW_KEY, next);
+    } catch {
+      /* La preferencia sigue en la URL de esta visita. */
+    }
+    update({ vista: next, publicacion: '' });
+  };
+
+  // En el feed también se ven tus publicaciones: todas en «Todo» y las recientes en «Pendientes».
+  const own = view === 'feed' ? mine.filter((n) => showAll || !lastSeenAt || n.at > lastSeenAt) : [];
+  const base = [...(showAll ? news : pending), ...own].sort((a, b) => b.at.getTime() - a.at.getTime() || a.key.localeCompare(b.key));
   const bySubjectFilter = base.filter((n) => !subjectId || n.subjectId === subjectId);
   const shown = bySubjectFilter.filter((n) => !kind || n.kind === kind);
   const kinds = (Object.keys(NEWS_LABEL) as NewsKind[])
@@ -105,6 +126,14 @@ export function WhatsNewPage() {
           </p>
         </div>
         <div className="row">
+          <div className="segmented" role="group" aria-label="Vista">
+            <button type="button" aria-pressed={view === 'feed'} onClick={() => chooseView('feed')}>
+              Feed
+            </button>
+            <button type="button" aria-pressed={view === 'clasica'} onClick={() => chooseView('clasica')}>
+              Clásica
+            </button>
+          </div>
           <button
             type="button"
             className="secondary with-icon"
@@ -120,8 +149,14 @@ export function WhatsNewPage() {
       {error && <p className="error" role="alert">{error}</p>}
       <p className="muted">Las novedades y la lectura de cada chat se marcan por separado. Aquí solo se resume contenido compartido con el grupo.</p>
 
-      <div className="detail">
+      {view === 'feed' && (
+        <StoriesBar meId={me?.id} members={members} celebrating={celebrating} messages={messages} due={due} />
+      )}
+
+      <div className={view === 'feed' ? 'detail detail--feed' : 'detail'}>
         <div className="detail__main">
+          {view === 'feed' && <FeedComposer me={me} subjects={subjects} />}
+
           <div className="toolbar">
             <div className="segmented" role="group" aria-label="Qué mostrar">
               <button
@@ -188,7 +223,7 @@ export function WhatsNewPage() {
           )}
 
           {shown.length === 0 ? (
-            news.length === 0 ? (
+            news.length === 0 && mine.length === 0 ? (
               <Empty icon="check" title="Todavía no pasa nada en el grupo">
                 Aquí vas a ver tareas nuevas, cambios de fecha, apuntes, trabajos subidos y
                 respuestas, en cuanto alguien los publique.
@@ -210,142 +245,14 @@ export function WhatsNewPage() {
                 Prueba con otro tipo de novedad o con todas las materias.
               </Empty>
             )
+          ) : view === 'feed' ? (
+            <FeedView items={shown} snapshot={snapshot} isPending={isPending} now={now} highlightPostId={highlightPostId} />
           ) : (
-            byDay(shown).map((group) => (
-              <section key={group.label} className="news-day">
-                <h2 className="label">{group.label}</h2>
-                <ul className="news">
-                  {group.items.map((n) => {
-                    const subject = subjects.find((s) => s.id === n.subjectId);
-                    const isNew = isPending(n);
-                    return (
-                      <li key={n.key}>
-                        <Link
-                          to={n.link}
-                          className={isNew ? 'news-item news-item--pending' : 'news-item'}
-                        >
-                          <Avatar member={members.find((m) => m.id === n.actorId)} size={36} />
-                          <span className="news-item__body">
-                            <span className="news-item__text">
-                              <strong>{memberName(members, n.actorId)}</strong> {n.text}
-                            </span>
-                            <span className="news-item__meta">
-                              <span className={`badge news-kind news-kind--${n.kind}`}>
-                                {NEWS_LABEL[n.kind]}
-                              </span>
-                              <span>
-                                {subject?.name ?? 'Grupo'} ·{' '}
-                                <time dateTime={n.at.toISOString()}>{formatClock(n.at)}</time>
-                              </span>
-                            </span>
-                          </span>
-                          {isNew && (
-                            <span className="news-item__dot" role="img" aria-label="Pendiente" />
-                          )}
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            ))
+            <ClassicNewsList items={shown} members={members} subjects={subjects} isPending={isPending} />
           )}
         </div>
 
-        <aside className="detail__side">
-          {celebrating.length > 0 && (
-            <section className="panel news-birthday">
-              <span className="news-birthday__emoji" aria-hidden="true">
-                🎂
-              </span>
-              <p>
-                Hoy {celebrating.length === 1 ? 'cumple' : 'cumplen'}{' '}
-                <strong>
-                  {peopleList(
-                    celebrating.map((b) => b.memberId),
-                    members,
-                    me?.id,
-                  )}
-                </strong>
-                .{' '}
-                {celebrating.length === 1 && celebrating[0]!.memberId !== me?.id ? (
-                  <Link to={`/perfil/${celebrating[0]!.memberId}`}>Ver perfil</Link>
-                ) : (
-                  <Link to="/m/cumpleanos">Ver cumpleaños</Link>
-                )}
-              </p>
-            </section>
-          )}
-
-          <section className="panel">
-            <h2 className="label">Mensajes nuevos</h2>
-            <p className="muted">Solo tus conversaciones. No se muestra el contenido de los mensajes.</p>
-            {messages.group === 0 && messages.direct.length === 0 && messages.channels.length === 0 ? (
-              <p className="muted">No tienes mensajes nuevos.</p>
-            ) : (
-              <ul className="links">
-                {messages.group > 0 && (
-                  <li>
-                    <Link to="/m/mensajes" className="news-link">
-                      <span className="avatar avatar--group news-link__icon" aria-hidden="true">
-                        <Icon name="users" size={16} />
-                      </span>
-                      <span className="news-link__text">Canal del salón</span>
-                      <span className="news-count">{messages.group}</span>
-                    </Link>
-                  </li>
-                )}
-                {messages.direct.map((d) => (
-                  <li key={d.conversation.id}>
-                    <Link to={`/m/mensajes/directos/${d.conversation.id}`} className="news-link">
-                      <Avatar member={members.find((m) => m.id === d.otherId)} size={28} />
-                      <span className="news-link__text">{memberName(members, d.otherId)}</span>
-                      <span className="news-count">{d.count}</span>
-                    </Link>
-                  </li>
-                ))}
-                {messages.channels.map(({ channel, count }) => (
-                  <li key={channel.id}>
-                    <Link to={`/m/mensajes/canales/${channel.id}`} className="news-link">
-                      <Icon name="chat" size={18} />
-                      <span className="news-link__text">{channel.name}</span>
-                      <span className="news-count">{count}</span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          <section className="panel">
-            <h2 className="label">Entregas de esta semana</h2>
-            {due.length === 0 ? (
-              <p className="muted">Nada que entregar en los próximos 7 días.</p>
-            ) : (
-              <ul className="links">
-                {due.map(({ assignment, inDays }) => (
-                  <li key={assignment.id}>
-                    <Link to={`/m/tareas/${assignment.id}`} className="news-link">
-                      <span className="news-link__text">
-                        <strong>{assignment.title}</strong>
-                        <span className="muted">
-                          {subjects.find((s) => s.id === assignment.subjectId)?.name}
-                        </span>
-                      </span>
-                      <span className={inDays <= 1 ? 'news-due news-due--soon' : 'news-due'}>
-                        {dueLabel(inDays)}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          <Link to="/modulos" className="news-modules">
-            Ver todos los módulos
-          </Link>
-        </aside>
+        <NewsSidebar meId={me?.id} members={members} subjects={subjects} celebrating={celebrating} messages={messages} due={due} />
       </div>
     </>
   );

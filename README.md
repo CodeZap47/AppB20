@@ -74,7 +74,7 @@ primera versión sin IA que también requiere comprobación con cuentas reales.
 | **Votaciones y contribuciones** | Votaciones nominales con participantes elegibles y reglas de cierre; puntos con reglas y desglose de aportes. Falta validar con datos reales y acordar la puntuación con el grupo. |
 | **Perfiles y cumpleaños** | Presentación voluntaria, foto privada bajo demanda, portafolio y archivo de trabajos; calendario mensual/anual y recordatorios con preferencias y zona horaria. El planificador está publicado y configurado; queda pendiente validar la recepción en dispositivos. |
 | **Avisos y papelera** | Bandeja privada, lectura y Web Push configurable; recuperación de contenido retirado antes de 30 días y purga programada con limpieza de referencias y bytes sin uso. |
-| **¿Qué me perdí?** | Novedades de materiales, guías, votaciones abiertas, ayuda y repaso compartido; lectura de chats separada. Excluye contenido privado y retirado. |
+| **¿Qué me perdí?** | Novedades de materiales, guías, votaciones abiertas, ayuda y repaso compartido; lectura de chats separada. Excluye contenido privado y retirado. Se ve como feed (historias, publicaciones propias, reacciones y comentarios) o como la lista clásica. |
 
 Salas de estudio está implementada y publicada sin IA: acceso abierto o privado,
 materiales, chat, temporizador y resumen. Sus pruebas locales y la comprobación publicada
@@ -248,6 +248,7 @@ Para publicar servicios y configurar producción, sigue la [guía de despliegue]
 - [Autenticación y acceso](docs/spacetimeauth.md): clientes, retornos e invitaciones.
 - [Tareas y Actividades](docs/tareas-actividades.md): consignas, trabajos, evidencias e historial.
 - [Exposiciones](docs/exposiciones.md): ensayos por texto, preguntas y siguientes intentos privados.
+- [Primera vista](docs/primera-vista-feed.md): vista Feed o Clásica, reacciones, publicaciones y comentarios.
 - [Archivos en SpacetimeDB](docs/archivos-spacetime.md): límites, transferencias y compatibilidad.
 - [Cloudflare Pages](docs/cloudflare-pages.md): configuración de la web/PWA.
 - [Despliegue](docs/despliegue.md): publicación de servicios y comprobaciones de producción.

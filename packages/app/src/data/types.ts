@@ -26,8 +26,10 @@ import type {
 import type { PresentationActions, PresentationsSnapshot } from './presentationTypes';
 import type { PracticeActions, PracticeSnapshot } from './practiceTypes';
 import type { Community4Actions, Community4Snapshot } from './community4Types';
+import type { FeedActions, FeedSnapshot } from './feedTypes';
 export type * from './practiceTypes';
 export type * from './community4Types';
+export type * from './feedTypes';
 export type * from './presentationTypes';
 
 export type Id = string;
@@ -717,7 +719,7 @@ export interface PollVote {
 }
 
 /** Lo que el usuario actual puede ver, igual que las vistas del servidor. */
-export interface Snapshot extends StudyRoomsSnapshot, NotificationsSnapshot, PresentationsSnapshot, PracticeSnapshot, Community4Snapshot {
+export interface Snapshot extends StudyRoomsSnapshot, NotificationsSnapshot, PresentationsSnapshot, PracticeSnapshot, Community4Snapshot, FeedSnapshot {
   trashEntries: TrashEntry[];
   contributionOrigins: { kind: OriginContributionKind; refId: Id; memberId: Id; creditedAt: Date; duplicateOf?: Id }[];
   chatChannels: ChatChannel[];
@@ -828,7 +830,7 @@ export interface PublishWorkInput {
 export type MaybePromise<T> = T | Promise<T>;
 
 /** Acciones: corresponden uno a uno con los reducers del módulo. */
-export interface Actions extends Delivery2Actions, StudyRoomActions, NotificationActions, TrashActions, PresentationActions, PracticeActions, Community4Actions, GuideAiActions, ExamActions {
+export interface Actions extends Delivery2Actions, StudyRoomActions, NotificationActions, TrashActions, PresentationActions, PracticeActions, Community4Actions, FeedActions, GuideAiActions, ExamActions {
   replaceSpacedCardSource(cardId: Id, expectedVersion: number, sourceKind: SpacedSourceKind, sourceId: Id): MaybePromise<void>;
   saveSpacedCollection(input: SpacedCollectionInput): MaybePromise<Id>;
   publishSpacedCollection(collectionId: Id, expectedVersion: number): MaybePromise<void>;

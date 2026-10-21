@@ -23,6 +23,7 @@ export * from './aiStudyDraft';
 export * from './notifications';
 export * from './practice';
 export * from './community4';
+export * from './feed';
 export * from './aiStudyModules';
 export * from './guideAi';
 export * from './agent';

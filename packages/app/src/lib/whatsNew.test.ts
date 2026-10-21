@@ -73,6 +73,7 @@ describe('resumen y paneles de «¿Qué me perdí?»', () => {
     text: '',
     link: '',
     at: new Date(),
+    target: { kind: 'note' as const, id: 'x' },
   });
 
   it('resume en una frase con singular y plural', () => {

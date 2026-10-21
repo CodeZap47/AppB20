@@ -1,7 +1,8 @@
-import { celebrationDate } from '@b20/core';
-import type { Assignment, Birthday, Id, Snapshot } from '../data/types';
+import { celebrationDate, type FeedTargetKind } from '@b20/core';
+import type { Assignment, Birthday, FeedPost, Id, Snapshot } from '../data/types';
 import { formatDate, parseDay } from './format';
 import { unreadMessages as unreadChatMessages } from './chat';
+import { previewText } from './messages';
 
 export type NewsKind =
   | 'tarea'
@@ -16,7 +17,8 @@ export type NewsKind =
   | 'guia'
   | 'votacion'
   | 'ayuda'
-  | 'repaso';
+  | 'repaso'
+  | 'publicacion';
 
 export interface NewsItem {
   key: string;
@@ -26,6 +28,10 @@ export interface NewsItem {
   text: string;
   link: string;
   at: Date;
+  /** Contenido al que apunta el aviso; ahí se guardan las reacciones del feed. */
+  target: { kind: FeedTargetKind; id: Id };
+  /** Extracto del contenido para la vista Feed; la Clásica no lo muestra. */
+  preview?: string;
 }
 
 export const NEWS_LABEL: Record<NewsKind, string> = {
@@ -42,6 +48,7 @@ export const NEWS_LABEL: Record<NewsKind, string> = {
   votacion: 'Votaciones abiertas',
   ayuda: 'Ayuda entre compañeros',
   repaso: 'Colecciones de repaso',
+  publicacion: 'Publicaciones',
 };
 
 /**
@@ -67,6 +74,7 @@ export function buildNews(snapshot: Snapshot, now = new Date()): NewsItem[] {
         : `quitó la fecha de entrega de «${assignment.title}»`,
       link: `/m/tareas/${assignment.id}`,
       at: revision.editedAt,
+      target: { kind: 'assignment' as const, id: assignment.id },
     })),
     // Una página nueva la anuncia quien la creó; una edición, quien guardó la última versión.
     // Si esa edición fue un cambio de fecha, ya lo anuncia el aviso de arriba.
@@ -83,6 +91,8 @@ export function buildNews(snapshot: Snapshot, now = new Date()): NewsItem[] {
         text: `${a.version > 1 ? 'editó' : 'creó'} la página de «${a.title}»`,
         link: `/m/tareas/${a.id}`,
         at: a.updatedAt,
+        target: { kind: 'assignment' as const, id: a.id },
+        preview: excerpt(a.instructions),
       })),
     ...snapshot.works.filter((work) => !work.withdrawnAt && work.status !== 'draft').map((w) => {
       const assignment = assignmentOf(w.assignmentId);
@@ -94,6 +104,8 @@ export function buildNews(snapshot: Snapshot, now = new Date()): NewsItem[] {
         text: `subió su trabajo a «${assignment?.title ?? 'una tarea'}»`,
         link: `/m/tareas/${w.assignmentId}?trabajo=${w.id}`,
         at: w.createdAt,
+        target: { kind: 'work' as const, id: w.id },
+        preview: excerpt(w.description),
       };
     }),
     ...snapshot.notes
@@ -107,6 +119,8 @@ export function buildNews(snapshot: Snapshot, now = new Date()): NewsItem[] {
           n.version > 1 ? `actualizó el apunte «${n.title}»` : `compartió el apunte «${n.title}»`,
         link: `/m/notas/${n.id}`,
         at: n.updatedAt,
+        target: { kind: 'note' as const, id: n.id },
+        preview: excerpt(n.body),
       })),
     ...snapshot.activities.map((a) => ({
       key: `a${a.id}`,
@@ -116,6 +130,8 @@ export function buildNews(snapshot: Snapshot, now = new Date()): NewsItem[] {
       text: `registró la actividad «${a.title}»`,
       link: `/m/actividades/${a.id}`,
       at: a.createdAt,
+      target: { kind: 'activity' as const, id: a.id },
+      preview: excerpt(a.instructions),
     })),
     ...snapshot.evidences.filter((evidence) => !evidence.withdrawnAt).map((e) => ({
       key: `e${e.id}`,
@@ -125,6 +141,8 @@ export function buildNews(snapshot: Snapshot, now = new Date()): NewsItem[] {
       text: `subió evidencia a «${activityOf(e.activityId)?.title ?? 'una actividad'}»`,
       link: `/m/actividades/${e.activityId}`,
       at: e.createdAt,
+      target: { kind: 'evidence' as const, id: e.id },
+      preview: excerpt(e.content),
     })),
     ...snapshot.questions.filter((question) => !question.withdrawnAt).map((q) => ({
       key: `q${q.id}`,
@@ -134,6 +152,8 @@ export function buildNews(snapshot: Snapshot, now = new Date()): NewsItem[] {
       text: `preguntó «${q.title}»`,
       link: `/m/preguntas/${q.id}`,
       at: q.createdAt,
+      target: { kind: 'question' as const, id: q.id },
+      preview: excerpt(q.body),
     })),
     ...snapshot.answers.filter((answer) => !answer.withdrawnAt && questionOf(answer.questionId) && !questionOf(answer.questionId)!.withdrawnAt).map((r) => ({
       key: `r${r.id}`,
@@ -143,6 +163,8 @@ export function buildNews(snapshot: Snapshot, now = new Date()): NewsItem[] {
       text: `respondió «${questionOf(r.questionId)?.title ?? 'una pregunta'}»`,
       link: `/m/preguntas/${r.questionId}`,
       at: r.createdAt,
+      target: { kind: 'answer' as const, id: r.id },
+      preview: excerpt(r.body),
     })),
     ...snapshot.questions
       .filter((q) => q.status === 'resolved' && q.resolvedAt && !q.withdrawnAt)
@@ -154,6 +176,7 @@ export function buildNews(snapshot: Snapshot, now = new Date()): NewsItem[] {
         text: `aceptó una respuesta en «${q.title}»`,
         link: `/m/preguntas/${q.id}`,
         at: q.resolvedAt!,
+        target: { kind: 'question' as const, id: q.id },
       })),
     ...snapshot.guides.filter((guide) => !guide.withdrawnAt).map((guide) => ({
       key: `g${guide.id}`,
@@ -163,6 +186,8 @@ export function buildNews(snapshot: Snapshot, now = new Date()): NewsItem[] {
       text: `${guide.version > 1 ? 'actualizó' : 'publicó'} la guía «${guide.title}»`,
       link: `/m/guias/${guide.id}`,
       at: guide.updatedAt,
+      target: { kind: 'guide' as const, id: guide.id },
+      preview: excerpt(guide.topics.join(' · ')),
     })),
     ...snapshot.polls
       .filter((poll) => !poll.cancelledAt && poll.closesAt > now)
@@ -174,6 +199,8 @@ export function buildNews(snapshot: Snapshot, now = new Date()): NewsItem[] {
         text: `abrió la votación «${poll.title}»`,
         link: `/m/votaciones/${poll.id}`,
         at: poll.updatedAt,
+        target: { kind: 'poll' as const, id: poll.id },
+        preview: excerpt(poll.description),
       })),
     ...snapshot.helpPosts
       .filter((post) => post.status === 'open')
@@ -185,6 +212,8 @@ export function buildNews(snapshot: Snapshot, now = new Date()): NewsItem[] {
         text: `publicó «${post.title}» en ayuda entre compañeros`,
         link: `/m/ayuda/${post.id}`,
         at: post.updatedAt,
+        target: { kind: 'help' as const, id: post.id },
+        preview: excerpt(post.description),
       })),
     ...snapshot.spacedCollections
       .filter((collection) => collection.visibility === 'group' && !collection.archived)
@@ -196,11 +225,43 @@ export function buildNews(snapshot: Snapshot, now = new Date()): NewsItem[] {
         text: `${collection.version > 1 ? 'actualizó' : 'compartió'} la colección «${collection.title}»`,
         link: `/m/repaso/colecciones/${collection.id}`,
         at: collection.updatedAt,
+        target: { kind: 'spaced' as const, id: collection.id },
       })),
+    ...snapshot.feedPosts.map(postNews),
   ];
 
   return [...new Map(items.filter((i) => i.actorId && i.actorId !== meId).map((i) => [i.key, i])).values()]
     .sort((a, b) => b.at.getTime() - a.at.getTime() || a.key.localeCompare(b.key));
+}
+
+/** Una publicación del feed como novedad; su texto completo lo muestra la tarjeta. */
+function postNews(post: FeedPost): NewsItem {
+  return {
+    key: `fp${post.id}`,
+    kind: 'publicacion',
+    subjectId: post.subjectId,
+    actorId: post.authorId,
+    text: 'publicó en el grupo',
+    link: `/m/inicio?vista=feed&publicacion=${post.id}`,
+    at: post.createdAt,
+    target: { kind: 'post', id: post.id },
+    preview: excerpt(post.text),
+  };
+}
+
+/** Tus publicaciones: `buildNews` omite lo propio, pero en el feed sí deben verse. */
+export function ownPostNews(snapshot: Snapshot): NewsItem[] {
+  const meId = snapshot.me?.id;
+  return snapshot.feedPosts.filter((post) => post.authorId === meId).map(postNews);
+}
+
+const PREVIEW_LENGTH = 280;
+
+/** Extracto de una línea para la tarjeta del feed; vacío si no hay texto. */
+function excerpt(text: string | undefined): string | undefined {
+  const clean = previewText(text ?? '');
+  if (!clean) return undefined;
+  return clean.length > PREVIEW_LENGTH ? `${clean.slice(0, PREVIEW_LENGTH - 1).trimEnd()}…` : clean;
 }
 
 /** Versiones de tareas que movieron o quitaron la fecha de entrega respecto a la anterior. */
@@ -235,6 +296,7 @@ const NOUNS: Record<NewsKind, [string, string]> = {
   votacion: ['votación abierta', 'votaciones abiertas'],
   ayuda: ['publicación de ayuda', 'publicaciones de ayuda'],
   repaso: ['colección de repaso', 'colecciones de repaso'],
+  publicacion: ['publicación', 'publicaciones'],
 };
 
 const listFormat = new Intl.ListFormat('es-MX', { style: 'long', type: 'conjunction' });

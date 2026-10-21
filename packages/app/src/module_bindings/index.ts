@@ -58,6 +58,7 @@ import CancelResourceUploadReducer from "./cancel_resource_upload_reducer";
 import CastVoteReducer from "./cast_vote_reducer";
 import CloseHelpContactReducer from "./close_help_contact_reducer";
 import CommentAcademicReducer from "./comment_academic_reducer";
+import CommentFeedPostReducer from "./comment_feed_post_reducer";
 import CommentNoteReducer from "./comment_note_reducer";
 import CommentQuestionReducer from "./comment_question_reducer";
 import CompletePresentationAttemptReducer from "./complete_presentation_attempt_reducer";
@@ -67,6 +68,7 @@ import CreateActivityReducer from "./create_activity_reducer";
 import CreateAssignmentReducer from "./create_assignment_reducer";
 import CreateAssignmentV2Reducer from "./create_assignment_v_2_reducer";
 import CreateChatChannelReducer from "./create_chat_channel_reducer";
+import CreateFeedPostReducer from "./create_feed_post_reducer";
 import CreateGuideReducer from "./create_guide_reducer";
 import CreateMuseumReducer from "./create_museum_reducer";
 import CreateOpportunityReducer from "./create_opportunity_reducer";
@@ -77,7 +79,10 @@ import CreateStudyRoomReducer from "./create_study_room_reducer";
 import CreateSubjectReducer from "./create_subject_reducer";
 import CreateTeachingPracticeReducer from "./create_teaching_practice_reducer";
 import CreateTermReducer from "./create_term_reducer";
+import DeleteFeedCommentReducer from "./delete_feed_comment_reducer";
+import DeleteFeedPostReducer from "./delete_feed_post_reducer";
 import DeleteMessageReducer from "./delete_message_reducer";
+import EditFeedPostReducer from "./edit_feed_post_reducer";
 import EditMessageReducer from "./edit_message_reducer";
 import FinalizeFileUploadReducer from "./finalize_file_upload_reducer";
 import FinalizeResourceUploadReducer from "./finalize_resource_upload_reducer";
@@ -186,6 +191,7 @@ import SetTeachingReviewerReducer from "./set_teaching_reviewer_reducer";
 import ShareBirthdayReducer from "./share_birthday_reducer";
 import StartTeachingPracticeReducer from "./start_teaching_practice_reducer";
 import ToggleAnswerUsefulnessReducer from "./toggle_answer_usefulness_reducer";
+import ToggleFeedReactionReducer from "./toggle_feed_reaction_reducer";
 import ToggleReactionReducer from "./toggle_reaction_reducer";
 import UpdateActivityReducer from "./update_activity_reducer";
 import UpdateActivityV2Reducer from "./update_activity_v_2_reducer";
@@ -268,6 +274,9 @@ import ContentStatusesRow from "./content_statuses_table";
 import ContributionOriginsRow from "./contribution_origins_table";
 import EvidenceDetailsRow from "./evidence_details_table";
 import EvidencesRow from "./evidences_table";
+import FeedCommentsRow from "./feed_comments_table";
+import FeedPostsRow from "./feed_posts_table";
+import FeedReactionsRow from "./feed_reactions_table";
 import GroupMessagesRow from "./group_messages_table";
 import GuideAiSourceAvailabilityRow from "./guide_ai_source_availability_table";
 import GuideReviewsRow from "./guide_reviews_table";
@@ -512,6 +521,27 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, EvidencesRow),
+  feedComments: __table({
+    name: 'feed_comments',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, FeedCommentsRow),
+  feedPosts: __table({
+    name: 'feed_posts',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, FeedPostsRow),
+  feedReactions: __table({
+    name: 'feed_reactions',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, FeedReactionsRow),
   groupMessages: __table({
     name: 'group_messages',
     indexes: [
@@ -1086,6 +1116,7 @@ const reducersSchema = __reducers(
   __reducerSchema("cast_vote", CastVoteReducer),
   __reducerSchema("close_help_contact", CloseHelpContactReducer),
   __reducerSchema("comment_academic", CommentAcademicReducer),
+  __reducerSchema("comment_feed_post", CommentFeedPostReducer),
   __reducerSchema("comment_note", CommentNoteReducer),
   __reducerSchema("comment_question", CommentQuestionReducer),
   __reducerSchema("complete_presentation_attempt", CompletePresentationAttemptReducer),
@@ -1095,6 +1126,7 @@ const reducersSchema = __reducers(
   __reducerSchema("create_assignment", CreateAssignmentReducer),
   __reducerSchema("create_assignment_v_2", CreateAssignmentV2Reducer),
   __reducerSchema("create_chat_channel", CreateChatChannelReducer),
+  __reducerSchema("create_feed_post", CreateFeedPostReducer),
   __reducerSchema("create_guide", CreateGuideReducer),
   __reducerSchema("create_museum", CreateMuseumReducer),
   __reducerSchema("create_opportunity", CreateOpportunityReducer),
@@ -1105,7 +1137,10 @@ const reducersSchema = __reducers(
   __reducerSchema("create_subject", CreateSubjectReducer),
   __reducerSchema("create_teaching_practice", CreateTeachingPracticeReducer),
   __reducerSchema("create_term", CreateTermReducer),
+  __reducerSchema("delete_feed_comment", DeleteFeedCommentReducer),
+  __reducerSchema("delete_feed_post", DeleteFeedPostReducer),
   __reducerSchema("delete_message", DeleteMessageReducer),
+  __reducerSchema("edit_feed_post", EditFeedPostReducer),
   __reducerSchema("edit_message", EditMessageReducer),
   __reducerSchema("finalize_file_upload", FinalizeFileUploadReducer),
   __reducerSchema("finalize_resource_upload", FinalizeResourceUploadReducer),
@@ -1214,6 +1249,7 @@ const reducersSchema = __reducers(
   __reducerSchema("share_birthday", ShareBirthdayReducer),
   __reducerSchema("start_teaching_practice", StartTeachingPracticeReducer),
   __reducerSchema("toggle_answer_usefulness", ToggleAnswerUsefulnessReducer),
+  __reducerSchema("toggle_feed_reaction", ToggleFeedReactionReducer),
   __reducerSchema("toggle_reaction", ToggleReactionReducer),
   __reducerSchema("update_activity", UpdateActivityReducer),
   __reducerSchema("update_activity_v_2", UpdateActivityV2Reducer),
@@ -1311,6 +1347,12 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "contribution_origins": Omit<typeof tablesSchema.schemaType.tables["contributionOrigins"], "accessorName"> & { readonly accessorName: "contribution_origins" };
     /** @deprecated Use `evidenceDetails` instead. This alias will be removed in the next major version. */
     readonly "evidence_details": Omit<typeof tablesSchema.schemaType.tables["evidenceDetails"], "accessorName"> & { readonly accessorName: "evidence_details" };
+    /** @deprecated Use `feedComments` instead. This alias will be removed in the next major version. */
+    readonly "feed_comments": Omit<typeof tablesSchema.schemaType.tables["feedComments"], "accessorName"> & { readonly accessorName: "feed_comments" };
+    /** @deprecated Use `feedPosts` instead. This alias will be removed in the next major version. */
+    readonly "feed_posts": Omit<typeof tablesSchema.schemaType.tables["feedPosts"], "accessorName"> & { readonly accessorName: "feed_posts" };
+    /** @deprecated Use `feedReactions` instead. This alias will be removed in the next major version. */
+    readonly "feed_reactions": Omit<typeof tablesSchema.schemaType.tables["feedReactions"], "accessorName"> & { readonly accessorName: "feed_reactions" };
     /** @deprecated Use `groupMessages` instead. This alias will be removed in the next major version. */
     readonly "group_messages": Omit<typeof tablesSchema.schemaType.tables["groupMessages"], "accessorName"> & { readonly accessorName: "group_messages" };
     /** @deprecated Use `guideAiSourceAvailability` instead. This alias will be removed in the next major version. */
@@ -1482,6 +1524,9 @@ const tableAccessorAliases = {
   "content_statuses": "contentStatuses",
   "contribution_origins": "contributionOrigins",
   "evidence_details": "evidenceDetails",
+  "feed_comments": "feedComments",
+  "feed_posts": "feedPosts",
+  "feed_reactions": "feedReactions",
   "group_messages": "groupMessages",
   "guide_ai_source_availability": "guideAiSourceAvailability",
   "guide_reviews": "guideReviews",
@@ -1604,6 +1649,12 @@ export type DbView = __DbViewBase & {
   readonly "contribution_origins": __DbViewBase["contributionOrigins"];
   /** @deprecated Use `evidenceDetails` instead. This alias will be removed in the next major version. */
   readonly "evidence_details": __DbViewBase["evidenceDetails"];
+  /** @deprecated Use `feedComments` instead. This alias will be removed in the next major version. */
+  readonly "feed_comments": __DbViewBase["feedComments"];
+  /** @deprecated Use `feedPosts` instead. This alias will be removed in the next major version. */
+  readonly "feed_posts": __DbViewBase["feedPosts"];
+  /** @deprecated Use `feedReactions` instead. This alias will be removed in the next major version. */
+  readonly "feed_reactions": __DbViewBase["feedReactions"];
   /** @deprecated Use `groupMessages` instead. This alias will be removed in the next major version. */
   readonly "group_messages": __DbViewBase["groupMessages"];
   /** @deprecated Use `guideAiSourceAvailability` instead. This alias will be removed in the next major version. */
@@ -1778,6 +1829,12 @@ export type Tables = __TablesBase & {
   readonly "contribution_origins": __TablesBase["contributionOrigins"];
   /** @deprecated Use `evidenceDetails` instead. This alias will be removed in the next major version. */
   readonly "evidence_details": __TablesBase["evidenceDetails"];
+  /** @deprecated Use `feedComments` instead. This alias will be removed in the next major version. */
+  readonly "feed_comments": __TablesBase["feedComments"];
+  /** @deprecated Use `feedPosts` instead. This alias will be removed in the next major version. */
+  readonly "feed_posts": __TablesBase["feedPosts"];
+  /** @deprecated Use `feedReactions` instead. This alias will be removed in the next major version. */
+  readonly "feed_reactions": __TablesBase["feedReactions"];
   /** @deprecated Use `groupMessages` instead. This alias will be removed in the next major version. */
   readonly "group_messages": __TablesBase["groupMessages"];
   /** @deprecated Use `guideAiSourceAvailability` instead. This alias will be removed in the next major version. */
@@ -1962,3 +2019,4 @@ export class DbConnection extends __DbConnectionImpl<typeof REMOTE_MODULE> {
     return new SubscriptionBuilder(this);
   };
 }
+

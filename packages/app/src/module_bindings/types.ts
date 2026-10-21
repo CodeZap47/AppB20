@@ -585,6 +585,51 @@ export const ExamVersion = __t.object("ExamVersion", {
 });
 export type ExamVersion = __Infer<typeof ExamVersion>;
 
+export const FeedComment = __t.object("FeedComment", {
+  id: __t.u64(),
+  postId: __t.u64(),
+  author: __t.identity(),
+  text: __t.string(),
+  requestId: __t.string(),
+  createdAt: __t.timestamp(),
+  deletedAt: __t.option(__t.timestamp()),
+  deletedBy: __t.option(__t.identity()),
+});
+export type FeedComment = __Infer<typeof FeedComment>;
+
+export const FeedComments = __t.object("FeedComments", {});
+export type FeedComments = __Infer<typeof FeedComments>;
+
+export const FeedPost = __t.object("FeedPost", {
+  id: __t.u64(),
+  author: __t.identity(),
+  text: __t.string(),
+  subjectId: __t.option(__t.u64()),
+  requestId: __t.string(),
+  createdAt: __t.timestamp(),
+  editedAt: __t.option(__t.timestamp()),
+  deletedAt: __t.option(__t.timestamp()),
+  deletedBy: __t.option(__t.identity()),
+});
+export type FeedPost = __Infer<typeof FeedPost>;
+
+export const FeedPosts = __t.object("FeedPosts", {});
+export type FeedPosts = __Infer<typeof FeedPosts>;
+
+export const FeedReaction = __t.object("FeedReaction", {
+  key: __t.string(),
+  target: __t.string(),
+  targetKind: __t.string(),
+  targetId: __t.u64(),
+  member: __t.identity(),
+  emoji: __t.string(),
+  updatedAt: __t.timestamp(),
+});
+export type FeedReaction = __Infer<typeof FeedReaction>;
+
+export const FeedReactions = __t.object("FeedReactions", {});
+export type FeedReactions = __Infer<typeof FeedReactions>;
+
 export const FileServiceConfig = __t.object("FileServiceConfig", {
   id: __t.u32(),
   identity: __t.identity(),
@@ -2035,3 +2080,4 @@ export type WorkRevisions = __Infer<typeof WorkRevisions>;
 
 export const Works = __t.object("Works", {});
 export type Works = __Infer<typeof Works>;
+
