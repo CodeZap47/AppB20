@@ -22,6 +22,11 @@ function connection(overrides: Record<string, unknown[]> = {}): Pick<DbConnectio
     'stickers', 'myChatCommands', 'birthdays', 'activities', 'evidences', 'notes',
     'noteComments', 'questions', 'answers', 'myLastSeen', 'studyGuides', 'guideSources',
     'guideReviews', 'polls', 'pollVotes',
+    'assignmentDetails', 'workDetails', 'evidenceDetails', 'myProgress', 'workRevisions',
+    'workReviews', 'academicComments', 'resourceFiles', 'activityLinks', 'pageSnapshots',
+    'helpPosts', 'myHelpContactRequests',
+    'teachingPractices', 'myTeachingPersonal', 'teachingQuestions',
+    'spacedCollections', 'spacedCards', 'spacedUnavailableCards', 'mySpacedEnrollments', 'mySpacedProgress', 'mySpacedReviews',
   ];
   return { db: Object.fromEntries(names.map((name) => [name, table(
     overrides[name] ?? (name === 'myMember' || name === 'members' ? [member] : []),
@@ -29,6 +34,49 @@ function connection(overrides: Record<string, unknown[]> = {}): Pick<DbConnectio
 }
 
 describe('snapshot de SpacetimeDB', () => {
+  it('une recursos nuevos y heredados sin duplicados y conserva historial y avance privado', () => {
+    const data = readSnapshot(connection({
+      works: [{ id: 9n, assignmentId: 17n, title: 'Actual', description: '', version: 3,
+        createdBy: identity(), createdAt: timestamp, updatedAt: timestamp }],
+      workAuthors: [{ workId: 9n, author: identity() }],
+      workDetails: [{ workId: 9n, status: 'final', topic: 'Tema', updatedBy: identity() }],
+      workReviews: [{ id: 1n, workId: 9n, version: 2, reviewer: identity(OTHER), comment: 'Anterior', createdAt: timestamp }],
+      workFiles: [{ id: 2n, workId: 9n, name: 'legado.txt', size: 4n, contentType: 'text/plain',
+        uploadedBy: identity(), createdAt: timestamp, storageKey: 'privado/legado' }],
+      resourceFiles: [{ id: 'legacy:2', targetKind: 'work', targetId: 9n, name: 'legado.txt', size: 4n,
+        contentType: 'text/plain', uploadedBy: identity(), createdAt: timestamp, removedAt: timestamp, etag: '' },
+      { id: 'new-file', targetKind: 'work', targetId: 9n, name: 'nuevo.txt', size: 3n,
+        contentType: 'text/plain', uploadedBy: identity(), createdAt: timestamp, removedAt: undefined, etag: '' }],
+      workRevisions: [{ id: 1n, workId: 9n, version: 2, title: 'Anterior', description: 'Texto anterior',
+        topic: '', status: 'final', authors: [identity()], attachmentIds: ['legacy:2'], editedBy: identity(), editedAt: timestamp }],
+      myProgress: [{ owner: identity(), targetKind: 'assignment', targetId: 17n, status: 'done', updatedAt: timestamp },
+        { owner: identity(OTHER), targetKind: 'assignment', targetId: 17n, status: 'pending', updatedAt: timestamp }],
+      evidenceDetails: [{ evidenceId: 10n, version: 4, updatedBy: identity(), updatedAt: timestamp }],
+      evidences: [{ id: 10n, activityId: 2n, author: identity(), participants: [identity()], content: 'Prueba', createdAt: timestamp }],
+    }), ID);
+    expect(data.resourceFiles).toHaveLength(2);
+    expect(data.workFiles.map((file) => file.id)).toEqual(['new-file']);
+    expect(data.workRevisions.map((revision) => revision.version)).toEqual([2, 3]);
+    expect(data.workRevisions[0]?.attachmentIds).toEqual(['legacy:2']);
+    expect(data.works[0]).toMatchObject({ id: '9', status: 'final', topic: 'Tema' });
+    expect(data.myProgress).toMatchObject([{ targetId: '17', status: 'done' }]);
+    expect(data.myProgress).toHaveLength(1);
+    expect(data.evidences[0]?.version).toBe(4);
+    expect(JSON.stringify(data.resourceFiles)).not.toContain('storageKey');
+    expect(JSON.stringify(data.resourceFiles)).not.toContain('privado/legado');
+  });
+
+  it('solo la revisión noautora de la versión actual deriva el estado revisado', () => {
+    const work = { id: 9n, assignmentId: 17n, title: '', description: '', version: 2,
+      createdBy: identity(), createdAt: timestamp, updatedAt: timestamp };
+    const reviews = [{ id: 1n, workId: 9n, version: 2, reviewer: identity(), comment: 'Propia', createdAt: timestamp }];
+    const fixture = { works: [work], workAuthors: [{ workId: 9n, author: identity() }],
+      workDetails: [{ workId: 9n, topic: '', status: 'final', updatedBy: identity() }], workReviews: reviews };
+    expect(readSnapshot(connection(fixture), ID).works[0]?.status).toBe('final');
+    expect(readSnapshot(connection({ ...fixture, workReviews: [{ ...reviews[0], reviewer: identity(OTHER) }] }), ID).works[0]?.status).toBe('reviewed');
+    expect(readSnapshot(connection({ works: [work] }), ID).works[0]?.status).toBe('draft');
+  });
+
   it('mantiene estados de conexión separados de la falta de membresía', () => {
     expect(emptySnapshot('connecting').connection).toBe('connecting');
     expect(emptySnapshot('offline', 'Sin conexión')).toMatchObject({
@@ -116,9 +164,62 @@ describe('snapshot de SpacetimeDB', () => {
   it('se suscribe únicamente a vistas públicas con permisos por usuario', () => {
     expect(PUBLIC_VIEWS).toContain('my_member');
     expect(PUBLIC_VIEWS).toContain('my_direct_messages');
+    expect(PUBLIC_VIEWS).toContain('teaching_practices');
+    expect(PUBLIC_VIEWS).toContain('my_teaching_personal');
+    expect(PUBLIC_VIEWS).toContain('teaching_questions');
     expect(PUBLIC_VIEWS).not.toContain('member');
     expect(PUBLIC_VIEWS).not.toContain('direct_message');
     expect(PUBLIC_VIEWS).not.toContain('auth_config');
+    expect(PUBLIC_VIEWS).not.toContain('teaching_practice');
+    expect(PUBLIC_VIEWS).not.toContain('teaching_personal');
     expect(new Set(PUBLIC_VIEWS).size).toBe(PUBLIC_VIEWS.length);
+  });
+
+  it('mapea explicaciones y filtra información personal incluso ante filas privadas en caché', () => {
+    const third = '00000000000000000000000000000000000000000000000000000000000000cc';
+    const practice = { id: 9_007_199_254_740_993n, owner: identity(), reviewer: identity(OTHER), subjectId: 7n,
+      topic: 'Condicionales', concept: 'Inicial', example: 'Ejemplo inicial', limits: 'Límites iniciales',
+      revisedConcept: 'Revisada', revisedExample: 'Ejemplo revisado', revisedLimits: 'Límites revisados',
+      status: 'practicing', createdAt: timestamp, updatedAt: timestamp };
+    const personal = { practiceId: practice.id, reflection: 'Privada', topicsToReview: 'Privados',
+      sourceKind: 'note', sourceId: 9_007_199_254_740_994n, sourceVersion: 2, publishedNoteId: 45n };
+    const question = { id: 51n, practiceId: practice.id, author: identity(OTHER), kind: 'peer', text: '¿Por qué?',
+      answer: 'Porque…', createdAt: timestamp, answeredAt: timestamp };
+    const rows = {
+      members: [member, { ...member, identity: identity(OTHER), isCreator: false }, { ...member, identity: identity(third) }],
+      teachingPractices: [practice, { ...practice, id: 99n, owner: identity(third), reviewer: undefined }],
+      myTeachingPersonal: [personal, { ...personal, practiceId: 99n }],
+      teachingQuestions: [question, { ...question, id: 52n, practiceId: 99n }],
+    };
+    const owner = readSnapshot(connection(rows), ID);
+    expect(owner.teachingPractices).toHaveLength(1);
+    expect(owner.teachingPractices[0]).toMatchObject({ id: '9007199254740993', ownerId: ID, reviewerId: OTHER,
+      initial: { concept: 'Inicial', example: 'Ejemplo inicial', limits: 'Límites iniciales' },
+      revised: { concept: 'Revisada', example: 'Ejemplo revisado', limits: 'Límites revisados' } });
+    expect(owner.teachingPersonal).toEqual([{ practiceId: '9007199254740993', reflection: 'Privada', topicsToReview: 'Privados',
+      sourceKind: 'note', sourceId: '9007199254740994', sourceVersion: 2, publishedNoteId: '45' }]);
+    const peer = readSnapshot(connection({ ...rows, myMember: [{ ...member, identity: identity(OTHER), isCreator: false }] }), OTHER);
+    expect(peer.teachingPractices).toHaveLength(1);
+    expect(peer.teachingPersonal).toEqual([]);
+    expect(peer.teachingQuestions).toEqual([{ id: '51', practiceId: '9007199254740993', authorId: OTHER,
+      kind: 'peer', text: '¿Por qué?', answer: 'Porque…', createdAt: at, answeredAt: at }]);
+    expect(JSON.stringify(peer.teachingPractices)).not.toContain('sourceId');
+  });
+
+  it('retira prácticas y preguntas del caché al revocar compañero o dar de baja al autor', () => {
+    const practice = { id: 9n, owner: identity(OTHER), reviewer: undefined, subjectId: 7n, topic: 'Privada',
+      concept: '', example: '', limits: '', revisedConcept: '', revisedExample: '', revisedLimits: '',
+      status: 'draft', createdAt: timestamp, updatedAt: timestamp };
+    const stale = { teachingPractices: [practice],
+      myTeachingPersonal: [{ practiceId: 9n, reflection: 'Secreto' }],
+      teachingQuestions: [{ id: 10n, practiceId: 9n, text: 'Secreto' }] };
+    const revoked = readSnapshot(connection({ ...stale, members: [member, { ...member, identity: identity(OTHER) }] }), ID);
+    expect(revoked.teachingPractices).toEqual([]);
+    expect(revoked.teachingPersonal).toEqual([]);
+    expect(revoked.teachingQuestions).toEqual([]);
+    const removedOwner = readSnapshot(connection({ ...stale, teachingPractices: [{ ...practice, reviewer: identity() }],
+      members: [member, { ...member, identity: identity(OTHER), status: 'removed' }] }), ID);
+    expect(removedOwner.teachingPractices).toEqual([]);
+    expect(removedOwner.teachingQuestions).toEqual([]);
   });
 });

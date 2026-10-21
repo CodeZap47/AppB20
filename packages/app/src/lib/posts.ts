@@ -1,5 +1,5 @@
-import { WORK_KIND_LABEL, workKindGroup, type WorkKindGroup } from '@b20/core';
-import type { Activity, Assignment, Evidence, Id, Member, Subject, Term, Work, WorkFile } from '../data/types';
+import { WORK_KIND_LABEL, workKindGroup, type WorkKindGroup, type WorkKind } from '@b20/core';
+import type { Activity, Assignment, Evidence, Id, Member, Subject, Term, Work, WorkFile, AcademicProgress, ProgressStatus, ResourceFile } from '../data/types';
 import { participantsOf } from './activities';
 import { parseDay, toDay } from './format';
 import { matches } from './search';
@@ -20,6 +20,10 @@ export interface Post {
   /** «Tarea», «Examen», «Actividad de clase»… */
   label: string;
   group: WorkKindGroup;
+  kind?: WorkKind | 'clase';
+  topics?: string[];
+  workStates?: { status: string; authors: Id[] }[];
+  progressStatus?: ProgressStatus;
   title: string;
   /** Instrucciones u objetivo, para el extracto. */
   text: string;
@@ -47,6 +51,8 @@ export function buildPosts(data: {
   activities: Activity[];
   evidences: Evidence[];
   members: Member[];
+  myProgress?: AcademicProgress[];
+  resourceFiles?: ResourceFile[];
 }): Post[] {
   const nameOf = (id: Id) => data.members.find((m) => m.id === id)?.displayName ?? '';
   const fromAssignments = data.assignments.map((a): Post => {
@@ -59,9 +65,13 @@ export function buildPosts(data: {
       termId: a.termId,
       label: WORK_KIND_LABEL[a.kind],
       group: workKindGroup(a.kind),
+      kind: a.kind,
+      topics: [a.topic ?? '', ...own.map((w) => w.topic ?? '')],
+      workStates: own.map((w) => ({ status: w.status ?? 'draft', authors: w.authorIds })),
+      progressStatus: data.myProgress?.find((p) => p.targetKind === 'assignment' && p.targetId === a.id)?.status ?? 'pending',
       title: a.title,
       text: a.instructions,
-      topic: '',
+      topic: a.topic ?? '',
       day: a.dueDate ?? toDay(a.createdAt),
       dueDate: a.dueDate,
       link: `/m/tareas/${a.id}`,
@@ -70,8 +80,9 @@ export function buildPosts(data: {
       noun: ['trabajo', 'trabajos'],
       updatedAt: own.reduce((latest, w) => (w.updatedAt > latest ? w.updatedAt : latest), a.updatedAt),
       extra: [
-        ...own.flatMap((w) => [w.title, w.description, ...w.authorIds.map(nameOf)]),
+        ...own.flatMap((w) => [w.title, w.topic ?? '', w.description, ...w.authorIds.map(nameOf)]),
         ...(data.workFiles ?? []).filter((f) => own.some((w) => w.id === f.workId)).map((f) => f.name),
+        ...(data.resourceFiles ?? []).filter((f) => !f.removedAt && f.targetKind === 'assignment' && f.targetId === a.id).map((f) => f.name),
       ],
     };
   });
@@ -85,6 +96,9 @@ export function buildPosts(data: {
       termId: a.termId,
       label: ACTIVITY_LABEL,
       group: 'tareas-actividades',
+      kind: 'clase',
+      topics: [a.topic],
+      progressStatus: data.myProgress?.find((p) => p.targetKind === 'activity' && p.targetId === a.id)?.status ?? 'pending',
       title: a.title,
       text: a.objective || a.instructions,
       topic: a.topic,
@@ -94,7 +108,7 @@ export function buildPosts(data: {
       count: own.length,
       noun: ['evidencia', 'evidencias'],
       updatedAt: own.reduce((latest, e) => (e.createdAt > latest ? e.createdAt : latest), a.updatedAt),
-      extra: [a.instructions, ...own.flatMap((e) => [e.content, ...e.participantIds.map(nameOf)])],
+      extra: [a.instructions, ...own.flatMap((e) => [e.content, ...e.participantIds.map(nameOf)]), ...(data.resourceFiles ?? []).filter((f) => !f.removedAt && ((f.targetKind === 'activity' && f.targetId === a.id) || (f.targetKind === 'evidence' && own.some((e) => e.id === f.targetId)))).map((f) => f.name)],
     };
   });
   return [...fromAssignments, ...fromActivities];
@@ -111,6 +125,12 @@ export interface PostFilters {
   termId: Id;
   /** Solo donde esta persona subió un trabajo o aparece en una evidencia. */
   personId: Id;
+  exactKind?: string;
+  topic?: string;
+  from?: string;
+  to?: string;
+  workStatus?: string;
+  progress?: string;
 }
 
 /** La búsqueda mira título, texto, tema, materia, parcial y lo que subió cada quien. */
@@ -122,6 +142,12 @@ export function filterPosts(
   return posts.filter((p) => {
     const subject = ctx.subjects.find((s) => s.id === p.subjectId);
     if (filters.kindGroup && p.group !== filters.kindGroup) return false;
+    if (filters.exactKind && p.kind !== filters.exactKind) return false;
+    if (filters.topic && !matches(filters.topic, ...(p.topics ?? [p.topic]))) return false;
+    if (filters.from && p.day < filters.from) return false;
+    if (filters.to && p.day > filters.to) return false;
+    if (filters.progress && (p.progressStatus ?? 'pending') !== filters.progress) return false;
+    if (filters.workStatus && !p.workStates?.some((w) => w.status === filters.workStatus && (!filters.personId || w.authors.includes(filters.personId)))) return false;
     if (filters.period && subject?.period !== filters.period) return false;
     if (filters.subjectId && p.subjectId !== filters.subjectId) return false;
     if (filters.termId === NO_TERM ? p.termId : filters.termId && p.termId !== filters.termId) return false;

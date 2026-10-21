@@ -6,3 +6,22 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all procedure arg schemas
+import * as AuthorizeFileUploadProcedure from "../authorize_file_upload_procedure";
+import * as GetFileDownloadAccessProcedure from "../get_file_download_access_procedure";
+import * as GetFileUploadStatusProcedure from "../get_file_upload_status_procedure";
+import * as GetResourceManifestProcedure from "../get_resource_manifest_procedure";
+import * as GetResourceUploadStatusProcedure from "../get_resource_upload_status_procedure";
+import * as ReadResourceChunkProcedure from "../read_resource_chunk_procedure";
+
+export type AuthorizeFileUploadArgs = __Infer<typeof AuthorizeFileUploadProcedure.params>;
+export type AuthorizeFileUploadResult = __Infer<typeof AuthorizeFileUploadProcedure.returnType>;
+export type GetFileDownloadAccessArgs = __Infer<typeof GetFileDownloadAccessProcedure.params>;
+export type GetFileDownloadAccessResult = __Infer<typeof GetFileDownloadAccessProcedure.returnType>;
+export type GetFileUploadStatusArgs = __Infer<typeof GetFileUploadStatusProcedure.params>;
+export type GetFileUploadStatusResult = __Infer<typeof GetFileUploadStatusProcedure.returnType>;
+export type GetResourceManifestArgs = __Infer<typeof GetResourceManifestProcedure.params>;
+export type GetResourceManifestResult = __Infer<typeof GetResourceManifestProcedure.returnType>;
+export type GetResourceUploadStatusArgs = __Infer<typeof GetResourceUploadStatusProcedure.params>;
+export type GetResourceUploadStatusResult = __Infer<typeof GetResourceUploadStatusProcedure.returnType>;
+export type ReadResourceChunkArgs = __Infer<typeof ReadResourceChunkProcedure.params>;
+export type ReadResourceChunkResult = __Infer<typeof ReadResourceChunkProcedure.returnType>;

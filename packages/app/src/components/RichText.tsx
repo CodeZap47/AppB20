@@ -1,7 +1,13 @@
-/**
- * Muestra texto con bloques de código delimitados por ``` sin interpretar HTML.
- * Es la primera versión del editor de notas (3.4); tablas e imágenes vendrán después.
- */
+/** Los recursos HTTP se pueden abrir; el contenido del usuario nunca se interpreta como HTML. */
+function linkedText(text: string) {
+  return text.split(/(https?:\/\/[^\s<>]+)/g).map((part, index) => {
+    if (!/^https?:\/\//.test(part)) return part;
+    const url = part.replace(/[.,;:!?\])}]+$/, '');
+    return <span key={index}><a href={url} target="_blank" rel="noopener noreferrer">{url}</a>{part.slice(url.length)}</span>;
+  });
+}
+
+/** Muestra texto, enlaces y bloques de código sin interpretar HTML. */
 export function RichText({ text }: { text: string }) {
   const parts = text.split(/```[^\n]*\n?/);
   return (
@@ -14,7 +20,7 @@ export function RichText({ text }: { text: string }) {
         ) : (
           part.trim() && (
             <p key={i} className="prewrap">
-              {part.trim()}
+              {linkedText(part.trim())}
             </p>
           )
         ),

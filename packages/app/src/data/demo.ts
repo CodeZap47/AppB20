@@ -1,8 +1,10 @@
 import {
+  cleanHelpPost,
+  helpText,
+  HELP_LIMITS,
   buildPeriodCalendar,
   canDeleteMessage,
   canEditMessage,
-  canEditWork,
   commandNameError,
   detectImageType,
   isAnimatedWebp,
@@ -14,7 +16,6 @@ import {
   canReadDirectConversation,
   canReviewGuide,
   CURRICULUM,
-  fileSizeError,
   GUIDE_SECTIONS,
   isGuideReviewVerdict,
   isGuideSourceKind,
@@ -36,8 +37,25 @@ import {
   termNames,
   type TermDates,
   type TermDatesInput,
+  EMPTY_TEACHING_EXPLANATION,
+  TEACHING_PROMPTS,
+  MAX_TEACHING_TOPIC_LENGTH,
+  MAX_TEACHING_TEXT_LENGTH,
+  MAX_TEACHING_QUESTION_LENGTH,
+  normalizeTeachingExplanation,
+  teachingExplanationError,
+  teachingCompletionError,
+  teachingNoteBody,
+  nextSpacedSchedule,
+  MAX_SPACED_TITLE_LENGTH,
+  MAX_SPACED_QUESTION_LENGTH,
+  MAX_SPACED_EXPLANATION_LENGTH,
+  MAX_SPACED_HINT_LENGTH,
 } from '@b20/core';
 import type {
+  HelpPost,
+  HelpContactRequest,
+  HelpPostInput,
   Invitation,
   Activity,
   Assignment,
@@ -80,9 +98,27 @@ import type {
   Term,
   Work,
   WorkFile,
+  TeachingPractice,
+  TeachingPersonal,
+  TeachingQuestion,
+  CreateTeachingPracticeInput,
+  SaveTeachingPracticeInput,
+  ProgressTargetKind,
+  ProgressStatus,
+  ResourceTargetKind,
+  WorkVersionInput,
+  SpacedCollection,
+  SpacedCard,
+  SpacedEnrollment,
+  SpacedProgress,
+  SpacedReview,
+  SpacedCollectionInput,
+  SpacedCardInput,
+  SpacedReviewInput,
 } from './types';
 import { toDay } from '../lib/format';
 import { referencesIn } from '../lib/references';
+import { DemoAcademicStore } from './demoAcademic';
 
 /**
  * Fuente de datos en memoria para desarrollar la interfaz antes de conectar SpacetimeDB.
@@ -122,6 +158,16 @@ interface State {
   guideReviews: GuideReview[];
   polls: Poll[];
   pollVotes: PollVote[];
+  helpPosts: HelpPost[];
+  helpContacts: HelpContactRequest[];
+  teachingPractices: TeachingPractice[];
+  teachingPersonal: TeachingPersonal[];
+  teachingQuestions: TeachingQuestion[];
+  spacedCollections: SpacedCollection[];
+  spacedCards: SpacedCard[];
+  spacedEnrollments: SpacedEnrollment[];
+  spacedProgress: SpacedProgress[];
+  spacedReviews: (SpacedReview & { expectedRevision: number })[];
   lastSeen: Record<Id, Date>;
 }
 
@@ -131,12 +177,18 @@ function emptyState(): State {
     works: [], workFiles: [], revisions: [], groupMessages: [], directConversations: [],
     directMessages: [], reactions: [], stickerPacks: [], stickers: [], chatCommands: [],
     birthdays: [], activities: [], evidences: [], notes: [], noteComments: [], questions: [],
-    answers: [], guides: [], guideSources: [], guideReviews: [], polls: [], pollVotes: [],
-    lastSeen: {},
+    answers: [], guides: [], guideSources: [], guideReviews: [], polls: [], pollVotes: [], helpPosts: [], helpContacts: [],
+    teachingPractices: [], teachingPersonal: [], teachingQuestions: [],
+    spacedCollections: [], spacedCards: [], spacedEnrollments: [], spacedProgress: [], spacedReviews: [], lastSeen: {},
   };
 }
 
 const MAX_TEXT = 4000;
+const textTopic = (value?: string) => {
+  const topic = value?.trim() ?? '';
+  if (topic.length > 120) throw new Error('El tema excede 120 caracteres.');
+  return topic;
+};
 
 /** Altas, bajas e invitaciones: solo creadores activos (`canManageMembership` en `@b20/core`). */
 function isCreator(m: Member | undefined): boolean {
@@ -168,11 +220,16 @@ export class DemoDataSource implements DataSource {
   #now: () => Date;
   #disposed = false;
   #objectUrls = new Set<string>();
+  #academic: DemoAcademicStore;
 
   constructor(state: State, viewerId: Id, now: () => Date = () => new Date()) {
     this.#state = state;
     this.#viewerId = viewerId;
     this.#now = now;
+    this.#academic = new DemoAcademicStore({ state: () => this.#state, active: () => this.#activeMember(),
+      id: () => this.#id(), now: () => this.#now(), emit: () => this.#emit(),
+      updateAssignment: (id, input, expected) => this.updateAssignment(id, input, expected),
+      updateActivity: (id, input, expected) => this.updateActivity(id, input, expected) });
   }
 
   get viewerId(): Id {
@@ -205,6 +262,7 @@ export class DemoDataSource implements DataSource {
       if (typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(url);
     }
     this.#objectUrls.clear();
+    this.#academic.dispose();
     this.#listeners.clear();
     this.#state = emptyState();
     this.#viewerId = '';
@@ -230,6 +288,8 @@ export class DemoDataSource implements DataSource {
         calendar: [],
         assignments: [],
         works: [],
+        myProgress: [], workRevisions: [], workReviews: [], academicComments: [],
+        resourceFiles: [], activityLinks: [], pageSnapshots: [],
         workFiles: [],
         revisions: [],
         groupMessages: [],
@@ -251,10 +311,24 @@ export class DemoDataSource implements DataSource {
         guideReviews: [],
         polls: [],
         pollVotes: [],
+        helpPosts: [],
+        helpContacts: [],
+        teachingPractices: [],
+        teachingPersonal: [],
+        teachingQuestions: [],
+        spacedCollections: [], spacedCards: [], spacedUnavailableCards: [], spacedEnrollments: [], spacedProgress: [], spacedReviews: [],
         lastSeenAt: undefined,
       };
     }
     const notes = s.notes.filter((n) => n.visibility === 'group' || n.authorId === me.id);
+    const spacedCollections = s.spacedCollections.filter((collection) => collection.visibility === 'group' || collection.ownerId === me.id);
+    const visibleSpacedCollections = new Map(spacedCollections.map((collection) => [collection.id, collection]));
+    const teachingPractices = s.teachingPractices.filter((practice) =>
+      this.#isActive(practice.ownerId) &&
+      (practice.ownerId === me.id || practice.reviewerId === me.id),
+    );
+    const visiblePractices = new Set(teachingPractices.map((practice) => practice.id));
+    const ownPractices = new Set(teachingPractices.filter((practice) => practice.ownerId === me.id).map((practice) => practice.id));
     const visibleNotes = new Set(notes.map((n) => n.id));
     const directConversations = s.directConversations.filter((c) =>
       canReadDirectConversation(me.id, c.participantIds),
@@ -283,9 +357,8 @@ export class DemoDataSource implements DataSource {
       subjects: s.subjects,
       terms: s.terms,
       calendar: s.calendar,
-      assignments: s.assignments,
-      works: s.works,
-      workFiles: s.workFiles,
+      assignments: s.assignments.map((row) => ({ ...row, topic: row.topic ?? '' })),
+      ...this.#academic.snapshot(me.id),
       revisions: s.revisions,
       groupMessages: s.groupMessages,
       directConversations,
@@ -296,7 +369,7 @@ export class DemoDataSource implements DataSource {
       chatCommands: s.chatCommands.filter((c) => c.ownerId === me.id),
       birthdays: s.birthdays,
       activities: s.activities,
-      evidences: s.evidences,
+      evidences: s.evidences.map((row) => ({ ...row, version: row.version ?? 1 })),
       notes,
       noteComments: s.noteComments.filter((c) => visibleNotes.has(c.noteId)),
       questions: s.questions,
@@ -306,6 +379,23 @@ export class DemoDataSource implements DataSource {
       guideReviews: s.guideReviews,
       polls: s.polls,
       pollVotes: s.pollVotes,
+      helpPosts: s.helpPosts.filter((p) => p.authorId === me.id || (p.status !== 'withdrawn' && this.#isActive(p.authorId))),
+      helpContacts: s.helpContacts.filter((r) => r.senderId === me.id || r.recipientId === me.id),
+      teachingPractices,
+      teachingPersonal: s.teachingPersonal.filter((personal) => ownPractices.has(personal.practiceId)),
+      teachingQuestions: s.teachingQuestions.filter((question) => visiblePractices.has(question.practiceId)),
+      spacedCollections,
+      spacedCards: s.spacedCards.filter((card) => {
+        const collection = visibleSpacedCollections.get(card.collectionId);
+        return collection && this.#readableSpacedSource(card.sourceKind, card.sourceId, collection) !== undefined;
+      }),
+      spacedUnavailableCards: s.spacedCards.filter((card) => {
+        const collection = visibleSpacedCollections.get(card.collectionId);
+        return collection && this.#readableSpacedSource(card.sourceKind, card.sourceId, collection) === undefined;
+      }).map(({ id, collectionId, version, archived }) => ({ id, collectionId, version, archived })),
+      spacedEnrollments: s.spacedEnrollments.filter((row) => row.memberId === me.id),
+      spacedProgress: s.spacedProgress.filter((row) => row.memberId === me.id),
+      spacedReviews: s.spacedReviews.filter((row) => row.memberId === me.id).map(({ expectedRevision: _expected, ...row }) => row),
       lastSeenAt: s.lastSeen[me.id],
     };
   }
@@ -328,6 +418,118 @@ export class DemoDataSource implements DataSource {
 
   #isActive(id: Id): boolean {
     return this.#state.members.some((m) => m.id === id && m.status === 'active');
+  }
+
+  #helpPost(postId: Id): HelpPost {
+    this.#activeMember();
+    const post = this.#state.helpPosts.find((p) => p.id === postId);
+    if (!post) throw new Error('La publicación no está disponible.');
+    return post;
+  }
+
+  #ownHelpPost(postId: Id): HelpPost {
+    const me = this.#activeMember();
+    const post = this.#helpPost(postId);
+    if (post.authorId !== me.id) throw new Error('Solo su autor puede modificar esta publicación.');
+    if (post.status === 'withdrawn') throw new Error('La publicación fue retirada.');
+    return post;
+  }
+
+  #helpContact(requestId: Id): HelpContactRequest {
+    const me = this.#activeMember();
+    const contact = this.#state.helpContacts.find((r) => r.id === requestId && (r.senderId === me.id || r.recipientId === me.id));
+    if (!contact) throw new Error('La solicitud de contacto no está disponible.');
+    return contact;
+  }
+
+  #updateHelpContact(contact: HelpContactRequest, fields: Partial<HelpContactRequest>) {
+    this.#state.helpContacts = this.#state.helpContacts.map((r) => r.id === contact.id ? { ...r, ...fields, updatedAt: this.#now() } : r);
+  }
+
+  #closePendingHelpContacts(postId: Id, closeReason: string) {
+    this.#state.helpContacts = this.#state.helpContacts.map((r) => r.postId === postId && r.status === 'pending'
+      ? { ...r, status: 'closed', updatedAt: this.#now(), closedBy: this.#viewerId, closeReason } : r);
+  }
+
+  saveHelpPost(input: HelpPostInput): Id {
+    const me = this.#activeMember();
+    const existing = input.id === undefined ? undefined : this.#ownHelpPost(input.id);
+    if (existing && existing.kind !== input.kind) throw new Error('El tipo de publicación no se puede cambiar.');
+    this.#requireSubject(input.subjectId);
+    const fields = cleanHelpPost(input);
+    const post: HelpPost = existing ? { ...existing, ...fields, updatedAt: this.#now() }
+      : { ...fields, id: this.#id(), authorId: me.id, status: 'open', createdAt: this.#now(), updatedAt: this.#now() };
+    this.#state.helpPosts = existing ? this.#state.helpPosts.map((p) => p.id === existing.id ? post : p) : [...this.#state.helpPosts, post];
+    this.#emit();
+    return post.id;
+  }
+
+  setHelpPostStatus(postId: Id, status: 'open' | 'closed') {
+    const post = this.#ownHelpPost(postId);
+    if (status !== 'open' && status !== 'closed') throw new Error('El estado de la publicación no es válido.');
+    this.#state.helpPosts = this.#state.helpPosts.map((p) => p.id === post.id ? { ...p, status, updatedAt: this.#now() } : p);
+    if (status === 'closed') this.#closePendingHelpContacts(postId, 'post_closed');
+    this.#emit();
+  }
+
+  withdrawHelpPost(postId: Id, reason = '') {
+    const me = this.#activeMember();
+    const post = this.#helpPost(postId);
+    if (post.status === 'withdrawn') throw new Error('La publicación no está disponible.');
+    if (post.authorId !== me.id && !me.isCreator) throw new Error('Solo el autor o un administrador pueden retirar esta publicación.');
+    const withdrawalReason = helpText(reason, 'El motivo', HELP_LIMITS.reason, post.authorId === me.id);
+    this.#state.helpPosts = this.#state.helpPosts.map((p) => p.id === postId
+      ? { ...p, status: 'withdrawn', withdrawnBy: me.id, withdrawalReason, updatedAt: this.#now() } : p);
+    this.#closePendingHelpContacts(postId, 'post_withdrawn');
+    this.#emit();
+  }
+
+  sendHelpContact(postId: Id, message = ''): Id {
+    const me = this.#activeMember();
+    const post = this.#helpPost(postId);
+    if (post.status !== 'open' || !this.#isActive(post.authorId)) throw new Error('La publicación no está abierta.');
+    if (post.authorId === me.id) throw new Error('No puedes enviarte una solicitud de contacto.');
+    if (this.#state.helpContacts.some((r) => r.postId === postId && r.senderId === me.id)) throw new Error('Ya enviaste una solicitud para esta publicación.');
+    const cleanMessage = helpText(message, 'El mensaje', HELP_LIMITS.message, true);
+    const contact: HelpContactRequest = { id: this.#id(), postId, senderId: me.id, recipientId: post.authorId,
+      subjectId: post.subjectId, postTitle: post.title, postTopic: post.topic, postKind: post.kind,
+      message: cleanMessage, status: 'pending', createdAt: this.#now(), updatedAt: this.#now() };
+    this.#state.helpContacts = [...this.#state.helpContacts, contact];
+    this.#emit();
+    return contact.id;
+  }
+
+  respondHelpContact(requestId: Id, decision: 'accepted' | 'rejected') {
+    const me = this.#activeMember();
+    const contact = this.#helpContact(requestId);
+    if (decision !== 'accepted' && decision !== 'rejected') throw new Error('La respuesta no es válida.');
+    if (contact.recipientId !== me.id || contact.status !== 'pending') throw new Error('Solo el destinatario puede responder una solicitud pendiente.');
+    let conversationId: Id | undefined;
+    if (decision === 'accepted') {
+      const post = this.#helpPost(contact.postId);
+      if (post.status !== 'open' || !this.#isActive(contact.senderId) || !this.#isActive(contact.recipientId)) throw new Error('La publicación o el compañero ya no están disponibles.');
+      const existing = this.#state.directConversations.find((c) => c.participantIds.includes(me.id) && c.participantIds.includes(contact.senderId));
+      conversationId = existing?.id ?? this.#id();
+      if (!existing) this.#state.directConversations = [...this.#state.directConversations, { id: conversationId, participantIds: [me.id, contact.senderId] }];
+    }
+    this.#updateHelpContact(contact, { status: decision, conversationId });
+    this.#emit();
+  }
+
+  cancelHelpContact(requestId: Id) {
+    const me = this.#activeMember();
+    const contact = this.#helpContact(requestId);
+    if (contact.senderId !== me.id || contact.status !== 'pending') throw new Error('Solo quien envió una solicitud pendiente puede cancelarla.');
+    this.#updateHelpContact(contact, { status: 'cancelled' });
+    this.#emit();
+  }
+
+  closeHelpContact(requestId: Id) {
+    const me = this.#activeMember();
+    const contact = this.#helpContact(requestId);
+    if (contact.status !== 'accepted') throw new Error('Solo se puede cerrar un contacto aceptado.');
+    this.#updateHelpContact(contact, { status: 'closed', closedBy: me.id, closeReason: 'participant' });
+    this.#emit();
   }
 
   joinGroup(displayName: string) {
@@ -447,6 +649,7 @@ export class DemoDataSource implements DataSource {
       kind: input.kind,
       title: requireText(input.title, 'El título', 200),
       instructions: input.instructions.trim(),
+      topic: textTopic(input.topic),
       dueDate: input.dueDate || undefined,
     };
   }
@@ -468,6 +671,7 @@ export class DemoDataSource implements DataSource {
       ...content,
     };
     this.#state.revisions = [...this.#state.revisions, revision];
+    this.#academic.capturePage(page, pageId);
   }
 
   createAssignment(input: AssignmentInput): Id {
@@ -494,13 +698,17 @@ export class DemoDataSource implements DataSource {
   }
 
   /** Sin restricción de autoría: es la página del grupo. La responsabilidad queda en el historial. */
-  updateAssignment(assignmentId: Id, input: AssignmentInput) {
+  updateAssignment(assignmentId: Id, input: AssignmentInput, expectedVersion?: number) {
     const me = this.#activeMember();
     const current = this.#state.assignments.find((a) => a.id === assignmentId);
     if (!current) throw new Error('La tarea no existe.');
+    if (expectedVersion !== undefined && current.version !== expectedVersion) throw new Error('Esta publicación cambió. Revisa la versión actual antes de guardar.');
+    this.#checkAssignment(input);
+    this.#academic.capturePage('assignment', assignmentId);
     const next: Assignment = {
       ...current,
       ...this.#checkAssignment(input),
+      topic: input.topic === undefined ? current.topic ?? '' : textTopic(input.topic),
       version: current.version + 1,
       updatedBy: me.id,
       updatedAt: this.#now(),
@@ -525,88 +733,57 @@ export class DemoDataSource implements DataSource {
     }
     const title = input.title.trim();
     if (title.length > 200) throw new Error('El título excede 200 caracteres.');
+    if (input.status && input.status !== 'draft' && input.status !== 'final') throw new Error('El estado del trabajo no existe.');
+    if (input.description.trim().length > 50_000) throw new Error('La descripción excede 50000 caracteres.');
     const now = this.#now();
     const work: Work = {
       id: this.#id(),
       assignmentId: input.assignmentId,
       title,
       description: input.description.trim(),
+      topic: textTopic(input.topic),
+      status: input.status ?? 'draft',
+      updatedBy: me.id,
       version: 1,
       authorIds: [...new Set([me.id, ...input.coauthorIds])],
       createdAt: now,
       updatedAt: now,
     };
     this.#state.works = [...this.#state.works, work];
+    this.#academic.captureWork(work.id);
     this.#emit();
     return work.id;
   }
 
   updateWork(workId: Id, title: string, description: string) {
-    const me = this.#activeMember();
+    this.#activeMember();
     const work = this.#state.works.find((w) => w.id === workId);
     if (!work) throw new Error('El trabajo no existe.');
-    if (!canEditWork(me.id, work.authorIds)) {
-      throw new Error('Solo el autor o los coautores editan este trabajo.');
-    }
-    if (title.trim().length > 200) throw new Error('El título excede 200 caracteres.');
-    this.#state.works = this.#state.works.map((w) =>
-      w.id === workId
-        ? {
-            ...w,
-            title: title.trim(),
-            description: description.trim(),
-            version: w.version + 1,
-            updatedAt: this.#now(),
-          }
-        : w,
-    );
-    this.#emit();
+    this.saveWorkVersion(workId, { title, description, topic: work.topic ?? '', status: 'draft' }, work.version);
   }
+
+  setProgress(kind: ProgressTargetKind, id: Id, status: ProgressStatus) { return this.#academic.setProgress(kind, id, status); }
+  saveWorkVersion(id: Id, input: WorkVersionInput, expectedVersion: number) { return this.#academic.saveWorkVersion(id, input, expectedVersion); }
+  restoreWorkVersion(id: Id, version: number, expectedVersion: number) { return this.#academic.restoreWorkVersion(id, version, expectedVersion); }
+  reviewWork(id: Id, expectedVersion: number, comment: string) { return this.#academic.reviewWork(id, expectedVersion, comment); }
+  commentAcademic(kind: 'work' | 'evidence', id: Id, value: string) { return this.#academic.commentAcademic(kind, id, value); }
+  saveActivityLinks(id: Id, assignments: Id[], notes: Id[], expectedVersion?: number) { return this.#academic.saveActivityLinks(id, assignments, notes, expectedVersion); }
+  restorePageSnapshot(page: ProgressTargetKind, id: Id, version: number, expectedVersion: number) { return this.#academic.restorePageSnapshot(page, id, version, expectedVersion); }
+  attachResourceFile(kind: ResourceTargetKind, id: Id, file: File, expectedVersion?: number) { return this.#academic.attachResourceFile(kind, id, file, expectedVersion); }
+  removeResourceFile(id: Id, expectedVersion?: number) { return this.#academic.removeResourceFile(id, expectedVersion); }
+  downloadResourceFile(id: Id) { return this.#academic.downloadResourceFile(id); }
 
   /**
    * En modo de prueba el archivo no sale del navegador: se guarda un enlace local que dura
    * mientras la pestaña siga abierta. Las reglas (autoría y 50 MB) son las del servidor.
    */
   async attachWorkFile(workId: Id, file: File): Promise<Id> {
-    const me = this.#activeMember();
-    const work = this.#state.works.find((w) => w.id === workId);
-    if (!work) throw new Error('El trabajo no existe.');
-    if (!canEditWork(me.id, work.authorIds)) {
-      throw new Error('Solo el autor o los coautores adjuntan archivos a este trabajo.');
-    }
-    const name = file.name.trim().slice(0, 200) || 'archivo';
-    const problem = fileSizeError(name, file.size);
-    if (problem) throw new Error(problem);
-    const url = typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : undefined;
-    if (url) this.#objectUrls.add(url);
-    const entry: WorkFile = {
-      id: this.#id(),
-      workId,
-      name,
-      size: file.size,
-      contentType: file.type || 'application/octet-stream',
-      uploadedBy: me.id,
-      createdAt: this.#now(),
-      url,
-    };
-    this.#state.workFiles = [...this.#state.workFiles, entry];
-    this.#emit();
-    return entry.id;
+    return this.attachResourceFile('work', workId, file);
   }
 
   removeWorkFile(fileId: Id) {
-    const me = this.#activeMember();
-    const entry = this.#state.workFiles.find((f) => f.id === fileId);
-    if (!entry) throw new Error('El archivo no existe.');
-    const work = this.#state.works.find((w) => w.id === entry.workId);
-    if (!work || !canEditWork(me.id, work.authorIds)) {
-      throw new Error('Solo el autor o los coautores quitan archivos de este trabajo.');
-    }
-    if (entry.url && this.#objectUrls.delete(entry.url) && typeof URL.revokeObjectURL === 'function') {
-      URL.revokeObjectURL(entry.url);
-    }
-    this.#state.workFiles = this.#state.workFiles.filter((f) => f.id !== fileId);
-    this.#emit();
+    const ref = this.#state.workFiles.some((file) => file.id === fileId) ? `legacy:${fileId}` : fileId;
+    return this.removeResourceFile(ref);
   }
 
   /** Texto de un mensaje nuevo o editado: no vacío y solo con stickers que puedes usar. */
@@ -885,10 +1062,13 @@ export class DemoDataSource implements DataSource {
   }
 
   /** Sin restricción de autoría: es la página del grupo. La responsabilidad queda en el historial. */
-  updateActivity(activityId: Id, input: CreateActivityInput) {
+  updateActivity(activityId: Id, input: CreateActivityInput, expectedVersion?: number) {
     const me = this.#activeMember();
     const current = this.#state.activities.find((a) => a.id === activityId);
     if (!current) throw new Error('La actividad no existe.');
+    if (expectedVersion !== undefined && current.version !== expectedVersion) throw new Error('Esta publicación cambió. Revisa la versión actual antes de guardar.');
+    this.#checkActivity(input);
+    this.#academic.capturePage('activity', activityId);
     const next: Activity = {
       ...current,
       ...this.#checkActivity(input),
@@ -919,8 +1099,9 @@ export class DemoDataSource implements DataSource {
       content: requireText(content, 'La evidencia', 20_000),
       createdAt: this.#now(),
     };
+    this.#academic.capturePage('activity', activityId);
     this.#state.evidences = [...this.#state.evidences, evidence];
-    this.#emit();
+    this.#academic.evidenceChanged(activityId);
     return evidence.id;
   }
 
@@ -1157,6 +1338,367 @@ export class DemoDataSource implements DataSource {
       src.guideId === guideId ? { ...src, topics: src.topics.filter((t) => next.topics.includes(t)) } : src,
     );
     this.#emit();
+  }
+
+  #spacedCollection(collectionId: Id): SpacedCollection {
+    const me = this.#activeMember();
+    const collection = this.#state.spacedCollections.find((item) => item.id === collectionId &&
+      (item.visibility === 'group' || item.ownerId === me.id));
+    if (!collection) throw new Error('La colección no existe o no tienes acceso.');
+    return collection;
+  }
+
+  #spacedVersion(version: number, expectedVersion?: number) {
+    if (version !== expectedVersion) throw new Error('El contenido cambió. Actualiza antes de guardar.');
+  }
+
+  #readableSpacedSource(kind: SpacedCard['sourceKind'], sourceId: Id, collection: SpacedCollection) {
+    const source = kind === 'note'
+      ? this.#state.notes.find((note) => note.id === sourceId &&
+        (note.visibility === 'group' || (collection.visibility === 'personal' && note.authorId === collection.ownerId)))
+      : kind === 'guide' ? this.#state.guides.find((guide) => guide.id === sourceId) : undefined;
+    return source?.subjectId === collection.subjectId ? source : undefined;
+  }
+
+  saveSpacedCollection(input: SpacedCollectionInput): Id {
+    const me = this.#activeMember();
+    this.#requireSubject(input.subjectId);
+    if (input.termId && !this.#state.terms.some((term) => term.id === input.termId && term.subjectId === input.subjectId)) {
+      throw new Error('El parcial no pertenece a esta materia.');
+    }
+    if (input.visibility !== 'personal' && input.visibility !== 'group') throw new Error('La visibilidad no es válida.');
+    const title = requireText(input.title, 'El título', MAX_SPACED_TITLE_LENGTH);
+    const current = input.id ? this.#spacedCollection(input.id) : undefined;
+    if (current) {
+      this.#spacedVersion(current.version, input.expectedVersion);
+      if (current.archived) throw new Error('Restaura la colección antes de editarla.');
+      if (current.visibility !== input.visibility) throw new Error('Usa Publicar para compartir una colección personal; una compartida permanece en el grupo.');
+      if (current.subjectId !== input.subjectId && this.#state.spacedCards.some((card) => card.collectionId === current.id)) {
+        throw new Error('La materia de una colección con tarjetas no cambia.');
+      }
+      if (current.title === title && current.subjectId === input.subjectId && current.termId === input.termId) return current.id;
+    }
+    const now = this.#now();
+    const collection: SpacedCollection = current
+      ? { ...current, subjectId: input.subjectId, termId: input.termId, title, version: current.version + 1, updatedBy: me.id, updatedAt: now }
+      : { id: this.#id(), subjectId: input.subjectId, termId: input.termId, title, visibility: input.visibility,
+        ownerId: me.id, version: 1, archived: false, createdAt: now, updatedAt: now, updatedBy: me.id };
+    this.#state.spacedCollections = current
+      ? this.#state.spacedCollections.map((item) => item.id === current.id ? collection : item)
+      : [...this.#state.spacedCollections, collection];
+    this.#emit();
+    return collection.id;
+  }
+
+  publishSpacedCollection(collectionId: Id, expectedVersion: number) {
+    const me = this.#activeMember();
+    const collection = this.#spacedCollection(collectionId);
+    if (collection.ownerId !== me.id) throw new Error('Solo su propietario puede publicar la colección.');
+    this.#spacedVersion(collection.version, expectedVersion);
+    if (collection.archived) throw new Error('Restaura la colección antes de publicarla.');
+    const shared = { ...collection, visibility: 'group' as const };
+    if (this.#state.spacedCards.some((card) => card.collectionId === collectionId &&
+      !this.#readableSpacedSource(card.sourceKind, card.sourceId, shared))) {
+      throw new Error('Todas las fuentes, incluso las archivadas, deben ser accesibles al grupo; las notas personales no se pueden compartir.');
+    }
+    if (collection.visibility === 'group') return;
+    this.#state.spacedCollections = this.#state.spacedCollections.map((item) => item.id === collectionId
+      ? { ...shared, version: collection.version + 1, updatedBy: me.id, updatedAt: this.#now() } : item);
+    this.#emit();
+  }
+
+  archiveSpacedCollection(collectionId: Id, archived: boolean, expectedVersion: number) {
+    const me = this.#activeMember();
+    const collection = this.#spacedCollection(collectionId);
+    if (collection.ownerId !== me.id) throw new Error('Solo su propietario puede archivar la colección.');
+    this.#spacedVersion(collection.version, expectedVersion);
+    if (collection.archived === archived) return;
+    this.#state.spacedCollections = this.#state.spacedCollections.map((item) => item.id === collectionId
+      ? { ...item, archived, version: item.version + 1, updatedBy: me.id, updatedAt: this.#now() } : item);
+    this.#emit();
+  }
+
+  #preserveSpacedProgress(card: SpacedCard, version: number) {
+    this.#state.spacedProgress = this.#state.spacedProgress.map((progress) => progress.cardId === card.id && progress.cardVersion === card.version
+      ? { ...progress, cardVersion: version, revision: progress.revision + 1 } : progress);
+  }
+
+  saveSpacedCard(input: SpacedCardInput): Id {
+    const me = this.#activeMember();
+    const collection = this.#spacedCollection(input.collectionId);
+    if (collection.archived) throw new Error('Restaura la colección antes de editar sus tarjetas.');
+    const source = this.#readableSpacedSource(input.sourceKind, input.sourceId, collection);
+    if (!source) throw new Error('La fuente no existe, no es accesible o no pertenece a esta materia. Las notas personales solo se usan en colecciones personales.');
+    const question = requireText(input.question, 'La pregunta', MAX_SPACED_QUESTION_LENGTH);
+    const explanation = requireText(input.explanation, 'La explicación', MAX_SPACED_EXPLANATION_LENGTH);
+    const hint = input.hint.trim();
+    if (hint.length > MAX_SPACED_HINT_LENGTH) throw new Error(`La pista excede ${MAX_SPACED_HINT_LENGTH} caracteres.`);
+    const current = input.id ? this.#state.spacedCards.find((card) => card.id === input.id && card.collectionId === collection.id) : undefined;
+    if (input.id && !current) throw new Error('La tarjeta no existe o no pertenece a esta colección.');
+    if (current) {
+      this.#spacedVersion(current.version, input.expectedVersion);
+    }
+    const now = this.#now();
+    const changed = current && (current.question !== question || current.explanation !== explanation || current.hint !== hint ||
+      current.sourceKind !== input.sourceKind || current.sourceId !== input.sourceId || current.sourceVersion !== source.version);
+    if (current && !changed) return current.id;
+    const card: SpacedCard = current
+      ? { ...current, question, explanation, hint, sourceKind: input.sourceKind, sourceId: input.sourceId,
+        sourceVersion: source.version, version: current.version + 1, updatedBy: me.id, updatedAt: now }
+      : { id: this.#id(), collectionId: collection.id, question, explanation, hint, sourceKind: input.sourceKind,
+        sourceId: input.sourceId, sourceVersion: source.version, version: 1, archived: false,
+        createdBy: me.id, updatedBy: me.id, createdAt: now, updatedAt: now };
+    if (current && current.question === question && current.explanation === explanation && current.hint === hint) {
+      this.#preserveSpacedProgress(current, card.version);
+    }
+    this.#state.spacedCards = current
+      ? this.#state.spacedCards.map((item) => item.id === current.id ? card : item)
+      : [...this.#state.spacedCards, card];
+    this.#emit();
+    return card.id;
+  }
+
+  archiveSpacedCard(cardId: Id, archived: boolean, expectedVersion: number) {
+    const me = this.#activeMember();
+    const card = this.#state.spacedCards.find((item) => item.id === cardId);
+    if (!card) throw new Error('La tarjeta no existe o no tienes acceso.');
+    const collection = this.#spacedCollection(card.collectionId);
+    if (collection.archived) throw new Error('Restaura la colección antes de editar sus tarjetas.');
+    this.#spacedVersion(card.version, expectedVersion);
+    if (card.archived === archived) return;
+    this.#preserveSpacedProgress(card, card.version + 1);
+    this.#state.spacedCards = this.#state.spacedCards.map((item) => item.id === cardId
+      ? { ...item, archived, version: item.version + 1, updatedBy: me.id, updatedAt: this.#now() } : item);
+    this.#emit();
+  }
+
+  replaceSpacedCardSource(cardId: Id, expectedVersion: number, sourceKind: SpacedCard['sourceKind'], sourceId: Id) {
+    const me = this.#activeMember();
+    const card = this.#state.spacedCards.find((item) => item.id === cardId);
+    if (!card) throw new Error('La tarjeta no existe o no tienes acceso.');
+    const collection = this.#spacedCollection(card.collectionId);
+    if (collection.archived) throw new Error('Restaura la colección antes de editar sus tarjetas.');
+    this.#spacedVersion(card.version, expectedVersion);
+    const source = this.#readableSpacedSource(sourceKind, sourceId, collection);
+    if (!source) throw new Error('La fuente no existe, no es accesible o no pertenece a esta materia.');
+    if (card.sourceKind === sourceKind && card.sourceId === sourceId && card.sourceVersion === source.version) return;
+    this.#preserveSpacedProgress(card, card.version + 1);
+    this.#state.spacedCards = this.#state.spacedCards.map((item) => item.id === cardId
+      ? { ...item, sourceKind, sourceId, sourceVersion: source.version, version: item.version + 1, updatedBy: me.id, updatedAt: this.#now() } : item);
+    this.#emit();
+  }
+
+  setSpacedEnrollment(collectionId: Id, active: boolean) {
+    const me = this.#activeMember();
+    const collection = this.#spacedCollection(collectionId);
+    if (active && collection.archived) throw new Error('La colección está archivada.');
+    const enrollment = { memberId: me.id, collectionId, active, updatedAt: this.#now() };
+    this.#state.spacedEnrollments = [...this.#state.spacedEnrollments.filter((row) => row.memberId !== me.id || row.collectionId !== collectionId), enrollment];
+    this.#emit();
+  }
+
+  reviewSpacedCard(input: SpacedReviewInput) {
+    const me = this.#activeMember();
+    const requestId = input.requestId;
+    if (!requestId.trim() || requestId.length > 200) throw new Error('La identificación del repaso no es válida.');
+    if (input.rating !== 'remembered' && input.rating !== 'hint' && input.rating !== 'again') throw new Error('El resultado del repaso no es válido.');
+    const existing = this.#state.spacedReviews.find((row) => row.memberId === me.id && row.requestId === requestId);
+    if (existing) {
+      if (existing.cardId !== input.cardId || existing.cardVersion !== input.cardVersion || existing.rating !== input.rating ||
+        existing.expectedRevision !== input.expectedRevision) throw new Error('Esta identificación ya se usó para otro repaso.');
+      return;
+    }
+    const card = this.#state.spacedCards.find((item) => item.id === input.cardId);
+    if (!card) throw new Error('La tarjeta no existe o no tienes acceso.');
+    const collection = this.#spacedCollection(card.collectionId);
+    if (collection.archived || card.archived || !this.#readableSpacedSource(card.sourceKind, card.sourceId, collection)) {
+      throw new Error('La tarjeta o su fuente ya no están disponibles.');
+    }
+    if (!this.#state.spacedEnrollments.some((row) => row.memberId === me.id && row.collectionId === collection.id && row.active)) {
+      throw new Error('Añade esta colección a tu repaso antes de estudiar.');
+    }
+    this.#spacedVersion(card.version, input.cardVersion);
+    const progress = this.#state.spacedProgress.find((row) => row.memberId === me.id && row.cardId === card.id);
+    if ((progress?.revision ?? 0) !== input.expectedRevision) throw new Error('El progreso cambió en otra sesión. Actualiza antes de guardar.');
+    const now = this.#now();
+    const current = progress?.cardVersion === card.version ? progress : undefined;
+    if (current && current.dueAt.getTime() > now.getTime()) throw new Error('Todavía no vence el próximo repaso de esta tarjeta.');
+    const schedule = nextSpacedSchedule(current?.step ?? 0, input.rating, now.getTime());
+    const next: SpacedProgress = { memberId: me.id, cardId: card.id, cardVersion: card.version,
+      step: schedule.step, revision: (progress?.revision ?? 0) + 1, reviewedAt: now, dueAt: new Date(schedule.dueAt) };
+    this.#state.spacedProgress = [...this.#state.spacedProgress.filter((row) => row.memberId !== me.id || row.cardId !== card.id), next];
+    this.#state.spacedReviews = [...this.#state.spacedReviews, { id: `${me.id}:${requestId}`, requestId, memberId: me.id,
+      cardId: card.id, cardVersion: card.version, rating: input.rating, step: schedule.step,
+      reviewedAt: now, dueAt: next.dueAt, expectedRevision: input.expectedRevision }];
+    this.#emit();
+  }
+
+  #ownTeachingPractice(practiceId: Id): TeachingPractice {
+    const me = this.#activeMember();
+    const practice = this.#state.teachingPractices.find((item) => item.id === practiceId);
+    if (!practice || practice.ownerId !== me.id) throw new Error('La práctica no existe o no tienes acceso.');
+    return practice;
+  }
+
+  #teachingPersonal(practiceId: Id): TeachingPersonal {
+    const personal = this.#state.teachingPersonal.find((item) => item.practiceId === practiceId);
+    if (!personal) throw new Error('No se encontró la información personal de la práctica.');
+    return personal;
+  }
+
+  createTeachingPractice(input: CreateTeachingPracticeInput): Id {
+    const me = this.#activeMember();
+    this.#requireSubject(input.subjectId);
+    const topic = requireText(input.topic, 'El tema', MAX_TEACHING_TOPIC_LENGTH);
+    const problem = teachingExplanationError(input.initial);
+    if (problem) throw new Error(problem);
+    let sourceVersion: number | undefined;
+    if (input.source) {
+      const source = input.source.kind === 'note'
+        ? this.#state.notes.find((note) => note.id === input.source!.id &&
+          (note.visibility === 'group' || note.authorId === me.id))
+        : input.source.kind === 'guide'
+          ? this.#state.guides.find((guide) => guide.id === input.source!.id)
+          : undefined;
+      if (!source || source.subjectId !== input.subjectId) throw new Error('La fuente no existe, no es accesible o no pertenece a esta materia.');
+      sourceVersion = source.version;
+    }
+    const now = this.#now();
+    const practice: TeachingPractice = {
+      id: this.#id(), ownerId: me.id, subjectId: input.subjectId, topic,
+      initial: normalizeTeachingExplanation(input.initial), revised: { ...EMPTY_TEACHING_EXPLANATION },
+      status: 'draft', createdAt: now, updatedAt: now,
+    };
+    this.#state.teachingPractices = [...this.#state.teachingPractices, practice];
+    this.#state.teachingPersonal = [...this.#state.teachingPersonal, {
+      practiceId: practice.id, reflection: '', topicsToReview: '',
+      sourceKind: input.source?.kind, sourceId: input.source?.id, sourceVersion,
+    }];
+    this.#emit();
+    return practice.id;
+  }
+
+  saveTeachingPractice(practiceId: Id, input: SaveTeachingPracticeInput) {
+    const practice = this.#ownTeachingPractice(practiceId);
+    if (practice.status === 'completed') throw new Error('Reabre la práctica para seguir trabajando.');
+    for (const explanation of [input.initial, input.revised]) {
+      const problem = teachingExplanationError(explanation);
+      if (problem) throw new Error(problem);
+    }
+    const initial = normalizeTeachingExplanation(input.initial);
+    const revised = normalizeTeachingExplanation(input.revised);
+    if (practice.status !== 'draft' &&
+      (initial.concept !== practice.initial.concept || initial.example !== practice.initial.example || initial.limits !== practice.initial.limits)) {
+      throw new Error('La explicación inicial se conserva al comenzar la práctica.');
+    }
+    const reflection = input.reflection.trim();
+    const topicsToReview = input.topicsToReview.trim();
+    if (reflection.length > MAX_TEACHING_TEXT_LENGTH) throw new Error(`La reflexión excede ${MAX_TEACHING_TEXT_LENGTH} caracteres.`);
+    if (topicsToReview.length > MAX_TEACHING_QUESTION_LENGTH) throw new Error(`Los temas para repasar exceden ${MAX_TEACHING_QUESTION_LENGTH} caracteres.`);
+    this.#state.teachingPractices = this.#state.teachingPractices.map((item) => item.id === practiceId
+      ? { ...item, initial, revised, updatedAt: this.#now() } : item);
+    this.#state.teachingPersonal = this.#state.teachingPersonal.map((item) => item.practiceId === practiceId
+      ? { ...item, reflection, topicsToReview } : item);
+    this.#emit();
+  }
+
+  startTeachingPractice(practiceId: Id) {
+    const practice = this.#ownTeachingPractice(practiceId);
+    if (practice.status === 'practicing') return;
+    if (practice.status !== 'draft') throw new Error('La práctica ya comenzó.');
+    const problem = teachingExplanationError(practice.initial, true);
+    if (problem) throw new Error(problem);
+    const now = this.#now();
+    this.#state.teachingPractices = this.#state.teachingPractices.map((item) => item.id === practiceId
+      ? { ...item, status: 'practicing', updatedAt: now } : item);
+    this.#state.teachingQuestions = [...this.#state.teachingQuestions, ...TEACHING_PROMPTS.map((text): TeachingQuestion => ({
+      id: this.#id(), practiceId, authorId: practice.ownerId, kind: 'guided', text, answer: '', createdAt: now,
+    }))];
+    this.#emit();
+  }
+
+  completeTeachingPractice(practiceId: Id) {
+    const practice = this.#ownTeachingPractice(practiceId);
+    if (practice.status === 'completed') return;
+    if (practice.status !== 'practicing') throw new Error('La práctica debe estar en curso para completarla.');
+    const personal = this.#teachingPersonal(practiceId);
+    const answered = this.#state.teachingQuestions.filter((question) => question.practiceId === practiceId && question.answer.trim()).length;
+    const problem = teachingCompletionError(practice.revised, personal.reflection, answered);
+    if (problem) throw new Error(problem);
+    this.#state.teachingPractices = this.#state.teachingPractices.map((item) => item.id === practiceId
+      ? { ...item, status: 'completed', updatedAt: this.#now() } : item);
+    this.#emit();
+  }
+
+  reopenTeachingPractice(practiceId: Id) {
+    const practice = this.#ownTeachingPractice(practiceId);
+    if (practice.status !== 'completed') throw new Error('Solo se reabre una práctica completada.');
+    this.#state.teachingPractices = this.#state.teachingPractices.map((item) => item.id === practiceId
+      ? { ...item, status: 'practicing', updatedAt: this.#now() } : item);
+    this.#emit();
+  }
+
+  setTeachingReviewer(practiceId: Id, reviewerId?: Id) {
+    const practice = this.#ownTeachingPractice(practiceId);
+    if (reviewerId) {
+      if (practice.status !== 'practicing') throw new Error('Invita a un compañero cuando la práctica esté en curso.');
+      if (reviewerId === practice.ownerId || !this.#isActive(reviewerId)) throw new Error('Elige a otro integrante activo.');
+    }
+    this.#state.teachingPractices = this.#state.teachingPractices.map((item) => item.id === practiceId
+      ? { ...item, reviewerId: reviewerId || undefined, updatedAt: this.#now() } : item);
+    this.#emit();
+  }
+
+  askTeachingQuestion(practiceId: Id, text: string): Id {
+    const me = this.#activeMember();
+    const practice = this.#state.teachingPractices.find((item) => item.id === practiceId);
+    if (!practice || !this.#isActive(practice.ownerId) || practice.reviewerId !== me.id) {
+      throw new Error('La práctica no existe o no tienes acceso.');
+    }
+    if (practice.status !== 'practicing') throw new Error('Solo puedes preguntar mientras la práctica está en curso.');
+    const question: TeachingQuestion = {
+      id: this.#id(), practiceId, authorId: me.id, kind: 'peer',
+      text: requireText(text, 'La pregunta', MAX_TEACHING_QUESTION_LENGTH), answer: '', createdAt: this.#now(),
+    };
+    this.#state.teachingQuestions = [...this.#state.teachingQuestions, question];
+    this.#state.teachingPractices = this.#state.teachingPractices.map((item) => item.id === practiceId
+      ? { ...item, updatedAt: question.createdAt } : item);
+    this.#emit();
+    return question.id;
+  }
+
+  answerTeachingQuestion(questionId: Id, answer: string) {
+    this.#activeMember();
+    const question = this.#state.teachingQuestions.find((item) => item.id === questionId);
+    if (!question) throw new Error('La pregunta no existe.');
+    const practice = this.#ownTeachingPractice(question.practiceId);
+    if (practice.status !== 'practicing') throw new Error('Solo puedes responder mientras la práctica está en curso.');
+    const text = requireText(answer, 'La respuesta', MAX_TEACHING_QUESTION_LENGTH);
+    const now = this.#now();
+    this.#state.teachingQuestions = this.#state.teachingQuestions.map((item) => item.id === questionId
+      ? { ...item, answer: text, answeredAt: now } : item);
+    this.#state.teachingPractices = this.#state.teachingPractices.map((item) => item.id === practice.id
+      ? { ...item, updatedAt: now } : item);
+    this.#emit();
+  }
+
+  publishTeachingExplanation(practiceId: Id): Id {
+    const practice = this.#ownTeachingPractice(practiceId);
+    const personal = this.#teachingPersonal(practiceId);
+    if (personal.publishedNoteId) return personal.publishedNoteId;
+    if (practice.status !== 'completed') throw new Error('Completa la práctica antes de publicar.');
+    const now = this.#now();
+    const note: Note = {
+      id: this.#id(), subjectId: practice.subjectId, topic: practice.topic, title: practice.topic,
+      body: teachingNoteBody(practice.revised), tags: ['aprende-ensenando'], visibility: 'group', source: 'student',
+      authorId: practice.ownerId, version: 1, createdAt: now, updatedAt: now,
+    };
+    // Ambas escrituras se terminan antes de emitir: un doble envío recupera la misma nota.
+    this.#state.notes = [...this.#state.notes, note];
+    this.#state.teachingPersonal = this.#state.teachingPersonal.map((item) => item.practiceId === practiceId
+      ? { ...item, publishedNoteId: note.id } : item);
+    this.#emit();
+    return note.id;
   }
 
   /** Valida lo que se captura al crear o editar una votación. */
@@ -1581,6 +2123,7 @@ export function createDemoState(now = new Date()): State {
     })),
   ];
   return {
+    ...emptyState(),
     invitations: [
       {
         email: 'pendiente@ejemplo.mx',
@@ -2114,6 +2657,125 @@ export function createDemoState(now = new Date()): State {
       { pollId: 'p5', voterId: 'demo-2', choices: [0], votedAt: minutesAgo(1800) },
       { pollId: 'p5', voterId: 'demo-4', choices: [0], votedAt: minutesAgo(1700) },
       { pollId: 'p5', voterId: 'demo-1', choices: [1], votedAt: minutesAgo(1000) },
+    ],
+    spacedCollections: [
+      { id: 'sd1', subjectId: LOGICA, termId: `${LOGICA}-p1`, title: 'Decisiones y lógica · colección de prueba',
+        visibility: 'group', ownerId: 'demo-1', version: 1, archived: false,
+        createdAt: minutesAgo(4500), updatedAt: minutesAgo(120), updatedBy: 'demo-2' },
+      { id: 'sd2', subjectId: FUNDAMENTOS, title: 'Mis ciclos · colección personal de prueba',
+        visibility: 'personal', ownerId: 'demo-3', version: 1, archived: false,
+        createdAt: minutesAgo(75), updatedAt: minutesAgo(75), updatedBy: 'demo-3' },
+    ],
+    spacedCards: [
+      { id: 'sc1', collectionId: 'sd1', question: '¿Para qué sirve una condición en un algoritmo?',
+        explanation: 'Permite elegir qué instrucciones ejecutar según el resultado verdadero o falso de una expresión.',
+        hint: 'Piensa en una decisión con dos caminos.', sourceKind: 'guide', sourceId: 'gd1', sourceVersion: 2,
+        version: 1, archived: false, createdBy: 'demo-1', updatedBy: 'demo-1', createdAt: minutesAgo(4500), updatedAt: minutesAgo(4500) },
+      { id: 'sc2', collectionId: 'sd1', question: '¿Qué debe incluir un ejemplo para explicar una decisión?',
+        explanation: 'La condición evaluada y lo que ocurre tanto cuando se cumple como cuando no se cumple.',
+        hint: '', sourceKind: 'note', sourceId: 'n1', sourceVersion: 1, version: 1, archived: false,
+        createdBy: 'demo-2', updatedBy: 'demo-2', createdAt: minutesAgo(120), updatedAt: minutesAgo(120) },
+      { id: 'sc3', collectionId: 'sd1', question: '¿Cómo compruebas que una explicación es suficiente?',
+        explanation: 'Prueba el mismo razonamiento con datos distintos y explica por qué el resultado cambia o se mantiene.',
+        hint: 'Usa un caso diferente al del ejemplo.', sourceKind: 'guide', sourceId: 'gd1', sourceVersion: 2,
+        version: 1, archived: false, createdBy: 'demo-2', updatedBy: 'demo-2', createdAt: minutesAgo(2200), updatedAt: minutesAgo(2200) },
+      { id: 'sc4', collectionId: 'sd1', question: '¿Por qué hay que revisar la fuente antes de estudiar?',
+        explanation: 'El material del grupo puede cambiar. Esta tarjeta conserva la explicación de su versión de origen para que revises si sigue vigente.',
+        hint: '', sourceKind: 'guide', sourceId: 'gd1', sourceVersion: 1, version: 1, archived: false,
+        createdBy: 'demo-1', updatedBy: 'demo-1', createdAt: minutesAgo(3000), updatedAt: minutesAgo(3000) },
+      { id: 'sc5', collectionId: 'sd2', question: '¿Qué necesito recordar sobre la salida de un ciclo?',
+        explanation: 'Debo identificar la condición que deja de cumplirse y qué cambia en cada repetición para poder alcanzarla.',
+        hint: 'Busca qué dato se actualiza.', sourceKind: 'note', sourceId: 'n2', sourceVersion: 1,
+        version: 1, archived: false, createdBy: 'demo-3', updatedBy: 'demo-3', createdAt: minutesAgo(75), updatedAt: minutesAgo(75) },
+    ],
+    spacedEnrollments: [
+      { memberId: 'demo-1', collectionId: 'sd1', active: true, updatedAt: minutesAgo(4500) },
+      { memberId: 'demo-2', collectionId: 'sd1', active: true, updatedAt: minutesAgo(3500) },
+      { memberId: 'demo-3', collectionId: 'sd2', active: true, updatedAt: minutesAgo(75) },
+    ],
+    spacedProgress: [
+      { memberId: 'demo-1', cardId: 'sc1', cardVersion: 1, step: 1, revision: 1, reviewedAt: minutesAgo(1500), dueAt: minutesAgo(60) },
+      { memberId: 'demo-1', cardId: 'sc3', cardVersion: 1, step: 2, revision: 2, reviewedAt: minutesAgo(1200), dueAt: minutesAgo(-3120) },
+      { memberId: 'demo-2', cardId: 'sc1', cardVersion: 1, step: 3, revision: 3, reviewedAt: minutesAgo(2000), dueAt: minutesAgo(-8080) },
+    ],
+    spacedReviews: [
+      { id: 'demo-1:fixture1', requestId: 'fixture1', memberId: 'demo-1', cardId: 'sc1', cardVersion: 1,
+        rating: 'remembered', step: 1, expectedRevision: 0, reviewedAt: minutesAgo(1500), dueAt: minutesAgo(60) },
+      { id: 'demo-2:fixture2', requestId: 'fixture2', memberId: 'demo-2', cardId: 'sc1', cardVersion: 1,
+        rating: 'remembered', step: 3, expectedRevision: 2, reviewedAt: minutesAgo(2000), dueAt: minutesAgo(-8080) },
+    ],
+    teachingPractices: [
+      {
+        id: 'tp1', ownerId: 'demo-1', reviewerId: 'demo-2', subjectId: LOGICA,
+        topic: 'Condiciones y decisiones de prueba',
+        initial: { concept: 'Una condición permite decidir qué instrucciones ejecutar.',
+          example: 'Si la temperatura supera 30 grados, encendemos el ventilador.',
+          limits: 'Se necesita una expresión que tenga un resultado verdadero o falso.' },
+        revised: { ...EMPTY_TEACHING_EXPLANATION }, status: 'practicing',
+        createdAt: minutesAgo(150), updatedAt: minutesAgo(120),
+      },
+      {
+        id: 'tp2', ownerId: 'demo-3', reviewerId: 'demo-1', subjectId: FUNDAMENTOS,
+        topic: 'Ciclos de prueba',
+        initial: { concept: 'Un ciclo repite un conjunto de instrucciones.',
+          example: 'Recorrer los nombres de una lista y saludar a cada persona.',
+          limits: 'Debe tener una condición de salida cuando el proceso no sea infinito.' },
+        revised: { ...EMPTY_TEACHING_EXPLANATION }, status: 'practicing',
+        createdAt: minutesAgo(100), updatedAt: minutesAgo(75),
+      },
+      {
+        id: 'tp3', ownerId: 'demo-1', subjectId: LOGICA, topic: 'Variables de prueba',
+        initial: { concept: 'Una variable guarda un valor.', example: '', limits: '' },
+        revised: { ...EMPTY_TEACHING_EXPLANATION }, status: 'draft',
+        createdAt: minutesAgo(30), updatedAt: minutesAgo(30),
+      },
+    ],
+    teachingPersonal: [
+      { practiceId: 'tp1', reflection: 'Reflexión de prueba, visible solo para mí.',
+        topicsToReview: 'Operadores de comparación', sourceKind: 'note', sourceId: 'n1', sourceVersion: 1 },
+      { practiceId: 'tp2', reflection: 'Reflexión privada del autor de la práctica de prueba.',
+        topicsToReview: 'Condición de salida', sourceKind: 'note', sourceId: 'n2', sourceVersion: 1 },
+      { practiceId: 'tp3', reflection: '', topicsToReview: '' },
+    ],
+    teachingQuestions: [
+      ...['tp1', 'tp2'].flatMap((practiceId) => TEACHING_PROMPTS.map((text, index): TeachingQuestion => ({
+        id: `tq-${practiceId}-${index}`, practiceId, authorId: practiceId === 'tp1' ? 'demo-1' : 'demo-3',
+        kind: 'guided', text, answer: '', createdAt: minutesAgo(70),
+      }))),
+      { id: 'tq-peer', practiceId: 'tp1', authorId: 'demo-2', kind: 'peer',
+        text: '¿Qué pasa exactamente cuando la temperatura es de 30 grados?', answer: '', createdAt: minutesAgo(45) },
+    ],
+    helpPosts: [
+      { id: 'hp1', kind: 'offer', subjectId: FUNDAMENTOS, title: 'Puedo explicar condicionales (ejemplo)',
+        topic: 'Condicionales', description: 'Oferta de prueba: podemos revisar un ejemplo de if y else y practicar juntos.',
+        level: 'initial', modality: 'messages', availability: 'Ejemplo de disponibilidad voluntaria: por la tarde.',
+        status: 'open', authorId: 'demo-2', createdAt: minutesAgo(240), updatedAt: minutesAgo(240) },
+      { id: 'hp2', kind: 'request', subjectId: LOGICA, title: 'Necesito practicar conversiones (ejemplo)',
+        topic: 'Sistemas numéricos', description: 'Petición de prueba: quiero entender los pasos para convertir entre binario y decimal.',
+        level: 'initial', modality: 'flexible', availability: '', status: 'open', authorId: 'demo-3',
+        createdAt: minutesAgo(180), updatedAt: minutesAgo(180) },
+      { id: 'hp3', kind: 'request', subjectId: FUNDAMENTOS, title: 'Repasar ciclos con ejemplos (prueba)',
+        topic: 'Ciclos', description: 'Petición de ejemplo para practicar la coordinación de ayuda entre compañeros.',
+        level: 'basics', modality: 'video', availability: '', status: 'open', authorId: 'demo-1',
+        createdAt: minutesAgo(120), updatedAt: minutesAgo(120) },
+      { id: 'hp4', kind: 'offer', subjectId: LOGICA, title: 'Repaso de tablas de verdad (ejemplo cerrado)',
+        topic: 'Tablas de verdad', description: 'Oferta de prueba cerrada por su autor; ya no recibe nuevos contactos.',
+        level: 'basics', modality: 'in_person', availability: '', status: 'closed', authorId: 'demo-4',
+        createdAt: minutesAgo(400), updatedAt: minutesAgo(100) },
+    ],
+    helpContacts: [
+      { id: 'hc1', postId: 'hp1', senderId: 'demo-1', recipientId: 'demo-2', subjectId: FUNDAMENTOS,
+        postTitle: 'Puedo explicar condicionales (ejemplo)', postTopic: 'Condicionales', postKind: 'offer',
+        message: 'Solicitud privada de ejemplo: me gustaría practicar con un ejercicio.', status: 'pending',
+        createdAt: minutesAgo(60), updatedAt: minutesAgo(60) },
+      { id: 'hc2', postId: 'hp3', senderId: 'demo-4', recipientId: 'demo-1', subjectId: FUNDAMENTOS,
+        postTitle: 'Repasar ciclos con ejemplos (prueba)', postTopic: 'Ciclos', postKind: 'request',
+        message: 'Contacto de prueba: puedo ayudar con un ejemplo de ciclos.', status: 'pending',
+        createdAt: minutesAgo(45), updatedAt: minutesAgo(45) },
+      { id: 'hc3', postId: 'hp2', senderId: 'demo-2', recipientId: 'demo-3', subjectId: LOGICA,
+        postTitle: 'Necesito practicar conversiones (ejemplo)', postTopic: 'Sistemas numéricos', postKind: 'request',
+        message: 'Ejemplo de ayuda acordada por privado.', status: 'accepted', conversationId: 'c1',
+        createdAt: minutesAgo(100), updatedAt: minutesAgo(30) },
     ],
     lastSeen: { 'demo-1': minutesAgo(180) },
   };

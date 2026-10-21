@@ -141,3 +141,25 @@ describe('las dos vistas', () => {
     ]);
   });
 });
+
+describe('filtros académicos completos', () => {
+  const academic = buildPosts({
+    assignments: [assignment('academic', { topic: 'Recursión', kind: 'tarea', dueDate: '2026-10-20' }), assignment('future', { kind: 'examen', dueDate: '2026-11-01' })],
+    works: [{ ...works[0]!, id: 'reviewed', assignmentId: 'academic', topic: 'Árboles', status: 'reviewed' }],
+    activities: [activity('session', '2026-10-21', { topic: 'Recursión' })],
+    evidences: [], members,
+    myProgress: [{ targetKind: 'assignment', targetId: 'academic', status: 'done', updatedAt: day(20) }],
+  });
+  it('combina tipo, tema, estado de trabajo y avance propio sin incluir publicaciones distintas', () => {
+    expect(keys(filterPosts(academic, { ...all, exactKind: 'tarea', topic: 'arboles', workStatus: 'reviewed', progress: 'done' }, ctx))).toEqual(['t:academic']);
+    expect(keys(filterPosts(academic, { ...all, personId: 'ana', workStatus: 'reviewed' }, ctx))).toEqual([]);
+  });
+  it('usa límites inclusivos de fechas tanto para entregas como para sesiones', () => {
+    expect(keys(filterPosts(academic, { ...all, from: '2026-10-20', to: '2026-10-21' }, ctx))).toEqual(['t:academic', 'a:session']);
+    expect(keys(filterPosts(academic, { ...all, from: '2026-10-22', to: '2026-10-20' }, ctx))).toEqual([]);
+  });
+  it('considera sin empezar únicamente el avance propio ausente, sin confundirlo con la participación', () => {
+    expect(keys(filterPosts(academic, { ...all, progress: 'pending' }, ctx))).toEqual(['t:future', 'a:session']);
+    expect(keys(filterPosts(academic, { ...all, exactKind: 'clase', topic: 'recursion' }, ctx))).toEqual(['a:session']);
+  });
+});

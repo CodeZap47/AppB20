@@ -8,7 +8,7 @@ function source() {
 afterEach(() => vi.restoreAllMocks());
 
 describe('cierre de una simulación', () => {
-  it('libera una vez cada adjunto, incluidos los restantes al salir', async () => {
+  it('conserva los archivos históricos y libera sus enlaces una vez al salir', async () => {
     const create = vi.spyOn(URL, 'createObjectURL')
       .mockReturnValueOnce('blob:primer-adjunto')
       .mockReturnValueOnce('blob:segundo-adjunto');
@@ -19,7 +19,8 @@ describe('cierre de una simulación', () => {
     expect(create).toHaveBeenCalledTimes(2);
 
     data.removeWorkFile(first);
-    expect(revoke.mock.calls).toEqual([['blob:primer-adjunto']]);
+    expect(revoke).not.toHaveBeenCalled();
+    expect(await (await data.downloadResourceFile(first)).text()).toBe('primero');
     data.dispose();
     data.dispose();
 

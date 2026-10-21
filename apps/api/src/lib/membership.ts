@@ -21,7 +21,8 @@ export async function checkActiveMembership(token: string, options?: MembershipO
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: '[]',
-    redirect: 'error',
+    // Workers supports manual/follow; reject every redirect through the status check below.
+    redirect: 'manual',
     signal: AbortSignal.timeout(8_000),
   });
   if (response.status === 200) return true;

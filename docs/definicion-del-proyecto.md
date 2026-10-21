@@ -427,15 +427,15 @@ Validar emisor, audiencia, identidad y pertenencia antes de permitir lectura o e
 
 ### Archivos y fotos
 
-Propuesta: **Google Cloud Storage para fotos, documentos, imágenes y otros adjuntos**, con metadatos y referencias en SpacetimeDB. El backend comprobará membresía y emitirá accesos de duración limitada cuando corresponda. Las URLs firmadas permiten acceso temporal, pero cualquiera que tenga una puede utilizarla mientras siga activa; no se tratarán como autorización permanente del grupo. [[11]](https://docs.cloud.google.com/storage/docs/access-control/signed-urls)
+**Decisión actualizada:** fotos, documentos, imágenes y otros adjuntos se almacenan en tablas privadas de **SpacetimeDB**, con manifiestos y fragmentos binarios de 1 MiB. Las suscripciones generales reciben metadatos; los bytes se solicitan bajo demanda y cada operación comprueba membresía y permisos sobre su recurso. Cloudflare Pages sirve la web/PWA; no se requiere almacenamiento externo para una instalación nueva. La guía de implementación está en [archivos-spacetime.md](archivos-spacetime.md).
 
-**Límite confirmado: 50 MB por archivo**, igual para adjuntos de trabajos, mensajes, evidencias y fotos. La interfaz avisa antes de subir y el servidor lo vuelve a comprobar.
+**Límite confirmado: 50 MiB (52,428,800 bytes) por archivo**, igual para adjuntos de trabajos, mensajes, evidencias y fotos. Esta unidad aclara los «50 MB» anteriores y conserva el límite binario del código. La interfaz avisa antes de subir y el servidor lo vuelve a comprobar.
 
-Mantener el almacenamiento cerrado al público general, definir los tipos de archivo permitidos, evitar duplicados y conservar versiones. Costos, cuotas, región y política de eliminación quedan por verificar antes de contratar o desplegar servicios.
+Mantener el almacenamiento cerrado al público general, definir los tipos de archivo permitidos, evitar duplicados y conservar versiones. La entrega inicial establece reservas y cuotas conservadoras, reanudación, cancelación y limpieza de intentos pendientes. La papelera de 30 días corresponde a una entrega posterior. Conservar los IDs y archivos R2 anteriores hasta comprobar su migración; no eliminar datos como efecto de desplegar. Medir almacenamiento, transferencia y procesamiento del plan gratuito, sin activar facturación automáticamente.
 
 ### Gemini y secretos
 
-Propuesta: servicio backend en TypeScript con el SDK `@google/genai`, claves BYOK separadas por usuario y un almacén de secretos, por ejemplo Google Cloud Secret Manager. La documentación de Gemini muestra este SDK y recomienda mantener claves fuera del cliente de producción. [[1]](https://ai.google.dev/gemini-api/docs/api-key)
+**Arquitectura elegida para una entrega posterior:** claves BYOK personales cifradas en tablas privadas de SpacetimeDB y una clave maestra protegida mediante Cloudflare Secrets. Un Cloudflare Worker autenticado realizará el cifrado y la integración con Gemini sin devolver claves al cliente. No se requieren Supabase, D1 ni Google Cloud Secret Manager. La integración permanece deshabilitada hasta implementarla y verificarla; Gemini sigue siendo el proveedor de IA de la sección 4. [[1]](https://ai.google.dev/gemini-api/docs/api-key)
 
 ### Notificaciones push por presentación
 
@@ -449,7 +449,7 @@ Añadir una pantalla para comprobar instalación y compatibilidad, solicitar el 
 
 #### Android: notificaciones del APK
 
-Usar `@capacitor/push-notifications` con **Firebase Cloud Messaging**. El plugin documenta registro FCM en Android y la solicitud de permisos requerida para Android 13 o superior. [[7]](https://capacitorjs.com/docs/apis/push-notifications)
+**Restricción actual de proveedores:** solo SpacetimeDB y Cloudflare. El diseño original de push nativo mediante `@capacitor/push-notifications` requiere Firebase Cloud Messaging en Android. Por ello no se configura FCM en esta entrega: se planifican avisos internos y recordatorios locales; la recepción de push nativo con el APK cerrado permanece como requisito pendiente, sin atribuírsela a SpacetimeDB. [[7]](https://capacitorjs.com/docs/apis/push-notifications)
 
 Configurar canales, registro del dispositivo y apertura del contenido desde el aviso. Diseñar avisos visibles, no depender exclusivamente de mensajes de datos para ejecutar código con la app terminada: Capacitor documenta límites en ese escenario. Probar primer plano, segundo plano y cierre en dispositivos reales. [[7]](https://capacitorjs.com/docs/apis/push-notifications)
 
@@ -464,7 +464,7 @@ En la web/PWA, usar Web Push en navegadores compatibles, con detección de capac
 - En mensajes directos, vista previa configurable; por defecto un aviso genérico para no exponer el texto en una pantalla bloqueada.
 - Al pulsar una notificación, abrir el contenido correcto y volver a comprobar identidad y permisos.
 
-**Flujo:** evento autorizado o recordatorio programado → notificación pendiente → servicio backend que envía por Web Push o FCM según la instalación → apertura autenticada del contenido. Las suscripciones Web Push, los tokens FCM y las credenciales de envío no son datos visibles para el grupo.
+**Flujo previsto:** evento autorizado o recordatorio programado en SpacetimeDB → notificación pendiente → envío compatible desde Cloudflare Worker → apertura autenticada del contenido. Las suscripciones Web Push y las credenciales de envío no son datos visibles para el grupo. La vía nativa de Android conserva la limitación indicada arriba; una cola no resuelve por sí misma la recepción en segundo plano.
 
 Guardar preferencias, eliminar suscripciones inválidas, controlar reintentos y duplicados y limitar avisos repetidos. No mantener una conexión SpacetimeDB permanente en segundo plano como sustituto de push. Si se deniega el permiso, la app seguirá funcionando con avisos dentro de su interfaz.
 
@@ -477,7 +477,7 @@ Guardar preferencias, eliminar suscripciones inválidas, controlar reintentos y 
 - Pregunta, respuesta, canal, conversación y participantes; mensajes del grupo o directos con autorización diferenciada.
 - Encuesta, voto y evento de contribución.
 - Diccionario de señales, versión, convención por medio físico, práctica y ficha de anotación preparada.
-- Instalación o dispositivo, suscripción Web Push o token FCM, preferencias y notificación pendiente; datos técnicos protegidos del acceso comunitario.
+- Instalación o dispositivo, suscripción Web Push, preferencias y notificación pendiente; datos técnicos protegidos del acceso comunitario. El registro de push nativo Android queda pendiente de una solución compatible con la restricción de proveedores.
 - Referencia al secreto de Gemini y solicitud de generación, sin exponer la clave.
 
 Cada trabajo enlazará materia, parcial y autores para reutilizarse en el archivo, los perfiles y las guías. Un adjunto de chat directo tendrá permisos de su conversación, no los del archivo académico compartido. Puntajes, votos, roles, pertenencia y acceso a mensajes se validarán en el servidor.
@@ -492,7 +492,7 @@ El alcance reúne once módulos base —incluidos perfiles, cumpleaños y el mó
 - Probar React, el SDK oficial de SpacetimeDB, autenticación y autorización en los tres entornos.
 - Validar perfil, archivos, conversación del grupo y chat directo con pruebas de acceso de un tercero.
 - Probar una PWA instalada en iPhone compatible y un aviso visible con permiso concedido.
-- Compilar un APK Android firmado de prueba y validar una notificación FCM.
+- Compilar un APK Android firmado de prueba y validar avisos internos; registrar por separado el requisito pendiente de push nativo con el APK cerrado.
 - Probar el panel lateral y la vista completa de la extensión con dependencias empaquetadas.
 - Validar una guía con fuentes y un cumpleaños de prueba identificado como dato de prueba, sin inventar información real de compañeros.
 
@@ -681,6 +681,25 @@ Las siguientes doce ideas quedan incorporadas al alcance ampliado. Algunas será
 
 **Criterio de aceptación:** el estudiante puede revisar su explicación después de responder preguntas y señalar qué necesita repasar.
 
+**Primera versión implementada (sin Gemini):** prácticas con materia y tema, fuente opcional
+en una nota accesible o guía, explicación inicial (concepto, ejemplo y límites), tres preguntas
+orientadoras, respuestas, explicación revisada y reflexión personal con temas para repasar.
+Se permiten borradores incompletos; completar requiere las tres partes de la explicación
+revisada, una reflexión y al menos una respuesta. La explicación inicial se conserva al
+comenzar; una práctica completa puede reabrirse.
+
+El autor puede invitar a un compañero activo, con acceso inmediato a las explicaciones
+guardadas y a sus preguntas y respuestas. Solo ese compañero puede añadir preguntas, y solo
+el autor responde. Retirar o sustituir al compañero retira su acceso. La reflexión, los temas
+de repaso y la referencia de origen solo se entregan al autor; tampoco los recibe un
+administrador. Una nota personal usada como fuente no se comparte al invitar.
+
+Publicar crea una nota del grupo con la explicación revisada, previa vista de su contenido.
+La sesión, sus preguntas y su reflexión siguen privadas. Repetir la publicación abre la misma
+nota sin duplicarla; las ediciones posteriores de la práctica no modifican la nota publicada.
+La práctica privada no suma puntos ni aparece en el historial público. El modo de demostración
+mantiene el mismo aviso de datos temporales y reinicio al recargar.
+
 ### 7.9. Repaso espaciado
 
 **Propósito:** facilitar la revisión periódica de conceptos mediante tarjetas de preguntas y respuestas.
@@ -698,6 +717,34 @@ Las siguientes doce ideas quedan incorporadas al alcance ampliado. Algunas será
 **Integración:** ampliación del módulo de guías de estudio, no un sistema independiente de apuntes.
 
 **Criterio de aceptación:** cada estudiante tiene su propia cola de repaso sin revelar sus respuestas o dificultades al leaderboard.
+
+**Primera versión implementada (manual):** colecciones personales o compartidas, clasificadas
+por materia y parcial opcional. Cada tarjeta conserva una pregunta, explicación, pista opcional
+y una nota o guía de origen con su versión. «Crear tarjeta» parte de notas y guías; las guías
+enlazan sus colecciones. La escritura de la respuesta es opcional y se descarta al cambiar de
+tarjeta: no se envía ni se guarda en el historial.
+
+Cada alumno añade o pausa colecciones en su cola. Primero aparecen las revisiones vencidas y
+después las tarjetas nuevas, incluidas las que el grupo añada a una colección ya activada.
+La sesión revela la explicación antes de permitir la autoevaluación y confirma el guardado
+y la próxima fecha; un error permite reintentar el mismo envío sin duplicarlo.
+
+«Lo recordé» avanza por **1, 3, 7, 14, 30, 60 y 120 días**, manteniendo después 120.
+«Necesité una pista» programa un día sin avanzar; «Debo repasarlo» reinicia la progresión y
+programa diez minutos. Los días son intervalos de 24 horas desde el reloj del servidor y se
+muestran en la hora local del alumno. No se repite una tarjeta dentro de la misma sesión.
+
+Cualquier miembro activo puede corregir las colecciones compartidas; las personales solo las
+edita su propietario. Publicar y archivar una colección corresponde a su creador. Una
+colección con fuentes personales o inaccesibles no se puede publicar, incluidas sus tarjetas
+archivadas. Si cambia la fuente, se avisa sin reescribir la tarjeta; si deja de ser accesible,
+la tarjeta deja de mostrarse y de entrar en la cola. Corregir pregunta, explicación o pista
+reinicia su aprendizaje, conservando el historial anterior. Archivar no borra el progreso.
+
+Las inscripciones, resultados e historial solo son consultables por el alumno, también frente
+a administradores. Estudiar y autoevaluarse no suma puntos ni genera novedades comunitarias.
+El modo de demostración aplica las mismas reglas con datos temporales en memoria. La
+generación de borradores con Gemini queda pendiente de su integración general.
 
 ### 7.10. Simulador de exposiciones y preguntas
 
@@ -797,7 +844,9 @@ Todas las ideas están incluidas en el proyecto. La siguiente distribución orga
 | IA | Gemini como proveedor principal, conservando BYOK y comprobando elegibilidad y consumo. |
 | Motivación | Leaderboard incluido; reglas de puntos pendientes de validación. |
 | Perfil | Foto, nombre y archivo de trabajos por materia y parcial, con coautorías y versiones. |
-| Archivos | Máximo 50 MB por archivo subido a la app. |
+| Archivos | Máximo 50 MiB (52,428,800 bytes) por archivo; fragmentos privados de 1 MiB en SpacetimeDB. |
+| Infraestructura | SpacetimeAuth y SpacetimeDB como backend principal; Cloudflare Pages para web/PWA y Workers solo para integraciones necesarias. Sin servicios adicionales ni activación automática de planes de pago. |
+| Conservación | Papelera de 30 días planificada; conservar versiones y sus archivos mientras sean recuperables. Las claves BYOK se eliminan inmediatamente. |
 | Páginas principales | Lo que se pidió vive en una página que todo el grupo edita como wiki, con historial y restauración; los trabajos de cada alumno se suben aparte en esa página. Aplica también a las actividades de clase. |
 | Tipos de trabajo | Tarea, actividad, exposición o examen; se elige al publicar y se filtra por «Tareas y actividades» o «Exposiciones y exámenes». |
 | Módulo unido | «Actividades de clase» vive dentro de «Tareas y Actividades», con dos vistas de las mismas publicaciones: por materia y por fecha. |
@@ -809,8 +858,8 @@ Todas las ideas están incluidas en el proyecto. La siguiente distribución orga
 
 - React + TypeScript + Vite y SDK oficial `spacetimedb`; compilaciones adaptadas para web/PWA, extensión Manifest V3 y Capacitor Android. Tauri y una app nativa iOS quedan como opciones posteriores.
 - SpacetimeAuth OIDC con Google y acceso autorizado al grupo por invitación (decisión confirmada).
-- Google Cloud Storage para archivos y backend con almacén de secretos para Gemini.
-- Web Push para la PWA de iPhone y web compatible; FCM para el APK Android. La recepción y avisos del sistema de la extensión requieren implementación específica y pruebas.
+- Archivos privados en SpacetimeDB y claves BYOK cifradas allí con clave maestra en Cloudflare Secrets; no se exige un proveedor adicional.
+- Web Push para la PWA de iPhone y web compatible, con envío desde Cloudflare. Push nativo del APK cerrado pendiente bajo la restricción de proveedores. La recepción y avisos del sistema de la extensión requieren implementación específica y pruebas.
 
 ### Pendientes que no deben darse por resueltos
 
@@ -818,7 +867,7 @@ Todas las ideas están incluidas en el proyecto. La siguiente distribución orga
 - **Cuenta institucional:** probar Google AI Studio y creación de clave en una cuenta autorizada, sin solicitar claves en chats o documentos compartidos.
 - **Costos y límites:** infraestructura, archivos, cuotas de API y presupuesto de cada clave BYOK.
 - **Integración real:** SDK y autenticación en PWA, WebView Android y páginas de extensión; callbacks por presentación y permisos de lectura de mensajes.
-- **Instalación y push:** iPhone compatible con PWA añadida a inicio y autorización; APK firmado, permisos Android y registro FCM; funcionamiento de la extensión y políticas de distribución.
+- **Instalación y push:** iPhone compatible con PWA añadida a inicio y autorización; APK firmado y permisos Android; solución pendiente para push nativo con el APK cerrado; funcionamiento de la extensión y políticas de distribución.
 - **Cumpleaños:** fechas aportadas voluntariamente, zona de recordatorios, preferencias y tratamiento del 29 de febrero.
 - **Guías:** temarios, identificación de parciales, formatos de archivo y mecanismo para señalar fuentes no procesadas.
 - **Puntuación:** aportes que cuentan, ponderación, límites y tratamiento de duplicados.

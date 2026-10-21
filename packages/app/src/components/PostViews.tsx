@@ -27,6 +27,8 @@ const countOf = (post: Post) =>
 const mineOf = (post: Post, meId: Id | undefined) =>
   Boolean(meId && post.people.includes(meId)) && (post.type === 'activity' ? 'Participaste' : 'Ya subiste');
 
+const progressOf = (post: Post) => ({ pending: 'Sin empezar', in_progress: 'En proceso', done: 'Terminado' })[post.progressStatus ?? 'pending'];
+
 /**
  * Vista por materia: tarjetas agrupadas en materia → parcial (sección 2). Es la vista que tenía
  * «Tareas y Actividades».
@@ -57,6 +59,7 @@ export function PostArchive({ posts, subjects, terms, members, meId }: ViewProps
                           {post.topic && <span className="work-card__context">{post.topic}</span>}
                         </span>
                         <strong className="work-card__title">{post.title}</strong>
+                        {meId && <span className="muted">Mi avance: {progressOf(post)}</span>}
                         {excerpt && <span className="work-card__excerpt">{excerpt}</span>}
                         <span className="work-card__footer">
                           {post.count > 0 && (
@@ -123,6 +126,7 @@ export function PostTimeline({ posts, subjects, terms, members, meId }: ViewProp
                       </span>
                       <strong className="row-card__title">{post.title}</strong>
                       <span className="row-card__meta">{place}</span>
+                      {meId && <span className="row-card__meta">Mi avance: {progressOf(post)}</span>}
                     </span>
                     <span className="row-card__side">
                       {post.count > 0 && (

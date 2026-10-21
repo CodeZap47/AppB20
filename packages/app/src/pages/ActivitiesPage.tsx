@@ -2,12 +2,12 @@ import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router';
 import { isValidPeriod, PERIOD_COUNT, periodLabel, WORK_KIND_LABEL } from '@b20/core';
 import { useDataSource, useSnapshot } from '../data/DataContext';
-import type { Activity, Evidence, Member, Revision } from '../data/types';
+import type { Activity, Evidence, Member } from '../data/types';
 import { Avatar } from '../components/Avatar';
 import { AvatarStack } from '../components/AvatarStack';
 import { Empty } from '../components/Empty';
 import { Icon } from '../components/Icon';
-import { RevisionHistory } from '../components/RevisionHistory';
+import { AcademicComments, ActivityRelations, PageHistory, ProgressControl, ResourceSection } from '../components/AcademicTools';
 import { RichText } from '../components/RichText';
 import { useAction } from '../components/useAction';
 import { participantsOf } from '../lib/activities';
@@ -22,7 +22,7 @@ import {
 } from '../lib/format';
 import { currentPlacement, lastPeriod, rememberPeriod, termAt } from '../lib/period';
 import { normalize } from '../lib/search';
-import { bySubject, NO_TERM, revisionsOf } from '../lib/works';
+import { bySubject, NO_TERM } from '../lib/works';
 
 const PERIODS = Array.from({ length: PERIOD_COUNT }, (_, i) => i + 1);
 
@@ -53,6 +53,8 @@ function EvidenceCard({
         {mine && <span className="badge badge--resolved">Tu evidencia</span>}
       </header>
       <RichText text={evidence.content} />
+      <ResourceSection kind="evidence" id={evidence.id} version={evidence.version ?? 1} canEdit={meId === evidence.authorId} title="Archivos de esta evidencia" />
+      <AcademicComments kind="evidence" id={evidence.id} />
     </article>
   );
 }
@@ -145,9 +147,7 @@ function EvidenceForm({ activityId, onDone }: { activityId: string; onDone: () =
 
 export function ActivityPage() {
   const { activityId = '' } = useParams();
-  const source = useDataSource();
-  const { me, activities, assignments, evidences, members, subjects, terms, notes, revisions } = useSnapshot();
-  const { error, run } = useAction();
+  const { me, activities, assignments, evidences, members, subjects, terms, notes } = useSnapshot();
   const [adding, setAdding] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const activity = activities.find((a) => a.id === activityId);
@@ -180,26 +180,12 @@ export function ActivityPage() {
         .slice(0, 4)
     : [];
   const inSubject = { ...(subject && { cuatri: String(subject.period) }), materia: activity.subjectId };
-  const history = revisionsOf('activity', activity.id, revisions);
   const term = terms.find((t) => t.id === activity.termId);
   // El vínculo con «Tareas y Actividades»: lo que se entrega en esta misma materia y parcial.
   const sameTerm = assignments
     .filter((a) => a.subjectId === activity.subjectId && a.termId === activity.termId)
     .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
   const tasksLink = `/m/tareas?${new URLSearchParams({ ...inSubject, parcial: activity.termId ?? NO_TERM })}`;
-
-  // Restaurar es editar con el texto de antes: crea una versión nueva y no borra ninguna.
-  const restore = (revision: Revision) =>
-    run(() =>
-      source.updateActivity(activity.id, {
-        subjectId: activity.subjectId,
-        topic: activity.topic,
-        date: activity.date,
-        title: revision.title,
-        objective: revision.summary,
-        instructions: revision.body,
-      }),
-    );
 
   return (
     <>
@@ -278,15 +264,10 @@ export function ActivityPage() {
             </p>
           </section>
           {showHistory && (
-            <RevisionHistory
-              revisions={history}
-              members={members}
-              summaryLabel="Objetivo"
-              onRestore={restore}
-              error={error}
-            />
+            <PageHistory kind="activity" id={activity.id} version={activity.version} />
           )}
 
+          <section className="panel"><ResourceSection kind="activity" id={activity.id} version={activity.version} canEdit={Boolean(me)} title="Recursos de la actividad" /></section>
           <h2 className="section-title">
             Evidencias <span className="muted">{own.length}</span>
           </h2>
@@ -310,6 +291,8 @@ export function ActivityPage() {
         </div>
 
         <aside className="detail__side">
+          <ProgressControl kind="activity" id={activity.id} />
+          <ActivityRelations activityId={activity.id} version={activity.version} editable={Boolean(me)} />
           <section className="panel">
             <h2 className="label">Detalles</h2>
             <dl className="facts">
@@ -447,6 +430,7 @@ function ActivityForm({ activity }: { activity: Activity | undefined }) {
   const [topic, setTopic] = useState(activity?.topic ?? '');
   const [objective, setObjective] = useState(activity?.objective ?? '');
   const [instructions, setInstructions] = useState(activity?.instructions ?? '');
+  const [baseVersion] = useState(activity?.version);
   const changed =
     !activity ||
     subjectId !== activity.subjectId ||
@@ -462,7 +446,7 @@ function ActivityForm({ activity }: { activity: Activity | undefined }) {
     const input = { subjectId, termId: termId || undefined, topic, date, title, objective, instructions };
     const id = await run(async () => {
       if (!activity) return source.createActivity(input);
-      await source.updateActivity(activity.id, input);
+      await source.updateActivity(activity.id, input, baseVersion);
       return activity.id;
     });
     if (!id) return;

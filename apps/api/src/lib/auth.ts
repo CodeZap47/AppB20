@@ -1,5 +1,5 @@
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
-import type { MiddlewareHandler } from 'hono';
+import type { Env, MiddlewareHandler } from 'hono';
 import { env } from '../env.ts';
 import { checkActiveMembership } from './membership.ts';
 
@@ -34,7 +34,7 @@ function configuredOptions(): AuthOptions {
 }
 
 /** Firma, emisor, audiencia, caducidad, correo verificado y membresía activa, sin caché. */
-export function createRequireAuth(options?: AuthOptions): MiddlewareHandler<{ Variables: AuthVariables }> {
+export function createRequireAuth<E extends Env = { Variables: AuthVariables }>(options?: AuthOptions): MiddlewareHandler<E & { Variables: AuthVariables }> {
   return async (c, next) => {
     const header = c.req.header('authorization') ?? '';
     const token = /^Bearer\s+(\S+)$/i.exec(header)?.[1];

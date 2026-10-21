@@ -46,6 +46,7 @@ vi.mock('./lib/spacetime', async () => {
 
 import { App } from './App';
 import { createDemoState, DemoDataSource } from './data/demo';
+import { SpacetimeDataSource } from './data/spacetime';
 
 let root: Root;
 let container: HTMLDivElement;
@@ -80,6 +81,20 @@ afterEach(async () => {
 });
 
 describe('login real antes de cualquier fuente de datos', () => {
+  it('reconecta la misma fuente sin recargar ni descartar borradores privados en memoria', async () => {
+    control.config.dataMode = 'spacetime';
+    control.session = signedIn();
+    const source = new SpacetimeDataSource({ uri: 'ws://localhost:3000', database: 'test', token: 'test-token' });
+    source.disconnect();
+    const reconnect = vi.spyOn(source, 'connect').mockImplementation(() => {});
+    control.realSource = source as unknown as DataSource;
+    await renderApp();
+    const button = [...container.querySelectorAll('button')].find((element) => element.textContent === 'Volver a conectar');
+    expect(button).toBeDefined();
+    await act(async () => button!.click());
+    expect(reconnect).toHaveBeenCalledTimes(1);
+    expect(control.realSource).toBe(source);
+  });
   it.each(['/', '/?demo', '/?demo=1'])('exige sesión aunque la dirección sea %s', async (url) => {
     window.history.replaceState({}, '', url);
     await renderApp();

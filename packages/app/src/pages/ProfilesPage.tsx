@@ -1,6 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import { nextCelebration, periodLabel, WORK_KIND_LABEL, workKindGroup } from '@b20/core';
+import {
+  HELP_KIND_LABEL,
+  nextCelebration,
+  periodLabel,
+  WORK_KIND_LABEL,
+  workKindGroup,
+} from '@b20/core';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import type { Id, Member, Snapshot, Subject } from '../data/types';
 import { Avatar } from '../components/Avatar';
@@ -22,12 +28,15 @@ function contributionsOf(memberId: Id, data: Snapshot) {
   const helpful = answers.filter((a) => data.questions.some((q) => q.acceptedAnswerId === a.id));
   const questions = data.questions.filter((q) => q.authorId === memberId);
   const evidences = data.evidences.filter((e) => e.participantIds.includes(memberId));
+  const helpPosts = data.helpPosts.filter(
+    (post) => post.authorId === memberId && post.status !== 'withdrawn',
+  );
   const subjectIds = new Set(
     works
       .map((w) => data.assignments.find((a) => a.id === w.assignmentId)?.subjectId)
       .filter((id): id is Id => Boolean(id)),
   );
-  return { works, notes, answers, helpful, questions, evidences, subjectIds };
+  return { works, notes, answers, helpful, questions, evidences, helpPosts, subjectIds };
 }
 
 /** «Contigo y Ana», «Con Ana y Luis» o «Individual», visto por quien mira el perfil. */
@@ -134,6 +143,12 @@ export function ProfilesPage() {
                         <strong>{c.answers.length}</strong>{' '}
                         {c.answers.length === 1 ? 'respuesta' : 'respuestas'}
                       </span>
+                      {c.helpPosts.length > 0 && (
+                        <span>
+                          <strong>{c.helpPosts.length}</strong>{' '}
+                          {c.helpPosts.length === 1 ? 'publicación de ayuda' : 'publicaciones de ayuda'}
+                        </span>
+                      )}
                     </span>
                   </span>
                 </Link>
@@ -399,11 +414,11 @@ function NotesTab({ member }: { member: Member }) {
   );
 }
 
-/** Respuestas, preguntas y actividades de clase en las que participó. */
+/** Respuestas, preguntas, publicaciones de ayuda y actividades de clase en las que participó. */
 function CollaborationTab({ member }: { member: Member }) {
   const data = useSnapshot();
   const { me, questions, activities, subjects } = data;
-  const { answers, helpful, evidences } = contributionsOf(member.id, data);
+  const { answers, helpful, evidences, helpPosts } = contributionsOf(member.id, data);
   const asked = contributionsOf(member.id, data).questions;
   const isMe = member.id === me?.id;
   const subjectName = (id: Id) =>
@@ -416,18 +431,40 @@ function CollaborationTab({ member }: { member: Member }) {
     .filter((a) => a !== undefined)
     .sort((a, b) => b.date.localeCompare(a.date));
 
-  if (!answered.length && !asked.length && !sessions.length) {
+  const sortedHelpPosts = [...helpPosts].sort(
+    (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
+  );
+
+  if (!answered.length && !asked.length && !sessions.length && !helpPosts.length) {
     return (
       <Empty icon="chat" title="Sin colaboraciones todavía">
         {isMe
-          ? 'Cuando respondas una duda o registres tu evidencia de una actividad de clase, aparecerá aquí.'
-          : 'Aquí aparecerán sus respuestas, sus preguntas y las actividades de clase en las que participó.'}
+          ? 'Cuando publiques ayuda, respondas una duda o registres tu evidencia de una actividad de clase, aparecerá aquí.'
+          : 'Aquí aparecerán sus publicaciones de ayuda, sus respuestas, sus preguntas y las actividades de clase en las que participó.'}
       </Empty>
     );
   }
 
   return (
     <div className="collab">
+      {sortedHelpPosts.length > 0 && (
+        <section className="panel">
+          <h2 className="label">Puedo ayudarte / necesito ayuda</h2>
+          <ul className="links">
+            {sortedHelpPosts.map((post) => (
+              <li key={post.id}>
+                <Link to={`/m/ayuda/${post.id}`}>
+                  <strong>{post.title}</strong>
+                  <span className="muted">
+                    {HELP_KIND_LABEL[post.kind]} · {subjectName(post.subjectId)} · {post.topic} ·{' '}
+                    {post.status === 'open' ? 'Abierta' : 'Cerrada'}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {answered.length > 0 && (
         <section className="panel">
           <h2 className="label">
@@ -542,7 +579,8 @@ export function ProfilePage() {
     colaboracion:
       new Set(c.answers.map((a) => a.questionId)).size +
       c.questions.length +
-      new Set(c.evidences.map((e) => e.activityId)).size,
+      new Set(c.evidences.map((e) => e.activityId)).size +
+      c.helpPosts.length,
   };
 
   const message = async () => {

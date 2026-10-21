@@ -7,12 +7,199 @@ import type {
   GuideReviewVerdict,
   GuideSourceKind,
   GuideSourceStatus,
+  TeachingExplanation,
+  TeachingSourceKind,
+  TeachingStatus,
   TermDates,
   TermDatesInput,
   WorkKind,
+  HelpPostFields,
+  HelpPostStatus,
+  HelpContactStatus,
+  HelpKind,
+  SpacedRating,
+  SpacedSourceKind,
+  SpacedVisibility,
 } from '@b20/core';
 
 export type Id = string;
+
+export interface SpacedCollection {
+  id: Id;
+  subjectId: Id;
+  termId?: Id;
+  title: string;
+  visibility: SpacedVisibility;
+  ownerId: Id;
+  version: number;
+  archived: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  updatedBy: Id;
+}
+
+export interface SpacedCard {
+  id: Id;
+  collectionId: Id;
+  question: string;
+  explanation: string;
+  hint: string;
+  sourceKind: SpacedSourceKind;
+  sourceId: Id;
+  sourceVersion: number;
+  version: number;
+  archived: boolean;
+  createdBy: Id;
+  updatedBy: Id;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface SpacedEnrollment {
+  memberId: Id;
+  collectionId: Id;
+  active: boolean;
+  updatedAt: Date;
+}
+
+/** Una fuente retirada nunca revela la pregunta, explicación ni el identificador de origen. */
+export interface SpacedUnavailableCard {
+  id: Id;
+  collectionId: Id;
+  version: number;
+  archived: boolean;
+}
+
+/** Solo la persona que estudia recibe su progreso; ni administradores consultan el ajeno. */
+export interface SpacedProgress {
+  memberId: Id;
+  cardId: Id;
+  cardVersion: number;
+  step: number;
+  revision: number;
+  dueAt: Date;
+  reviewedAt: Date;
+}
+
+export interface SpacedReview {
+  id: Id;
+  requestId: string;
+  memberId: Id;
+  cardId: Id;
+  cardVersion: number;
+  rating: SpacedRating;
+  step: number;
+  reviewedAt: Date;
+  dueAt: Date;
+}
+
+export interface SpacedCollectionInput {
+  id?: Id;
+  subjectId: Id;
+  termId?: Id;
+  title: string;
+  visibility: SpacedVisibility;
+  expectedVersion?: number;
+}
+
+export interface SpacedCardInput {
+  id?: Id;
+  collectionId: Id;
+  question: string;
+  explanation: string;
+  hint: string;
+  sourceKind: SpacedSourceKind;
+  sourceId: Id;
+  expectedVersion?: number;
+}
+
+export interface SpacedReviewInput {
+  cardId: Id;
+  cardVersion: number;
+  expectedRevision: number;
+  rating: SpacedRating;
+  /** Un intento conserva su identificador al reintentar tras una desconexión. */
+  requestId: string;
+}
+
+export interface TeachingPractice {
+  id: Id;
+  ownerId: Id;
+  reviewerId?: Id;
+  subjectId: Id;
+  topic: string;
+  initial: TeachingExplanation;
+  revised: TeachingExplanation;
+  status: TeachingStatus;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Nunca se entrega al compañero invitado, ni a administradores ajenos a la práctica. */
+export interface TeachingPersonal {
+  practiceId: Id;
+  reflection: string;
+  topicsToReview: string;
+  sourceKind?: TeachingSourceKind;
+  sourceId?: Id;
+  sourceVersion?: number;
+  publishedNoteId?: Id;
+}
+
+export interface TeachingQuestion {
+  id: Id;
+  practiceId: Id;
+  authorId: Id;
+  kind: 'guided' | 'peer';
+  text: string;
+  answer: string;
+  createdAt: Date;
+  answeredAt?: Date;
+}
+
+export interface CreateTeachingPracticeInput {
+  subjectId: Id;
+  topic: string;
+  initial: TeachingExplanation;
+  source?: { kind: TeachingSourceKind; id: Id };
+}
+
+export interface SaveTeachingPracticeInput {
+  initial: TeachingExplanation;
+  revised: TeachingExplanation;
+  reflection: string;
+  topicsToReview: string;
+}
+
+export interface HelpPost extends HelpPostFields {
+  id: Id;
+  authorId: Id;
+  status: HelpPostStatus;
+  createdAt: Date;
+  updatedAt: Date;
+  withdrawnBy?: Id;
+  withdrawalReason?: string;
+}
+
+export interface HelpContactRequest {
+  id: Id;
+  postId: Id;
+  senderId: Id;
+  recipientId: Id;
+  subjectId: Id;
+  postTitle: string;
+  postTopic: string;
+  postKind: HelpKind;
+  message: string;
+  status: HelpContactStatus;
+  conversationId?: Id;
+  createdAt: Date;
+  updatedAt: Date;
+  closedBy?: Id;
+  closeReason?: string;
+}
+
+export interface HelpPostInput extends HelpPostFields { id?: Id; }
 
 export interface Member {
   id: Id;
@@ -61,6 +248,8 @@ export interface Assignment {
   kind: WorkKind;
   title: string;
   instructions: string;
+  /** Tema explícito; los registros anteriores pueden no tenerlo. */
+  topic?: string;
   /** Fecha de entrega `AAAA-MM-DD`, si la hay. */
   dueDate?: string;
   version: number;
@@ -77,6 +266,10 @@ export interface Work {
   /** Tema o título propio; vacío si basta con el de la tarea. */
   title: string;
   description: string;
+  topic?: string;
+  /** Revisado se deriva de una revisión válida sobre la versión actual. */
+  status?: WorkStatus;
+  updatedBy?: Id;
   version: number;
   authorIds: Id[];
   createdAt: Date;
@@ -112,6 +305,111 @@ export interface WorkFile {
   createdAt: Date;
   /** Enlace de descarga, cuando la fuente de datos puede dar uno. */
   url?: string;
+}
+
+export type ProgressTargetKind = 'assignment' | 'activity';
+export type ProgressStatus = 'pending' | 'in_progress' | 'done';
+export type WorkPublicationStatus = 'draft' | 'final';
+export type WorkStatus = WorkPublicationStatus | 'reviewed';
+export type ResourceTargetKind = ProgressTargetKind | 'work' | 'evidence';
+
+/** Se obtiene exclusivamente a través de la vista privada del alumno. */
+export interface AcademicProgress {
+  targetKind: ProgressTargetKind;
+  targetId: Id;
+  status: ProgressStatus;
+  updatedAt: Date;
+}
+
+export interface WorkVersionInput {
+  title: string;
+  description: string;
+  topic: string;
+  status: WorkPublicationStatus;
+}
+
+/** Instantánea inmutable: sus adjuntos siguen accesibles aunque se quiten de la actual. */
+export interface WorkRevision extends WorkVersionInput {
+  id: Id;
+  workId: Id;
+  version: number;
+  authorIds: Id[];
+  attachmentIds: Id[];
+  editedBy?: Id;
+  editedAt: Date;
+  restoredFrom?: number;
+}
+
+export interface WorkReview {
+  id: Id;
+  workId: Id;
+  version: number;
+  workVersion: number;
+  reviewerId: Id;
+  comment: string;
+  createdAt: Date;
+}
+
+export interface AcademicComment {
+  id: Id;
+  targetKind: 'work' | 'evidence';
+  targetId: Id;
+  authorId: Id;
+  text: string;
+  createdAt: Date;
+}
+
+/** Progreso de bytes confirmados; cancelar no elimina publicaciones ni otros adjuntos. */
+export interface ResourceTransferOptions {
+  signal?: AbortSignal;
+  onProgress?: (transferredBytes: number, totalBytes: number) => void;
+}
+
+/** ID UUID para los nuevos; `legacy:<id>` conserva referencias a work_file existentes. */
+export interface ResourceFile {
+  id: Id;
+  targetKind: ResourceTargetKind;
+  targetId: Id;
+  name: string;
+  size: number;
+  contentType: string;
+  uploadedBy: Id;
+  createdAt: Date;
+  removedAt?: Date;
+  /** Solo simulación: nunca contiene una ubicación de almacenamiento privada. */
+  url?: string;
+}
+
+export interface ActivityLink {
+  id: Id;
+  activityId: Id;
+  targetKind: 'assignment' | 'note';
+  targetId: Id;
+  createdBy: Id;
+  createdAt: Date;
+  removedAt?: Date;
+}
+
+export interface PageSnapshot {
+  id: Id;
+  page: ProgressTargetKind;
+  pageId: Id;
+  version: number;
+  subjectId: Id;
+  termId?: Id;
+  kind?: WorkKind;
+  topic: string;
+  date: string;
+  title: string;
+  summary: string;
+  body: string;
+  dueDate?: string;
+  attachmentIds: Id[];
+  assignmentIds: Id[];
+  noteIds: Id[];
+  restoredFrom?: number;
+  editedBy?: Id;
+  editedAt: Date;
 }
 
 /** Campos comunes de un mensaje del grupo o de un 1 a 1. */
@@ -217,6 +515,7 @@ export interface Evidence {
   participantIds: Id[];
   content: string;
   createdAt: Date;
+  version?: number;
 }
 
 export type NoteVisibility = 'personal' | 'group';
@@ -357,6 +656,16 @@ export interface PollVote {
 
 /** Lo que el usuario actual puede ver, igual que las vistas del servidor. */
 export interface Snapshot {
+  spacedUnavailableCards: SpacedUnavailableCard[];
+  spacedCollections: SpacedCollection[];
+  spacedCards: SpacedCard[];
+  spacedEnrollments: SpacedEnrollment[];
+  spacedProgress: SpacedProgress[];
+  spacedReviews: SpacedReview[];
+  teachingPractices: TeachingPractice[];
+  /** Información privada del autor; nunca se combina con la práctica compartida. */
+  teachingPersonal: TeachingPersonal[];
+  teachingQuestions: TeachingQuestion[];
   /**
    * `connecting` mientras llegan los datos del servidor (en la demo nunca). Sin esto, la app no
    * sabría distinguir «todavía no llega tu membresía» de «no eres miembro».
@@ -374,6 +683,13 @@ export interface Snapshot {
   calendar: TermDates[];
   assignments: Assignment[];
   works: Work[];
+  myProgress: AcademicProgress[];
+  workRevisions: WorkRevision[];
+  workReviews: WorkReview[];
+  academicComments: AcademicComment[];
+  resourceFiles: ResourceFile[];
+  activityLinks: ActivityLink[];
+  pageSnapshots: PageSnapshot[];
   workFiles: WorkFile[];
   /** Historial de las páginas editables (tareas principales y actividades de clase). */
   revisions: Revision[];
@@ -401,6 +717,10 @@ export interface Snapshot {
   guideReviews: GuideReview[];
   polls: Poll[];
   pollVotes: PollVote[];
+  /** Publicaciones del grupo y las retiradas propias. */
+  helpPosts: HelpPost[];
+  /** Solo los contactos enviados o recibidos por quien consulta. */
+  helpContacts: HelpContactRequest[];
   /** Última vez que marcaste las novedades como vistas. */
   lastSeenAt: Date | undefined;
 }
@@ -411,6 +731,7 @@ export interface AssignmentInput {
   kind: WorkKind;
   title: string;
   instructions: string;
+  topic?: string;
   dueDate?: string;
 }
 
@@ -419,6 +740,8 @@ export interface PublishWorkInput {
   title: string;
   description: string;
   coauthorIds: Id[];
+  topic?: string;
+  status?: WorkPublicationStatus;
 }
 
 /**
@@ -430,6 +753,30 @@ export type MaybePromise<T> = T | Promise<T>;
 
 /** Acciones: corresponden uno a uno con los reducers del módulo. */
 export interface Actions {
+  replaceSpacedCardSource(cardId: Id, expectedVersion: number, sourceKind: SpacedSourceKind, sourceId: Id): MaybePromise<void>;
+  saveSpacedCollection(input: SpacedCollectionInput): MaybePromise<Id>;
+  publishSpacedCollection(collectionId: Id, expectedVersion: number): MaybePromise<void>;
+  archiveSpacedCollection(collectionId: Id, archived: boolean, expectedVersion: number): MaybePromise<void>;
+  saveSpacedCard(input: SpacedCardInput): MaybePromise<Id>;
+  archiveSpacedCard(cardId: Id, archived: boolean, expectedVersion: number): MaybePromise<void>;
+  setSpacedEnrollment(collectionId: Id, active: boolean): MaybePromise<void>;
+  reviewSpacedCard(input: SpacedReviewInput): MaybePromise<void>;
+  createTeachingPractice(input: CreateTeachingPracticeInput): MaybePromise<Id>;
+  saveTeachingPractice(practiceId: Id, input: SaveTeachingPracticeInput): MaybePromise<void>;
+  startTeachingPractice(practiceId: Id): MaybePromise<void>;
+  completeTeachingPractice(practiceId: Id): MaybePromise<void>;
+  reopenTeachingPractice(practiceId: Id): MaybePromise<void>;
+  setTeachingReviewer(practiceId: Id, reviewerId?: Id): MaybePromise<void>;
+  askTeachingQuestion(practiceId: Id, text: string): MaybePromise<Id>;
+  answerTeachingQuestion(questionId: Id, answer: string): MaybePromise<void>;
+  publishTeachingExplanation(practiceId: Id): MaybePromise<Id>;
+  saveHelpPost(input: HelpPostInput): MaybePromise<Id>;
+  setHelpPostStatus(postId: Id, status: 'open' | 'closed'): MaybePromise<void>;
+  withdrawHelpPost(postId: Id, reason?: string): MaybePromise<void>;
+  sendHelpContact(postId: Id, message?: string): MaybePromise<Id>;
+  respondHelpContact(requestId: Id, decision: 'accepted' | 'rejected'): MaybePromise<void>;
+  cancelHelpContact(requestId: Id): MaybePromise<void>;
+  closeHelpContact(requestId: Id): MaybePromise<void>;
   /** Primera entrada: si tu correo está invitado, te vuelves miembro con ese nombre. */
   joinGroup(displayName: string): MaybePromise<void>;
   /** Solo creadores. Invitar un correo ya invitado no hace nada. */
@@ -451,11 +798,21 @@ export interface Actions {
   saveCalendar(period: number, terms: TermDatesInput[]): MaybePromise<void>;
   createAssignment(input: AssignmentInput): MaybePromise<Id>;
   /** Como en un wiki: cualquier miembro activo edita y se guarda una versión a su nombre. */
-  updateAssignment(assignmentId: Id, input: AssignmentInput): MaybePromise<void>;
+  updateAssignment(assignmentId: Id, input: AssignmentInput, expectedVersion?: number): MaybePromise<void>;
   /** Sube el trabajo propio o del equipo a una página principal. */
   publishWork(input: PublishWorkInput): MaybePromise<Id>;
   /** Solo sus autores; cada edición guarda una versión nueva. */
   updateWork(workId: Id, title: string, description: string): MaybePromise<void>;
+  setProgress(targetKind: ProgressTargetKind, targetId: Id, status: ProgressStatus): MaybePromise<void>;
+  saveWorkVersion(workId: Id, input: WorkVersionInput, expectedVersion: number): MaybePromise<void>;
+  restoreWorkVersion(workId: Id, version: number, expectedVersion: number): MaybePromise<void>;
+  reviewWork(workId: Id, expectedVersion: number, comment: string): MaybePromise<void>;
+  commentAcademic(targetKind: 'work' | 'evidence', targetId: Id, text: string): MaybePromise<void>;
+  saveActivityLinks(activityId: Id, assignmentIds: Id[], noteIds: Id[], expectedVersion?: number): MaybePromise<void>;
+  restorePageSnapshot(page: ProgressTargetKind, pageId: Id, version: number, expectedVersion: number): MaybePromise<void>;
+  attachResourceFile(targetKind: ResourceTargetKind, targetId: Id, file: File, expectedVersion?: number, transfer?: ResourceTransferOptions): Promise<Id>;
+  removeResourceFile(fileId: Id, expectedVersion?: number): MaybePromise<void>;
+  downloadResourceFile(fileId: Id, transfer?: ResourceTransferOptions): Promise<Blob>;
   /**
    * Sube un archivo y lo adjunta al trabajo; solo sus autores. Rechaza archivos vacíos o de
    * más de 50 MB (`MAX_FILE_BYTES`). Es la única acción asíncrona: subir toma tiempo.
@@ -487,7 +844,7 @@ export interface Actions {
   withdrawBirthday(): MaybePromise<void>;
   createActivity(input: CreateActivityInput): MaybePromise<Id>;
   /** Como en un wiki: cualquier miembro activo edita y se guarda una versión a su nombre. */
-  updateActivity(activityId: Id, input: CreateActivityInput): MaybePromise<void>;
+  updateActivity(activityId: Id, input: CreateActivityInput, expectedVersion?: number): MaybePromise<void>;
   addEvidence(activityId: Id, content: string, participantIds: Id[]): MaybePromise<Id>;
   saveNote(input: SaveNoteInput): MaybePromise<Id>;
   commentNote(noteId: Id, text: string): MaybePromise<void>;

@@ -254,6 +254,10 @@ export function GuidePage() {
   const missingSections = written.filter((s) => !s.text);
   const term = data.terms.find((t) => t.id === guide.termId);
   const subject = data.subjects.find((s) => s.id === guide.subjectId);
+  const relatedCollections = data.spacedCollections.filter((collection) => !collection.archived
+    && (collection.visibility === 'group' || collection.ownerId === data.me?.id)
+    && data.spacedCards.some((card) => !card.archived && card.collectionId === collection.id
+      && card.sourceKind === 'guide' && card.sourceId === guide.id));
 
   const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: '', label: 'Guía' },
@@ -276,6 +280,12 @@ export function GuidePage() {
           </p>
         </div>
         <div className="row">
+          <Link to={`/m/repaso/tarjetas/nueva?guia=${encodeURIComponent(guide.id)}`} className="button secondary">
+            Crear tarjeta
+          </Link>
+          <Link to={`/m/aprende-ensenando/nueva?guia=${encodeURIComponent(guide.id)}`} className="button secondary">
+            Practicar explicándolo
+          </Link>
           <Link to={`/m/guias/${guide.id}/editar`} className="button secondary with-icon">
             <Icon name="edit" size={16} /> Editar
           </Link>
@@ -336,6 +346,13 @@ export function GuidePage() {
         </div>
 
         <aside className="detail__side">
+          <section className="panel">
+            <h2 className="label">Repaso de esta guía</h2>
+            {relatedCollections.length ? <ul className="links">{relatedCollections.map((collection) => <li key={collection.id}>
+              <Link to={`/m/repaso/colecciones/${collection.id}`}>{collection.title}</Link>
+            </li>)}</ul> : <p className="muted">Todavía no hay colecciones vinculadas a esta guía.</p>}
+            <Link to={`/m/repaso/tarjetas/nueva?guia=${encodeURIComponent(guide.id)}`}>Crear una tarjeta de repaso</Link>
+          </section>
           <section className="panel">
             <h2 className="label">Cobertura del temario</h2>
             <CoverageBar covered={status.covered} total={guide.topics.length} />

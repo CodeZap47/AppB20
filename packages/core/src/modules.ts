@@ -2,7 +2,7 @@
  * Catálogo de módulos de App B20 según la definición del proyecto (secciones 3, 6, 7 y 8).
  * La interfaz lo usa para la navegación y para mostrar en qué etapa entra cada módulo.
  *
- * El módulo 3.11 (lenguaje de señales y respuestas preparadas) no forma parte de este proyecto.
+ * El módulo experimental 3.11 se incorpora en la etapa 3 y permanece pendiente.
  * Las actividades de clase (3.3) no tienen entrada propia: viven dentro de «Tareas y Actividades».
  */
 
@@ -112,6 +112,7 @@ export const MODULES: readonly ModuleInfo[] = [
     summary: 'Ofertas y solicitudes de apoyo entre compañeros.',
     stage: 2,
     worksWithoutAi: true,
+    ready: true,
   },
   {
     id: 'retos',
@@ -143,7 +144,8 @@ export const MODULES: readonly ModuleInfo[] = [
     section: '7.8',
     summary: 'Explica un tema y responde preguntas.',
     stage: 2,
-    worksWithoutAi: false,
+    worksWithoutAi: true,
+    ready: true,
   },
   {
     id: 'repaso',
@@ -152,6 +154,7 @@ export const MODULES: readonly ModuleInfo[] = [
     summary: 'Tarjetas e historial personal.',
     stage: 2,
     worksWithoutAi: true,
+    ready: true,
   },
   {
     id: 'oportunidades',
@@ -185,6 +188,14 @@ export const MODULES: readonly ModuleInfo[] = [
     summary: 'Ensayo por texto antes de evaluar audio.',
     stage: 3,
     worksWithoutAi: false,
+  },
+  {
+    id: 'senales',
+    title: 'Lenguaje de señales',
+    section: '3.11',
+    summary: 'Diccionario versionado, prácticas y fichas de anotaciones con fuentes.',
+    stage: 3,
+    worksWithoutAi: true,
   },
   {
     id: 'prestamos',

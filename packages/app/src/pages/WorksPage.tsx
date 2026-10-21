@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   canEditWork,
@@ -13,7 +13,7 @@ import {
   type WorkKind,
 } from '@b20/core';
 import { useDataSource, useSnapshot } from '../data/DataContext';
-import type { Assignment, Member, Revision, Work, WorkFile } from '../data/types';
+import type { Assignment, Member, Work, WorkPublicationStatus } from '../data/types';
 import { Avatar } from '../components/Avatar';
 import { AvatarStack } from '../components/AvatarStack';
 import { Empty } from '../components/Empty';
@@ -21,7 +21,7 @@ import { FileList } from '../components/FileList';
 import { FilePicker } from '../components/FilePicker';
 import { Icon } from '../components/Icon';
 import { PostArchive, PostTimeline } from '../components/PostViews';
-import { RevisionHistory } from '../components/RevisionHistory';
+import { AcademicComments, PageHistory, ProgressControl, ResourceSection, WorkHistoryAndReview } from '../components/AcademicTools';
 import { RichText } from '../components/RichText';
 import { useAction } from '../components/useAction';
 import {
@@ -35,7 +35,7 @@ import {
 } from '../lib/format';
 import { currentPlacement, lastPeriod, rememberPeriod, termAt } from '../lib/period';
 import { buildPosts, filterPosts, type PostFilters } from '../lib/posts';
-import { bySubject, NO_TERM, revisionsOf, submittersOf, worksOf } from '../lib/works';
+import { bySubject, NO_TERM, submittersOf, worksOf } from '../lib/works';
 
 /** Opción de los selectores para crear una materia o un parcial al clasificar. */
 const NEW = '__nuevo__';
@@ -83,7 +83,7 @@ function KindPicker({ value, onChange }: { value: WorkKind; onChange: (kind: Wor
  * URL para conservarlos al volver de una página.
  */
 export function AssignmentsPage() {
-  const { me, assignments, activities, evidences, works, workFiles, subjects, terms, members } =
+  const { me, assignments, activities, evidences, works, workFiles, subjects, terms, members, myProgress, resourceFiles } =
     useSnapshot();
   const [params, setParams] = useSearchParams();
   const kindParam = params.get('tipo');
@@ -95,6 +95,12 @@ export function AssignmentsPage() {
     subjectId: params.get('materia') ?? '',
     termId: params.get('parcial') ?? '',
     personId: params.get('autor') ?? '',
+    exactKind: params.get('clase') ?? '',
+    topic: params.get('tema') ?? '',
+    from: params.get('desde') ?? '',
+    to: params.get('hasta') ?? '',
+    workStatus: params.get('estado') ?? '',
+    progress: params.get('avance') ?? '',
   };
   const view = params.get('vista') === 'fechas' ? 'dates' : 'subjects';
 
@@ -111,7 +117,7 @@ export function AssignmentsPage() {
       { replace: true },
     );
 
-  const posts = buildPosts({ assignments, works, workFiles, activities, evidences, members });
+  const posts = buildPosts({ assignments, works, workFiles, activities, evidences, members, myProgress, resourceFiles });
   const ctx = { subjects, terms };
   const shown = filterPosts(posts, filters, ctx);
   // Cada conteo respeta los demás filtros: así se ve cuánto hay antes de elegir.
@@ -140,7 +146,7 @@ export function AssignmentsPage() {
     filters.period ||
     filters.subjectId ||
     filters.termId ||
-    filters.personId,
+    filters.personId || filters.exactKind || filters.topic || filters.from || filters.to || filters.workStatus || filters.progress,
   );
   const people = members.filter((m) => m.id !== me?.id && posts.some((p) => p.people.includes(m.id)));
 
@@ -234,6 +240,25 @@ export function AssignmentsPage() {
             </div>
           </div>
 
+          <details className="panel academic-filters" open={Boolean(filters.exactKind || filters.topic || filters.from || filters.to || filters.workStatus || filters.progress)}>
+            <summary>Más filtros</summary>
+            <div className="form__grid">
+              <label className="field"><span className="field__label">Tipo exacto</span><select value={filters.exactKind} onChange={(e) => update({ clase: e.target.value })}>
+                <option value="">Todos los tipos</option><option value="tarea">Tarea</option><option value="actividad">Actividad</option><option value="exposicion">Exposición</option><option value="examen">Examen</option><option value="clase">Actividad de clase</option>
+              </select></label>
+              <label className="field"><span className="field__label">Tema</span><input value={filters.topic} onChange={(e) => update({ tema: e.target.value })} placeholder="Filtrar por tema" /></label>
+              <label className="field"><span className="field__label">Desde</span><input type="date" value={filters.from} onChange={(e) => update({ desde: e.target.value })} /></label>
+              <label className="field"><span className="field__label">Hasta</span><input type="date" value={filters.to} onChange={(e) => update({ hasta: e.target.value })} /></label>
+              <label className="field"><span className="field__label">Estado de trabajos</span><select value={filters.workStatus} onChange={(e) => update({ estado: e.target.value })}>
+                <option value="">Todos los estados</option><option value="draft">Borrador compartido</option><option value="final">Final</option><option value="reviewed">Revisado</option>
+              </select></label>
+              <label className="field"><span className="field__label">Mi avance</span><select value={filters.progress} onChange={(e) => update({ avance: e.target.value })}>
+                <option value="">Cualquier avance</option><option value="pending">Sin empezar</option><option value="in_progress">En proceso</option><option value="done">Terminado</option>
+              </select></label>
+            </div>
+            {filters.from && filters.to && filters.from > filters.to && <p className="error" role="alert">La fecha inicial debe ser anterior o igual a la fecha final.</p>}
+            <p className="field__hint">Las fechas corresponden a la entrega o a la sesión. El estado filtra trabajos publicados; el avance solo muestra el tuyo.</p>
+          </details>
           <div className="chips chips--scroll" role="group" aria-label="Tipo">
             <button
               type="button"
@@ -347,11 +372,14 @@ function EditWorkForm({ work, onDone }: { work: Work; onDone: () => void }) {
   const { error, run } = useAction();
   const [title, setTitle] = useState(work.title);
   const [description, setDescription] = useState(work.description);
-  const changed = title.trim() !== work.title || description.trim() !== work.description;
+  const [topic, setTopic] = useState(work.topic ?? '');
+  const [status, setStatus] = useState<WorkPublicationStatus>(work.status === 'draft' || !work.status ? 'draft' : 'final');
+  const [baseVersion] = useState(work.version);
+  const changed = title.trim() !== work.title || description.trim() !== work.description || topic.trim() !== (work.topic ?? '') || status !== (work.status === 'reviewed' ? 'final' : work.status ?? 'draft');
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (await run(async () => (await source.updateWork(work.id, title, description), true))) onDone();
+    if (await run(async () => (await source.saveWorkVersion(work.id, { title, description, topic, status }, baseVersion), true))) onDone();
   };
 
   return (
@@ -362,6 +390,10 @@ function EditWorkForm({ work, onDone }: { work: Work; onDone: () => void }) {
         </span>
         <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} />
       </label>
+      <label className="field"><span className="field__label">Tema</span><input value={topic} onChange={(e) => setTopic(e.target.value)} maxLength={120} /></label>
+      <label className="field"><span className="field__label">Estado del trabajo</span><select value={status} onChange={(e) => setStatus(e.target.value as WorkPublicationStatus)}>
+        <option value="draft">Borrador compartido</option><option value="final">Final</option>
+      </select><span className="field__hint">Una versión nueva requiere otra revisión de un compañero.</span></label>
       <label className="field">
         <span className="field__label">Descripción</span>
         <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={6} autoFocus />
@@ -386,127 +418,39 @@ function EditWorkForm({ work, onDone }: { work: Work; onDone: () => void }) {
 }
 
 /** El trabajo de un alumno o equipo dentro de la página de la tarea. Solo sus autores lo cambian. */
-function SubmissionCard({
-  work,
-  files,
-  members,
-  meId,
-  highlighted,
-  initialErrors,
-}: {
-  work: Work;
-  files: WorkFile[];
-  members: Member[];
-  meId: string | undefined;
-  highlighted: boolean;
-  /** Archivos que no pudieron subirse al publicarlo. */
-  initialErrors: string[];
+function SubmissionCard({ work, members, meId, highlighted, initialErrors }: {
+  work: Work; members: Member[]; meId: string | undefined; highlighted: boolean; initialErrors: string[];
 }) {
-  const source = useDataSource();
   const [editing, setEditing] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [errors, setErrors] = useState(initialErrors);
   const canEdit = Boolean(meId && canEditWork(meId, work.authorIds));
-
-  const upload = async (list: File[]) => {
-    setUploading(true);
-    const failed: string[] = [];
-    for (const file of list) {
-      try {
-        await source.attachWorkFile(work.id, file);
-      } catch (error) {
-        failed.push(uploadError(error, file));
-      }
-    }
-    setErrors(failed);
-    setUploading(false);
-  };
-
-  const removeFile = async (fileId: string) => {
-    const file = files.find((f) => f.id === fileId);
-    if (!file || !window.confirm(`¿Quitar «${file.name}» de tu trabajo?`)) return;
-    try {
-      await source.removeWorkFile(fileId);
-      setErrors([]);
-    } catch (error) {
-      setErrors([error instanceof Error ? error.message : 'No se pudo quitar el archivo.']);
-    }
-  };
-
-  return (
-    <article
-      id={`trabajo-${work.id}`}
-      className={highlighted ? 'panel submission submission--highlighted' : 'panel submission'}
-    >
-      <header className="evidence__header">
-        <AvatarStack
-          members={work.authorIds.map((id) => members.find((m) => m.id === id))}
-          size={28}
-          max={4}
-        />
-        <span className="evidence__who">
-          <strong>{peopleList(work.authorIds, members, meId)}</strong>
-          <span className="muted">
-            {work.authorIds.length > 1 ? 'Equipo' : 'Individual'} · {formatTime(work.updatedAt)}
-            {work.version > 1 && ` · versión ${work.version}`}
-          </span>
-        </span>
-        {canEdit && <span className="badge badge--resolved">Tu trabajo</span>}
-        {canEdit && !editing && (
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="Editar mi trabajo"
-            title="Editar"
-            onClick={() => setEditing(true)}
-          >
-            <Icon name="edit" size={18} />
-          </button>
-        )}
-      </header>
-      {editing ? (
-        <EditWorkForm work={work} onDone={() => setEditing(false)} />
-      ) : (
-        <>
-          {work.title && <h3 className="submission__title">{work.title}</h3>}
-          {work.description ? (
-            <RichText text={work.description} />
-          ) : (
-            files.length === 0 && <p className="muted">Sin descripción ni archivos todavía.</p>
-          )}
-        </>
-      )}
-      <FileList
-        items={files.map((f) => ({
-          key: f.id,
-          name: f.name,
-          size: f.size,
-          url: f.url,
-          detail: `${memberName(members, f.uploadedBy)} · ${formatDate(f.createdAt)}`,
-        }))}
-        onRemove={canEdit ? removeFile : undefined}
-      />
-      {canEdit && <FilePicker onFiles={(list) => void upload(list)} busy={uploading} />}
-      {errors.length > 0 && (
-        <ul className="file-picker__errors error" role="alert">
-          {errors.map((problem) => (
-            <li key={problem}>{problem}</li>
-          ))}
-        </ul>
-      )}
-    </article>
-  );
+  return <article id={`trabajo-${work.id}`} className={highlighted ? 'panel submission submission--highlighted' : 'panel submission'}>
+    <header className="evidence__header">
+      <AvatarStack members={work.authorIds.map((id) => members.find((m) => m.id === id))} size={28} max={4} />
+      <span className="evidence__who"><strong>{peopleList(work.authorIds, members, meId)}</strong>
+        <span className="muted">{work.authorIds.length > 1 ? 'Equipo' : 'Individual'} · {formatTime(work.updatedAt)} · versión {work.version}</span>
+      </span>
+      {canEdit && <span className="badge badge--resolved">Tu trabajo</span>}
+      {canEdit && !editing && <button type="button" className="icon-button" aria-label="Editar mi trabajo" title="Editar" onClick={() => setEditing(true)}><Icon name="edit" size={18} /></button>}
+    </header>
+    {editing ? <EditWorkForm work={work} onDone={() => setEditing(false)} /> : <>
+      {work.title && <h3 className="submission__title">{work.title}</h3>}
+      {work.topic && <p className="muted">Tema: {work.topic}</p>}
+      <RichText text={work.description} />
+    </>}
+    <ResourceSection kind="work" id={work.id} version={work.version} canEdit={canEdit} />
+    {initialErrors.length > 0 && <ul className="file-picker__errors error" role="alert">{initialErrors.map((problem) => <li key={problem}>{problem}</li>)}</ul>}
+    <WorkHistoryAndReview work={work} />
+    <AcademicComments kind="work" id={work.id} />
+  </article>;
 }
 
 /** Página principal: lo que se pidió (editable por todos) y los trabajos de cada alumno. */
 export function AssignmentPage() {
   const { assignmentId = '' } = useParams();
-  const source = useDataSource();
   const location = useLocation();
   const [params] = useSearchParams();
-  const { me, assignments, activities, works, workFiles, revisions, subjects, terms, members } =
+  const { me, assignments, activities, works, subjects, terms, members, activityLinks } =
     useSnapshot();
-  const { error, run } = useAction();
   const [showHistory, setShowHistory] = useState(false);
   const highlighted = params.get('trabajo') ?? '';
 
@@ -535,7 +479,6 @@ export function AssignmentPage() {
   const subject = subjects.find((s) => s.id === assignment.subjectId);
   const term = terms.find((t) => t.id === assignment.termId);
   const own = worksOf(assignment.id, works);
-  const history = revisionsOf('assignment', assignment.id, revisions);
   const roster = members.filter((m) => m.status === 'active');
   const submitted = submittersOf(assignment.id, works);
   const done = roster.filter((m) => submitted.includes(m.id)).length;
@@ -547,19 +490,6 @@ export function AssignmentPage() {
     .filter((a) => a.subjectId === assignment.subjectId && a.termId === assignment.termId)
     .sort((a, b) => b.date.localeCompare(a.date));
   const sessionsLink = `/m/tareas?${new URLSearchParams({ ...inSubject, parcial: assignment.termId ?? NO_TERM, vista: 'fechas' })}`;
-
-  // Restaurar es editar con el texto de antes: crea una versión nueva y no borra ninguna.
-  const restore = (revision: Revision) =>
-    run(() =>
-      source.updateAssignment(assignment.id, {
-        subjectId: assignment.subjectId,
-        termId: assignment.termId,
-        kind: assignment.kind,
-        dueDate: assignment.dueDate,
-        title: revision.title,
-        instructions: revision.body,
-      }),
-    );
 
   return (
     <>
@@ -632,9 +562,10 @@ export function AssignmentPage() {
             </p>
           </section>
           {showHistory && (
-            <RevisionHistory revisions={history} members={members} onRestore={restore} error={error} />
+            <PageHistory kind="assignment" id={assignment.id} version={assignment.version} />
           )}
 
+          <section className="panel"><ResourceSection kind="assignment" id={assignment.id} version={assignment.version} canEdit={Boolean(me)} title="Recursos de la consigna" /></section>
           <h2 className="section-title">
             Trabajos de cada alumno <span className="muted">{own.length}</span>
           </h2>
@@ -642,7 +573,6 @@ export function AssignmentPage() {
             <SubmissionCard
               key={work.id}
               work={work}
-              files={workFiles.filter((f) => f.workId === work.id)}
               members={members}
               meId={me?.id}
               highlighted={work.id === highlighted}
@@ -665,6 +595,8 @@ export function AssignmentPage() {
         </div>
 
         <aside className="detail__side">
+          <ProgressControl kind="assignment" id={assignment.id} />
+          {activityLinks.some((link) => link.targetKind === 'assignment' && link.targetId === assignment.id && !link.removedAt) && <section className="panel"><h2 className="label">Actividades enlazadas</h2><ul className="links">{activityLinks.filter((link) => link.targetKind === 'assignment' && link.targetId === assignment.id && !link.removedAt).map((link) => <li key={link.id}><Link to={`/m/actividades/${link.activityId}`}>{activities.find((a) => a.id === link.activityId)?.title ?? 'Actividad de clase'}</Link></li>)}</ul></section>}
           <section className="panel">
             <h2 className="label">
               Quién ya subió ({done} de {roster.length})
@@ -810,6 +742,8 @@ function AssignmentForm({ assignment }: { assignment: Assignment | undefined }) 
   const [title, setTitle] = useState(assignment?.title ?? '');
   const [dueDate, setDueDate] = useState(assignment?.dueDate ?? '');
   const [instructions, setInstructions] = useState(assignment?.instructions ?? '');
+  const [topic, setTopic] = useState(assignment?.topic ?? '');
+  const [baseVersion] = useState(assignment?.version);
 
   const periodSubjects = subjects.filter((s) => s.period === period).sort(bySubject);
   const subjectTerms = terms
@@ -819,6 +753,7 @@ function AssignmentForm({ assignment }: { assignment: Assignment | undefined }) 
     !assignment ||
     title.trim() !== assignment.title ||
     instructions.trim() !== assignment.instructions ||
+    topic.trim() !== (assignment.topic ?? '') ||
     dueDate !== (assignment.dueDate ?? '') ||
     kind !== assignment.kind ||
     subjectId !== assignment.subjectId ||
@@ -847,10 +782,11 @@ function AssignmentForm({ assignment }: { assignment: Assignment | undefined }) 
         kind,
         title,
         instructions,
+        topic,
         dueDate: dueDate || undefined,
       };
       if (!assignment) return source.createAssignment(input);
-      await source.updateAssignment(assignment.id, input);
+      await source.updateAssignment(assignment.id, input, baseVersion);
       return assignment.id;
     });
     if (!id) return;
@@ -979,6 +915,7 @@ function AssignmentForm({ assignment }: { assignment: Assignment | undefined }) 
               <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </label>
           </div>
+          <label className="field"><span className="field__label">Tema <span className="field__optional">opcional</span></span><input value={topic} onChange={(e) => setTopic(e.target.value)} maxLength={120} /></label>
           <label className="field">
             <span className="field__label">Instrucciones</span>
             <textarea value={instructions} onChange={(e) => setInstructions(e.target.value)} rows={10} />
@@ -1021,9 +958,17 @@ export function SubmitWorkPage() {
   const { error, run } = useAction();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [topic, setTopic] = useState('');
+  const [status, setStatus] = useState<WorkPublicationStatus>('draft');
   const [coauthorIds, setCoauthorIds] = useState<string[]>([]);
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
+  const [createdId, setCreatedId] = useState<string | null>(null);
+  const [uploadVersion, setUploadVersion] = useState(1);
+  const [uploadErrors, setUploadErrors] = useState<string[]>([]);
+  const uploadController = useRef<AbortController | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{ name: string; done: number; total: number } | null>(null);
+  useEffect(() => () => uploadController.current?.abort(), []);
   const assignment = assignments.find((a) => a.id === assignmentId);
 
   if (!assignment) {
@@ -1056,21 +1001,35 @@ export function SubmitWorkPage() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const id = await run(() =>
-      source.publishWork({ assignmentId: assignment.id, title, description, coauthorIds }),
-    );
-    if (!id) return;
-    // El trabajo ya existe: lo que no se pueda subir se avisa en su tarjeta, sin repetir el alta.
+    if (busy) return;
     setBusy(true);
-    const fileErrors: string[] = [];
-    for (const file of files) {
+    const id = createdId ?? await run(() => source.publishWork({ assignmentId: assignment.id, title, description, coauthorIds, topic, status }));
+    if (!id) { setBusy(false); return; }
+    setCreatedId(id);
+    setUploadErrors([]);
+    const controller = new AbortController();
+    uploadController.current = controller;
+    let expectedVersion = uploadVersion;
+    for (let index = 0; index < files.length; index++) {
+      const file = files[index]!;
       try {
-        await source.attachWorkFile(id, file);
+        setUploadProgress({ name: file.name, done: 0, total: file.size });
+        await source.attachResourceFile('work', id, file, expectedVersion, { signal: controller.signal,
+          onProgress: (done, total) => setUploadProgress({ name: file.name, done, total }) });
+        expectedVersion++;
+        setUploadVersion(expectedVersion);
       } catch (failure) {
-        fileErrors.push(uploadError(failure, file));
+        setUploadErrors([uploadError(failure, file)]);
+        setFiles(files.slice(index));
+        uploadController.current = null;
+        setUploadProgress(null);
+        setBusy(false);
+        return;
       }
     }
-    void navigate(`${backTo}?trabajo=${id}`, { state: fileErrors.length ? { fileErrors } : null });
+    uploadController.current = null;
+    setUploadProgress(null);
+    void navigate(`${backTo}?trabajo=${id}`);
   };
 
   return (
@@ -1089,7 +1048,9 @@ export function SubmitWorkPage() {
         </div>
       </header>
 
+      {createdId && <p className="panel" role="status">Tu trabajo ya está publicado. Reintentar solo confirma los archivos pendientes, sin crear otro trabajo. <Link to={`${backTo}?trabajo=${createdId}`}>Abrir el trabajo</Link></p>}
       <form className="panel form form--wide" onSubmit={(e) => void submit(e)}>
+        <fieldset className="academic-publish-fields" disabled={busy || Boolean(createdId)}>
         <section className="form__section">
           <h2>Tu trabajo</h2>
           <label className="field">
@@ -1099,6 +1060,8 @@ export function SubmitWorkPage() {
             <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} />
             <span className="field__hint">Útil si cada equipo desarrolló un tema distinto.</span>
           </label>
+          <label className="field"><span className="field__label">Tema académico <span className="field__optional">opcional</span></span><input value={topic} onChange={(e) => setTopic(e.target.value)} maxLength={120} /></label>
+          <label className="field"><span className="field__label">Estado del trabajo</span><select value={status} onChange={(e) => setStatus(e.target.value as WorkPublicationStatus)}><option value="draft">Borrador compartido</option><option value="final">Final</option></select><span className="field__hint">Ambos son visibles para el grupo. Solo otro compañero puede marcar una versión final como revisada.</span></label>
           <label className="field">
             <span className="field__label">Descripción</span>
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={6} />
@@ -1146,6 +1109,9 @@ export function SubmitWorkPage() {
           </section>
         )}
 
+        </fieldset>
+        {uploadProgress && <p role="status">Subiendo {uploadProgress.name}: {Math.round(uploadProgress.done / uploadProgress.total * 100)} % <button type="button" className="link-button" onClick={() => uploadController.current?.abort()}>Cancelar subida</button></p>}
+        {uploadErrors.length > 0 && <ul className="error" role="alert">{uploadErrors.map((message) => <li key={message}>{message}</li>)}</ul>}
         {error && (
           <p className="error" role="alert">
             {error}
@@ -1157,7 +1123,7 @@ export function SubmitWorkPage() {
             Cancelar
           </Link>
           <button type="submit" disabled={busy || empty}>
-            {busy ? 'Subiendo archivos…' : 'Subir trabajo'}
+            {busy ? 'Subiendo archivos…' : createdId ? 'Reintentar archivos pendientes' : 'Subir trabajo'}
           </button>
         </div>
       </form>

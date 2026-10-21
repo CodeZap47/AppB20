@@ -1,0 +1,20 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "app-b20-api",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-10-21",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+  "vars": {
+    "CORS_ORIGINS": "https://app-b20.pages.dev,http://localhost:5173,capacitor://localhost,https://localhost",
+    "OIDC_ISSUER": "https://auth.spacetimedb.com/oidc",
+    "OIDC_AUDIENCE": "client_034jL0AHYYQ1bps8SupHU0",
+    "OIDC_JWKS_URI": "https://auth.spacetimedb.com/oidc/jwks",
+    "SPACETIMEDB_URI": "https://maincloud.spacetimedb.com",
+    "SPACETIMEDB_MODULE": "app-b20-34245"
+  },
+  "secrets": { "required": ["FILE_SERVICE_TOKEN"] },
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "app-b20-files" }],
+  "triggers": { "crons": ["23 9 * * *"] }
+}

@@ -1,14 +1,20 @@
 import type { DbConnection } from '../module_bindings';
 import type { Snapshot } from './types';
+import { enrichAcademicSnapshot } from './academicSnapshot';
 
 /** Solo vistas públicas del módulo; nunca tablas privadas ni SELECT * de toda la base. */
 export const PUBLIC_VIEWS = [
   'my_member', 'members', 'invitations', 'subjects', 'terms', 'calendar',
   'assignments', 'page_revisions', 'works', 'work_authors', 'work_files',
+  'assignment_details', 'my_progress', 'work_details', 'work_revisions', 'work_reviews',
+  'academic_comments', 'resource_files', 'activity_links', 'page_snapshots', 'evidence_details',
   'group_messages', 'my_direct_conversations', 'my_direct_messages', 'message_reactions',
   'sticker_packs', 'stickers', 'my_chat_commands', 'birthdays', 'activities', 'evidences',
   'notes', 'note_comments', 'questions', 'answers', 'my_last_seen',
   'study_guides', 'guide_sources', 'guide_reviews', 'polls', 'poll_votes',
+  'help_posts', 'my_help_contact_requests',
+  'teaching_practices', 'my_teaching_personal', 'teaching_questions',
+  'spaced_collections', 'spaced_cards', 'spaced_unavailable_cards', 'my_spaced_enrollments', 'my_spaced_progress', 'my_spaced_reviews',
 ] as const;
 
 export function emptySnapshot(connection: Snapshot['connection'], connectionError?: string): Snapshot {
@@ -18,9 +24,13 @@ export function emptySnapshot(connection: Snapshot['connection'], connectionErro
     me: undefined,
     members: [], invitations: [], subjects: [], terms: [], calendar: [], assignments: [],
     works: [], workFiles: [], revisions: [], groupMessages: [], directConversations: [],
+    myProgress: [], workRevisions: [], workReviews: [], academicComments: [],
+    resourceFiles: [], activityLinks: [], pageSnapshots: [],
     directMessages: [], reactions: [], stickerPacks: [], stickers: [], chatCommands: [],
     birthdays: [], activities: [], evidences: [], notes: [], noteComments: [], questions: [],
-    answers: [], guides: [], guideSources: [], guideReviews: [], polls: [], pollVotes: [],
+    answers: [], guides: [], guideSources: [], guideReviews: [], polls: [], pollVotes: [], helpPosts: [], helpContacts: [],
+    teachingPractices: [], teachingPersonal: [], teachingQuestions: [],
+    spacedCollections: [], spacedCards: [], spacedUnavailableCards: [], spacedEnrollments: [], spacedProgress: [], spacedReviews: [],
     lastSeenAt: undefined,
   };
 }
@@ -67,10 +77,98 @@ export function readSnapshot(connection: Pick<DbConnection, 'db'>, identity: str
     authors.set(id, entries);
   }
 
-  return {
+  // También filtra la caché mientras se propagan una revocación o una baja de integrantes.
+  const activeMembers = new Set(members.filter((member) => member.status === 'active').map((member) => member.id));
+  const teachingPractices = [...db.teachingPractices.iter()].filter((row) =>
+    activeMembers.has(row.owner.toHexString()) &&
+    (row.owner.toHexString() === identity || row.reviewer?.toHexString() === identity),
+  ).map((row) => ({
+    id: row.id.toString(), ownerId: row.owner.toHexString(), reviewerId: row.reviewer?.toHexString(),
+    subjectId: row.subjectId.toString(), topic: row.topic,
+    initial: { concept: row.concept, example: row.example, limits: row.limits },
+    revised: { concept: row.revisedConcept, example: row.revisedExample, limits: row.revisedLimits },
+    status: enumValue(row.status, ['draft', 'practicing', 'completed']),
+    createdAt: row.createdAt.toDate(), updatedAt: row.updatedAt.toDate(),
+  }));
+  const visiblePractices = new Set(teachingPractices.map((practice) => practice.id));
+  const ownPractices = new Set(teachingPractices.filter((practice) => practice.ownerId === identity).map((practice) => practice.id));
+  const spacedCollections = [...db.spacedCollections.iter()].filter((row) => row.visibility === 'group' || row.ownerId.toHexString() === identity)
+    .map((row) => ({
+      id: row.id.toString(), subjectId: row.subjectId.toString(), termId: row.termId?.toString(), title: row.title,
+      visibility: enumValue(row.visibility, ['personal', 'group']), ownerId: row.ownerId.toHexString(), version: row.version,
+      archived: row.archived, createdAt: row.createdAt.toDate(), updatedAt: row.updatedAt.toDate(), updatedBy: row.updatedBy.toHexString(),
+    }));
+  const visibleSpacedCollections = new Map(spacedCollections.map((collection) => [collection.id, collection]));
+  const spacedCards = [...db.spacedCards.iter()].filter((row) => {
+    const collection = visibleSpacedCollections.get(row.collectionId.toString());
+    if (!collection) return false;
+    // La caché también retira tarjetas durante la propagación de una fuente que se volvió privada.
+    if (row.sourceKind === 'note') return [...db.notes.iter()].some((note) => note.id === row.sourceId &&
+      note.subjectId.toString() === collection.subjectId && (note.visibility === 'group' ||
+        (collection.visibility === 'personal' && note.author.toHexString() === collection.ownerId)));
+    if (row.sourceKind === 'guide') return [...db.studyGuides.iter()].some((guide) => guide.id === row.sourceId && guide.subjectId.toString() === collection.subjectId);
+    return false;
+  }).map((row) => ({
+    id: row.id.toString(), collectionId: row.collectionId.toString(), question: row.question, explanation: row.explanation, hint: row.hint,
+    sourceKind: enumValue(row.sourceKind, ['note', 'guide']), sourceId: row.sourceId.toString(), sourceVersion: row.sourceVersion,
+    version: row.version, archived: row.archived, createdBy: row.createdBy.toHexString(), updatedBy: row.updatedBy.toHexString(),
+    createdAt: row.createdAt.toDate(), updatedAt: row.updatedAt.toDate(),
+  }));
+
+  return enrichAcademicSnapshot(connection, {
+    myProgress: [], workRevisions: [], workReviews: [], academicComments: [],
+    resourceFiles: [], activityLinks: [], pageSnapshots: [],
     connection: 'ready',
     me,
     members,
+    spacedCollections,
+    spacedCards,
+    spacedUnavailableCards: [...db.spacedUnavailableCards.iter()].filter((row) => visibleSpacedCollections.has(row.collectionId.toString()))
+      .map((row) => ({ id: row.id.toString(), collectionId: row.collectionId.toString(), version: row.version, archived: row.archived })),
+    spacedEnrollments: [...db.mySpacedEnrollments.iter()].filter((row) => row.memberId.toHexString() === identity).map((row) => ({
+      memberId: row.memberId.toHexString(), collectionId: row.collectionId.toString(), active: row.active, updatedAt: row.updatedAt.toDate(),
+    })),
+    spacedProgress: [...db.mySpacedProgress.iter()].filter((row) => row.memberId.toHexString() === identity).map((row) => ({
+      memberId: row.memberId.toHexString(), cardId: row.cardId.toString(), cardVersion: row.cardVersion, step: row.step,
+      revision: row.revision, dueAt: row.dueAt.toDate(), reviewedAt: row.reviewedAt.toDate(),
+    })),
+    spacedReviews: [...db.mySpacedReviews.iter()].filter((row) => row.memberId.toHexString() === identity).map((row) => ({
+      id: row.id, requestId: row.requestId, memberId: row.memberId.toHexString(), cardId: row.cardId.toString(),
+      cardVersion: row.cardVersion, rating: enumValue(row.rating, ['remembered', 'hint', 'again']), step: row.step,
+      reviewedAt: row.reviewedAt.toDate(), dueAt: row.dueAt.toDate(),
+    })),
+    helpPosts: [...db.helpPosts.iter()]
+      .filter((row) => row.author.toHexString() === identity || (row.status !== 'withdrawn' && members.some((m) => m.id === row.author.toHexString() && m.status === 'active')))
+      .map((row) => ({
+        id: row.id.toString(), kind: enumValue(row.kind, ['offer', 'request']), subjectId: row.subjectId.toString(),
+        title: row.title, topic: row.topic, description: row.description,
+        level: enumValue(row.level, ['initial', 'basics', 'advanced']),
+        modality: enumValue(row.modality, ['messages', 'video', 'in_person', 'flexible']), availability: row.availability,
+        status: enumValue(row.status, ['open', 'closed', 'withdrawn']), authorId: row.author.toHexString(),
+        createdAt: row.createdAt.toDate(), updatedAt: row.updatedAt.toDate(),
+        withdrawnBy: row.withdrawnBy?.toHexString(), withdrawalReason: row.withdrawalReason,
+      })),
+    helpContacts: [...db.myHelpContactRequests.iter()]
+      .filter((row) => row.sender.toHexString() === identity || row.recipient.toHexString() === identity)
+      .map((row) => ({
+        id: row.id.toString(), postId: row.postId.toString(), senderId: row.sender.toHexString(), recipientId: row.recipient.toHexString(),
+        subjectId: row.subjectId.toString(), postTitle: row.postTitle, postTopic: row.postTopic, postKind: enumValue(row.postKind, ['offer', 'request']),
+        message: row.message, status: enumValue(row.status, ['pending', 'accepted', 'rejected', 'cancelled', 'closed']),
+        conversationId: row.conversationId?.toString(), createdAt: row.createdAt.toDate(), updatedAt: row.updatedAt.toDate(),
+        closedBy: row.closedBy?.toHexString(), closeReason: row.closeReason,
+      })),
+    teachingPractices,
+    teachingPersonal: [...db.myTeachingPersonal.iter()].filter((row) => ownPractices.has(row.practiceId.toString())).map((row) => ({
+      practiceId: row.practiceId.toString(), reflection: row.reflection, topicsToReview: row.topicsToReview,
+      sourceKind: row.sourceKind ? enumValue(row.sourceKind, ['note', 'guide']) : undefined,
+      sourceId: row.sourceId?.toString(), sourceVersion: row.sourceVersion,
+      publishedNoteId: row.publishedNoteId?.toString(),
+    })),
+    teachingQuestions: [...db.teachingQuestions.iter()].filter((row) => visiblePractices.has(row.practiceId.toString())).map((row) => ({
+      id: row.id.toString(), practiceId: row.practiceId.toString(), authorId: row.author.toHexString(),
+      kind: enumValue(row.kind, ['guided', 'peer']), text: row.text, answer: row.answer,
+      createdAt: row.createdAt.toDate(), answeredAt: row.answeredAt?.toDate(),
+    })),
     invitations: me.isCreator ? [...db.invitations.iter()].map((row) => ({
       email: row.email,
       isCreator: row.isCreator,
@@ -205,5 +303,5 @@ export function readSnapshot(connection: Pick<DbConnection, 'db'>, identity: str
       votedAt: row.votedAt.toDate(), changedAt: row.changedAt?.toDate(),
     })),
     lastSeenAt: [...db.myLastSeen.iter()].find((row) => row.identity.toHexString() === identity)?.at.toDate(),
-  };
+  }, identity);
 }

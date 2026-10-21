@@ -1,6 +1,6 @@
 # Arquitectura
 
-Resumen técnico de la base inicial. La fuente de verdad del alcance es
+Arquitectura elegida para completar el proyecto con SpacetimeDB y Cloudflare. La fuente de verdad del alcance es
 [`definicion-del-proyecto.md`](definicion-del-proyecto.md) (secciones 5, 6 y 9).
 
 ## Piezas
@@ -8,13 +8,13 @@ Resumen técnico de la base inicial. La fuente de verdad del alcance es
 | Pieza | Tecnología | Rol |
 | --- | --- | --- |
 | Interfaz | React 19 + TypeScript + Vite, `react-router` con rutas hash | Una sola app para todas las presentaciones. |
-| Datos en tiempo real | SpacetimeDB, SDK `spacetimedb` (cliente y módulo en TypeScript) | Membresía, perfiles, trabajos, mensajes, cumpleaños. |
+| Datos y backend principal | SpacetimeDB, SDK `spacetimedb` (cliente y módulo en TypeScript) | Datos, archivos binarios privados, permisos, reducers, vistas, procedures y trabajos programados. |
 | Autenticación | SpacetimeAuth OIDC (Google) + invitaciones (`invitation`) | Emisor y audiencias configurables en `auth_config`; alta con correo verificado, vistas/acciones y backend con membresía activa. |
-| Backend | Node + Hono + `@google/genai` + `jose` | Gemini BYOK; después URLs firmadas de Cloud Storage y envío de push. |
-| Secretos | `EncryptedMemoryStore` (desarrollo) → Google Cloud Secret Manager | Claves BYOK por usuario, nunca devueltas al cliente. |
-| Web/PWA | `vite-plugin-pwa` con service worker propio (`apps/web/src/sw.ts`) | Instalación en iPhone y Web Push. |
+| Integraciones complementarias | Cloudflare Workers + Hono | Compatibilidad opcional con archivos R2 anteriores; futuro cifrado BYOK y envíos externos. No se requiere Worker para los archivos nuevos. |
+| Secretos (entrega posterior) | Claves personales cifradas en SpacetimeDB; clave maestra en Cloudflare Secrets | No se devuelven las claves al cliente. Gemini permanece deshabilitado en esta entrega. |
+| Web/PWA | Cloudflare Pages + `vite-plugin-pwa`, service worker propio (`apps/web/src/sw.ts`) | Web estática, instalación y base para Web Push; recepción real por validar. |
 | Extensión | Manifest V3, `sidePanel`, todo empaquetado | Panel lateral y vista completa (`app.html`). |
-| Android | Capacitor 8 + `@capacitor/push-notifications` (FCM) | APK firmado con avisos nativos. |
+| Android | Capacitor 8 | APK firmado, avisos internos y recordatorios locales planificados. El push nativo con la app cerrada sigue pendiente sin un proveedor adicional. |
 
 ## Modelo de datos inicial (`packages/spacetime-module`)
 
@@ -49,8 +49,9 @@ materia, el parcial y el tipo se leen de la página, no se repiten en el trabajo
 `update_assignment` y `update_activity` no comprueban autoría: basta ser miembro activo, como
 en un wiki. Cada creación o edición guarda el texto completo en `page_revision` (título,
 objetivo e instrucciones) con quién y cuándo, y aumenta `version`. Restaurar una versión es
-editar con el texto de esa versión, así que nunca se borra historial. No hay bloqueo de edición
-simultánea: gana el último que guarda y el anterior queda en el historial.
+editar con el texto de esa versión, así que nunca se borra historial. Las operaciones académicas
+V2 comprueban la versión esperada para avisar de cambios simultáneos; las operaciones antiguas
+se conservan por compatibilidad y no deben usarse para omitir ese control.
 
 `update_work`, `attach_work_file` y `remove_work_file` sí exigen ser autor del trabajo.
 
@@ -87,26 +88,31 @@ dirección de la lista antigua redirige a la vista por fecha.
 
 Las 45 materias (nueve cuatrimestres de cinco) viven en `CURRICULUM` de `@b20/core`. Cada
 materia guarda su cuatrimestre (`period`) y tiene tres parciales. En el servidor se cargan con
-el reducer `import_curriculum`, que solo ejecutan los creadores y no duplica materias; falta
-llamarlo desde la interfaz cuando se conecte SpacetimeDB. `create_subject` sigue disponible para
+el reducer `import_curriculum`, que solo ejecutan los creadores y no duplica materias; Ajustes
+expone su importación en modo real. `create_subject` sigue disponible para
 materias fuera del plan y ahora pide el cuatrimestre.
 
 Cada página principal lleva `kind`: `tarea`, `actividad`, `exposicion` o `examen` (`WORK_KINDS` en
 `@b20/core`, repetido en el módulo). `create_assignment` y `update_assignment` lo validan.
 
-### Archivos adjuntos y su límite
+### Archivos académicos, versiones y permisos
 
-Cada archivo pesa como máximo **50 MB**. El valor vive en `MAX_FILE_BYTES` de `@b20/core`
-(`packages/core/src/files.ts`) y se comprueba en tres lugares:
+Los archivos nuevos de consignas, trabajos, actividades y evidencias se guardan directamente
+en tablas privadas de SpacetimeDB, divididos en fragmentos de 1 MiB y con un máximo de
+50 MiB (52,428,800 bytes). Cada operación comprueba membresía y permisos sobre el recurso;
+los clientes reciben metadatos en las suscripciones y descargan bytes solo al pedirlos.
+La subida conserva un manifiesto para reanudar, cancelar y confirmar de forma idempotente.
+Ver [archivos-spacetime.md](archivos-spacetime.md).
 
-1. La interfaz (`FilePicker`) descarta el archivo y explica por qué antes de subirlo.
-2. El reducer `attach_work_file` rechaza registrar un archivo vacío o de más de 50 MB. El módulo
-   repite la constante porque no importa `@b20/core`; hay que cambiar las dos juntas.
-3. Pendiente con el almacenamiento: el backend debe firmar cada subida con ese mismo tope, para
-   que el servicio de archivos rechace el exceso aunque alguien salte la interfaz.
+Los IDs de archivos existentes y sus referencias históricas se conservan. Los objetos R2
+previos requieren su ruta de compatibilidad hasta migrarlos y verificar su integridad; una
+instalación nueva no requiere R2, buckets ni una credencial técnica de archivos.
 
-Por ahora solo los trabajos aceptan adjuntos (`attachWorkFile` y `removeWorkFile` en
-`DataSource`). En modo de prueba el archivo no sale del navegador.
+Las nuevas tablas son aditivas: avance privado, metadatos, revisiones de trabajos, snapshots
+completos de páginas, revisiones nominales, comentarios, recursos y vínculos. Cada cambio
+material conserva un snapshot y requiere la versión esperada. Los archivos históricos no se
+borran al retirarlos de la versión actual. Las evidencias y sus archivos actualizan la versión
+de la actividad para que las guías avisen del cambio; comentar no la modifica.
 
 ### Guías de estudio (3.5)
 
@@ -159,7 +165,57 @@ nadie de fuera. No hay votaciones anónimas en esta versión. Las reglas están 
 - **Navegación**: `ready` en `MODULES` muestra en el menú un módulo de una etapa posterior que ya
   tiene pantalla.
 
+### Ayuda entre compañeros (7.3)
+
+`/m/ayuda` permite publicar ofertas y peticiones por materia, tema, nivel del contenido y
+modalidad. La disponibilidad es voluntaria: incluirla en la publicación la comparte con el
+grupo. «Mis publicaciones» incluye las cerradas y las retiradas propias; los perfiles solo
+muestran publicaciones públicas. Este módulo no genera puntos.
+
+Las tablas `help_post` y `help_contact_request` son privadas. La vista `help_posts` entrega al
+grupo publicaciones no retiradas de miembros activos y a cada autor sus propias retiradas.
+`my_help_contact_requests` entrega únicamente los contactos enviados o recibidos por quien
+consulta; ser administrador no permite leer contactos ajenos. Las solicitudes conservan el
+título y el tema originales para mantener contexto tras editar o retirar una publicación.
+Las acciones de contacto no se registran en el historial público.
+
+Aceptar un contacto crea o reutiliza atómicamente la conversación 1 a 1, sin enviar mensajes
+automáticos ni cerrar la publicación. Solo el destinatario acepta/rechaza; el remitente
+cancela pendientes y cualquiera de los participantes cierra un contacto aceptado. Cada
+persona puede enviar una sola solicitud por publicación, incluso si ya fue rechazada o
+cancelada. Las bajas impiden enviar y aceptar nuevos contactos.
+
+El autor decide cerrar y puede reabrir una publicación cerrada. Cerrar o retirar termina los
+contactos pendientes y conserva los aceptados y sus conversaciones. Retirar oculta la
+publicación al grupo y no permite reabrirla. El autor puede retirarla; un administrador que
+retire una ajena debe registrar un motivo que el autor puede consultar. Los encuentros se
+coordinan por mensajes; convertirlos en salas de estudio queda para una entrega posterior.
+
+La demo aplica las mismas reglas en memoria y contiene ejemplos ficticios. Su implementación
+de SpacetimeDB y bindings están incluidos, sin cambiar el modo demo ni publicar en Maincloud.
+
 ## Capa de datos de la interfaz
+
+### Aprende enseñando (7.8)
+
+La primera versión es manual y funciona sin Gemini. `teaching_practice` conserva explicación
+inicial, revisada, estado (`draft`, `practicing`, `completed`) y un compañero opcional.
+`teaching_personal` separa reflexión, temas para repasar, fuente y nota publicada;
+`teaching_question` conserva las preguntas orientadoras o del compañero y las respuestas.
+Las tres tablas son privadas. Las vistas entregan prácticas y preguntas únicamente al autor
+o al compañero invitado actual, con membresía activa de ambos; los datos personales solo al
+autor. No hay privilegio de lectura por administrar el grupo.
+
+Los reducers validan autoría, estado y acceso a fuentes, y no escriben eventos privados en
+`change_log`. Iniciar conserva la explicación inicial y crea tres preguntas una sola vez.
+Completar exige explicación revisada, reflexión y una respuesta; reabrir permite continuar.
+La publicación inserta una nota de grupo y guarda su ID en la misma transacción: es idempotente
+y copia únicamente la explicación revisada. La nota se edita después en Notas de clase.
+
+La demo aplica las mismas reglas en memoria. Las suscripciones y snapshots de SpacetimeDB
+retiran las prácticas al revocar invitaciones o dar de baja participantes. El cambio de esquema
+es aditivo; al activar el modo real debe actualizarse el módulo antes que los clientes, sin
+borrar datos. Esta entrega no activa datos reales ni cambia la configuración de despliegue.
 
 Las pantallas leen y escriben a través de `DataSource` (`packages/app/src/data/types.ts`),
 cuyas acciones corresponden a los reducers del módulo y cuyo `Snapshot` corresponde a sus
@@ -190,17 +246,51 @@ La configuración del panel y del primer creador está en
 Android usan el navegador del sistema y callbacks propios que deben registrarse y probarse
 antes de distribuirse.
 
+### Repaso espaciado (7.9)
+
+`spaced_collection` y `spaced_card` almacenan colecciones personales/compartidas y tarjetas
+con una nota o guía de origen versionada. Las vistas comprueban membresía, visibilidad de la
+colección y accesibilidad actual de la fuente; las notas personales solo sirven en colecciones
+personales de su autor. Publicar valida todas las fuentes, incluidas las tarjetas archivadas.
+
+`spaced_enrollment`, `spaced_progress` y `spaced_review` permanecen privados por identidad,
+mediante vistas `my_spaced_*`. No se registran respuestas escritas ni se incorporan sesiones a
+contribuciones o novedades. La interfaz mantiene una cola finita por sesión; guardar exige
+versión de tarjeta, revisión del progreso y un identificador idempotente por intento.
+
+La función pura `nextSpacedSchedule` de `@b20/core` la usan demo y módulo: acierto a 1/3/7/14/30/
+60/120 días, pista a un día sin avanzar y olvido a diez minutos con reinicio. El servidor
+determina la hora y rechaza revisiones adelantadas. Cambiar el contenido reinicia el aprendizaje;
+actualizar solo la referencia o archivar conserva el intervalo e invalida sesiones antiguas.
+
+El cambio añade tablas, vistas y reducers, sin migrar datos existentes ni cambiar el modo de
+datos del despliegue. Para usarlo en modo real hace falta publicar el módulo actualizado por
+el procedimiento habitual; la implementación local no publica ni elimina datos.
+
 ## Pendientes de la Etapa 0
 
-- Configurar el proyecto y cliente de SpacetimeAuth, publicar el módulo, establecer
-  `auth_config` y crear la primera invitación. Probar acceso, persistencia, dos cuentas,
-  exclusión de no invitados y bajas en un servidor real.
+- Verificar la publicación del módulo actualizado, `auth_config` e invitaciones existentes.
+  Probar acceso y persistencia con autor, compañero autorizado y tercero; incluir bajas y
+  rechazo de lectura de bytes privados. El código local no acredita el despliegue de esta entrega.
 - Registrar y probar el acceso de extensión y Android; la configuración web no basta para
   estas presentaciones. Validar renovación y cierre de sesión también en la PWA instalada.
 - Confirmar edad del grupo y acceso a Google AI Studio antes de habilitar Gemini; definir el
   modelo vigente en `GEMINI_MODEL`, límites de solicitudes y presupuesto.
 - Iconos PNG de la PWA (192, 512 y apple-touch-icon 180) y de la extensión.
 - Claves VAPID, suscripciones Web Push y prueba en un iPhone real con la PWA instalada.
-- Proyecto de Firebase para FCM, `google-services.json` (no se versiona) y APK firmado de prueba.
+- APK firmado de prueba y recordatorios locales. El requisito original de push nativo Android
+  permanece pendiente bajo la restricción de usar únicamente SpacetimeDB y Cloudflare.
 - Bandeja de avisos de la extensión.
 - Confirmar el `appId` de Android antes de firmar el primer APK.
+
+## Alcance y estado de la primera entrega
+
+La incorporación del módulo 3.11 al catálogo no implementa su pantalla. Su alcance funcional
+se conserva íntegro en la definición y su primera incorporación corresponde a la etapa 3.
+Ayuda, Aprende enseñando y Repaso ya tienen implementación manual local; sus integraciones
+pendientes y las pruebas reales se reflejan en [estado-del-proyecto.md](estado-del-proyecto.md).
+
+La papelera de 30 días, Gemini, programación de recordatorios y push pertenecen a entregas
+posteriores; no se consideran implementados por elegir SpacetimeDB para alojarlos. El SDK
+del cliente y del módulo está fijado en `2.12.0`, con bindings regenerados; la versión de CLI,
+las pruebas del runtime y las compilaciones se registran al verificar la entrega.

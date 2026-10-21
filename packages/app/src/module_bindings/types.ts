@@ -10,6 +10,25 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const AcademicComment = __t.object("AcademicComment", {
+  id: __t.u64(),
+  targetKind: __t.string(),
+  targetId: __t.u64(),
+  author: __t.identity(),
+  text: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type AcademicComment = __Infer<typeof AcademicComment>;
+
+export const AcademicComments = __t.object("AcademicComments", {});
+export type AcademicComments = __Infer<typeof AcademicComments>;
+
+export const AcademicMigration = __t.object("AcademicMigration", {
+  id: __t.u32(),
+  completedAt: __t.timestamp(),
+});
+export type AcademicMigration = __Infer<typeof AcademicMigration>;
+
 export const Activities = __t.object("Activities", {});
 export type Activities = __Infer<typeof Activities>;
 
@@ -29,6 +48,20 @@ export const Activity = __t.object("Activity", {
   updatedAt: __t.timestamp(),
 });
 export type Activity = __Infer<typeof Activity>;
+
+export const ActivityLink = __t.object("ActivityLink", {
+  id: __t.u64(),
+  activityId: __t.u64(),
+  targetKind: __t.string(),
+  targetId: __t.u64(),
+  createdBy: __t.identity(),
+  createdAt: __t.timestamp(),
+  removedAt: __t.option(__t.timestamp()),
+});
+export type ActivityLink = __Infer<typeof ActivityLink>;
+
+export const ActivityLinks = __t.object("ActivityLinks", {});
+export type ActivityLinks = __Infer<typeof ActivityLinks>;
 
 export const Answer = __t.object("Answer", {
   id: __t.u64(),
@@ -63,6 +96,15 @@ export const Assignment = __t.object("Assignment", {
   updatedAt: __t.timestamp(),
 });
 export type Assignment = __Infer<typeof Assignment>;
+
+export const AssignmentDetail = __t.object("AssignmentDetail", {
+  assignmentId: __t.u64(),
+  topic: __t.string(),
+});
+export type AssignmentDetail = __Infer<typeof AssignmentDetail>;
+
+export const AssignmentDetails = __t.object("AssignmentDetails", {});
+export type AssignmentDetails = __Infer<typeof AssignmentDetails>;
 
 export const Assignments = __t.object("Assignments", {});
 export type Assignments = __Infer<typeof Assignments>;
@@ -143,8 +185,36 @@ export const Evidence = __t.object("Evidence", {
 });
 export type Evidence = __Infer<typeof Evidence>;
 
+export const EvidenceDetail = __t.object("EvidenceDetail", {
+  evidenceId: __t.u64(),
+  version: __t.u32(),
+  updatedBy: __t.identity(),
+  updatedAt: __t.timestamp(),
+});
+export type EvidenceDetail = __Infer<typeof EvidenceDetail>;
+
+export const EvidenceDetails = __t.object("EvidenceDetails", {});
+export type EvidenceDetails = __Infer<typeof EvidenceDetails>;
+
 export const Evidences = __t.object("Evidences", {});
 export type Evidences = __Infer<typeof Evidences>;
+
+export const FileServiceConfig = __t.object("FileServiceConfig", {
+  id: __t.u32(),
+  identity: __t.identity(),
+});
+export type FileServiceConfig = __Infer<typeof FileServiceConfig>;
+
+export const FileUploadIntent = __t.object("FileUploadIntent", {
+  id: __t.string(),
+  actor: __t.identity(),
+  targetKind: __t.string(),
+  targetId: __t.u64(),
+  expectedVersion: __t.u32(),
+  createdAt: __t.timestamp(),
+  expiresAt: __t.timestamp(),
+});
+export type FileUploadIntent = __Infer<typeof FileUploadIntent>;
 
 export const GroupMessage = __t.object("GroupMessage", {
   id: __t.u64(),
@@ -198,6 +268,47 @@ export type GuideSourceRef = __Infer<typeof GuideSourceRef>;
 export const GuideSources = __t.object("GuideSources", {});
 export type GuideSources = __Infer<typeof GuideSources>;
 
+export const HelpContactRequest = __t.object("HelpContactRequest", {
+  id: __t.u64(),
+  postId: __t.u64(),
+  sender: __t.identity(),
+  recipient: __t.identity(),
+  subjectId: __t.u64(),
+  postTitle: __t.string(),
+  postTopic: __t.string(),
+  postKind: __t.string(),
+  message: __t.string(),
+  status: __t.string(),
+  conversationId: __t.option(__t.u64()),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+  closedBy: __t.option(__t.identity()),
+  closeReason: __t.option(__t.string()),
+});
+export type HelpContactRequest = __Infer<typeof HelpContactRequest>;
+
+export const HelpPost = __t.object("HelpPost", {
+  id: __t.u64(),
+  kind: __t.string(),
+  subjectId: __t.u64(),
+  title: __t.string(),
+  topic: __t.string(),
+  description: __t.string(),
+  level: __t.string(),
+  modality: __t.string(),
+  availability: __t.string(),
+  status: __t.string(),
+  author: __t.identity(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+  withdrawnBy: __t.option(__t.identity()),
+  withdrawalReason: __t.option(__t.string()),
+});
+export type HelpPost = __Infer<typeof HelpPost>;
+
+export const HelpPosts = __t.object("HelpPosts", {});
+export type HelpPosts = __Infer<typeof HelpPosts>;
+
 export const Invitation = __t.object("Invitation", {
   email: __t.string(),
   isCreator: __t.bool(),
@@ -249,11 +360,29 @@ export type MyDirectConversations = __Infer<typeof MyDirectConversations>;
 export const MyDirectMessages = __t.object("MyDirectMessages", {});
 export type MyDirectMessages = __Infer<typeof MyDirectMessages>;
 
+export const MyHelpContactRequests = __t.object("MyHelpContactRequests", {});
+export type MyHelpContactRequests = __Infer<typeof MyHelpContactRequests>;
+
 export const MyLastSeen = __t.object("MyLastSeen", {});
 export type MyLastSeen = __Infer<typeof MyLastSeen>;
 
 export const MyMember = __t.object("MyMember", {});
 export type MyMember = __Infer<typeof MyMember>;
+
+export const MyProgress = __t.object("MyProgress", {});
+export type MyProgress = __Infer<typeof MyProgress>;
+
+export const MySpacedEnrollments = __t.object("MySpacedEnrollments", {});
+export type MySpacedEnrollments = __Infer<typeof MySpacedEnrollments>;
+
+export const MySpacedProgress = __t.object("MySpacedProgress", {});
+export type MySpacedProgress = __Infer<typeof MySpacedProgress>;
+
+export const MySpacedReviews = __t.object("MySpacedReviews", {});
+export type MySpacedReviews = __Infer<typeof MySpacedReviews>;
+
+export const MyTeachingPersonal = __t.object("MyTeachingPersonal", {});
+export type MyTeachingPersonal = __Infer<typeof MyTeachingPersonal>;
 
 export const Note = __t.object("Note", {
   id: __t.u64(),
@@ -302,6 +431,42 @@ export type PageRevision = __Infer<typeof PageRevision>;
 
 export const PageRevisions = __t.object("PageRevisions", {});
 export type PageRevisions = __Infer<typeof PageRevisions>;
+
+export const PageSnapshot = __t.object("PageSnapshot", {
+  id: __t.u64(),
+  page: __t.string(),
+  pageId: __t.u64(),
+  version: __t.u32(),
+  subjectId: __t.u64(),
+  termId: __t.option(__t.u64()),
+  kind: __t.string(),
+  topic: __t.string(),
+  date: __t.string(),
+  title: __t.string(),
+  summary: __t.string(),
+  body: __t.string(),
+  dueDate: __t.string(),
+  attachmentIds: __t.array(__t.string()),
+  assignmentIds: __t.array(__t.u64()),
+  noteIds: __t.array(__t.u64()),
+  editedBy: __t.identity(),
+  editedAt: __t.timestamp(),
+  restoredFrom: __t.option(__t.u32()),
+});
+export type PageSnapshot = __Infer<typeof PageSnapshot>;
+
+export const PageSnapshots = __t.object("PageSnapshots", {});
+export type PageSnapshots = __Infer<typeof PageSnapshots>;
+
+export const PersonalProgress = __t.object("PersonalProgress", {
+  key: __t.string(),
+  owner: __t.identity(),
+  targetKind: __t.string(),
+  targetId: __t.u64(),
+  status: __t.string(),
+  updatedAt: __t.timestamp(),
+});
+export type PersonalProgress = __Infer<typeof PersonalProgress>;
 
 export const Poll = __t.object("Poll", {
   id: __t.u64(),
@@ -356,6 +521,170 @@ export type Question = __Infer<typeof Question>;
 
 export const Questions = __t.object("Questions", {});
 export type Questions = __Infer<typeof Questions>;
+
+export const ResourceCapacity = __t.object("ResourceCapacity", {
+  id: __t.u32(),
+  limitBytes: __t.u64(),
+  reservedBytes: __t.u64(),
+});
+export type ResourceCapacity = __Infer<typeof ResourceCapacity>;
+
+export const ResourceChunk = __t.object("ResourceChunk", {
+  id: __t.string(),
+  uploadId: __t.string(),
+  index: __t.u32(),
+  bytes: __t.byteArray(),
+  sha256: __t.string(),
+});
+export type ResourceChunk = __Infer<typeof ResourceChunk>;
+
+export const ResourceChunkResult = __t.object("ResourceChunkResult", {
+  index: __t.u32(),
+  bytes: __t.byteArray(),
+  sha256: __t.string(),
+});
+export type ResourceChunkResult = __Infer<typeof ResourceChunkResult>;
+
+export const ResourceExpiry = __t.object("ResourceExpiry", {
+  id: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  uploadId: __t.string(),
+});
+export type ResourceExpiry = __Infer<typeof ResourceExpiry>;
+
+export const ResourceFile = __t.object("ResourceFile", {
+  id: __t.string(),
+  targetKind: __t.string(),
+  targetId: __t.u64(),
+  name: __t.string(),
+  size: __t.u64(),
+  contentType: __t.string(),
+  storageKey: __t.string(),
+  etag: __t.string(),
+  uploadedBy: __t.identity(),
+  createdAt: __t.timestamp(),
+  removedAt: __t.option(__t.timestamp()),
+});
+export type ResourceFile = __Infer<typeof ResourceFile>;
+
+export const ResourceFileInfo = __t.object("ResourceFileInfo", {
+  id: __t.string(),
+  targetKind: __t.string(),
+  targetId: __t.u64(),
+  name: __t.string(),
+  size: __t.u64(),
+  contentType: __t.string(),
+  etag: __t.string(),
+  uploadedBy: __t.identity(),
+  createdAt: __t.timestamp(),
+  removedAt: __t.option(__t.timestamp()),
+});
+export type ResourceFileInfo = __Infer<typeof ResourceFileInfo>;
+
+export const ResourceFiles = __t.object("ResourceFiles", {});
+export type ResourceFiles = __Infer<typeof ResourceFiles>;
+
+export const ResourceUpload = __t.object("ResourceUpload", {
+  id: __t.string(),
+  actor: __t.identity(),
+  targetKind: __t.string(),
+  targetId: __t.u64(),
+  expectedVersion: __t.u32(),
+  name: __t.string(),
+  mime: __t.string(),
+  bytes: __t.u64(),
+  sha256: __t.string(),
+  chunkCount: __t.u32(),
+  state: __t.string(),
+  createdAt: __t.timestamp(),
+  expiresAt: __t.timestamp(),
+});
+export type ResourceUpload = __Infer<typeof ResourceUpload>;
+
+export const SpacedCard = __t.object("SpacedCard", {
+  id: __t.u64(),
+  collectionId: __t.u64(),
+  question: __t.string(),
+  explanation: __t.string(),
+  hint: __t.string(),
+  sourceKind: __t.string(),
+  sourceId: __t.u64(),
+  sourceVersion: __t.u32(),
+  version: __t.u32(),
+  archived: __t.bool(),
+  createdBy: __t.identity(),
+  updatedBy: __t.identity(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type SpacedCard = __Infer<typeof SpacedCard>;
+
+export const SpacedCards = __t.object("SpacedCards", {});
+export type SpacedCards = __Infer<typeof SpacedCards>;
+
+export const SpacedCollection = __t.object("SpacedCollection", {
+  id: __t.u64(),
+  subjectId: __t.u64(),
+  termId: __t.option(__t.u64()),
+  title: __t.string(),
+  visibility: __t.string(),
+  ownerId: __t.identity(),
+  version: __t.u32(),
+  archived: __t.bool(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+  updatedBy: __t.identity(),
+});
+export type SpacedCollection = __Infer<typeof SpacedCollection>;
+
+export const SpacedCollections = __t.object("SpacedCollections", {});
+export type SpacedCollections = __Infer<typeof SpacedCollections>;
+
+export const SpacedEnrollment = __t.object("SpacedEnrollment", {
+  key: __t.string(),
+  memberId: __t.identity(),
+  collectionId: __t.u64(),
+  active: __t.bool(),
+  updatedAt: __t.timestamp(),
+});
+export type SpacedEnrollment = __Infer<typeof SpacedEnrollment>;
+
+export const SpacedProgress = __t.object("SpacedProgress", {
+  key: __t.string(),
+  memberId: __t.identity(),
+  cardId: __t.u64(),
+  cardVersion: __t.u32(),
+  step: __t.u32(),
+  revision: __t.u32(),
+  dueAt: __t.timestamp(),
+  reviewedAt: __t.timestamp(),
+});
+export type SpacedProgress = __Infer<typeof SpacedProgress>;
+
+export const SpacedReview = __t.object("SpacedReview", {
+  id: __t.string(),
+  requestId: __t.string(),
+  memberId: __t.identity(),
+  cardId: __t.u64(),
+  cardVersion: __t.u32(),
+  expectedRevision: __t.u32(),
+  rating: __t.string(),
+  step: __t.u32(),
+  reviewedAt: __t.timestamp(),
+  dueAt: __t.timestamp(),
+});
+export type SpacedReview = __Infer<typeof SpacedReview>;
+
+export const SpacedUnavailableCard = __t.object("SpacedUnavailableCard", {
+  id: __t.u64(),
+  collectionId: __t.u64(),
+  version: __t.u32(),
+  archived: __t.bool(),
+});
+export type SpacedUnavailableCard = __Infer<typeof SpacedUnavailableCard>;
+
+export const SpacedUnavailableCards = __t.object("SpacedUnavailableCards", {});
+export type SpacedUnavailableCards = __Infer<typeof SpacedUnavailableCards>;
 
 export const Sticker = __t.object("Sticker", {
   id: __t.u64(),
@@ -415,6 +744,53 @@ export type Subject = __Infer<typeof Subject>;
 export const Subjects = __t.object("Subjects", {});
 export type Subjects = __Infer<typeof Subjects>;
 
+export const TeachingPersonal = __t.object("TeachingPersonal", {
+  practiceId: __t.u64(),
+  reflection: __t.string(),
+  topicsToReview: __t.string(),
+  sourceKind: __t.option(__t.string()),
+  sourceId: __t.option(__t.u64()),
+  sourceVersion: __t.option(__t.u32()),
+  publishedNoteId: __t.option(__t.u64()),
+});
+export type TeachingPersonal = __Infer<typeof TeachingPersonal>;
+
+export const TeachingPractice = __t.object("TeachingPractice", {
+  id: __t.u64(),
+  owner: __t.identity(),
+  reviewer: __t.option(__t.identity()),
+  subjectId: __t.u64(),
+  topic: __t.string(),
+  concept: __t.string(),
+  example: __t.string(),
+  limits: __t.string(),
+  revisedConcept: __t.string(),
+  revisedExample: __t.string(),
+  revisedLimits: __t.string(),
+  status: __t.string(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type TeachingPractice = __Infer<typeof TeachingPractice>;
+
+export const TeachingPractices = __t.object("TeachingPractices", {});
+export type TeachingPractices = __Infer<typeof TeachingPractices>;
+
+export const TeachingQuestion = __t.object("TeachingQuestion", {
+  id: __t.u64(),
+  practiceId: __t.u64(),
+  author: __t.identity(),
+  kind: __t.string(),
+  text: __t.string(),
+  answer: __t.string(),
+  createdAt: __t.timestamp(),
+  answeredAt: __t.option(__t.timestamp()),
+});
+export type TeachingQuestion = __Infer<typeof TeachingQuestion>;
+
+export const TeachingQuestions = __t.object("TeachingQuestions", {});
+export type TeachingQuestions = __Infer<typeof TeachingQuestions>;
+
 export const Term = __t.object("Term", {
   id: __t.u64(),
   subjectId: __t.u64(),
@@ -459,6 +835,17 @@ export type WorkAuthor = __Infer<typeof WorkAuthor>;
 export const WorkAuthors = __t.object("WorkAuthors", {});
 export type WorkAuthors = __Infer<typeof WorkAuthors>;
 
+export const WorkDetail = __t.object("WorkDetail", {
+  workId: __t.u64(),
+  topic: __t.string(),
+  status: __t.string(),
+  updatedBy: __t.identity(),
+});
+export type WorkDetail = __Infer<typeof WorkDetail>;
+
+export const WorkDetails = __t.object("WorkDetails", {});
+export type WorkDetails = __Infer<typeof WorkDetails>;
+
 export const WorkFile = __t.object("WorkFile", {
   id: __t.u64(),
   workId: __t.u64(),
@@ -473,6 +860,38 @@ export type WorkFile = __Infer<typeof WorkFile>;
 
 export const WorkFiles = __t.object("WorkFiles", {});
 export type WorkFiles = __Infer<typeof WorkFiles>;
+
+export const WorkReview = __t.object("WorkReview", {
+  id: __t.u64(),
+  workId: __t.u64(),
+  version: __t.u32(),
+  reviewer: __t.identity(),
+  comment: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type WorkReview = __Infer<typeof WorkReview>;
+
+export const WorkReviews = __t.object("WorkReviews", {});
+export type WorkReviews = __Infer<typeof WorkReviews>;
+
+export const WorkRevision = __t.object("WorkRevision", {
+  id: __t.u64(),
+  workId: __t.u64(),
+  version: __t.u32(),
+  title: __t.string(),
+  description: __t.string(),
+  topic: __t.string(),
+  status: __t.string(),
+  authors: __t.array(__t.identity()),
+  attachmentIds: __t.array(__t.string()),
+  editedBy: __t.identity(),
+  editedAt: __t.timestamp(),
+  restoredFrom: __t.option(__t.u32()),
+});
+export type WorkRevision = __Infer<typeof WorkRevision>;
+
+export const WorkRevisions = __t.object("WorkRevisions", {});
+export type WorkRevisions = __Infer<typeof WorkRevisions>;
 
 export const Works = __t.object("Works", {});
 export type Works = __Infer<typeof Works>;

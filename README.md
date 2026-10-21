@@ -14,23 +14,30 @@ La definición completa está en [`docs/definicion-del-proyecto.md`](docs/defini
 y la arquitectura en [`docs/arquitectura.md`](docs/arquitectura.md). Este repositorio es la base
 de la **Etapa 0** (prototipo técnico) y del **MVP** (Etapa 1).
 
-## Versión temporal para probar la interfaz
+## Primera entrega: archivos en SpacetimeDB
 
-La web usa **SpacetimeAuth real por enlace al correo** y **datos simulados**. Cualquier persona
-con correo verificado puede entrar sin invitación en esta fase. `VITE_DATA_MODE=demo` es el
-valor predeterminado y el configurado para Pages; no se conecta ni escribe en Maincloud.
-El 20 de octubre de 2026 se confirmó el acceso por enlace al correo y la visualización de la
-app con datos de prueba. Ajustes muestra la cuenta real separada de los perfiles simulados.
+La arquitectura elegida utiliza **SpacetimeAuth + SpacetimeDB** para autenticación,
+membresía, datos, permisos y archivos privados; **Cloudflare Pages** sirve la web/PWA.
+Las subidas nuevas se almacenan como fragmentos privados de **1 MiB**, hasta **50 MiB
+(52,428,800 bytes)** por archivo, con reanudación y descarga bajo demanda. No se requiere
+un bucket R2 ni una tarjeta para preparar esta entrega. Cloudflare Workers queda reservado
+para integraciones que lo necesiten, como el cifrado BYOK en una entrega posterior.
 
-Los cambios de prueba viven en memoria por la cuenta autenticada: una renovación de sesión
-los conserva; recargar, cerrar sesión o cambiar de cuenta los reinicia. No se guardan datos
-simulados en `localStorage`. Los perfiles y roles ficticios del selector se identifican como
-simulación; **Ajustes** muestra por separado la cuenta real que inició sesión.
+Tareas y Actividades incorpora avance personal privado, borrador compartido/final,
+revisión por otro compañero, historial recuperable con archivos, comentarios, vínculos
+explícitos y filtros. La cuenta invitada se une con su nombre real; en Ajustes puede importar
+el plan de estudios e invitar a los demás. La simulación no se importa a los datos reales.
 
-El modo futuro `VITE_DATA_MODE=spacetime` conserva la conexión y la validación de invitaciones
-para los datos reales del grupo. Al activarlo se reutilizarán las cuentas de SpacetimeAuth;
-los cambios temporales de la simulación no se convierten automáticamente en datos reales.
+La configuración de producción apunta a `VITE_DATA_MODE=spacetime`. La entrega local no
+prueba por sí sola que el módulo actualizado esté publicado ni que se hayan completado
+los recorridos con tres cuentas. Consulta [estado y criterios de cierre](docs/estado-del-proyecto.md),
+[archivos en SpacetimeDB](docs/archivos-spacetime.md) y
+[funcionamiento del módulo](docs/tareas-actividades.md).
 
+Para desarrollar con ejemplos sigue disponible `VITE_DATA_MODE=demo`: exige inicio de sesión,
+conserva cambios en memoria por cuenta y los reinicia al recargar. Las integraciones anteriores
+con R2 se mantienen solo para recuperar archivos existentes; no se borran ni migran datos
+remotos como efecto de compilar o ejecutar pruebas.
 
 ## Qué es la app
 
@@ -66,6 +73,7 @@ los cambios temporales de la simulación no se convierten automáticamente en da
 | **Guías de estudio** | Guías integrales por materia y parcial, manuales o asistidas por Gemini, con índice de fuentes, cobertura del temario y omisiones visibles. |
 | **Votaciones** | Encuestas nominales de opción única o múltiple, con participantes elegibles, fecha de cierre y registro del acuerdo adoptado. |
 | **Contribuciones** | Estadísticas y leaderboard que reconocen aportes útiles (no volumen de mensajes), con reglas visibles y desglose de cada punto. |
+| **Lenguaje de señales — 3.11** | Diccionario versionado para los tres medios del documento, prácticas individuales y en parejas y fichas con fuente. Pendiente de la etapa 3. |
 
 ### Funciones adicionales
 
@@ -76,8 +84,8 @@ los cambios temporales de la simulación no se convierten automáticamente en da
 | Retos de programación | Problemas cortos con pistas progresivas y soluciones explicadas; se prioriza la comprensión, no la velocidad. | 2 |
 | Revisión de código | Fragmentos o enlaces con comentarios por línea y estado de cada observación. | 2 |
 | Museo de bugs | Fichas de errores reales: intención, comportamiento, causa, corrección y aprendizaje. | 2 |
-| Aprende enseñando | Explicar un concepto con palabras propias y recibir preguntas de un compañero o de la IA. | 2 |
-| Repaso espaciado | Tarjetas de preguntas a partir de notas y guías, con cola personal de repaso. | 2 |
+| Aprende enseñando | Prácticas privadas con preguntas guía, compañero invitado y publicación voluntaria de la explicación revisada en Notas de clase. Primera versión manual. | 2 |
+| Repaso espaciado | Colecciones personales o compartidas desde notas y guías, con programación de revisiones e historial privado. | 2 |
 | Radar de oportunidades | Talleres, hackatones, becas y concursos, con la opción «busco equipo». | 2 |
 | Microproyectos | Equipos para proyectos pequeños, con pendientes, demostraciones y reconocimiento. | 3 |
 | Simulador de exposiciones | Ensayar una explicación y responder preguntas antes de exponer. | 3 |
@@ -113,24 +121,26 @@ Reglas de uso:
 
 La misma cuenta y los mismos datos del grupo en tres formas de distribución:
 
-- **Web y PWA para iPhone:** se instala con «Añadir a pantalla de inicio» y recibe
-  notificaciones Web Push (iOS 16.4 o superior).
+- **Web y PWA para iPhone:** instalación prevista mediante «Añadir a pantalla de inicio»
+  y Web Push en sistemas compatibles; recepción pendiente de pruebas en dispositivos reales.
 - **Extensión de Chrome (Manifest V3):** la app completa en el panel lateral y en una vista
   amplia, con todas sus dependencias empaquetadas y permisos mínimos.
-- **APK para Android:** empaquetada con Capacitor, firmada y con notificaciones FCM.
+- **APK para Android:** empaquetada con Capacitor y firmada. Con la restricción actual de
+  proveedores se planifican avisos internos y recordatorios locales; el push nativo con la app
+  cerrada permanece pendiente y no se presenta como resuelto.
 
-Las notificaciones cubren mensajes 1 a 1, menciones, nuevos trabajos, cambios de fecha,
-respuestas, votaciones por cerrar, guías disponibles y cumpleaños, con preferencias por
-categoría. Los mensajes directos muestran por defecto un aviso genérico, sin el texto.
+Las notificaciones previstas cubrirán mensajes 1 a 1, menciones, nuevos trabajos, cambios de
+fecha, respuestas, votaciones por cerrar, guías disponibles y cumpleaños, con preferencias por
+categoría. Los mensajes directos mostrarán por defecto un aviso genérico, sin el texto.
 
 ## Etapas
 
 | Etapa | Contenido |
 | --- | --- |
-| **0. Prototipo técnico** | Validar React, SpacetimeDB, autenticación y permisos en las tres presentaciones; PWA con push en iPhone, APK firmado con FCM y extensión con panel lateral. |
+| **0. Prototipo técnico** | Validar React, SpacetimeDB, autenticación y permisos en las tres presentaciones; PWA con push en iPhone, APK firmado y extensión con panel lateral. Push nativo Android pendiente bajo la restricción de proveedores. |
 | **1. MVP** | Acceso exclusivo, perfiles, Tareas y Actividades, notas, preguntas, ¿Qué me perdí?, mensajería del grupo y 1 a 1, cumpleaños y Gemini para explicar y generar borradores de guía. |
 | **2. Colaboración y estudio** | Guías integrales, búsqueda, repaso espaciado, salas de estudio, ayuda entre compañeros, retos, revisión de código, museo de bugs, votaciones y radar de oportunidades. |
-| **3. Comunidad** | Stickers, leaderboard verificable, microproyectos, simulador de exposiciones y préstamo de materiales. |
+| **3. Comunidad** | Stickers, leaderboard verificable, microproyectos, simulador de exposiciones, préstamo de materiales y lenguaje de señales (3.11). |
 
 Las etapas no son fechas comprometidas; las fechas y costos se estimarán después del prototipo.
 
@@ -142,7 +152,7 @@ app-b20/
 │   ├── web/              Web + PWA instalable en iPhone (Vite, service worker con Web Push)
 │   ├── extension/        Extensión de Chrome Manifest V3: panel lateral y vista completa
 │   ├── android/          APK Android con Capacitor (usa la compilación de apps/web)
-│   └── api/              Backend Node (Hono): Gemini BYOK, y luego archivos y envío de push
+│   └── api/              Worker Hono: compatibilidad de archivos R2 anteriores; futuras integraciones
 ├── packages/
 │   ├── app/              Interfaz React compartida por web, extensión y Android
 │   ├── core/             Catálogo de módulos, plan de estudios y reglas de negocio (con pruebas)
@@ -151,7 +161,9 @@ app-b20/
     ├── arquitectura.md   Cómo encajan las piezas y qué falta validar
     ├── spacetimeauth.md  Panel de autenticación, variables e invitación inicial
     ├── cloudflare-pages.md   Web en el subdominio gratuito de Cloudflare Pages
-    ├── despliegue.md     Publicación de web, base de datos y backend
+    ├── despliegue.md     Publicación de web, base de datos e integraciones opcionales
+    ├── archivos-spacetime.md   Subidas privadas por fragmentos y migración conservadora
+    ├── estado-del-proyecto.md  Matriz de requisitos y comprobaciones pendientes
     └── definicion-del-proyecto.md   Alcance funcional completo
 ```
 
@@ -159,26 +171,36 @@ Las tres presentaciones son la misma app con los mismos datos; solo cambia el em
 interfaz recibe la presentación como `platform` para adaptarse (por ejemplo, navegación compacta
 en el panel lateral).
 
-**Pila técnica:** React + TypeScript + Vite, SpacetimeDB para datos en tiempo real, inicio de
-sesión con SpacetimeAuth y datos simulados en esta fase; modo SpacetimeDB con invitaciones
-conservado para activar después, Google Cloud Storage
-para archivos (máximo 50 MB por archivo), backend con `@google/genai` y almacén de secretos para Gemini, Web Push y FCM para
-notificaciones.
+**Pila técnica:** React + TypeScript + Vite; SpacetimeAuth y SpacetimeDB para sesiones, datos
+y archivos privados; Cloudflare Pages para web/PWA. Cloudflare Workers será un complemento
+cuando una integración lo requiera. Gemini, push y papelera de 30 días corresponden a entregas
+posteriores. No se requieren Supabase, D1, Google Cloud Storage ni Secret Manager.
 
 ## Requisitos
 
 - Node.js 22 o superior y npm 10.
-- [CLI de SpacetimeDB](https://spacetimedb.com/install) para publicar el módulo y generar bindings.
+- [CLI de SpacetimeDB](https://spacetimedb.com/install) compatible con el SDK `spacetimedb`
+  **2.12.0**, fijado tanto en cliente como módulo, para publicar y generar bindings.
 - Android Studio y JDK 21 solo para compilar el APK.
 
 ## Primeros pasos
 
 ```bash
+nvm use                     # selecciona Node 22 para esta terminal, según .nvmrc
 npm install
 cp .env.example .env        # llena los valores; nunca subas claves reales
 npm run dev                 # web en http://localhost:5173
-npm run dev:api             # backend en http://localhost:8787
+npm run dev:api             # opcional: compatibilidad con archivos R2 anteriores
 ```
+
+Si Node 22 aún no está instalado, ejecuta `nvm install` y después `nvm use` desde esta
+carpeta. Repite `nvm use` al abrir otra terminal antes de instalar dependencias, ejecutar
+pruebas o compilar. Esto solo cambia la terminal actual; no modifica la versión global de
+otros proyectos. Sin nvm, selecciona Node 22 o superior con tu gestor de versiones.
+
+`npm run build` y `npm run build:pages` comprueban la versión antes de compilar. Con Node 20
+se detienen de inmediato con las instrucciones para corregirla; la API de archivos requiere
+Node 22 o superior para empaquetarse con Wrangler.
 
 Base de datos local:
 
@@ -197,36 +219,33 @@ Este repositorio ya contiene la aplicación. No ejecutes aquí `spacetime init` 
 creación con `--template chat-react-ts`: esos pasos son para crear otra app de ejemplo. Para
 trabajar con B20 usa `npm run dev`; para publicar, sigue la guía sobre el módulo existente.
 
-El módulo ya está publicado en esa base, con `auth_config` y la primera invitación de
-administrador preparados. Los callbacks locales, del dominio estable `app-b20.pages.dev` y
+El registro del despliegue anterior indica el módulo en esa base, con `auth_config` y la
+primera invitación de administrador preparados; no confirma la publicación del módulo actualizado. Los callbacks locales, del dominio estable `app-b20.pages.dev` y
 del enlace anterior `af0dd1ec.app-b20.pages.dev` ya están registrados en el cliente
 `client_034jL0AHYYQ1bps8SupHU0`. El acceso humano por enlace al correo y la separación entre
 cuenta real y perfiles simulados se comprobaron el 20 de octubre de 2026. Siguen pendientes
 las pruebas humanas con un correo sin invitación, renovación al vencer la sesión y cambio de
 cuenta. La versión temporal no requiere invitación.
-La web ya está publicada en
-https://app-b20.pages.dev; la API todavía no está desplegada.
+Direcciones históricas registradas: web https://app-b20.pages.dev y Worker R2
+https://app-b20-api.sucanasta1.workers.dev. No confirman que la versión de esta entrega esté
+publicada; su despliegue y comprobación se registran por separado.
 
 Para futuras actualizaciones del módulo, `npm run spacetime:publish:maincloud` apunta a
 `app-b20-34245` con `--delete-data=never`; `npm run spacetime:publish` conserva el destino local
 `app-b20`.
 
-Consulta los callbacks ya registrados y ambos modos en
-[`docs/spacetimeauth.md`](docs/spacetimeauth.md). Para esta fase basta SpacetimeAuth con correo
-verificado y `VITE_DATA_MODE=demo`. No se monta la conexión a Maincloud ni el control de
-invitaciones. La configuración de autenticación es obligatoria: si falta, aparece el error
-de configuración; ni siquiera `?demo` permite saltarse el inicio de sesión.
-
-Cuando se active `VITE_DATA_MODE=spacetime`, quien administra la base conservará las
-invitaciones mediante `invite_member` y Ajustes. Ese modo exige membresía para consultar y
-modificar datos del grupo; las cuentas de autenticación se conservan.
+Consulta los callbacks y ambos modos en [`docs/spacetimeauth.md`](docs/spacetimeauth.md).
+En producción se usa `VITE_DATA_MODE=spacetime` y se exige una invitación para unirse al grupo.
+El modo de desarrollo `demo` conserva ejemplos en memoria sin escribir en Maincloud; ningún
+modo permite saltarse el inicio de sesión mediante la URL.
 
 ## Publicar la web en Cloudflare Pages
 
-La web ya está publicada en **https://app-b20.pages.dev** mediante Pages y GitHub: el
-despliegue del commit `59d17a7` terminó en **Success** y muestra el acceso real de B20. Su rama
-de producción actual es `codex/pages-spacetimeauth`; `main` todavía contiene la versión
-anterior. Sigue la [guía de Cloudflare Pages](docs/cloudflare-pages.md).
+El despliegue anterior registrado está en **https://app-b20.pages.dev** mediante Pages y
+GitHub: el commit `59d17a7` terminó en **Success**. La configuración registrada usa
+`codex/pages-spacetimeauth` como rama de producción; verificarla antes de publicar esta entrega.
+Ese registro no acredita que los archivos por fragmentos estén activos. Sigue la
+[guía de Cloudflare Pages](docs/cloudflare-pages.md).
 
 ```sh
 cp .env.pages.example .env.pages
@@ -234,7 +253,7 @@ npm run build:pages
 npm run pages:dev
 ```
 
-`build:pages` compila en modo `pages` con `VITE_DATA_MODE=demo` y
+`build:pages` compila en modo `pages` con `VITE_DATA_MODE=spacetime` y
 `VITE_WEB_ORIGIN=https://app-b20.pages.dev` para usar el dominio estable. Las nuevas
 compilaciones llevan los alias a ese origen antes del login; no se trasladan parámetros de
 retorno de autenticación entre dominios. No publiques `.env`; el ZIP solo contiene la web.
@@ -268,8 +287,8 @@ autorizar cada alias de despliegue. El subdominio `pages.dev` no necesita DNS ni
   conexiones ni escrituras a Maincloud.
 - El modo `spacetime` exige una invitación para unirse. Módulo y backend limitan la confianza
   al emisor y client IDs configurados; sus rutas protegidas requieren membresía activa.
-- Ningún secreto vive en el cliente. Las claves de Gemini se guardan cifradas en el backend y
-  solo se informa si existen.
+- La integración Gemini permanece deshabilitada en esta entrega. Su implementación posterior
+  deberá cifrar las claves personales en SpacetimeDB mediante un Worker y mostrar solo su estado.
 - Los cumpleaños guardan día y mes, nunca el año, y son voluntarios.
 - Los cambios importantes quedan en un historial con responsable y fecha.
 
@@ -279,20 +298,22 @@ autorizar cada alias de despliegue. El subdominio `pages.dev` no necesita DNS ni
   comprobaron. Probar manualmente un correo sin invitación, la renovación al vencer la sesión,
   cierre, cambio de cuenta y reinicio de datos al recargar. Los casos de acceso sin invitación,
   renovación y cambio de cuenta tienen pruebas automatizadas; su prueba humana sigue
-  pendiente. Antes de activar `spacetime`, probar invitación,
-  baja, persistencia y privacidad con dos cuentas. Extensión y Android requieren sus pruebas
+  pendiente. Para cerrar esta entrega, probar invitación,
+  baja, persistencia y privacidad con autor, compañero autorizado y tercero. Extensión y Android requieren sus pruebas
   propias. Pasos en [`docs/spacetimeauth.md`](docs/spacetimeauth.md).
-- **IA y BYOK:** la interfaz aún no conecta con la API, que requiere despliegue y configuración
-  propios. Confirmar los requisitos de edad antes de habilitar Gemini. Esto no impide publicar
-  la web y revisar la interfaz con datos simulados.
-- **Archivos:** falta el almacenamiento remoto para adjuntos y stickers.
+- **IA y BYOK:** siguen desactivadas. El Worker desplegado solo monta archivos y salud; Gemini
+  requiere su propia entrega y configuración antes de habilitarse.
+- **Archivos:** la primera entrega incorpora archivos académicos privados en SpacetimeDB.
+  Deben comprobarse los recorridos reales y la preservación de archivos anteriores; stickers y
+  adjuntos de mensajes utilizarán el mismo almacenamiento al completar sus módulos.
 - **Costos y límites:** infraestructura, archivos, cuotas de API y presupuesto de cada clave.
-- **Instalación y push:** PWA en iPhone, APK firmado con FCM y avisos de la extensión, probados en
-  dispositivos reales.
+- **Instalación y push:** probar PWA en iPhone, APK firmado y avisos de la extensión en
+  dispositivos reales. El push nativo Android sigue pendiente bajo la restricción de proveedores.
 - **Guías:** temarios, formatos de archivo y cómo señalar fuentes no procesadas.
 - **Puntuación:** qué aportes cuentan, ponderación, límites y duplicados.
 
-## Fuera de alcance
+## Alcance pendiente
 
-El módulo 3.11 (lenguaje de señales y respuestas preparadas para evaluaciones) no forma parte de
-este proyecto.
+El módulo **3.11 sí está incluido** y se mantiene pendiente en el catálogo de la etapa 3, sin
+marcarlo como disponible. La [matriz de requisitos](docs/estado-del-proyecto.md) distingue
+implementación local, pruebas automatizadas y validación real.

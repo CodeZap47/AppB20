@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Identity, Timestamp } from 'spacetimedb';
 import type { DbConnection } from '../module_bindings';
 import { createSpacetimeActions } from './spacetimeActions';
+import { ResourceTransport } from './resourceTransport';
 
 const SELF = '00000000000000000000000000000000000000000000000000000000000000aa';
 const OTHER = '00000000000000000000000000000000000000000000000000000000000000bb';
@@ -15,6 +16,39 @@ function setup(reducers: Record<string, unknown>, initial: Record<string, unknow
 }
 
 describe('acciones conectadas a SpacetimeDB', () => {
+  it('manda versiones esperadas y referencias académicas al servidor sin convertir u64 a Number', async () => {
+    const saveWorkVersion = vi.fn(async () => {});
+    const reviewWork = vi.fn(async () => {});
+    const restorePageSnapshot = vi.fn(async () => {});
+    const saveActivityLinks = vi.fn(async () => {});
+    const setProgress = vi.fn(async () => {});
+    const { actions } = setup({ saveWorkVersion, reviewWork, restorePageSnapshot, saveActivityLinks, setProgress });
+    await actions.saveWorkVersion('18446744073709551614', { title: 'Final', description: 'Explicación', topic: 'Tema', status: 'final' }, 7);
+    expect(saveWorkVersion).toHaveBeenCalledWith({ workId: 18446744073709551614n,
+      title: 'Final', description: 'Explicación', topic: 'Tema', status: 'final', expectedVersion: 7 });
+    await actions.reviewWork('12', 7, 'Revisado con ejemplos');
+    expect(reviewWork).toHaveBeenCalledWith({ workId: 12n, expectedVersion: 7, comment: 'Revisado con ejemplos' });
+    await actions.restorePageSnapshot('activity', '5', 2, 4);
+    expect(restorePageSnapshot).toHaveBeenCalledWith({ page: 'activity', pageId: 5n, version: 2, expectedVersion: 4 });
+    await actions.saveActivityLinks('5', ['9007199254740993'], ['6'], 4);
+    expect(saveActivityLinks).toHaveBeenCalledWith({ activityId: 5n, assignmentIds: [9007199254740993n], noteIds: [6n], expectedVersion: 4 });
+    await actions.setProgress('assignment', '5', 'done');
+    expect(setProgress).toHaveBeenCalledWith({ targetKind: 'assignment', targetId: 5n, status: 'done' });
+  });
+
+  it('sube por HTTP real y elimina mediante reducer; el wrapper heredado conserva la referencia', async () => {
+    const removeResourceFile = vi.fn(async () => {});
+    const { connection } = setup({ removeResourceFile }, { works: [{ id: 9n, version: 3 }],
+      workFiles: [{ id: 2n, workId: 9n }] });
+    const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ fileId: 'new-file' })));
+    const transport = new ResourceTransport({ apiUrl: '', getToken: () => 'current-token', fetch: request });
+    const actions = createSpacetimeActions(() => connection, () => SELF, transport);
+    expect(await actions.attachWorkFile('9', new File(['bytes'], 'prueba.txt'))).toBe('new-file');
+    expect(String(request.mock.calls[0]?.[0])).toContain('expectedVersion=3');
+    await actions.removeWorkFile('2');
+    expect(removeResourceFile).toHaveBeenCalledWith({ fileId: 'legacy:2', expectedVersion: 3 });
+  });
+
   it('convierte IDs u64 sin perder precisión y manda la invitación al reducer real', async () => {
     const updateAssignment = vi.fn(async () => {});
     const inviteMember = vi.fn(async () => {});
@@ -92,5 +126,46 @@ describe('acciones conectadas a SpacetimeDB', () => {
     await expect(actions.importStickers('Paquete', [file])).rejects.toThrow('almacenamiento');
     expect(attachWorkFile).not.toHaveBeenCalled();
     expect(createStickerPack).not.toHaveBeenCalled();
+  });
+
+  it('envía prácticas, fuentes privadas y explicaciones con tipos nativos del servidor', async () => {
+    const createTeachingPractice = vi.fn(async () => {
+      rows.teachingPractices!.push({ id: 91n, owner: person(OTHER), subjectId: 7n, topic: 'Tema' });
+      rows.teachingPractices!.push({ id: 92n, owner: person(), subjectId: 7n, topic: 'Tema' });
+    });
+    const saveTeachingPractice = vi.fn(async () => {});
+    const setTeachingReviewer = vi.fn(async () => {});
+    const { actions, rows } = setup({ createTeachingPractice, saveTeachingPractice, setTeachingReviewer }, { teachingPractices: [] });
+    const initial = { concept: 'Concepto', example: 'Ejemplo', limits: 'Límites' };
+    await expect(actions.createTeachingPractice({ subjectId: '7', topic: ' Tema ', initial,
+      source: { kind: 'note', id: '9007199254740993' } })).resolves.toBe('92');
+    expect(createTeachingPractice).toHaveBeenCalledWith({ subjectId: 7n, topic: ' Tema ', ...initial,
+      sourceKind: 'note', sourceId: 9007199254740993n });
+    await actions.saveTeachingPractice('92', { initial, revised: initial, reflection: 'Privado', topicsToReview: 'Privados' });
+    expect(saveTeachingPractice).toHaveBeenCalledWith({ practiceId: 92n, ...initial,
+      revisedConcept: 'Concepto', revisedExample: 'Ejemplo', revisedLimits: 'Límites', reflection: 'Privado', topicsToReview: 'Privados' });
+    await actions.setTeachingReviewer('92', OTHER);
+    expect(setTeachingReviewer).toHaveBeenLastCalledWith({ practiceId: 92n, reviewer: person(OTHER) });
+    await actions.setTeachingReviewer('92');
+    expect(setTeachingReviewer).toHaveBeenLastCalledWith({ practiceId: 92n, reviewer: undefined });
+  });
+
+  it('asocia preguntas al autor y práctica correctos y devuelve la nota registrada sin crear duplicados', async () => {
+    const askTeachingQuestion = vi.fn(async () => {
+      rows.teachingQuestions!.push({ id: 1n, practiceId: 9n, author: person(), kind: 'guided', text: 'Pregunta' });
+      rows.teachingQuestions!.push({ id: 2n, practiceId: 9n, author: person(), kind: 'peer', text: 'Pregunta' });
+    });
+    const answerTeachingQuestion = vi.fn(async () => {});
+    const publishTeachingExplanation = vi.fn(async () => {});
+    const { actions, rows } = setup({ askTeachingQuestion, answerTeachingQuestion, publishTeachingExplanation }, {
+      teachingQuestions: [], myTeachingPersonal: [{ practiceId: 9n, publishedNoteId: 9007199254740993n }],
+    });
+    await expect(actions.askTeachingQuestion('9', ' Pregunta ')).resolves.toBe('2');
+    await actions.answerTeachingQuestion('2', 'Respuesta privada');
+    expect(answerTeachingQuestion).toHaveBeenCalledWith({ questionId: 2n, answer: 'Respuesta privada' });
+    await expect(actions.publishTeachingExplanation('9')).resolves.toBe('9007199254740993');
+    await expect(actions.publishTeachingExplanation('9')).resolves.toBe('9007199254740993');
+    expect(publishTeachingExplanation).toHaveBeenCalledTimes(2);
+    expect(publishTeachingExplanation).toHaveBeenLastCalledWith({ practiceId: 9n });
   });
 });

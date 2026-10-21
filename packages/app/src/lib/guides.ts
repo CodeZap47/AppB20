@@ -9,6 +9,8 @@ export interface SourceInfo extends GuideSourceRef {
   context: string;
   link: string;
   version: number;
+  /** Clasificación vigente, también cuando cambió sin editar el trabajo citado. */
+  subjectId?: Id;
   /** Parcial del material; vacío si no tiene. */
   termId: Id | undefined;
 }
@@ -39,6 +41,7 @@ export function describeSource(ref: GuideSourceRef, data: Snapshot): SourceInfo 
         context: work.title ? `${authors} · ${assignment.title}` : assignment.title,
         link: `/m/tareas/${assignment.id}?trabajo=${work.id}`,
         version: work.version,
+        subjectId: assignment.subjectId,
         termId: assignment.termId,
       };
     }
@@ -52,6 +55,7 @@ export function describeSource(ref: GuideSourceRef, data: Snapshot): SourceInfo 
         context: 'Página principal: lo que se pidió',
         link: `/m/tareas/${assignment.id}`,
         version: assignment.version,
+        subjectId: assignment.subjectId,
         termId: assignment.termId,
       };
     }
@@ -65,6 +69,7 @@ export function describeSource(ref: GuideSourceRef, data: Snapshot): SourceInfo 
         context: activity.topic || 'Sesión de clase',
         link: `/m/actividades/${activity.id}`,
         version: activity.version,
+        subjectId: activity.subjectId,
         termId: activity.termId,
       };
     }
@@ -80,6 +85,7 @@ export function describeSource(ref: GuideSourceRef, data: Snapshot): SourceInfo 
           .join(' · '),
         link: `/m/notas/${note.id}`,
         version: note.version,
+        subjectId: note.subjectId,
         termId: undefined,
       };
     }
@@ -93,6 +99,7 @@ export function describeSource(ref: GuideSourceRef, data: Snapshot): SourceInfo 
         context: question.status === 'resolved' ? 'Resuelta' : 'Sin resolver',
         link: `/m/preguntas/${question.id}`,
         version: 1,
+        subjectId: question.subjectId,
         termId: undefined,
       };
     }
@@ -142,11 +149,24 @@ export function candidateSources(
 
 /** Todo lo que la lista y el detalle muestran de una guía: cobertura, fuentes y revisiones. */
 export function guideStatus(guide: StudyGuide, data: Snapshot) {
-  const sources = data.guideSources.filter((s) => s.guideId === guide.id);
-  const described = sources.map((source) => ({
-    source,
-    info: describeSource(source, data),
-  }));
+  const described = data.guideSources.filter((s) => s.guideId === guide.id).map((source) => {
+    const info = describeSource(source, data);
+    // Las fuentes sin parcial se seleccionan manualmente; una guía sin parcial admite
+    // cualquier parcial de su materia, igual que candidateSources.
+    const placementIssue = info?.subjectId !== undefined && info.subjectId !== guide.subjectId
+      ? 'La fuente ahora pertenece a otra materia. Revisa su clasificación o quítala de esta guía.'
+      : info && guide.termId && info.termId && info.termId !== guide.termId
+        ? 'La fuente ahora pertenece a otro parcial. Revisa su clasificación o quítala de esta guía.'
+        : undefined;
+    const reason = placementIssue ?? (!info ? 'La fuente ya no está disponible para esta guía.' : undefined);
+    return {
+      // Es un estado de lectura: no modifica el registro original ni su versión citada.
+      source: reason ? { ...source, status: 'pending' as const, reason } : source,
+      info,
+      placementIssue,
+    };
+  });
+  const sources = described.map((item) => item.source);
   const coverage = guideCoverage(guide.topics, sources);
   const reviews = data.guideReviews
     .filter((r) => r.guideId === guide.id)
@@ -159,7 +179,7 @@ export function guideStatus(guide: StudyGuide, data: Snapshot) {
     processed: sources.filter((s) => s.status === 'processed').length,
     pending: sources.filter((s) => s.status === 'pending').length,
     /** Material que cambió después de que se agregó a la guía. */
-    outdated: described.filter((d) => d.info && d.info.version > d.source.sourceVersion).length,
+    outdated: described.filter((d) => d.placementIssue || (d.info && d.info.version > d.source.sourceVersion)).length,
     missing: described.filter((d) => !d.info).length,
     reviews,
     approvals: current.filter((r) => r.verdict === 'approved').length,

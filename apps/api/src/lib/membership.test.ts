@@ -10,7 +10,7 @@ describe('checkActiveMembership', () => {
     expect(request?.method).toBe('POST');
     expect(request?.body).toBe('[]');
     expect(new Headers(request?.headers).get('Authorization')).toBe('Bearer id-token');
-    expect(request?.redirect).toBe('error');
+    expect(request?.redirect).toBe('manual');
   });
 
   it.each([400, 401, 403, 530])('deniega cuando el módulo rechaza el acceso (%s)', async (status) => {

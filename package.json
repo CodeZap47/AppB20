@@ -14,8 +14,10 @@
   "scripts": {
     "dev": "npm run dev -w @b20/web",
     "dev:api": "npm run dev -w @b20/api",
+    "prebuild": "node scripts/check-node.mjs",
     "build": "npm run build -w @b20/web && npm run build -w @b20/extension && npm run build -w @b20/api",
     "build:web": "npm run build -w @b20/web",
+    "prebuild:pages": "node scripts/check-node.mjs",
     "build:pages": "npm run build -w @b20/web -- --mode pages",
     "pages:dev": "wrangler pages dev",
     "pages:deploy": "npm run build:pages && wrangler pages deploy",

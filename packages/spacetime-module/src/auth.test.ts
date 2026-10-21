@@ -9,7 +9,7 @@ vi.mock('spacetimedb/server', () => {
     SenderError: class SenderError extends Error {},
     t: new Proxy({}, { get: () => () => builder }),
     table: () => ({ rowType: builder }),
-    schema: () => ({ reducer: handler, init: handler, clientConnected: handler, view: handler }),
+    schema: () => ({ reducer: handler, procedure: handler, init: handler, clientConnected: handler, view: handler }),
   };
 });
 
@@ -47,6 +47,7 @@ function setup() {
   const db = {
     appConfig: tableStore('id', [{ id: 0, owner }]),
     authConfig: tableStore('id', [{ id: 0, issuer, audiences: ['web-client', 'android-client'] }]),
+    fileServiceConfig: tableStore('id'),
     member: tableStore('identity'),
     invitation: tableStore('email'),
     subject: tableStore('id', [{ id: 1, name: 'Privado del grupo' }]),

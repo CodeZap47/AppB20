@@ -203,11 +203,19 @@ export function NotePage() {
       </Link>
       <div className="row row--between">
         <h1>{note.title}</h1>
+        <div className="row">
+        <Link to={`/m/repaso/tarjetas/nueva?nota=${encodeURIComponent(note.id)}`} className="button secondary">
+          Crear tarjeta
+        </Link>
+        <Link to={`/m/aprende-ensenando/nueva?nota=${encodeURIComponent(note.id)}`} className="button secondary">
+          Practicar explicándolo
+        </Link>
         {note.authorId === me?.id && (
           <Link to={`/m/notas/${note.id}/editar`} className="button secondary">
             Editar
           </Link>
         )}
+        </div>
       </div>
       <p className="muted">
         {subjects.find((s) => s.id === note.subjectId)?.name}

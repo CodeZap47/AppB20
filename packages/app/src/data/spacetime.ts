@@ -2,11 +2,16 @@ import { DbConnection } from '../module_bindings';
 import type { Actions, Snapshot } from './types';
 import { createSpacetimeActions } from './spacetimeActions';
 import { emptySnapshot, PUBLIC_VIEWS, readSnapshot } from './spacetimeSnapshot';
+import { ResourceTransport } from './resourceTransport';
+import { config } from '../config';
 
 export interface ConnectionOptions {
   uri: string;
   database: string;
   token: string;
+  /** El adaptador heredado toma el token renovado en cada solicitud. */
+  getToken?: () => string | undefined;
+  apiUrl?: string;
 }
 
 export interface ConnectionCallbacks {
@@ -143,6 +148,9 @@ export class SpacetimeDataSource {
 
 export function createSpacetimeDataSource(options: ConnectionOptions, factory?: ConnectionFactory) {
   const source = new SpacetimeDataSource(options, factory);
-  return Object.assign(source, createSpacetimeActions(source.getConnection, source.getIdentity)) as
+  const legacyApiUrl = options.apiUrl ?? config.apiUrl;
+  const files = new ResourceTransport({ getConnection: source.getConnection, getIdentity: source.getIdentity,
+    legacy: legacyApiUrl ? { apiUrl: legacyApiUrl, getToken: options.getToken ?? (() => options.token) } : undefined });
+  return Object.assign(source, createSpacetimeActions(source.getConnection, source.getIdentity, files)) as
     SpacetimeDataSource & Actions;
 }

@@ -20,15 +20,19 @@ import { GuideCompendiumPage, GuideFormPage, GuidePage, GuidesPage } from './pag
 import { WhatsNewPage } from './pages/WhatsNewPage';
 import { ContributorPage, LeaderboardPage } from './pages/LeaderboardPage';
 import { PollFormPage, PollPage, PollsPage } from './pages/PollsPage';
+import { HelpPage, HelpFormPage, HelpPostPage, HelpContactsPage } from './pages/HelpPage';
 import { ActivitiesPage, ActivityFormPage, ActivityPage } from './pages/ActivitiesPage';
 import { NoteFormPage, NotePage, NotesPage } from './pages/NotesPage';
 import { AskQuestionPage, QuestionPage, QuestionsPage } from './pages/QuestionsPage';
+import { TeachingFormPage, TeachingPage, TeachingPracticePage } from './pages/TeachingPage';
+import { SpacedPage, SpacedCollectionPage, SpacedCollectionFormPage, SpacedCardFormPage, SpacedSessionPage } from './pages/SpacedPage';
 import { SpacetimeProvider } from './lib/spacetime';
 import { AuthProvider, useSession, useSessionStore } from './auth/AuthContext';
 import { SignInPage } from './auth/SignInPage';
 import { JoinPage } from './auth/JoinPage';
 import { AuthFrame } from './auth/AuthFrame';
-import { useSnapshot } from './data/DataContext';
+import { useDataSource, useSnapshot } from './data/DataContext';
+import { SpacetimeDataSource } from './data/spacetime';
 import { config } from './config';
 import { PlatformContext } from './components/PlatformContext';
 import { DataProvider } from './data/DataContext';
@@ -90,12 +94,27 @@ const router = createHashRouter([
           { path: 'm/guias/compendio', element: <GuideCompendiumPage /> },
           { path: 'm/guias/:guideId', element: <GuidePage /> },
           { path: 'm/guias/:guideId/editar', element: <GuideFormPage /> },
+          { path: 'm/aprende-ensenando', element: <TeachingPage /> },
+          { path: 'm/aprende-ensenando/nueva', element: <TeachingFormPage /> },
+          { path: 'm/aprende-ensenando/:practiceId', element: <TeachingPracticePage /> },
+          { path: 'm/repaso', element: <SpacedPage /> },
+          { path: 'm/repaso/nueva', element: <SpacedCollectionFormPage /> },
+          { path: 'm/repaso/colecciones/:collectionId', element: <SpacedCollectionPage /> },
+          { path: 'm/repaso/colecciones/:collectionId/editar', element: <SpacedCollectionFormPage /> },
+          { path: 'm/repaso/tarjetas/nueva', element: <SpacedCardFormPage /> },
+          { path: 'm/repaso/tarjetas/:cardId/editar', element: <SpacedCardFormPage /> },
+          { path: 'm/repaso/sesion', element: <SpacedSessionPage /> },
           { path: 'm/leaderboard', element: <LeaderboardPage /> },
           { path: 'm/leaderboard/:memberId', element: <ContributorPage /> },
           { path: 'm/votaciones', element: <PollsPage /> },
           { path: 'm/votaciones/nueva', element: <PollFormPage /> },
           { path: 'm/votaciones/:pollId', element: <PollPage /> },
           { path: 'm/votaciones/:pollId/editar', element: <PollFormPage /> },
+          { path: 'm/ayuda', element: <HelpPage /> },
+          { path: 'm/ayuda/nueva', element: <HelpFormPage /> },
+          { path: 'm/ayuda/contactos', element: <HelpContactsPage /> },
+          { path: 'm/ayuda/:postId', element: <HelpPostPage /> },
+          { path: 'm/ayuda/:postId/editar', element: <HelpFormPage /> },
           { path: 'm/:moduleId', element: <ModulePage /> },
           { path: 'ajustes', element: <SettingsPage /> },
           { path: 'instalar', element: <InstallPage /> },
@@ -141,13 +160,16 @@ function SignedInGate() {
  */
 function MembershipGate() {
   const { connection, connectionError, me } = useSnapshot();
+  const dataSource = useDataSource();
   const sessionStore = useSessionStore();
   if (connection === 'offline') {
     return (
       <AuthFrame title="No pudimos conectar con tu grupo"
         description="Comprueba tu conexión y vuelve a intentarlo.">
         <p className="auth-feedback auth-feedback--error" role="alert">{connectionError ?? 'No se pudo conectar con el grupo.'}</p>
-        <button type="button" className="auth-action" onClick={() => window.location.reload()}>Volver a conectar</button>
+        <button type="button" className="auth-action" onClick={() => {
+          if (dataSource instanceof SpacetimeDataSource) dataSource.connect();
+        }}>Volver a conectar</button>
         <button type="button" className="auth-action auth-action--secondary" onClick={() => sessionStore?.signOut()}>
           Cerrar sesión
         </button>
