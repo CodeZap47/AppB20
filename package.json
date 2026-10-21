@@ -18,7 +18,7 @@
     "build:web": "npm run build -w @b20/web",
     "build:pages": "npm run build -w @b20/web -- --mode pages",
     "pages:dev": "wrangler pages dev",
-    "pages:deploy": "npm run build:pages && wrangler pages deploy --branch main",
+    "pages:deploy": "npm run build:pages && wrangler pages deploy",
     "build:extension": "npm run build -w @b20/extension",
     "build:android": "npm run build -w @b20/web -- --mode capacitor && npm run sync -w @b20/android",
     "typecheck": "npm run typecheck --workspaces --if-present",

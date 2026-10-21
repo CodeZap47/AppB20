@@ -180,8 +180,8 @@ trabajar con B20 usa `npm run dev`; para publicar, sigue la guía sobre el módu
 El módulo ya está publicado en esa base, con `auth_config` y la primera invitación de
 administrador preparados. Los callbacks locales de `client_034jL0AHYYQ1bps8SupHU0` ya están
 registrados y el formulario de acceso por correo abre sin error. El acceso completo con una
-cuenta invitada y las pruebas con dos cuentas siguen pendientes. La web y el backend todavía
-no están desplegados.
+cuenta invitada y las pruebas con dos cuentas siguen pendientes. La web ya está publicada en
+https://app-b20.pages.dev; la API todavía no está desplegada.
 
 Para futuras actualizaciones del módulo, `npm run spacetime:publish:maincloud` apunta a
 `app-b20-34245` con `--delete-data=never`; `npm run spacetime:publish` conserva el destino local
@@ -198,9 +198,10 @@ datos de prueba en memoria y se utiliza de forma explícita, sin conceder acceso
 
 ## Publicar la web en Cloudflare Pages
 
-La web está preparada para usar un subdominio gratuito como `app-b20.pages.dev`, sujeto a
-que el nombre esté disponible. Sigue la [guía de Cloudflare Pages](docs/cloudflare-pages.md):
-puedes subir el ZIP preparado o conectar Git para publicar automáticamente.
+La web ya está publicada en **https://app-b20.pages.dev** mediante Pages y GitHub: el
+despliegue del commit `59d17a7` terminó en **Success** y muestra el acceso real de B20. Su rama
+de producción actual es `codex/pages-spacetimeauth`; `main` todavía contiene la versión
+anterior. Sigue la [guía de Cloudflare Pages](docs/cloudflare-pages.md).
 
 ```sh
 cp .env.pages.example .env.pages
@@ -210,8 +211,10 @@ npm run pages:dev
 
 `build:pages` compila en modo `pages` con la base de Maincloud y callbacks derivados del dominio
 que abra la persona. No publiques el archivo `.env`; el ZIP solo contiene `apps/web/dist`.
-Después de crear el proyecto Pages, agrega su URL real de callback y cierre de sesión en
-SpacetimeAuth. El subdominio `pages.dev` no necesita cambios de DNS ni la sección Custom Domains.
+Para Cloudflare, los valores públicos viven en `wrangler.jsonc → vars`; `.env.pages` solo se
+usa localmente y no se sube. Agrega las URLs HTTPS de callback y cierre de sesión en
+SpacetimeAuth: la prueba de producción aún devuelve `invalid_redirect_uri` porque falta
+autorizar ese dominio. El subdominio `pages.dev` no necesita DNS ni Custom Domains.
 
 ## Comandos
 
@@ -224,7 +227,7 @@ SpacetimeAuth. El subdominio `pages.dev` no necesita cambios de DNS ni la secci�
 | `npm run build` | Compila web, extensión y backend. |
 | `npm run build:pages` | Compila la web para Cloudflare Pages en `apps/web/dist`. |
 | `npm run pages:dev` | Prueba la web compilada con el servidor local de Pages. |
-| `npm run pages:deploy` | Compila y publica en el proyecto Pages `app-b20`, rama `main`; requiere acceso a Cloudflare. |
+| `npm run pages:deploy` | Compila y sube con Wrangler usando la rama Git actual; la producción está vinculada a `codex/pages-spacetimeauth`. |
 | `npm run build:extension` | Genera `apps/extension/dist`, que se carga en `chrome://extensions` con «Cargar descomprimida». |
 | `npm run build:android` | Compila la web en modo Capacitor y sincroniza el proyecto Android. Después: `npm run open -w @b20/android`. |
 

@@ -29,7 +29,8 @@ En desarrollo local se puede conservar `app-b20` con el servidor `http://localho
 No ejecutes una creación con `--template chat-react-ts` en este repositorio: la aplicación y el
 módulo ya existen. El módulo B20 ya está publicado en esa base, con `auth_config` para
 `client_034jL0AHYYQ1bps8SupHU0` y la primera invitación de administrador guardados. La variable temporal
-para adoptar la base vacía ya se retiró. La web y el backend aún no están alojados.
+para adoptar la base vacía ya se retiró. La web ya está publicada en
+https://app-b20.pages.dev; la API aún no está alojada.
 
 ## Autenticación
 
@@ -45,9 +46,11 @@ Google, su client secret se guarda únicamente en el proveedor de SpacetimeAuth.
 
 ## Pendientes para publicar el piloto
 
-1. **Publicar la web y registrar sus callbacks HTTPS.** Los callbacks locales ya están
-   guardados y el formulario de correo abre sin error. La primera invitación de administrador
-   está guardada; completar el acceso con esa cuenta sigue pendiente. Sigue la
+1. **Completar el acceso desde la web publicada y registrar sus callbacks HTTPS.** La web ya
+   está en https://app-b20.pages.dev. Los callbacks locales están guardados y el formulario de
+   correo abre sin error. La primera invitación de administrador está guardada; completar el
+   acceso con esa cuenta sigue pendiente. La prueba de producción devuelve `invalid_redirect_uri`
+   porque falta autorizar `https://app-b20.pages.dev/auth/callback`. Sigue la
    [guía de Cloudflare Pages](cloudflare-pages.md).
 2. **Probar la base publicada.** `auth_config` ya tiene el emisor y client ID correctos. Faltan las
    pruebas con dos usuarios, persistencia, privacidad, rechazo de no invitados y bajas.
@@ -140,24 +143,27 @@ para comprobar que quedó arriba.
 
 ### 4. Web en Cloudflare Pages
 
-La preparación concreta, el ZIP para subir y los valores del panel están en
-[`cloudflare-pages.md`](cloudflare-pages.md). El subdominio gratuito se asigna al crear el
-proyecto: `app-b20.pages.dev` es el nombre propuesto y depende de su disponibilidad. No requiere
-DNS ni Custom Domains.
+La web ya está publicada en **https://app-b20.pages.dev** con integración Git. El despliegue
+del commit `59d17a7` terminó en **Success** y se comprobó la pantalla real de acceso de B20.
+Los detalles están en [`cloudflare-pages.md`](cloudflare-pages.md). El subdominio gratuito no
+requiere DNS ni Custom Domains.
 
-- Compilación local: `npm run build:pages`, con `.env.pages` creado desde `.env.pages.example`.
-- Subida directa: `artifacts/cloudflare-pages/app-b20-pages.zip`, que contiene solo la web
-  compilada. El panel no vuelve a compilar un ZIP.
-- Alternativa Git: repositorio `CodeZap47/AppB20`, raíz del repositorio sin subcarpeta,
-  comando `npm run build:pages`, salida `apps/web/dist`, preset **None** y `NODE_VERSION=22`.
-- Dejar vacías o sin definir las variables de callback: la app las deriva del origen HTTPS
-  desde el que se abre. Registrar esas direcciones exactas en SpacetimeAuth.
-- `VITE_API_URL` puede quedar vacío mientras la API esté pendiente. No usar una URL local
-  para un despliegue público.
+- Repositorio `CodeZap47/AppB20`, rama de producción **`codex/pages-spacetimeauth`**. `main`
+  conserva la versión anterior; no se fusiona automáticamente.
+- Raíz `/`, comando `npm run build:pages`, salida `apps/web/dist`, preset **None**.
+- Node.js `22` en `.nvmrc`.
+- Variables públicas en **`wrangler.jsonc → vars`**, ya incluidas desde el commit `59d17a7`.
+  Edita ese archivo y envía el commit; las variables `VITE_*` del panel no sustituyen el archivo.
+- Callbacks vacíos para derivarlos del dominio actual; registrar sus URLs exactas en
+  SpacetimeAuth. `VITE_API_URL` queda vacío mientras la API esté pendiente.
+- Para compilar localmente, `.env.pages` se crea desde `.env.pages.example`; está ignorado por
+  Git y no llega a Cloudflare.
 
-Elige antes de crear el proyecto si usarás subida directa o integración Git: un proyecto de
-Direct Upload no se convierte después en un proyecto con integración Git. Los cambios locales
-requieren commit y push antes de que Cloudflare pueda compilarlos desde Git.
+El Worker `appb20` creado desde el flujo inicial con `npx wrangler deploy`, sin build y desde la
+rama antigua no es el proyecto Pages preparado. La publicación correcta compila el monorepo y
+sirve `apps/web/dist`. La guía explica este error y el fallo inicial por variables ausentes.
+El ZIP local queda como alternativa para otro proyecto de subida directa; `app-b20` se
+actualiza mediante Git.
 
 ### 5. OpenMAIC
 

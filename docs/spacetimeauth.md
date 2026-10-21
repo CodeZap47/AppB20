@@ -20,11 +20,13 @@ quedó persistido en `app_config` y la variable temporal de adopción ya se reti
 
 Los callbacks locales ya están guardados y el formulario de acceso por correo abre sin el
 error `invalid_redirect_uri`. El acceso completo con una cuenta invitada, la renovación y las
-pruebas con dos cuentas siguen pendientes. La web está preparada para Cloudflare Pages, pero
-la preparación local no reserva un nombre ni publica el sitio. La API aún no está desplegada.
+pruebas con dos cuentas siguen pendientes. La web ya está publicada en
+https://app-b20.pages.dev; el despliegue de `59d17a7` terminó en **Success** y muestra el acceso
+real de B20. La API aún no está desplegada.
 
-Al crear el proyecto Pages, registra sus callbacks HTTPS de entrada y salida sin quitar los
-locales. Para `app-b20.pages.dev`, si ese nombre queda disponible y asignado, serían
+Registra los callbacks HTTPS de entrada y salida del proyecto Pages sin quitar los
+locales. La prueba del dominio público devuelve `invalid_redirect_uri` porque ese retorno
+todavía no está autorizado; las rutas HTTPS de la web ya funcionan. Para `app-b20.pages.dev`, son
 `https://app-b20.pages.dev/auth/callback` y `https://app-b20.pages.dev/auth/logout`.
 Consulta la [guía de Cloudflare Pages](cloudflare-pages.md).
 
@@ -119,10 +121,12 @@ SPACETIMEDB_URI=https://maincloud.spacetimedb.com
 SPACETIMEDB_MODULE=app-b20-34245
 ```
 
-En Cloudflare Pages usa `.env.pages.example` como base y deja ambas variables de callback
-vacías: la app usa el origen actual más `/auth/callback` o `/auth/logout`. Registra esas URLs
-HTTPS exactas en el panel cuando conozcas la dirección asignada. Las variables Vite se fijan
-al compilar, no al servir el ZIP. Detalles en [Cloudflare Pages](cloudflare-pages.md). La identidad de
+En Cloudflare Pages los valores públicos se configuran en `wrangler.jsonc → vars`; las
+variables `VITE_*` del panel no sustituyen ese archivo. Para compilar localmente usa
+`.env.pages.example` como base de `.env.pages`. Deja ambos callbacks vacíos: la app usa el
+origen actual más `/auth/callback` o `/auth/logout`. Registra esas URLs HTTPS exactas en el
+cliente de SpacetimeAuth. Las variables Vite se fijan al compilar. Detalles en
+[Cloudflare Pages](cloudflare-pages.md). La identidad de
 base indicada es `c2006d3bbe49dc8cabbfa144282ee0af8edb84292d74f2e48128a0e0f4f626ba`. Esta identidad y el nombre
 `app-b20-34245` identifican la base de datos; **ninguno es el Client ID de SpacetimeAuth**.
 El Client ID actual es `client_034jL0AHYYQ1bps8SupHU0`; se consulta en **Clients**. Úsalo en
@@ -210,8 +214,8 @@ control al primer visitante.
 - En Android se ha ejecutado `npm run build:android` para sincronizar los plugins nativos de
   navegador y retorno a la app antes de compilar el APK.
 
-El módulo remoto, la invitación inicial y los callbacks locales ya están preparados. Falta
-publicar la web, guardar sus callbacks HTTPS y completar el acceso y las pruebas con las cuentas
+El módulo remoto, la invitación inicial y los callbacks locales ya están preparados. La web
+está publicada; falta guardar sus callbacks HTTPS y completar el acceso y las pruebas con las cuentas
 del piloto. El backend requiere su propio despliegue y conectar la interfaz de IA/BYOK. Los flujos de extensión y Android requieren sus callbacks y validación en sus entornos reales
 antes de distribuirse. El retorno de Android usa el esquema anterior, no `capacitor://localhost`.
 Android usa un refresh token si el proveedor lo entrega; si no, al vencer el ID token pide
