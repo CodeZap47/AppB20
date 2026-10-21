@@ -1193,32 +1193,35 @@ export const create_assignment = spacetimedb.reducer(ASSIGNMENT_ARGS, (ctx, inpu
   log(ctx, 'create', 'assignment', row.id);
 });
 
-/**
- * Edición tipo wiki: no exige ser quien creó la página, solo ser miembro activo. La
- * responsabilidad de cada cambio queda en `page_revision` y en `change_log`.
- */
+/** Edición wiki con permiso y versión comprobados por la operación v2. */
+function updateAssignmentContent(ctx: Ctx, assignmentId: bigint, input: Parameters<typeof checkAssignment>[1]) {
+  activeMember(ctx);
+  const row = ctx.db.assignment.id.find(assignmentId);
+  if (!row) throw new SenderError('La tarea no existe.');
+  savePageSnapshot(ctx, 'assignment', assignmentId);
+  const next = {
+    ...row,
+    ...checkAssignment(ctx, input),
+    version: row.version + 1,
+    updatedBy: ctx.sender,
+    updatedAt: ctx.timestamp,
+  };
+  ctx.db.assignment.id.update(next);
+  saveRevision(ctx, 'assignment', assignmentId, next.version, {
+    title: next.title,
+    summary: '',
+    body: next.instructions,
+    dueDate: next.dueDate,
+  });
+  log(ctx, 'update', 'assignment', assignmentId);
+}
+
+/** Conserva la firma para clientes anteriores, sin permitir una escritura sin versión. */
 export const update_assignment = spacetimedb.reducer(
   { assignmentId: t.u64(), ...ASSIGNMENT_ARGS },
-  (ctx, { assignmentId, ...input }) => {
+  (ctx) => {
     activeMember(ctx);
-    const row = ctx.db.assignment.id.find(assignmentId);
-    if (!row) throw new SenderError('La tarea no existe.');
-    savePageSnapshot(ctx, 'assignment', assignmentId);
-    const next = {
-      ...row,
-      ...checkAssignment(ctx, input),
-      version: row.version + 1,
-      updatedBy: ctx.sender,
-      updatedAt: ctx.timestamp,
-    };
-    ctx.db.assignment.id.update(next);
-    saveRevision(ctx, 'assignment', assignmentId, next.version, {
-      title: next.title,
-      summary: '',
-      body: next.instructions,
-      dueDate: next.dueDate,
-    });
-    log(ctx, 'update', 'assignment', assignmentId);
+    throw new SenderError('Esta versión de la app no comprueba ediciones simultáneas. Actualiza la página antes de volver a editar la tarea.');
   },
 );
 
@@ -1259,26 +1262,9 @@ export const publish_work = spacetimedb.reducer(
 
 export const update_work = spacetimedb.reducer(
   { workId: t.u64(), title: t.string(), description: t.string() },
-  (ctx, { workId, title, description }) => {
+  (ctx) => {
     activeMember(ctx);
-    const row = ctx.db.work.id.find(workId);
-    if (!row) throw new SenderError('El trabajo no existe.');
-    const isAuthor = [...ctx.db.workAuthor.workId.filter(workId)].some((a) =>
-      a.author.isEqual(ctx.sender),
-    );
-    if (!isAuthor) throw new SenderError('Solo el autor o los coautores editan este trabajo.');
-    if (title.trim().length > 200) throw new SenderError('El título excede 200 caracteres.');
-    saveWorkSnapshot(ctx, workId);
-    ctx.db.work.id.update({
-      ...row,
-      title: title.trim(),
-      description: description.trim(),
-      version: row.version + 1,
-      updatedAt: ctx.timestamp,
-    });
-    setWorkDetail(ctx, workId, workMetadata(ctx, workId).topic, 'draft');
-    saveWorkSnapshot(ctx, workId);
-    log(ctx, 'update', 'work', workId);
+    throw new SenderError('Esta versión de la app no comprueba ediciones simultáneas. Actualiza la página antes de volver a editar el trabajo.');
   },
 );
 
@@ -1312,12 +1298,9 @@ export const attach_work_file = spacetimedb.reducer(
   },
 );
 
-export const remove_work_file = spacetimedb.reducer({ fileId: t.u64() }, (ctx, { fileId }) => {
+export const remove_work_file = spacetimedb.reducer({ fileId: t.u64() }, (ctx) => {
   activeMember(ctx);
-  const row = ctx.db.workFile.id.find(fileId);
-  if (!row) throw new SenderError('El archivo no existe.');
-  requireWorkAuthor(ctx, row.workId, 'quitan archivos');
-  removeResource(ctx, `legacy:${fileId}`, targetVersion(ctx, 'work', row.workId));
+  throw new SenderError('Esta versión de la app no comprueba ediciones simultáneas. Actualiza la página antes de volver a retirar el archivo.');
 });
 
 // ---------------------------------------------------------------------------
@@ -1735,28 +1718,33 @@ export const create_activity = spacetimedb.reducer(ACTIVITY_ARGS, (ctx, input) =
   log(ctx, 'create', 'activity', row.id);
 });
 
-/** Edición tipo wiki, igual que `update_assignment`: cualquier miembro activo. */
+/** Edición wiki con permiso y versión comprobados por la operación v2. */
+function updateActivityContent(ctx: Ctx, activityId: bigint, input: Parameters<typeof checkActivity>[1]) {
+  activeMember(ctx);
+  const row = ctx.db.activity.id.find(activityId);
+  if (!row) throw new SenderError('La actividad no existe.');
+  savePageSnapshot(ctx, 'activity', activityId);
+  const next = {
+    ...row,
+    ...checkActivity(ctx, input),
+    version: row.version + 1,
+    updatedBy: ctx.sender,
+    updatedAt: ctx.timestamp,
+  };
+  ctx.db.activity.id.update(next);
+  saveRevision(ctx, 'activity', activityId, next.version, {
+    title: next.title,
+    summary: next.objective,
+    body: next.instructions,
+  });
+  log(ctx, 'update', 'activity', activityId);
+}
+
 export const update_activity = spacetimedb.reducer(
   { activityId: t.u64(), ...ACTIVITY_ARGS },
-  (ctx, { activityId, ...input }) => {
+  (ctx) => {
     activeMember(ctx);
-    const row = ctx.db.activity.id.find(activityId);
-    if (!row) throw new SenderError('La actividad no existe.');
-    savePageSnapshot(ctx, 'activity', activityId);
-    const next = {
-      ...row,
-      ...checkActivity(ctx, input),
-      version: row.version + 1,
-      updatedBy: ctx.sender,
-      updatedAt: ctx.timestamp,
-    };
-    ctx.db.activity.id.update(next);
-    saveRevision(ctx, 'activity', activityId, next.version, {
-      title: next.title,
-      summary: next.objective,
-      body: next.instructions,
-    });
-    log(ctx, 'update', 'activity', activityId);
+    throw new SenderError('Esta versión de la app no comprueba ediciones simultáneas. Actualiza la página antes de volver a editar la actividad.');
   },
 );
 
@@ -2813,7 +2801,7 @@ export const update_assignment_v2 = spacetimedb.reducer(
     // La versión previa conserva el tema anterior, antes de actualizar los datos complementarios.
     savePageSnapshot(ctx, 'assignment', assignmentId);
     setAssignmentTopic(ctx, assignmentId, topic);
-    update_assignment(ctx, { assignmentId, ...input });
+    updateAssignmentContent(ctx, assignmentId, input);
   },
 );
 
@@ -2822,7 +2810,7 @@ export const update_activity_v2 = spacetimedb.reducer(
   (ctx, { activityId, expectedVersion, ...input }) => {
     activeMember(ctx);
     expectVersion(targetVersion(ctx, 'activity', activityId), expectedVersion);
-    update_activity(ctx, { activityId, ...input });
+    updateActivityContent(ctx, activityId, input);
   },
 );
 

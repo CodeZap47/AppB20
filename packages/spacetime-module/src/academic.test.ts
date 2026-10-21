@@ -18,7 +18,8 @@ import {
   comment_academic, finalize_file_upload, get_file_download_access, get_file_upload_status,
   my_progress, on_connect, page_snapshots, publish_work_v2, remove_resource_file, remove_work_file,
   resource_files, restore_page_snapshot, restore_work_version, review_work, save_activity_links,
-  save_work_version, set_file_service, set_progress, update_activity_v2, update_assignment_v2,
+  save_work_version, set_file_service, set_progress, update_activity, update_activity_v2, update_assignment,
+  update_assignment_v2, update_work,
   work_details, work_revisions, work_reviews,
   begin_resource_upload, put_resource_chunk, finalize_resource_upload, cancel_resource_upload, restore_resource_file,
   get_resource_upload_status, get_resource_manifest, read_resource_chunk, set_resource_capacity, expire_resource_upload,
@@ -268,6 +269,44 @@ describe('Tareas y Actividades: progreso y edición con versiones', () => {
     expect(rows('work')[0].version).toBe(4);
   });
 
+  it.each(['assignment', 'activity', 'work'])('un cliente anterior no sobrescribe una edición nueva de %s', (kind) => {
+    const { ctx, as, rows } = setup();
+    const assignmentInput = { assignmentId: 20n, subjectId: 1n, termId: 11n, kind: 'tarea',
+      title: 'Actualizada', instructions: 'Contenido actual', dueDate: '2026-11-01' };
+    const activityInput = { activityId: 30n, subjectId: 1n, termId: 11n, topic: 'Tema actual',
+      date: '2026-10-22', title: 'Actualizada', objective: 'Objetivo actual', instructions: 'Contenido actual' };
+    if (kind === 'assignment') update_assignment_v2(ctx, { ...assignmentInput, topic: 'Tema actual', expectedVersion: 2 });
+    else if (kind === 'activity') update_activity_v2(ctx, { ...activityInput, expectedVersion: 1 });
+    else {
+      save_work_version(ctx, workInput);
+      as(owner); review_work(ctx, { workId: 10n, expectedVersion: 4, comment: 'Revisión de la versión actual' });
+      as(author);
+    }
+    const tables = ['assignment', 'assignmentDetail', 'activity', 'work', 'workDetail', 'workRevision',
+      'workReview', 'pageRevision', 'pageSnapshot', 'changeLog'];
+    const before = tables.map(rows);
+    const obsoleteEdit = () => {
+      if (kind === 'assignment') update_assignment(ctx, { ...assignmentInput, instructions: 'Edición anterior' });
+      else if (kind === 'activity') update_activity(ctx, { ...activityInput, instructions: 'Edición anterior' });
+      else update_work(ctx, { workId: 10n, title: 'Anterior', description: 'Edición anterior' });
+    };
+    expect(obsoleteEdit).toThrow('Actualiza la página');
+    expect(tables.map(rows)).toEqual(before);
+  });
+
+  it('un cliente anterior no retira un adjunto sobre una versión que no leyó', () => {
+    const { ctx, rows } = setup();
+    save_work_version(ctx, workInput);
+    expect(() => remove_work_file(ctx, { fileId: 8n })).toThrow('Actualiza la página');
+    expect(rows('work')[0].version).toBe(4);
+    expect(rows('workFile')).toHaveLength(1);
+    expect(rows('resourceFile')[0].removedAt).toBeUndefined();
+    expect(() => remove_resource_file(ctx, { fileId: 'legacy:8', expectedVersion: 3 })).toThrow('cambió');
+    remove_resource_file(ctx, { fileId: 'legacy:8', expectedVersion: 4 });
+    expect(rows('workFile')).toHaveLength(0);
+    expect(rows('work')[0].version).toBe(5);
+  });
+
   it('solo otro compañero revisa una versión final con comentario y la revisión no se transfiere', () => {
     const { ctx, as, rows } = setup();
     as(owner);
@@ -420,7 +459,7 @@ describe('Archivos: autorización, atestación del servicio e historial', () => 
 
   it('retira y restaura archivos legacy sin destruir el objeto histórico', () => {
     const { ctx, proc, rows } = setup();
-    remove_work_file(ctx, { fileId: 8n });
+    remove_resource_file(ctx, { fileId: 'legacy:8', expectedVersion: 3 });
     expect(rows('workFile')).toHaveLength(0);
     expect(rows('resourceFile')[0].removedAt).toBeDefined();
     expect(JSON.parse(get_file_download_access(proc, { fileId: 'legacy:8' })).storageKey).toBe('legacy/original');

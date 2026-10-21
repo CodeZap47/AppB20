@@ -58,7 +58,9 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
     if (kind === 'evidence') return [...db.evidenceDetails.iter()].find((row) => row.evidenceId === target)?.version ?? 1;
     const rows = kind === 'work' ? db.works.iter() : kind === 'assignment' ? db.assignments.iter() : db.activities.iter();
     const row = [...rows].find((entry) => entry.id === target);
-    if (!row) throw new Error('La publicación ya no existe.');
+    if (!row || !Number.isInteger(row.version) || row.version < 1) {
+      throw new Error('No se pudo comprobar la versión de esta publicación. Actualiza la página antes de guardar.');
+    }
     return row.version;
   };
   const resource = (fileId: string) => {
@@ -166,11 +168,10 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
       (c) => input.topic === undefined ? c.reducers.createAssignment(assignment(input))
         : c.reducers.createAssignmentV2({ ...assignment(input), topic: input.topic }),
       (row, author) => own(row.createdBy, author) && row.subjectId === id(input.subjectId) && row.title === input.title.trim()),
-    updateAssignment: (assignmentId, input, expectedVersion) => input.topic !== undefined || expectedVersion !== undefined
-      ? getConnection().reducers.updateAssignmentV2({ assignmentId: id(assignmentId), ...assignment(input),
-        topic: input.topic ?? [...getConnection().db.assignmentDetails.iter()].find((row) => row.assignmentId === id(assignmentId))?.topic ?? '',
-        expectedVersion: expectedVersion ?? versionFor('assignment', assignmentId) })
-      : getConnection().reducers.updateAssignment({ assignmentId: id(assignmentId), ...assignment(input) }),
+    updateAssignment: (assignmentId, input, expectedVersion) => getConnection().reducers.updateAssignmentV2({
+      assignmentId: id(assignmentId), ...assignment(input),
+      topic: input.topic ?? [...getConnection().db.assignmentDetails.iter()].find((row) => row.assignmentId === id(assignmentId))?.topic ?? '',
+      expectedVersion: expectedVersion ?? versionFor('assignment', assignmentId) }),
     publishWork: (input) => create((c) => c.db.works.iter(),
       (c) => input.topic !== undefined || input.status !== undefined
         ? c.reducers.publishWorkV2({ assignmentId: id(input.assignmentId), title: input.title,
@@ -227,9 +228,8 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
     withdrawBirthday: () => getConnection().reducers.withdrawBirthday({}),
     createActivity: (input) => create((c) => c.db.activities.iter(), (c) => c.reducers.createActivity(activity(input)),
       (row, author) => own(row.createdBy, author) && row.subjectId === id(input.subjectId) && row.title === input.title.trim()),
-    updateActivity: (activityId, input, expectedVersion) => expectedVersion === undefined
-      ? getConnection().reducers.updateActivity({ activityId: id(activityId), ...activity(input) })
-      : getConnection().reducers.updateActivityV2({ activityId: id(activityId), ...activity(input), expectedVersion }),
+    updateActivity: (activityId, input, expectedVersion) => getConnection().reducers.updateActivityV2({
+      activityId: id(activityId), ...activity(input), expectedVersion: expectedVersion ?? versionFor('activity', activityId) }),
     addEvidence: (activityId, content, participantIds) => create((c) => c.db.evidences.iter(),
       (c) => c.reducers.addEvidence({ activityId: id(activityId), content, participants: participantIds.map(member) }),
       (row, author) => own(row.author, author) && row.activityId === id(activityId) && row.content === content.trim()),

@@ -70,6 +70,91 @@ describe('flujos académicos en la interfaz', () => {
 
 
 describe('concurrencia y recuperación de la interfaz', () => {
+  it('descarta la cola anterior cuando cambia el destino de los adjuntos', async () => {
+    const work = source.getSnapshot().works.find((w) => w.authorIds.includes('demo-1'))!;
+    const nextId = source.publishWork({ assignmentId: work.assignmentId, title: 'Otro trabajo', description: '', coauthorIds: [] });
+    const transfer = vi.spyOn(source, 'attachResourceFile').mockRejectedValueOnce(new Error('Sin conexión')).mockResolvedValueOnce('nuevo-adjunto');
+    await show(<ResourceSection kind="work" id={work.id} version={work.version} canEdit />);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const first = new File(['uno'], 'anterior.txt');
+    Object.defineProperty(input, 'files', { value: [first], configurable: true });
+    await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
+    expect(container.textContent).toContain('Reintentar archivos pendientes');
+    await show(<ResourceSection kind="work" id={nextId} version={1} canEdit />);
+    expect(container.textContent).not.toContain('Reintentar archivos pendientes');
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    const nextInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(nextInput.disabled).toBe(false);
+    const second = new File(['dos'], 'nuevo.txt');
+    Object.defineProperty(nextInput, 'files', { value: [second], configurable: true });
+    await act(async () => nextInput.dispatchEvent(new Event('change', { bubbles: true })));
+    expect(transfer.mock.calls.map((args) => [args[1], args[2]])).toEqual([[work.id, first], [nextId, second]]);
+  });
+
+  it('corta el lote anterior al cambiar de destino aunque su primera confirmación llegue tarde', async () => {
+    const work = source.getSnapshot().works.find((w) => w.authorIds.includes('demo-1'))!;
+    let finish: ((id: string) => void) | undefined;
+    let signal: AbortSignal | undefined;
+    const transfer = vi.spyOn(source, 'attachResourceFile').mockImplementation(async (_kind, _id, _file, _version, options) => {
+      signal = options?.signal;
+      return new Promise<string>((resolve) => { finish = resolve; });
+    });
+    await show(<ResourceSection kind="work" id={work.id} version={work.version} canEdit />);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [new File(['uno'], 'primero.txt'), new File(['dos'], 'segundo.txt')], configurable: true });
+    await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
+    await show(<ResourceSection kind="assignment" id={work.assignmentId} version={1} canEdit />);
+    expect(signal?.aborted).toBe(true);
+    await act(async () => finish!('confirmado-antes-de-cancelar'));
+    expect(transfer).toHaveBeenCalledTimes(1);
+    expect(container.textContent).not.toContain('Reintentar archivos pendientes');
+    expect(container.textContent).not.toContain('Subiendo primero.txt');
+  });
+
+  it.each([false, true])('reanuda un lote con confirmación perdida sin duplicar la versión (edición externa: %s)', async (editedByCoauthor) => {
+    const work = source.getSnapshot().works.find((w) => w.authorIds.includes('demo-1'))!;
+    const original = source.attachResourceFile.bind(source);
+    let confirmedId: string | undefined;
+    const transfer = vi.spyOn(source, 'attachResourceFile').mockImplementation(async (kind, id, file, expected, options) => {
+      if (file.name === 'primero.txt') {
+        if (confirmedId) return confirmedId;
+        confirmedId = await original(kind, id, file, expected, options);
+        throw new Error('Se perdió la confirmación');
+      }
+      return original(kind, id, file, expected, options);
+    });
+    function CurrentResources() {
+      const current = useSnapshot().works.find((w) => w.id === work.id)!;
+      return <ResourceSection kind="work" id={work.id} version={current.version} canEdit />;
+    }
+    await show(<CurrentResources />);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [new File(['uno'], 'primero.txt'), new File(['dos'], 'segundo.txt')], configurable: true });
+    await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
+    expect(source.getSnapshot().works.find((w) => w.id === work.id)!.version).toBe(work.version + 1);
+    if (editedByCoauthor) {
+      await act(async () => {
+        const current = source.getSnapshot().works.find((w) => w.id === work.id)!;
+        source.saveWorkVersion(work.id, { title: current.title, topic: '', description: 'Cambio simultáneo del equipo', status: 'draft' }, current.version);
+      });
+    }
+    const retry = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Reintentar archivos pendientes')!;
+    await act(async () => retry.click());
+    expect(transfer.mock.calls.map((args) => args[3])).toEqual([work.version, work.version, work.version + 1]);
+    const snapshot = source.getSnapshot();
+    const current = snapshot.works.find((w) => w.id === work.id)!;
+    expect(snapshot.resourceFiles.filter((f) => f.targetId === work.id && f.name === 'primero.txt')).toHaveLength(1);
+    if (editedByCoauthor) {
+      expect(snapshot.resourceFiles.some((f) => f.targetId === work.id && f.name === 'segundo.txt')).toBe(false);
+      expect(current.description).toBe('Cambio simultáneo del equipo');
+      expect(container.querySelector('[role="alert"]')?.textContent).toMatch(/cambi|actualiza|versión/i);
+    } else {
+      expect(snapshot.resourceFiles.filter((f) => f.targetId === work.id && f.name === 'segundo.txt')).toHaveLength(1);
+      expect(container.textContent).not.toContain('Reintentar archivos pendientes');
+    }
+    expect(current.version).toBe(work.version + 2);
+  });
+
   it('no sobrescribe vínculos que cambiaron después de abrir el editor', async () => {
     const id = source.getSnapshot().activities[0]!.id;
     function CurrentRelations() { const activity = useSnapshot().activities.find((a) => a.id === id)!; return <ActivityRelations activityId={id} version={activity.version} />; }

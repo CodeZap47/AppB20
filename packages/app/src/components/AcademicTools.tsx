@@ -76,9 +76,16 @@ export function ResourceDownloads({ files, onRemove, onRestore, disabled }: {
   </>;
 }
 
-export function ResourceSection({ kind, id, version, canEdit, title = 'Archivos y recursos' }: {
+type ResourceSectionProps = {
   kind: ResourceTargetKind; id: string; version: number; canEdit: boolean; title?: string;
-}) {
+};
+
+export function ResourceSection(props: ResourceSectionProps) {
+  // Cambiar de página termina la transferencia anterior y descarta su cola local.
+  return <ResourceSectionForTarget key={`${props.kind}:${props.id}`} {...props} />;
+}
+
+function ResourceSectionForTarget({ kind, id, version, canEdit, title = 'Archivos y recursos' }: ResourceSectionProps) {
   const { resourceFiles } = useSnapshot();
   const source = useDataSource();
   const { error, pending, run } = useAction();
@@ -104,6 +111,7 @@ export function ResourceSection({ kind, id, version, canEdit, title = 'Archivos 
           { signal: current.signal, onProgress: (done, total) => setProgress({ name: file.name, done, total }) }); return true; });
         if (!saved) { if (!current.signal.aborted) setRetry({ files: list.slice(index), version: expected }); break; }
         expected++;
+        if (current.signal.aborted) break;
       }
     } finally { controller.current = null; setProgress(null); setBusy(false); }
   };
@@ -120,7 +128,7 @@ export function ResourceSection({ kind, id, version, canEdit, title = 'Archivos 
     {canEdit && <>
       <FilePicker onFiles={(list) => void upload(list)} busy={busy || pending} disabled={Boolean(retry)} />
       {progress && <p role="status">Subiendo {progress.name}: {Math.round(progress.done / progress.total * 100)} % <button type="button" className="link-button" onClick={() => controller.current?.abort()}>Cancelar subida</button></p>}
-      {retry && <div className="academic-upload-retry"><p>Quedan por confirmar: {retry.files.map((file) => file.name).join(', ')}.</p><button type="button" disabled={busy || pending} onClick={() => void upload(retry.files, Math.max(retry.version, version))}>Reintentar archivos pendientes</button><button type="button" className="secondary" disabled={busy || pending} onClick={() => setRetry(null)}>Descartar pendientes</button></div>}
+      {retry && <div className="academic-upload-retry"><p>Quedan por confirmar: {retry.files.map((file) => file.name).join(', ')}.</p><button type="button" disabled={busy || pending} onClick={() => void upload(retry.files, retry.version)}>Reintentar archivos pendientes</button><button type="button" className="secondary" disabled={busy || pending} onClick={() => setRetry(null)}>Descartar pendientes</button></div>}
       <p className="field__hint">Hasta 50 MB por archivo. Los archivos de versiones anteriores se conservan en el historial.</p>
     </>}
     {error && <p className="error" role="alert">{error}</p>}
