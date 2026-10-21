@@ -1,14 +1,16 @@
-import type { ReactNode } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
+import { config } from '../config';
+import { DataProvider } from '../data/DataContext';
+import { createSpacetimeDataSource } from '../data/spacetime';
 
-/**
- * Conexión con SpacetimeDB.
- *
- * Pendiente de la Etapa 0: generar los bindings (`npm run spacetime:generate`) y envolver la app
- * con `SpacetimeDBProvider` de `spacetimedb/react`, usando `DbConnection.builder()` con
- * `config.spacetimeUri`, `config.spacetimeDb` y el token OIDC de Google de la sesión.
- * Las lecturas deben suscribirse a las vistas (`members`, `group_messages`,
- * `my_direct_messages`, etc.), no a las tablas, que son privadas.
- */
-export function SpacetimeProvider({ children }: { children: ReactNode }) {
-  return children;
+/** The authenticated session and the real group cache have the same lifetime. */
+export function SpacetimeProvider({ token, children }: { token: string; children: ReactNode }) {
+  const source = useMemo(() => createSpacetimeDataSource({
+    token, uri: config.spacetimeUri, database: config.spacetimeDb,
+  }), [token]);
+  useEffect(() => {
+    source.connect();
+    return () => source.disconnect();
+  }, [source]);
+  return <DataProvider source={source}>{children}</DataProvider>;
 }

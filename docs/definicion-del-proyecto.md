@@ -421,9 +421,9 @@ Estos son objetivos de implementación; aún requieren código, compilación, pr
 
 ### Autenticación
 
-Propuesta: **inicio de sesión con Google mediante OIDC más invitación o lista autorizada del grupo**. SpacetimeDB admite tokens OIDC y contempla proveedores como Google y Firebase; autenticar no reemplaza comprobar permisos y membresía en el módulo. [[9]](https://spacetimedb.com/docs/core-concepts/authentication)
+**Decisión confirmada: SpacetimeAuth mediante OIDC, con Google como proveedor de entrada, más invitación del grupo**. Autenticarse no reemplaza comprobar permisos y membresía en el módulo. La guía de configuración está en [`spacetimeauth.md`](spacetimeauth.md). [[9]](https://spacetimedb.com/docs/core-concepts/authentication)
 
-Validar emisor, audiencia, identidad y pertenencia antes de permitir lectura o escritura. No solicitar acceso a Gmail ni leer correos para iniciar sesión o usar Gemini. SpacetimeAuth con acceso Google es una opción para el prototipo, pero su documentación específica advierte estado beta; debe evaluarse antes de elegirlo para producción. [[10]](https://spacetimedb.com/docs/core-concepts/authentication/spacetimeauth)
+Validar emisor, audiencia, identidad y pertenencia antes de permitir lectura o escritura. No solicitar acceso a Gmail ni leer correos para iniciar sesión o usar Gemini. La documentación específica de SpacetimeAuth todavía advierte estado beta; el piloto debe validar acceso, renovación, cierre de sesión y rechazo de cuentas no invitadas antes de distribuirse. [[10]](https://spacetimedb.com/docs/core-concepts/authentication/spacetimeauth)
 
 ### Archivos y fotos
 
@@ -808,7 +808,7 @@ Todas las ideas están incluidas en el proyecto. La siguiente distribución orga
 ### Recomendaciones técnicas por validar
 
 - React + TypeScript + Vite y SDK oficial `spacetimedb`; compilaciones adaptadas para web/PWA, extensión Manifest V3 y Capacitor Android. Tauri y una app nativa iOS quedan como opciones posteriores.
-- Inicio de sesión Google/OIDC con acceso autorizado al grupo.
+- SpacetimeAuth OIDC con Google y acceso autorizado al grupo por invitación (decisión confirmada).
 - Google Cloud Storage para archivos y backend con almacén de secretos para Gemini.
 - Web Push para la PWA de iPhone y web compatible; FCM para el APK Android. La recepción y avisos del sistema de la extensión requieren implementación específica y pruebas.
 

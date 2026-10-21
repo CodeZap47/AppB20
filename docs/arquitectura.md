@@ -9,7 +9,7 @@ Resumen técnico de la base inicial. La fuente de verdad del alcance es
 | --- | --- | --- |
 | Interfaz | React 19 + TypeScript + Vite, `react-router` con rutas hash | Una sola app para todas las presentaciones. |
 | Datos en tiempo real | SpacetimeDB, SDK `spacetimedb` (cliente y módulo en TypeScript) | Membresía, perfiles, trabajos, mensajes, cumpleaños. |
-| Autenticación | Google OIDC + lista autorizada (`invitation`) | El módulo valida emisor y correo verificado; el backend valida firma, emisor y audiencia. |
+| Autenticación | SpacetimeAuth OIDC (Google) + invitaciones (`invitation`) | Emisor y audiencias configurables en `auth_config`; alta con correo verificado, vistas/acciones y backend con membresía activa. |
 | Backend | Node + Hono + `@google/genai` + `jose` | Gemini BYOK; después URLs firmadas de Cloud Storage y envío de push. |
 | Secretos | `EncryptedMemoryStore` (desarrollo) → Google Cloud Secret Manager | Claves BYOK por usuario, nunca devueltas al cliente. |
 | Web/PWA | `vite-plugin-pwa` con service worker propio (`apps/web/src/sw.ts`) | Instalación en iPhone y Web Push. |
@@ -18,7 +18,7 @@ Resumen técnico de la base inicial. La fuente de verdad del alcance es
 
 ## Modelo de datos inicial (`packages/spacetime-module`)
 
-Tablas privadas: `app_config`, `invitation`, `member`, `subject`, `term`, `work`,
+Tablas privadas: `app_config`, `auth_config`, `invitation`, `member`, `subject`, `term`, `work`,
 `term_dates`, `assignment`, `page_revision`, `work_author`, `work_file`, `group_message`, `direct_conversation`, `direct_message`, `birthday`,
 `change_log`, `activity`, `evidence`, `note`, `note_comment`, `question`, `answer`,
 `last_seen`, `message_reaction`, `sticker_pack`, `sticker`, `chat_command`.
@@ -163,17 +163,40 @@ nadie de fuera. No hay votaciones anónimas en esta versión. Las reglas están 
 
 Las pantallas leen y escriben a través de `DataSource` (`packages/app/src/data/types.ts`),
 cuyas acciones corresponden a los reducers del módulo y cuyo `Snapshot` corresponde a sus
-vistas. Mientras no hay SpacetimeDB, la app usa `DemoDataSource`: datos de prueba en memoria
-que aplican las mismas reglas de permisos, con un selector «Ver como» para revisar qué ve cada
-miembro. Conectar SpacetimeDB consiste en escribir otra implementación de `DataSource`.
+vistas. La sesión real utiliza la implementación de SpacetimeDB con el ID token de SpacetimeAuth;
+la demo usa `DemoDataSource`, con datos de prueba en memoria y un selector «Ver como». Iniciar
+sesión no selecciona automáticamente un usuario de la demo ni sustituye la validación del módulo.
+
+## Autenticación y membresía
+
+La web inicia Authorization Code con PKCE mediante SpacetimeAuth. El callback es
+`/auth/callback` y el retorno de logout es `/auth/logout`, fuera de las rutas hash; el hosting
+debe resolverlos a la aplicación. El cliente renueva la sesión y vuelve a autenticar la conexión de datos con su ID token. La configuración
+pública solo contiene emisor, client ID y direcciones de retorno.
+
+`set_auth_config` configura el emisor y las audiencias admitidas del módulo con la identidad
+que publicó la base. Es obligatorio validar la audiencia porque distintos proyectos de
+SpacetimeAuth comparten emisor. El backend obtiene las claves públicas OIDC y verifica firma,
+emisor y audiencia; además consulta `assert_active_member` antes de las rutas protegidas.
+
+`join_group` conserva la comprobación del correo verificado contra `invitation`. Las vistas y
+acciones exigen miembro activo; los privilegios de creador se asignan en la invitación del
+módulo. La primera invitación se prepara desde la CLI, pues la identidad del publicador no es
+la identidad OIDC con la que después entra al navegador. No se fusionan identidades antiguas
+de Google con las nuevas por correo.
+
+La configuración del panel y del primer creador está en
+[`spacetimeauth.md`](spacetimeauth.md). Web/PWA usa redirecciones en su origen; extensión y
+Android usan el navegador del sistema y callbacks propios que deben registrarse y probarse
+antes de distribuirse.
 
 ## Pendientes de la Etapa 0
 
-- Instalar la CLI de SpacetimeDB, publicar el módulo y generar bindings; escribir
-  una implementación de `DataSource` sobre `SpacetimeDBProvider` (`packages/app/src/lib/spacetime.tsx`). El módulo solo se ha
-  revisado con `tsc`; falta publicarlo en un servidor real.
-- Elegir flujo de inicio de sesión con Google por presentación (web, páginas de extensión,
-  WebView de Capacitor) y validar la audiencia en el módulo.
+- Configurar el proyecto y cliente de SpacetimeAuth, publicar el módulo, establecer
+  `auth_config` y crear la primera invitación. Probar acceso, persistencia, dos cuentas,
+  exclusión de no invitados y bajas en un servidor real.
+- Registrar y probar el acceso de extensión y Android; la configuración web no basta para
+  estas presentaciones. Validar renovación y cierre de sesión también en la PWA instalada.
 - Confirmar edad del grupo y acceso a Google AI Studio antes de habilitar Gemini; definir el
   modelo vigente en `GEMINI_MODEL`, límites de solicitudes y presupuesto.
 - Iconos PNG de la PWA (192, 512 y apple-touch-icon 180) y de la extensión.

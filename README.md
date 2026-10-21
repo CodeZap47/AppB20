@@ -130,6 +130,9 @@ app-b20/
 │   └── spacetime-module/ Módulo de servidor SpacetimeDB: tablas, reducers y vistas
 └── docs/
     ├── arquitectura.md   Cómo encajan las piezas y qué falta validar
+    ├── spacetimeauth.md  Panel de autenticación, variables e invitación inicial
+    ├── cloudflare-pages.md   Web en el subdominio gratuito de Cloudflare Pages
+    ├── despliegue.md     Publicación de web, base de datos y backend
     └── definicion-del-proyecto.md   Alcance funcional completo
 ```
 
@@ -138,8 +141,8 @@ interfaz recibe la presentación como `platform` para adaptarse (por ejemplo, na
 en el panel lateral).
 
 **Pila técnica:** React + TypeScript + Vite, SpacetimeDB para datos en tiempo real, inicio de
-sesión con Google (OIDC) más lista autorizada, Google Cloud Storage para archivos (máximo 50 MB
-por archivo), backend con `@google/genai` y almacén de secretos para Gemini, Web Push y FCM para
+sesión con SpacetimeAuth y lista de invitaciones, Google Cloud Storage
+para archivos (máximo 50 MB por archivo), backend con `@google/genai` y almacén de secretos para Gemini, Web Push y FCM para
 notificaciones.
 
 ## Requisitos
@@ -161,20 +164,67 @@ Base de datos local:
 
 ```bash
 spacetime start                       # servidor local en ws://localhost:3000
-npm run spacetime:publish             # publica packages/spacetime-module como "app-b20"
+spacetime publish -s http://localhost:3000 --module-path packages/spacetime-module app-b20
 npm run spacetime:generate            # genera bindings en packages/app/src/module_bindings
 ```
 
-Quien publica el módulo por primera vez queda como creador inicial y puede invitar correos
-con el reducer `invite_member`.
+La base elegida para Maincloud es **`app-b20-34245`**; `app-b20` en el ejemplo anterior
+es únicamente la base local. Para producción usa `VITE_SPACETIME_DB=app-b20-34245` y
+`SPACETIMEDB_MODULE=app-b20-34245`, con las URLs de Maincloud indicadas en la
+[guía de despliegue](docs/despliegue.md).
+
+Este repositorio ya contiene la aplicación. No ejecutes aquí `spacetime init` ni un comando de
+creación con `--template chat-react-ts`: esos pasos son para crear otra app de ejemplo. Para
+trabajar con B20 usa `npm run dev`; para publicar, sigue la guía sobre el módulo existente.
+
+El módulo ya está publicado en esa base, con `auth_config` y la primera invitación de
+administrador preparados. Los callbacks locales de `client_034jL0AHYYQ1bps8SupHU0` ya están
+registrados y el formulario de acceso por correo abre sin error. El acceso completo con una
+cuenta invitada y las pruebas con dos cuentas siguen pendientes. La web y el backend todavía
+no están desplegados.
+
+Para futuras actualizaciones del módulo, `npm run spacetime:publish:maincloud` apunta a
+`app-b20-34245` con `--delete-data=never`; `npm run spacetime:publish` conserva el destino local
+`app-b20`.
+
+Registra los callbacks de producción del cliente de SpacetimeAuth siguiendo
+[`docs/spacetimeauth.md`](docs/spacetimeauth.md). En una instalación nueva, quien publica usa
+su identidad de la CLI para ejecutar `set_auth_config` y crear la primera invitación de creador
+con `invite_member`. Después entra con el correo invitado a través de SpacetimeAuth y completa el registro. Las demás invitaciones
+se administran desde Ajustes.
+
+El acceso real necesita las variables de SpacetimeAuth y la base publicada. La demo conserva
+datos de prueba en memoria y se utiliza de forma explícita, sin conceder acceso al grupo real.
+
+## Publicar la web en Cloudflare Pages
+
+La web está preparada para usar un subdominio gratuito como `app-b20.pages.dev`, sujeto a
+que el nombre esté disponible. Sigue la [guía de Cloudflare Pages](docs/cloudflare-pages.md):
+puedes subir el ZIP preparado o conectar Git para publicar automáticamente.
+
+```sh
+cp .env.pages.example .env.pages
+npm run build:pages
+npm run pages:dev
+```
+
+`build:pages` compila en modo `pages` con la base de Maincloud y callbacks derivados del dominio
+que abra la persona. No publiques el archivo `.env`; el ZIP solo contiene `apps/web/dist`.
+Después de crear el proyecto Pages, agrega su URL real de callback y cierre de sesión en
+SpacetimeAuth. El subdominio `pages.dev` no necesita cambios de DNS ni la sección Custom Domains.
 
 ## Comandos
 
 | Comando | Qué hace |
 | --- | --- |
+| `npm run spacetime:publish` | Publica el módulo en la base local `app-b20`. |
+| `npm run spacetime:publish:maincloud` | Actualiza `app-b20-34245` en Maincloud con `--delete-data=never`. |
 | `npm run typecheck` | Revisa tipos en todos los paquetes. |
-| `npm test` | Pruebas de `core` y `api` (Vitest). |
+| `npm test` | Pruebas de reglas, sesiones y permisos (Vitest). |
 | `npm run build` | Compila web, extensión y backend. |
+| `npm run build:pages` | Compila la web para Cloudflare Pages en `apps/web/dist`. |
+| `npm run pages:dev` | Prueba la web compilada con el servidor local de Pages. |
+| `npm run pages:deploy` | Compila y publica en el proyecto Pages `app-b20`, rama `main`; requiere acceso a Cloudflare. |
 | `npm run build:extension` | Genera `apps/extension/dist`, que se carga en `chrome://extensions` con «Cargar descomprimida». |
 | `npm run build:android` | Compila la web en modo Capacitor y sincroniza el proyecto Android. Después: `npm run open -w @b20/android`. |
 
@@ -182,8 +232,9 @@ con el reducer `invite_member`.
 
 - Las tablas de SpacetimeDB son privadas; los clientes solo leen vistas que comprueban
   membresía activa. Los mensajes 1 a 1 solo los ven sus dos participantes.
-- Acceso por invitación: unirse requiere sesión de Google con correo verificado que esté en la
-  lista autorizada.
+- Acceso por invitación: unirse requiere sesión de SpacetimeAuth con correo verificado en la
+  lista autorizada. Módulo y backend limitan la confianza al emisor y client IDs configurados;
+  las rutas protegidas requieren membresía activa.
 - Ningún secreto vive en el cliente. Las claves de Gemini se guardan cifradas en el backend y
   solo se informa si existen.
 - Los cumpleaños guardan día y mes, nunca el año, y son voluntarios.
@@ -191,8 +242,15 @@ con el reducer `invite_member`.
 
 ## Pendientes por validar
 
-- **Edad y acceso a Gemini:** confirmar que el grupo cumple los términos antes de desplegar la
-  integración.
+- **SpacetimeAuth en el entorno real:** registrar los callbacks de producción y completar el
+  acceso con la cuenta invitada; los callbacks locales, emisor/audiencia y primera invitación
+  ya están preparados. El formulario actual permite acceso por correo; Google es opcional.
+  Probar invitación, baja, renovación y cierre de sesión con dos cuentas. Extensión y Android
+  necesitan validar su flujo propio antes de distribuirse. Pasos en [`docs/spacetimeauth.md`](docs/spacetimeauth.md).
+- **IA y BYOK:** la interfaz aún no conecta con la API, que requiere despliegue y configuración
+  propios. Confirmar los requisitos de edad antes de habilitar Gemini. Esto no impide publicar
+  la web y usar las funciones conectadas a SpacetimeDB.
+- **Archivos:** falta el almacenamiento remoto para adjuntos y stickers.
 - **Costos y límites:** infraestructura, archivos, cuotas de API y presupuesto de cada clave.
 - **Instalación y push:** PWA en iPhone, APK firmado con FCM y avisos de la extensión, probados en
   dispositivos reales.

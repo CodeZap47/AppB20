@@ -24,7 +24,7 @@ import { ActivitiesPage, ActivityFormPage, ActivityPage } from './pages/Activiti
 import { NoteFormPage, NotePage, NotesPage } from './pages/NotesPage';
 import { AskQuestionPage, QuestionPage, QuestionsPage } from './pages/QuestionsPage';
 import { SpacetimeProvider } from './lib/spacetime';
-import { AuthProvider, useSession } from './auth/AuthContext';
+import { AuthProvider, useSession, useSessionStore } from './auth/AuthContext';
 import { SignInPage } from './auth/SignInPage';
 import { JoinPage } from './auth/JoinPage';
 import { useSnapshot } from './data/DataContext';
@@ -106,23 +106,26 @@ const router = createHashRouter([
 ]);
 
 /**
- * Modo de prueba: datos en memoria, sin cuenta. Se usa con `?demo` en la dirección, cuando no
- * hay *client ID* de Google configurado y, por ahora, en la extensión y en Android, que todavía
- * no tienen su propio inicio de sesión.
+ * La demo siempre se solicita expresamente. Una configuración de acceso ausente nunca
+ * permite entrar con una identidad de prueba al flujo del grupo real.
  */
-function isDemoMode(platform: Platform): boolean {
-  if (platform !== 'web' || !config.googleClientId) return true;
+function isDemoMode(): boolean {
   return new URLSearchParams(window.location.search).has('demo');
 }
 
 export function App({ platform, source }: { platform: Platform; source?: DataSource }) {
-  const demo = source !== undefined || isDemoMode(platform);
+  const demo = source !== undefined || isDemoMode();
+  const clientId = platform === 'android'
+    ? config.spacetimeAuthAndroidClientId || config.spacetimeAuthClientId
+    : platform.startsWith('extension')
+      ? config.spacetimeAuthExtensionClientId || config.spacetimeAuthClientId
+      : config.spacetimeAuthClientId;
   return (
     <PlatformContext value={platform}>
       {demo ? (
         <DemoApp source={source} />
       ) : (
-        <AuthProvider clientId={config.googleClientId}>
+        <AuthProvider clientId={clientId} platform={platform}>
           <SignedInGate />
         </AuthProvider>
       )}
@@ -130,12 +133,15 @@ export function App({ platform, source }: { platform: Platform; source?: DataSou
   );
 }
 
-/** Sin sesión muestra la entrada con Google; con sesión, la app. */
+/** La sesión de SpacetimeAuth abre una conexión propia, nunca una cuenta de demostración. */
 function SignedInGate() {
   const session = useSession();
   if (session?.status !== 'signedIn') return <SignInPage />;
-  // TODO(Etapa 0): usar la fuente de SpacetimeDB con el token de la sesión.
-  return <DemoApp gated />;
+  return (
+    <SpacetimeProvider token={session.token} key={session.token}>
+      <MembershipGate />
+    </SpacetimeProvider>
+  );
 }
 
 /**
@@ -143,7 +149,20 @@ function SignedInGate() {
  * unirse. Solo después muestra la app.
  */
 function MembershipGate() {
-  const { connection, me } = useSnapshot();
+  const { connection, connectionError, me } = useSnapshot();
+  const sessionStore = useSessionStore();
+  if (connection === 'offline') {
+    return (
+      <main className="signin">
+        <h1>B20</h1>
+        <p role="alert">{connectionError ?? 'No se pudo conectar con el grupo.'}</p>
+        <button type="button" onClick={() => window.location.reload()}>Volver a conectar</button>
+        <button type="button" className="secondary" onClick={() => sessionStore?.signOut()}>
+          Cerrar sesión
+        </button>
+      </main>
+    );
+  }
   if (connection === 'connecting') {
     return (
       <main className="signin">
@@ -156,7 +175,7 @@ function MembershipGate() {
   return <RouterProvider router={router} />;
 }
 
-function DemoApp({ source, gated = false }: { source?: DataSource; gated?: boolean }) {
+function DemoApp({ source }: { source?: DataSource }) {
   // Dependen de `createDemoState` a propósito: en desarrollo, cuando ese módulo se recarga en
   // caliente (porque cambió la forma de los datos), se crean de nuevo. Si no, el estado en
   // memoria conserva la forma anterior y las pantallas que esperan los campos nuevos fallan.
@@ -165,10 +184,8 @@ function DemoApp({ source, gated = false }: { source?: DataSource; gated?: boole
     [source, createDemoState],
   );
   return (
-    <SpacetimeProvider>
-      <DataProvider source={data}>
-        {gated ? <MembershipGate /> : <RouterProvider router={router} />}
-      </DataProvider>
-    </SpacetimeProvider>
+    <DataProvider source={data}>
+      <RouterProvider router={router} />
+    </DataProvider>
   );
 }

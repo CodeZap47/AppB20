@@ -362,6 +362,8 @@ export interface Snapshot {
    * sabría distinguir «todavía no llega tu membresía» de «no eres miembro».
    */
   connection: 'connecting' | 'ready' | 'offline';
+  /** Error de conexión sin credenciales ni contenido privado. */
+  connectionError?: string;
   me: Member | undefined;
   members: Member[];
   /** Solo para creadores: correos autorizados, ya unidos o no. */

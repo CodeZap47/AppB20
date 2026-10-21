@@ -6,5 +6,7 @@ Esta carpeta la genera la CLI de SpacetimeDB a partir de `packages/spacetime-mod
 npm run spacetime:generate
 ```
 
-No edites estos archivos a mano. Una vez generados, `src/lib/spacetime.tsx` puede usar
-`DbConnection` y `tables` para conectar con `SpacetimeDBProvider` de `spacetimedb/react`.
+Los archivos generados están incluidos en el repositorio. No los edites a mano: vuelve a
+generarlos cuando cambie el módulo, con una CLI compatible con el SDK (2.11 o posterior).
+`src/data/spacetime.ts` usa `DbConnection` para suscribirse exclusivamente a las vistas
+públicas y autorizadas; `src/lib/spacetime.tsx` vincula esa conexión a la sesión de SpacetimeAuth.

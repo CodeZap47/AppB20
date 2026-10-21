@@ -1,10 +1,40 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 // `--mode capacitor` genera la misma app para el APK Android, sin service worker de PWA:
 // en Android los avisos llegan por FCM, no por Web Push.
-export default defineConfig(({ mode }) => ({
+export default defineConfig(({ mode }) => {
+  if (mode === 'pages') {
+    const env = loadEnv(mode, '../..', 'VITE_');
+    const required = ['VITE_SPACETIME_URI', 'VITE_SPACETIME_DB', 'VITE_SPACETIMEAUTH_CLIENT_ID'];
+    for (const key of required) {
+      if (!env[key]?.trim()) {
+        throw new Error(`Falta ${key}. Configura las variables del build de Pages o copia .env.pages.example a .env.pages.`);
+      }
+    }
+    // Evita publicar accidentalmente una web que dependa de la computadora del desarrollador.
+    const urls = [
+      ['VITE_SPACETIME_URI', 'wss:'],
+      ['VITE_API_URL', 'https:'],
+      ['VITE_SPACETIMEAUTH_REDIRECT_URI', 'https:'],
+      ['VITE_SPACETIMEAUTH_POST_LOGOUT_REDIRECT_URI', 'https:'],
+    ] as const;
+    for (const [key, protocol] of urls) {
+      if (!env[key]?.trim()) continue;
+      let url: URL;
+      try { url = new URL(env[key]); } catch { throw new Error(`${key} debe ser una URL válida para producción.`); }
+      if (url.protocol !== protocol || ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) ||
+          url.username || url.password || url.search || url.hash) {
+        throw new Error(`${key} debe usar ${protocol} sin credenciales y apuntar a un servicio público.`);
+      }
+    }
+    if (env.VITE_SPACETIMEAUTH_AUTHORITY &&
+        env.VITE_SPACETIMEAUTH_AUTHORITY.replace(/\/$/, '') !== 'https://auth.spacetimedb.com/oidc') {
+      throw new Error('VITE_SPACETIMEAUTH_AUTHORITY debe ser https://auth.spacetimedb.com/oidc.');
+    }
+  }
+  return {
   envDir: '../..',
   plugins: [
     react(),
@@ -33,4 +63,5 @@ export default defineConfig(({ mode }) => ({
         },
       }),
   ],
-}));
+  };
+});

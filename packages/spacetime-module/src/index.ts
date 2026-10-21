@@ -27,6 +27,16 @@ const appConfig = table(
   },
 );
 
+/** Credenciales públicas OIDC aceptadas; se configuran por el propietario tras publicar. */
+const authConfig = table(
+  { name: 'auth_config' },
+  {
+    id: t.u32().primaryKey(),
+    issuer: t.string(),
+    audiences: t.array(t.string()),
+  },
+);
+
 /** Lista autorizada del grupo: solo correos invitados pueden unirse. */
 const invitation = table(
   { name: 'invitation' },
@@ -259,7 +269,7 @@ const sticker = table(
   { name: 'sticker' },
   {
     id: t.u64().primaryKey().autoInc(),
-    packId: t.u64().index('btree'),
+    packId: t.u64(),
     storageKey: t.string(),
     contentType: t.string(),
     size: t.u64(),
@@ -515,6 +525,7 @@ const guideReview = table(
 
 const spacetimedb = schema({
   appConfig,
+  authConfig,
   invitation,
   member,
   subject,
@@ -546,6 +557,10 @@ const spacetimedb = schema({
   studyGuide,
   guideSource,
   guideReview,
+}, {
+  // Solo quien puede publicar el módulo controla este valor. Permite adoptar una DB vacía
+  // existente, cuyo init anterior no creó app_config, sin entregar el control al primer cliente.
+  env: { B20_BOOTSTRAP_OWNER_IDENTITY: t.string().optional() },
 });
 export default spacetimedb;
 
@@ -574,27 +589,24 @@ function requirePeriod(period: number): number {
   }
   return period;
 }
-const ALLOWED_ISSUERS = ['https://accounts.google.com', 'accounts.google.com'];
-
-/**
- * *Client IDs* de Google Cloud de la app (web, extensión y Android). No son secretos: llenar
- * antes de publicar. Sin ellos nadie puede entrar con Google.
- *
- * Hace falta porque SpacetimeDB acepta cualquier token de Google: sin revisar la audiencia, un
- * sitio ajeno que use «Iniciar sesión con Google» recibiría tokens con los que se haría pasar
- * por sus visitantes que son miembros del grupo.
- */
-const GOOGLE_CLIENT_IDS: readonly string[] = [];
-
-function isGoogleIssuer(issuer: string): boolean {
-  return ALLOWED_ISSUERS.includes(issuer);
-}
-
-function hasAllowedAudience(audience: readonly string[]): boolean {
-  return audience.some((aud) => GOOGLE_CLIENT_IDS.includes(aud));
+/** SpacetimeDB comprueba la firma; el módulo restringe además emisor y clientes de B20. */
+function trustedSession(ctx: Ctx) {
+  const jwt = ctx.senderAuth.jwt;
+  if (!jwt) throw new SenderError('Inicia sesión con SpacetimeAuth para acceder al grupo.');
+  const config = ctx.db.authConfig.id.find(0);
+  if (!config || !config.audiences.length) {
+    throw new SenderError('El acceso con SpacetimeAuth todavía no está configurado.');
+  }
+  if (jwt.issuer !== config.issuer) throw new SenderError('Emisor de sesión no permitido.');
+  if (!jwt.audience.some((aud) => config.audiences.includes(aud))) {
+    throw new SenderError('Sesión emitida para otra aplicación.');
+  }
+  return jwt;
 }
 
 function activeMember(ctx: Ctx) {
+  // También se exige en cada reducer: las llamadas HTTP no ejecutan on_connect.
+  verifiedEmail(ctx);
   const row = ctx.db.member.identity.find(ctx.sender);
   if (!row || row.status !== 'active') throw new SenderError('No eres miembro activo del grupo.');
   return row;
@@ -602,7 +614,10 @@ function activeMember(ctx: Ctx) {
 
 function isOwner(ctx: Ctx): boolean {
   const config = ctx.db.appConfig.id.find(0);
-  return config != null && config.owner.isEqual(ctx.sender);
+  if (config) return config.owner.isEqual(ctx.sender);
+  const configuredOwner = ctx.env.B20_BOOTSTRAP_OWNER_IDENTITY?.trim().replace(/^0x/i, '').toLowerCase();
+  if (!configuredOwner || !/^[0-9a-f]{64}$/.test(configuredOwner)) return false;
+  return ctx.sender.toHexString().replace(/^0x/i, '').toLowerCase() === configuredOwner;
 }
 
 function requireCreator(ctx: Ctx) {
@@ -629,19 +644,14 @@ function log(ctx: Ctx, action: string, entity: string, entityId: string | bigint
   });
 }
 
-/** Correo verificado del token OIDC de Google. */
+/** Correo verificado del ID token OIDC de SpacetimeAuth, nunca del formulario del cliente. */
 function verifiedEmail(ctx: Ctx): string {
-  const jwt = ctx.senderAuth.jwt;
-  if (!jwt) throw new SenderError('Inicia sesión con Google para unirte al grupo.');
-  if (!isGoogleIssuer(jwt.issuer)) throw new SenderError('Emisor de sesión no permitido.');
-  if (!hasAllowedAudience(jwt.audience)) {
-    throw new SenderError('Sesión emitida para otra aplicación.');
-  }
+  const jwt = trustedSession(ctx);
   const { email, email_verified: emailVerified } = jwt.fullPayload;
-  if (typeof email !== 'string' || emailVerified !== true) {
-    throw new SenderError('Tu cuenta de Google no tiene un correo verificado.');
+  if (typeof email !== 'string' || !email.trim() || emailVerified !== true) {
+    throw new SenderError('Tu cuenta no tiene un correo verificado.');
   }
-  return email.toLowerCase();
+  return email.trim().toLowerCase();
 }
 
 // ---------------------------------------------------------------------------
@@ -654,16 +664,44 @@ export const init = spacetimedb.init((ctx) => {
 });
 
 /**
- * Rechaza la conexión con un token de Google emitido para otra app. La identidad de SpacetimeDB
- * sale solo del emisor y el `sub`, así que sin esto bastaría cualquier token de Google de la
- * persona. Las demás conexiones (como la CLI de quien publicó) no pueden hacerse pasar por un
- * miembro porque su emisor es otro.
+ * El propietario puede configurar/invitar desde la CLI. Los demás necesitan un ID token
+ * emitido para un cliente autorizado; una sesión todavía no concede la membresía.
  */
 export const on_connect = spacetimedb.clientConnected((ctx) => {
-  const jwt = ctx.senderAuth.jwt;
-  if (jwt && isGoogleIssuer(jwt.issuer) && !hasAllowedAudience(jwt.audience)) {
-    throw new SenderError('Sesión emitida para otra aplicación.');
-  }
+  if (isOwner(ctx)) return;
+  verifiedEmail(ctx);
+});
+
+/** Los client IDs no son secretos. Una tabla nueva conserva app_config y datos existentes. */
+export const set_auth_config = spacetimedb.reducer(
+  { issuer: t.string(), audiences: t.array(t.string()) },
+  (ctx, { issuer, audiences }) => {
+    requireCreator(ctx);
+    const normalizedIssuer = issuer.trim();
+    // El módulo usa SpacetimeAuth; no permite configurar accidentalmente Google directo.
+    if (normalizedIssuer !== 'https://auth.spacetimedb.com/oidc') {
+      throw new SenderError('Usa el emisor de SpacetimeAuth: https://auth.spacetimedb.com/oidc');
+    }
+    const normalizedAudiences = [...new Set(audiences.map((value) => value.trim()))];
+    if (!normalizedAudiences.length || normalizedAudiences.length > 10 ||
+        normalizedAudiences.some((value) => !value || /\s/.test(value) || value.length > 200)) {
+      throw new SenderError('Configura de 1 a 10 client IDs válidos de SpacetimeAuth.');
+    }
+    // En una actualización init no vuelve a correr. Solo la identidad fijada por el deployer
+    // puede completar esta fila; una fila existente nunca se sustituye por el entorno.
+    if (!ctx.db.appConfig.id.find(0) && isOwner(ctx)) {
+      ctx.db.appConfig.insert({ id: 0, owner: ctx.sender });
+    }
+    const config = { id: 0, issuer: normalizedIssuer, audiences: normalizedAudiences };
+    if (ctx.db.authConfig.id.find(0)) ctx.db.authConfig.id.update(config);
+    else ctx.db.authConfig.insert(config);
+    log(ctx, 'update', 'auth_config', '0');
+  },
+);
+
+/** La API llama este reducer con el token del usuario, sin exponer tablas privadas. */
+export const assert_active_member = spacetimedb.reducer((ctx) => {
+  activeMember(ctx);
 });
 
 // ---------------------------------------------------------------------------
@@ -1254,7 +1292,7 @@ export const add_sticker = spacetimedb.reducer(
   (ctx, { packId, storageKey, contentType, size, animated }) => {
     activeMember(ctx);
     requireOwnPack(ctx, packId);
-    if ([...ctx.db.sticker.packId.filter(packId)].length >= MAX_STICKERS_PER_PACK) {
+    if ([...ctx.db.sticker.iter()].filter((row) => row.packId === packId).length >= MAX_STICKERS_PER_PACK) {
       throw new SenderError(`Un paquete tiene como máximo ${MAX_STICKERS_PER_PACK} stickers.`);
     }
     if (!STICKER_TYPES.includes(contentType))
@@ -1287,7 +1325,7 @@ export const set_sticker_pack_shared = spacetimedb.reducer(
 export const remove_sticker_pack = spacetimedb.reducer({ packId: t.u64() }, (ctx, { packId }) => {
   activeMember(ctx);
   requireOwnPack(ctx, packId);
-  for (const row of [...ctx.db.sticker.packId.filter(packId)]) {
+  for (const row of [...ctx.db.sticker.iter()].filter((row) => row.packId === packId)) {
     if (!row.used) ctx.db.sticker.id.delete(row.id);
   }
   ctx.db.stickerPack.id.delete(packId);

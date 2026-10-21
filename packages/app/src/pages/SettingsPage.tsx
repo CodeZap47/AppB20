@@ -25,6 +25,7 @@ export function SettingsPage() {
           <p>
             Entraste como <strong>{session.profile.email}</strong>.
           </p>
+          <p className="muted">Sesión administrada por SpacetimeAuth. El acceso al grupo depende de tu invitación.</p>
           <button type="button" onClick={() => sessionStore?.signOut()}>
             Cerrar sesión
           </button>

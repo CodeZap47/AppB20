@@ -1,162 +1,88 @@
-import { describe, expect, it, vi } from 'vitest';
-import { decodeIdToken, RENEW_BEFORE_MS, SessionStore } from './session';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { decodeIdToken, SessionStore } from './session';
 
-const HOUR = 3_600_000;
-
-function token(claims: Record<string, unknown>): string {
-  const part = (v: unknown) =>
-    btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(v))))
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/, '');
-  return `${part({ alg: 'RS256' })}.${part(claims)}.firma`;
+function token(extra: Record<string, unknown> = {}): string {
+  const part = (v: unknown) => btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(v))))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return `${part({ alg: 'RS256' })}.${part({ sub: 'user_123', email: 'Ana@Ejemplo.MX',
+    email_verified: true, name: 'Ana Pérez', exp: 3600, ...extra })}.firma`;
 }
 
-function googleToken(expSeconds: number, extra: Record<string, unknown> = {}) {
-  return token({
-    sub: '123',
-    email: 'Ana@Ejemplo.MX',
-    email_verified: true,
-    name: 'Ana Pérez',
-    exp: expSeconds,
-    ...extra,
-  });
-}
+afterEach(() => vi.useRealTimers());
 
-function setup(now = 0) {
-  let clock = now;
-  const timers: { fn: () => void; at: number; handle: number }[] = [];
-  let next = 1;
-  const storage = new Map<string, string>();
-  const renewSilently = vi.fn();
-  const disableAutoSelect = vi.fn();
-  const store = new SessionStore({
-    renewSilently,
-    disableAutoSelect,
-    storage: {
-      getItem: (k) => storage.get(k) ?? null,
-      setItem: (k, v) => void storage.set(k, v),
-      removeItem: (k) => void storage.delete(k),
-    },
-    now: () => clock,
-    setTimer: (fn, ms) => {
-      const handle = next++;
-      timers.push({ fn, at: clock + ms, handle });
-      return handle;
-    },
-    clearTimer: (h) => {
-      const i = timers.findIndex((t) => t.handle === h);
-      if (i >= 0) timers.splice(i, 1);
-    },
+describe('perfil de SpacetimeAuth', () => {
+  it('lee la cuenta y el correo verificado sin confundirlo con una autorización del grupo', () => {
+    expect(decodeIdToken(token())).toEqual({ subject: 'user_123', email: 'ana@ejemplo.mx',
+      name: 'Ana Pérez', picture: undefined, expiresAt: 3_600_000 });
   });
-  const advance = (ms: number) => {
-    clock += ms;
-    for (;;) {
-      const due = timers.filter((t) => t.at <= clock).sort((a, b) => a.at - b.at)[0];
-      if (!due) break;
-      timers.splice(timers.indexOf(due), 1);
-      due.fn();
-    }
-  };
-  return { store, storage, renewSilently, disableAutoSelect, advance, timers };
-}
-
-describe('decodeIdToken', () => {
-  it('lee correo, nombre y vencimiento', () => {
-    expect(decodeIdToken(googleToken(3600))).toEqual({
-      subject: '123',
-      email: 'ana@ejemplo.mx',
-      name: 'Ana Pérez',
-      picture: undefined,
-      expiresAt: HOUR,
-    });
-  });
-
-  it('rechaza correos sin verificar y tokens mal formados', () => {
-    expect(decodeIdToken(googleToken(3600, { email_verified: false }))).toBeNull();
-    expect(decodeIdToken('no-es-un-token')).toBeNull();
-    expect(decodeIdToken('a.%%%.c')).toBeNull();
+  it('rechaza datos corruptos y cuentas sin correo verificado', () => {
+    for (const value of ['no-es-token', 'a.%%%.c', token({ email_verified: false }), token({ email: '' }),
+      token({ sub: '' }), token({ exp: '3600' })]) expect(decodeIdToken(value)).toBeNull();
   });
 });
 
-describe('SessionStore', () => {
-  it('sin token guardado queda sin sesión', () => {
+describe('estado de sesión OIDC', () => {
+  function setup() {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const onSignOut = vi.fn(async () => {});
+    const store = new SessionStore({ onSignOut });
+    return { store, onSignOut };
+  }
+
+  it('solo recibe el ID token restaurado por el cliente OIDC, sin recuperar credenciales antiguas', () => {
     const { store } = setup();
-    expect(store.getSnapshot().status).toBe('loading');
-    store.restore();
-    expect(store.getSnapshot()).toEqual({ status: 'signedOut' });
+    expect(store.getSnapshot()).toEqual({ status: 'loading' });
+    store.signedOut();
+    expect(store.token).toBeUndefined();
+    store.receiveToken(token());
+    expect(store.getSnapshot()).toMatchObject({ status: 'signedIn', profile: { email: 'ana@ejemplo.mx' } });
   });
 
-  it('entra con el token de Google y lo recupera al recargar', () => {
-    const first = setup();
-    first.store.restore();
-    first.store.receiveToken(googleToken(3600));
-    expect(first.store.token).toBe(googleToken(3600));
-    expect(first.store.getSnapshot()).toMatchObject({
-      status: 'signedIn',
-      profile: { email: 'ana@ejemplo.mx' },
-    });
-
-    const reloaded = setup();
-    for (const [k, v] of first.storage) reloaded.storage.set(k, v);
-    reloaded.store.restore();
-    expect(reloaded.store.getSnapshot().status).toBe('signedIn');
-  });
-
-  it('no recupera un token vencido', () => {
-    const { store, storage } = setup(2 * HOUR);
-    storage.set('b20.idToken', googleToken(3600));
-    store.restore();
-    expect(store.getSnapshot().status).toBe('signedOut');
-  });
-
-  it('pide un token nuevo antes de que venza y sigue con él', () => {
-    const { store, renewSilently, advance } = setup();
-    store.receiveToken(googleToken(3600));
-    advance(HOUR - RENEW_BEFORE_MS - 1);
-    expect(renewSilently).not.toHaveBeenCalled();
-    advance(1);
-    expect(renewSilently).toHaveBeenCalledTimes(1);
-    store.receiveToken(googleToken(2 * 3600));
-    advance(RENEW_BEFORE_MS + 1);
-    expect(store.getSnapshot().status).toBe('signedIn');
-    expect(store.token).toBe(googleToken(2 * 3600));
-  });
-
-  it('si la renovación no llega, cierra la sesión al vencer', () => {
-    const { store, storage, advance } = setup();
-    store.receiveToken(googleToken(3600));
-    advance(HOUR);
-    expect(store.getSnapshot()).toEqual({
-      status: 'signedOut',
-      error: 'Tu sesión venció. Vuelve a entrar.',
-    });
-    expect(storage.size).toBe(0);
-  });
-
-  it('un aviso de renovación fallida no saca a quien aún tiene token vigente', () => {
+  it('invalida una cuenta que no entregó correo verificado', () => {
     const { store } = setup();
-    store.receiveToken(googleToken(3600));
+    store.receiveToken(token());
+    expect(store.receiveToken(token({ email_verified: false }))).toBe(false);
+    expect(store.token).toBeUndefined();
+    expect(store.getSnapshot()).toMatchObject({ status: 'signedOut', error: expect.stringContaining('correo verificado') });
+  });
+
+  it('no utiliza el token después de vencer aunque el proveedor no envíe ningún evento', () => {
+    const { store } = setup();
+    store.receiveToken(token());
+    vi.advanceTimersByTime(3_600_000);
+    expect(store.token).toBeUndefined();
+    expect(store.getSnapshot()).toEqual({ status: 'signedOut', error: 'Tu sesión venció. Vuelve a entrar.' });
+  });
+
+  it('una renovación fallida respeta la vigencia actual y una renovación exitosa amplía la sesión', () => {
+    const { store } = setup();
+    store.receiveToken(token());
     store.renewalFailed();
+    expect(store.token).toBe(token());
+    vi.advanceTimersByTime(3_500_000);
+    store.receiveToken(token({ exp: 7200 }));
+    vi.advanceTimersByTime(100_000);
     expect(store.getSnapshot().status).toBe('signedIn');
+    expect(store.token).toBe(token({ exp: 7200 }));
   });
 
-  it('salir borra el token y desactiva la elección automática', () => {
-    const { store, storage, disableAutoSelect, timers } = setup();
-    store.receiveToken(googleToken(3600));
+  it('salir elimina inmediatamente la sesión local y solicita cerrar la sesión del proveedor', async () => {
+    const { store, onSignOut } = setup();
+    store.receiveToken(token());
     store.signOut();
+    expect(store.token).toBeUndefined();
     expect(store.getSnapshot()).toEqual({ status: 'signedOut' });
-    expect(storage.size).toBe(0);
-    expect(timers).toHaveLength(0);
-    expect(disableAutoSelect).toHaveBeenCalled();
+    expect(onSignOut).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('avisa a quien escucha en cada cambio', () => {
-    const { store } = setup();
-    const listener = vi.fn();
-    store.subscribe(listener);
-    store.restore();
-    store.receiveToken(googleToken(3600));
-    expect(listener).toHaveBeenCalledTimes(2);
+  it('si falla el cierre remoto conserva el cierre local y ofrece volver a intentarlo', async () => {
+    const store = new SessionStore({ onSignOut: async () => { throw new Error('sin red'); }, now: () => 0 });
+    store.receiveToken(token());
+    store.signOut();
+    await Promise.resolve();
+    expect(store.token).toBeUndefined();
+    expect(store.getSnapshot()).toMatchObject({ status: 'signedOut', error: expect.stringContaining('SpacetimeAuth') });
   });
 });

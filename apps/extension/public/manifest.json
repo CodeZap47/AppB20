@@ -15,7 +15,8 @@
     "service_worker": "background.js",
     "type": "module"
   },
-  "permissions": ["sidePanel", "storage"],
+  "permissions": ["sidePanel", "storage", "identity"],
+  "host_permissions": ["https://auth.spacetimedb.com/*"],
   "icons": {
     "128": "icons/icon-128.png"
   }

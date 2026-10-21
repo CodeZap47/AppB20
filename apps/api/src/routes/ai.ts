@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { GoogleGenAI } from '@google/genai';
-import { requireAuth, type AuthVariables } from '../lib/auth.ts';
+import { createRequireAuth, type AuthOptions, type AuthVariables } from '../lib/auth.ts';
 import type { SecretStore } from '../lib/secrets.ts';
 import { env } from '../env.ts';
 
@@ -14,9 +14,9 @@ const MAX_PROMPT_LENGTH = 20_000;
  * TODO(Etapa 0): habilitar solo tras confirmar edad y acceso a AI Studio; límites de
  * solicitudes y presupuesto; retirar datos personales de las fuentes; fuentes y omisiones.
  */
-export function aiRoutes(store: SecretStore) {
+export function aiRoutes(store: SecretStore, authOptions?: AuthOptions) {
   const app = new Hono<{ Variables: AuthVariables }>();
-  app.use('*', requireAuth);
+  app.use('*', createRequireAuth(authOptions));
 
   // Solo informa si existe una clave; nunca la devuelve.
   app.get('/key', async (c) => c.json({ configured: await store.has(c.get('user').subject) }));
