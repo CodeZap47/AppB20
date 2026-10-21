@@ -178,16 +178,17 @@ creación con `--template chat-react-ts`: esos pasos son para crear otra app de 
 trabajar con B20 usa `npm run dev`; para publicar, sigue la guía sobre el módulo existente.
 
 El módulo ya está publicado en esa base, con `auth_config` y la primera invitación de
-administrador preparados. Los callbacks locales de `client_034jL0AHYYQ1bps8SupHU0` ya están
-registrados y el formulario de acceso por correo abre sin error. El acceso completo con una
-cuenta invitada y las pruebas con dos cuentas siguen pendientes. La web ya está publicada en
+administrador preparados. Los callbacks locales, del dominio estable `app-b20.pages.dev` y
+del enlace anterior `af0dd1ec.app-b20.pages.dev` ya están registrados en el cliente
+`client_034jL0AHYYQ1bps8SupHU0`. El acceso completo con una cuenta invitada y las pruebas
+con dos cuentas siguen pendientes. La web ya está publicada en
 https://app-b20.pages.dev; la API todavía no está desplegada.
 
 Para futuras actualizaciones del módulo, `npm run spacetime:publish:maincloud` apunta a
 `app-b20-34245` con `--delete-data=never`; `npm run spacetime:publish` conserva el destino local
 `app-b20`.
 
-Registra los callbacks de producción del cliente de SpacetimeAuth siguiendo
+Consulta los callbacks ya registrados del cliente de SpacetimeAuth en
 [`docs/spacetimeauth.md`](docs/spacetimeauth.md). En una instalación nueva, quien publica usa
 su identidad de la CLI para ejecutar `set_auth_config` y crear la primera invitación de creador
 con `invite_member`. Después entra con el correo invitado a través de SpacetimeAuth y completa el registro. Las demás invitaciones
@@ -209,12 +210,14 @@ npm run build:pages
 npm run pages:dev
 ```
 
-`build:pages` compila en modo `pages` con la base de Maincloud y callbacks derivados del dominio
-que abra la persona. No publiques el archivo `.env`; el ZIP solo contiene `apps/web/dist`.
+`build:pages` compila en modo `pages` con Maincloud y
+`VITE_WEB_ORIGIN=https://app-b20.pages.dev` para usar el dominio estable. Las nuevas
+compilaciones llevan los alias a ese origen antes del login; no se trasladan parámetros de
+retorno de autenticación entre dominios. No publiques `.env`; el ZIP solo contiene la web.
 Para Cloudflare, los valores públicos viven en `wrangler.jsonc → vars`; `.env.pages` solo se
-usa localmente y no se sube. Agrega las URLs HTTPS de callback y cierre de sesión en
-SpacetimeAuth: la prueba de producción aún devuelve `invalid_redirect_uri` porque falta
-autorizar ese dominio. El subdominio `pages.dev` no necesita DNS ni Custom Domains.
+usa localmente y no se sube. Los retornos HTTPS de producción y del enlace anterior ya están
+autorizados en SpacetimeAuth. Usa siempre **https://app-b20.pages.dev**; no hace falta
+autorizar cada alias de despliegue. El subdominio `pages.dev` no necesita DNS ni Custom Domains.
 
 ## Comandos
 
@@ -245,9 +248,8 @@ autorizar ese dominio. El subdominio `pages.dev` no necesita DNS ni Custom Domai
 
 ## Pendientes por validar
 
-- **SpacetimeAuth en el entorno real:** registrar los callbacks de producción y completar el
-  acceso con la cuenta invitada; los callbacks locales, emisor/audiencia y primera invitación
-  ya están preparados. El formulario actual permite acceso por correo; Google es opcional.
+- **SpacetimeAuth en el entorno real:** completar el acceso con la cuenta invitada; los
+  callbacks locales y de producción, emisor/audiencia y primera invitación ya están preparados. El formulario actual permite acceso por correo; Google es opcional.
   Probar invitación, baja, renovación y cierre de sesión con dos cuentas. Extensión y Android
   necesitan validar su flujo propio antes de distribuirse. Pasos en [`docs/spacetimeauth.md`](docs/spacetimeauth.md).
 - **IA y BYOK:** la interfaz aún no conecta con la API, que requiere despliegue y configuración

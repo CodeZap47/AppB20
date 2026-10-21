@@ -4,7 +4,9 @@ El proyecto **Pages `app-b20`** ya está creado y conectado al repositorio
 `CodeZap47/AppB20`. La web ya está publicada en **https://app-b20.pages.dev**: el despliegue
 `af0dd1ec-a2a9-4cf5-81c4-e27411ad5331`, correspondiente al commit `59d17a7`, terminó en
 **Success** el 20 de octubre de 2026 y muestra la pantalla real de acceso de B20. El acceso
-completo con una cuenta invitada aún requiere prueba. SpacetimeDB ya está publicado en
+completo con una cuenta invitada aún requiere prueba. Los retornos de producción ya están
+guardados en SpacetimeAuth. La URL recomendada para entrar y compartir es siempre
+**https://app-b20.pages.dev**. SpacetimeDB ya está publicado en
 Maincloud como `app-b20-34245`; alojar la web no cambia esa base ni el acceso por invitación.
 
 El subdominio `pages.dev` se entrega con HTTPS y no requiere comprar un dominio, configurar
@@ -48,6 +50,7 @@ el cambio a la rama de producción. No hace falta duplicarlas en el panel.
 
 | Variable en `vars` | Valor |
 | --- | --- |
+| `VITE_WEB_ORIGIN` | `https://app-b20.pages.dev` |
 | `VITE_SPACETIME_URI` | `wss://maincloud.spacetimedb.com` |
 | `VITE_SPACETIME_DB` | `app-b20-34245` |
 | `VITE_SPACETIMEAUTH_AUTHORITY` | `https://auth.spacetimedb.com/oidc` |
@@ -67,8 +70,19 @@ un Client Secret, una clave de Gemini ni claves de administración. Vite incorpo
 al compilar; después de cambiarlos, espera un nuevo despliegue. `VITE_API_URL` podrá apuntar a
 la URL HTTPS real de la API cuando esté publicada y conectada con la interfaz.
 
-Con los callbacks vacíos, B20 usa el origen del sitio abierto y añade `/auth/callback` o
-`/auth/logout`. Se incluyen dos reglas explícitas en `_redirects` para esas rutas; Pages
+El modo `pages` usa `VITE_WEB_ORIGIN=https://app-b20.pages.dev` como origen canónico. En las
+nuevas compilaciones, abrir un alias de Pages lleva a ese dominio estable antes de iniciar
+autenticación. Los callbacks vacíos añaden `/auth/callback` o `/auth/logout` al origen
+estable. No hace falta autorizar cada nueva URL con hash de despliegue ni usar comodines.
+Si se abre un callback en otro origen con `code` o `state`, no se trasladan esos parámetros:
+se vuelve al dominio estable y se inicia un acceso limpio.
+
+Las URLs de despliegues anteriores son inmutables: conservan el código compilado en su
+publicación y no reciben este ajuste automáticamente. Por compatibilidad con un enlace
+ya compartido, se autorizó expresamente `https://af0dd1ec.app-b20.pages.dev`; usa el dominio
+estable para los próximos accesos.
+
+Se incluyen dos reglas explícitas en `_redirects` para los retornos; Pages
 resuelve el resto mediante su fallback de aplicación de una sola página. No agregues una regla
 global `/* /index.html 200`: Wrangler la rechaza como un bucle.
 [Fallback de Pages](https://developers.cloudflare.com/pages/configuration/serving-pages/).
@@ -77,30 +91,28 @@ La compilación en modo `pages` rechaza URLs de producción que apunten a localh
 nombre de base y Client ID. `.env.pages` sirve para probar o compilar localmente, pero está
 ignorado por Git y no llega a la compilación de Cloudflare.
 
-## Registrar el dominio en SpacetimeAuth
+## Retornos ya guardados en SpacetimeAuth
 
-**Pendiente confirmado:** al probar el acceso desde producción, SpacetimeAuth respondió
-`invalid_redirect_uri` porque `https://app-b20.pages.dev/auth/callback` aún no está autorizado.
-Los retornos locales sí funcionan. La web y sus rutas HTTPS ya responden correctamente; este
-ajuste se hace en el cliente de autenticación.
+En **SpacetimeAuth → Clients → `client_034jL0AHYYQ1bps8SupHU0`** ya están guardadas estas
+URL exactas de entrada y salida. Se conservaron los retornos locales y se añadieron el dominio
+estable y un despliegue anterior para que el enlace ya compartido siga funcionando.
 
-Abre **SpacetimeAuth → Clients → `client_034jL0AHYYQ1bps8SupHU0`** y conserva los retornos
-locales ya registrados. Para la URL estable del proyecto `app-b20`, agrega:
+| Entorno | Redirect URI | Post Logout Redirect URI |
+| --- | --- | --- |
+| Local | `http://localhost:5173/auth/callback` | `http://localhost:5173/auth/logout` |
+| Producción recomendada | `https://app-b20.pages.dev/auth/callback` | `https://app-b20.pages.dev/auth/logout` |
+| Enlace anterior conservado | `https://af0dd1ec.app-b20.pages.dev/auth/callback` | `https://af0dd1ec.app-b20.pages.dev/auth/logout` |
 
-| Campo | Nueva dirección |
-| --- | --- |
-| Redirect URIs | `https://app-b20.pages.dev/auth/callback` |
-| Post Logout Redirect URIs | `https://app-b20.pages.dev/auth/logout` |
+No hace falta modificar `auth_config` por estos retornos del mismo cliente. Comparte y abre
+**https://app-b20.pages.dev**. Los futuros alias deben llevar al dominio estable; no registres
+cada hash ni comodines. El error previo `invalid_redirect_uri` se debía a que únicamente
+estaban registrados los retornos de localhost; esa configuración ya se corrigió.
 
-Usa HTTPS, sin `#`, sin comodines y con la ruta exacta. No necesitas crear otro cliente ni
-modificar `auth_config` para añadir el dominio al cliente existente. Si usas vistas previas,
-registra únicamente URLs exactas de entornos que controles y necesites probar; para este piloto
-usa la URL estable de producción.
-
-El formulario actual ofrece acceso por correo. Google es opcional. La persona debe usar su
-correo invitado y verificado, y completar el registro para obtener membresía; crear una cuenta
-en SpacetimeAuth no concede acceso por sí solo. La primera invitación de administrador ya está
-guardada. Más información en [SpacetimeAuth y acceso por invitación](spacetimeauth.md).
+El formulario ofrece acceso por correo. Google es opcional. La persona debe usar su correo
+invitado y verificado, y completar el registro para obtener membresía; crear una cuenta en
+SpacetimeAuth no concede acceso por sí solo. La primera invitación de administrador ya está
+guardada. La prueba completa con una cuenta invitada y las pruebas con dos cuentas siguen
+pendientes. Más información en [SpacetimeAuth y acceso por invitación](spacetimeauth.md).
 
 ## Comprobar después de compilar
 
@@ -125,16 +137,18 @@ Pages con integración Git; Cloudflare publica la carpeta `apps/web/dist` al ter
 
 ### Variables ausentes durante `build:pages`
 
-Comprueba que el commit compilado contiene los siete valores públicos en `wrangler.jsonc →
+Comprueba que el commit compilado contiene los valores públicos en `wrangler.jsonc →
 vars`. Las variables `VITE_*` añadidas solo al panel no sustituyen esa configuración. Mantén
 `.nvmrc` en la raíz con Node.js `22`; tras corregir el archivo y enviar el commit, revisa el
 nuevo despliegue. No pongas una dirección local de API o callback en producción.
 
 ### `invalid_redirect_uri` al iniciar sesión
 
-Comprueba las dos URLs HTTPS en el cliente de SpacetimeAuth, incluyendo `/auth/callback` y
-`/auth/logout`. Los retornos de localhost no autorizan el dominio público. Con callbacks vacíos
-en `vars`, la app enviará el dominio real desde el que se abre.
+Los retornos exactos de localhost, del dominio estable y de `af0dd1ec.app-b20.pages.dev` ya
+están guardados. Abre **https://app-b20.pages.dev** para iniciar una sesión nueva. Las URLs de
+un despliegue anterior conservan su código original; no se actualizan al publicar otra versión.
+Si aparece el error en otro alias, vuelve al dominio estable y comprueba que la compilación
+actual incorpora `VITE_WEB_ORIGIN`; no autorices cada hash nuevo ni comodines.
 
 ## Compilación y prueba local
 

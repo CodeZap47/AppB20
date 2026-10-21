@@ -1,17 +1,21 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import { parsePagesOrigin } from './src/canonicalOrigin.ts';
 
 // `--mode capacitor` genera la misma app para el APK Android, sin service worker de PWA:
 // en Android los avisos llegan por FCM, no por Web Push.
 export default defineConfig(({ mode }) => {
   if (mode === 'pages') {
     const env = loadEnv(mode, '../..', 'VITE_');
-    const required = ['VITE_SPACETIME_URI', 'VITE_SPACETIME_DB', 'VITE_SPACETIMEAUTH_CLIENT_ID'];
+    const required = ['VITE_WEB_ORIGIN', 'VITE_SPACETIME_URI', 'VITE_SPACETIME_DB', 'VITE_SPACETIMEAUTH_CLIENT_ID'];
     for (const key of required) {
       if (!env[key]?.trim()) {
         throw new Error(`Falta ${key}. Configura las variables del build de Pages o copia .env.pages.example a .env.pages.`);
       }
+    }
+    if (!parsePagesOrigin(env.VITE_WEB_ORIGIN)) {
+      throw new Error('VITE_WEB_ORIGIN debe ser el origen estable https://<proyecto>.pages.dev, sin ruta, parámetros ni credenciales.');
     }
     // Evita publicar accidentalmente una web que dependa de la computadora del desarrollador.
     const urls = [

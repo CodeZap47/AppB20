@@ -7,6 +7,7 @@
   // Pages toma estas variables públicas como fuente de verdad del build.
   // Los secretos del backend nunca se configuran aquí.
   "vars": {
+    "VITE_WEB_ORIGIN": "https://app-b20.pages.dev",
     "VITE_SPACETIME_URI": "wss://maincloud.spacetimedb.com",
     "VITE_SPACETIME_DB": "app-b20-34245",
     "VITE_SPACETIMEAUTH_CLIENT_ID": "client_034jL0AHYYQ1bps8SupHU0",

@@ -18,16 +18,19 @@ con la identidad de base original. Ya se guardaron el emisor de SpacetimeAuth, e
 público `client_034jL0AHYYQ1bps8SupHU0` y la primera invitación de administrador. El propietario
 quedó persistido en `app_config` y la variable temporal de adopción ya se retiró.
 
-Los callbacks locales ya están guardados y el formulario de acceso por correo abre sin el
-error `invalid_redirect_uri`. El acceso completo con una cuenta invitada, la renovación y las
+Los callbacks locales y HTTPS de producción ya están guardados. También se conservó el
+retorno del enlace anterior `af0dd1ec.app-b20.pages.dev` para que continúe funcionando. El acceso completo con una cuenta invitada, la renovación y las
 pruebas con dos cuentas siguen pendientes. La web ya está publicada en
 https://app-b20.pages.dev; el despliegue de `59d17a7` terminó en **Success** y muestra el acceso
 real de B20. La API aún no está desplegada.
 
-Registra los callbacks HTTPS de entrada y salida del proyecto Pages sin quitar los
-locales. La prueba del dominio público devuelve `invalid_redirect_uri` porque ese retorno
-todavía no está autorizado; las rutas HTTPS de la web ya funcionan. Para `app-b20.pages.dev`, son
-`https://app-b20.pages.dev/auth/callback` y `https://app-b20.pages.dev/auth/logout`.
+El error previo `invalid_redirect_uri` se debía a que únicamente estaban registrados los
+retornos locales; ya se añadieron los de **https://app-b20.pages.dev** y del enlace anterior
+`https://af0dd1ec.app-b20.pages.dev`. El acceso completo con una persona sigue pendiente.
+Comparte y abre la URL estable. La nueva compilación de Pages usa
+`VITE_WEB_ORIGIN=https://app-b20.pages.dev` para llevar los alias al dominio estable antes del
+login; no traslada `code` ni `state` desde callbacks de otro origen. Los despliegues anteriores
+son inmutables. No registres cada hash futuro ni comodines.
 Consulta la [guía de Cloudflare Pages](cloudflare-pages.md).
 
 ## 1. Panel de SpacetimeDB
@@ -41,13 +44,14 @@ La base elegida de Maincloud es **`app-b20-34245`**. Abre su panel y entra a
 El proyecto de autenticación y la base son piezas distintas; comprueba que configuras B20.
 
 En **Clients**, edita el cliente `client_034jL0AHYYQ1bps8SupHU0` y copia su **Client ID**.
-Para otra instalación crea su propio cliente. Configura estas direcciones
+Para otra instalación crea su propio cliente. En B20 ya están guardadas estas direcciones
 exactas, incluidas las rutas y los puertos:
 
-| Campo | Desarrollo | Producción |
+| Entorno | Redirect URI | Post Logout Redirect URI |
 | --- | --- | --- |
-| Redirect URIs | `http://localhost:5173/auth/callback` | `https://<tu-web>/auth/callback` |
-| Post Logout Redirect URIs | `http://localhost:5173/auth/logout` | `https://<tu-web>/auth/logout` |
+| Local | `http://localhost:5173/auth/callback` | `http://localhost:5173/auth/logout` |
+| Producción recomendada | `https://app-b20.pages.dev/auth/callback` | `https://app-b20.pages.dev/auth/logout` |
+| Enlace anterior conservado | `https://af0dd1ec.app-b20.pages.dev/auth/callback` | `https://af0dd1ec.app-b20.pages.dev/auth/logout` |
 
 No uses direcciones con `#` para el callback OIDC, aunque la navegación de la app use rutas
 hash. El hosting debe servir `index.html` al abrir directamente `/auth/callback` y
@@ -123,9 +127,10 @@ SPACETIMEDB_MODULE=app-b20-34245
 
 En Cloudflare Pages los valores públicos se configuran en `wrangler.jsonc → vars`; las
 variables `VITE_*` del panel no sustituyen ese archivo. Para compilar localmente usa
-`.env.pages.example` como base de `.env.pages`. Deja ambos callbacks vacíos: la app usa el
-origen actual más `/auth/callback` o `/auth/logout`. Registra esas URLs HTTPS exactas en el
-cliente de SpacetimeAuth. Las variables Vite se fijan al compilar. Detalles en
+`.env.pages.example` como base de `.env.pages`. `VITE_WEB_ORIGIN=https://app-b20.pages.dev`
+fija el origen estable en modo `pages`; deja ambos callbacks vacíos y la app añade
+`/auth/callback` o `/auth/logout`. Esas URLs HTTPS exactas ya están registradas en el cliente.
+Las variables Vite se fijan al compilar. Detalles en
 [Cloudflare Pages](cloudflare-pages.md). La identidad de
 base indicada es `c2006d3bbe49dc8cabbfa144282ee0af8edb84292d74f2e48128a0e0f4f626ba`. Esta identidad y el nombre
 `app-b20-34245` identifican la base de datos; **ninguno es el Client ID de SpacetimeAuth**.
@@ -214,8 +219,8 @@ control al primer visitante.
 - En Android se ha ejecutado `npm run build:android` para sincronizar los plugins nativos de
   navegador y retorno a la app antes de compilar el APK.
 
-El módulo remoto, la invitación inicial y los callbacks locales ya están preparados. La web
-está publicada; falta guardar sus callbacks HTTPS y completar el acceso y las pruebas con las cuentas
+El módulo remoto, la invitación inicial y los callbacks locales y de producción ya están
+preparados. La web está publicada; falta completar el acceso y las pruebas con las cuentas
 del piloto. El backend requiere su propio despliegue y conectar la interfaz de IA/BYOK. Los flujos de extensión y Android requieren sus callbacks y validación en sus entornos reales
 antes de distribuirse. El retorno de Android usa el esquema anterior, no `capacitor://localhost`.
 Android usa un refresh token si el proveedor lo entrega; si no, al vencer el ID token pide

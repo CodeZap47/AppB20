@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
+  readonly VITE_WEB_ORIGIN?: string;
   readonly VITE_SPACETIME_URI?: string;
   readonly VITE_SPACETIME_DB?: string;
   readonly VITE_API_URL?: string;

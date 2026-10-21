@@ -46,11 +46,10 @@ Google, su client secret se guarda únicamente en el proveedor de SpacetimeAuth.
 
 ## Pendientes para publicar el piloto
 
-1. **Completar el acceso desde la web publicada y registrar sus callbacks HTTPS.** La web ya
-   está en https://app-b20.pages.dev. Los callbacks locales están guardados y el formulario de
-   correo abre sin error. La primera invitación de administrador está guardada; completar el
-   acceso con esa cuenta sigue pendiente. La prueba de producción devuelve `invalid_redirect_uri`
-   porque falta autorizar `https://app-b20.pages.dev/auth/callback`. Sigue la
+1. **Completar el acceso desde la web publicada.** La web ya está en https://app-b20.pages.dev.
+   Los callbacks locales, los del dominio estable y los del enlace anterior `af0dd1ec` ya están
+   guardados. La primera invitación de administrador también; completar el acceso con esa
+   cuenta sigue pendiente. Usa el dominio estable para entrar y compartir. Sigue la
    [guía de Cloudflare Pages](cloudflare-pages.md).
 2. **Probar la base publicada.** `auth_config` ya tiene el emisor y client ID correctos. Faltan las
    pruebas con dos usuarios, persistencia, privacidad, rechazo de no invitados y bajas.
@@ -73,11 +72,11 @@ La demo explícita permite revisar la interfaz con datos de prueba; no equivale 
 
 ### 1. Proyecto SpacetimeAuth
 
-El proyecto y el cliente `client_034jL0AHYYQ1bps8SupHU0` ya existen. Los retornos locales
-están guardados y el formulario de acceso por correo abre sin error. Conserva esos retornos y,
-cuando Pages muestre la dirección asignada, agrega `https://<web>/auth/callback` y
-`https://<web>/auth/logout` en sus campos correspondientes. El correo debe estar verificado e
-invitado para unirse a B20. Google es opcional; no hace falta configurarlo para este piloto.
+El proyecto y el cliente `client_034jL0AHYYQ1bps8SupHU0` ya existen. Ya están guardados los
+retornos locales, `https://app-b20.pages.dev/auth/callback` y
+`https://app-b20.pages.dev/auth/logout`, más los del enlace anterior `af0dd1ec.app-b20.pages.dev`
+para conservar su acceso. Usa la URL estable; no registres cada hash nuevo ni comodines. El
+correo debe estar verificado e invitado para unirse a B20. Google es opcional para este piloto.
 
 Sigue los detalles de [`spacetimeauth.md`](spacetimeauth.md). Si vas a distribuir la extensión o
 Android, registra también sus retornos y client IDs correspondientes.
@@ -154,8 +153,10 @@ requiere DNS ni Custom Domains.
 - Node.js `22` en `.nvmrc`.
 - Variables públicas en **`wrangler.jsonc → vars`**, ya incluidas desde el commit `59d17a7`.
   Edita ese archivo y envía el commit; las variables `VITE_*` del panel no sustituyen el archivo.
-- Callbacks vacíos para derivarlos del dominio actual; registrar sus URLs exactas en
-  SpacetimeAuth. `VITE_API_URL` queda vacío mientras la API esté pendiente.
+- `VITE_WEB_ORIGIN=https://app-b20.pages.dev` fija el dominio estable en modo `pages`; las
+  nuevas compilaciones llevan los alias allí antes del login. Los callbacks permanecen vacíos
+  y sus URLs exactas ya están guardadas en SpacetimeAuth. Los despliegues anteriores son
+  inmutables. `VITE_API_URL` queda vacío mientras la API esté pendiente.
 - Para compilar localmente, `.env.pages` se crea desde `.env.pages.example`; está ignorado por
   Git y no llega a Cloudflare.
 
@@ -177,5 +178,6 @@ El subdominio gratuito `*.pages.dev` ya sirve la web sin este paso. Si más adel
 un dominio propio, conecta `app.` en Pages y `api.` /
 `maic.` en Cloud Run (*Domain mappings*), siguiendo las instrucciones DNS de cada servicio.
 Después agrega los callbacks del nuevo dominio en SpacetimeAuth y actualiza `CORS_ORIGINS` y
-`VITE_API_URL` cuando corresponda. Con callbacks vacíos en el modo `pages`, la web deriva el
-retorno del dominio actual. Si se habilitó Google, su callback federado sigue en SpacetimeAuth.
+`VITE_API_URL` cuando corresponda, y cambia `VITE_WEB_ORIGIN` al nuevo dominio estable. Las
+nuevas compilaciones usarán ese origen para el login. Si se habilitó Google, su callback
+federado sigue en SpacetimeAuth.
