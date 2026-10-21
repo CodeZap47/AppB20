@@ -5,6 +5,11 @@ separa el código local del cierre de una entrega con datos reales; no declara p
 validado un cambio por tener pantalla, bindings o pruebas. La incorporación de Ayuda,
 Aprende enseñando y Repaso se conserva como trabajo existente.
 
+**Publicación actual, 21 de octubre de 2026:** la [sincronización conjunta](sincronizacion-2026-10-21.md)
+reúne cuarta entrega, Exámenes EX-2 y mensajería en `main` y producción. Maincloud conserva
+los 310 registros anteriores en 117 tablas y añade 22 tablas vacías; Worker y Pages están
+publicados. Los apartados históricos siguientes conservan sus comprobaciones originales.
+
 ## Primera entrega
 
 | Requisito | Implementación de la entrega | Evidencia necesaria para cerrarlo |
@@ -27,12 +32,12 @@ restauración y purga de datos dependientes. El registro de la tercera entrega d
 
 Las comprobaciones locales con servidor real aislado usan identidades y claves sintéticas.
 El [registro de despliegue de la tercera entrega](tercera-entrega.md) documenta su publicación
-posterior en Maincloud, Pages y el Worker de IA. La ampliación de la cuarta entrega todavía
-requiere su propio despliegue; sus pruebas locales no consumen Gemini real.
+posterior en Maincloud, Pages y el Worker de IA. La ampliación de la cuarta entrega se publicó
+durante la [sincronización conjunta](sincronizacion-2026-10-21.md); sus pruebas no consumen Gemini real.
 Los formatos binarios no admitidos para IA permanecen como omisiones explícitas. La cuarta
 entrega añade tarjetas de Repaso y preguntas de Aprende enseñando con Gemini; Exámenes EX-2 está publicado y tiene su [registro de cierre](examenes-entrega.md). El módulo 3.11 conserva su entrega 5 y el push nativo del APK permanece pendiente.
 
-## Cuarta entrega: implementación local
+## Cuarta entrega: implementación y publicación
 
 El [índice de la cuarta entrega](cuarta-entrega.md) reúne Retos, Revisión de código, Museo,
 Oportunidades, las versiones de Ayuda y la IA opcional de estudio. Se conservan Salas y sus

@@ -1,5 +1,10 @@
 # Cuarta entrega: colaboración y estudio
 
+**Publicación posterior:** el 21 de octubre de 2026 esta entrega quedó integrada con
+Exámenes y mensajería en Maincloud, Worker y Pages. La [sincronización conjunta](sincronizacion-2026-10-21.md)
+registra la conservación de los datos y la verificación de producción. Las secciones
+siguientes describen la implementación y validación local que precedieron a esa publicación.
+
 Implementación local sobre `5650d87`, posterior a la tercera entrega integrada en `main`.
 El alcance procede del plan y de las secciones 7.2–7.9 y 7.12 de la
 [definición del proyecto](definicion-del-proyecto.md). Los datos, permisos, versiones,

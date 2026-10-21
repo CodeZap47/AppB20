@@ -25,21 +25,23 @@ las entregas, calificaciones y asistencia oficiales siguen en los sistemas de la
 El proyecto tiene una interfaz compartida, autenticación con SpacetimeAuth y una implementación
 de datos y archivos privados en SpacetimeDB. Las comprobaciones automatizadas incluyen tipos,
 pruebas, compilaciones y transferencia de archivos contra un servidor local persistente.
-Según el registro de estado, el despliegue público conserva una versión anterior.
-**La publicación de esta entrega y los recorridos completos con cuentas reales en producción
-siguen pendientes de validación.**
+La [web publicada](https://app-b20.pages.dev/) reúne la cuarta entrega, Exámenes EX-2,
+Guías y la navegación y mensajería de Untitled UI. La [sincronización del 21 de octubre
+de 2026](docs/sincronizacion-2026-10-21.md) registra la versión, las pruebas y la conservación
+de los datos. Los recorridos de aceptación con compañeros siguen pendientes.
 
 Hay dos modos de datos, ambos con inicio de sesión:
 
 - **`demo`:** ejemplos ficticios en memoria, separados por cuenta. Los cambios se reinician
   al recargar, cerrar sesión o cambiar de cuenta; no se importan a la base real.
-- **`spacetime`:** datos persistentes, invitaciones y permisos de membresía. Es el modo previsto
-  en la configuración de producción; su disponibilidad debe comprobarse con la versión publicada.
+- **`spacetime`:** datos persistentes, invitaciones y permisos de membresía. Es el modo
+  publicado en producción, con datos y archivos en Maincloud.
 
-La [tercera entrega](docs/tercera-entrega.md) incorpora localmente Gemini con claves personales
+La [tercera entrega](docs/tercera-entrega.md) incorpora Gemini con claves personales
 (BYOK), borradores privados y publicación expresa; bandeja de avisos, recordatorios y Web Push;
-y papelera con recuperación durante 30 días. La generación y los envíos externos empiezan
-desactivados: requieren configuración, autorización individual y validación en dispositivos reales.
+y papelera con recuperación durante 30 días. El servicio compartido de IA y el programador
+de avisos están publicados; la generación requiere consentimiento y clave personal.
+Las llamadas reales a Gemini y la recepción push en dispositivos conservan su validación pendiente.
 
 La [matriz de estado](docs/estado-del-proyecto.md) detalla lo implementado, lo pendiente y
 la evidencia necesaria para cerrar cada entrega.
