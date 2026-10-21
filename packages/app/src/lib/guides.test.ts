@@ -70,4 +70,22 @@ describe('vigencia de fuentes de una guía', () => {
     expect(status.sources[0]?.source.reason).toContain('no está disponible');
     expect(source.status).toBe('processed');
   });
+
+  it('un recurso retirado no aporta cobertura aunque su autor todavía pueda verlo, y restaurarlo recupera la referencia', () => {
+    const data = fixture();
+    data.works = data.works.map((work) => ({ ...work, withdrawnAt: at }));
+    expect(guideStatus(guide, data)).toMatchObject({ covered: 0, processed: 0, pending: 1, missing: 1 });
+    expect(candidateSources('s1', 'p1', data).matched.some((item) => item.kind === 'trabajo')).toBe(false);
+    data.works = data.works.map((work) => ({ ...work, withdrawnAt: undefined }));
+    expect(guideStatus(guide, data)).toMatchObject({ covered: 1, processed: 1, pending: 0 });
+    expect(data.guideSources[0]).toBe(source);
+  });
+
+  it('propone las notas compartidas del parcial y excluye las retiradas', () => {
+    const data = fixture();
+    data.notes = [{ id: 'note', subjectId: 's1', termId: 'p1', session: '2026-10-21', title: 'Apunte', body: 'Contenido', topic: 'Tema', tags: [], visibility: 'group', source: 'student', authorId: 'a', version: 2, createdAt: at, updatedAt: at }];
+    expect(candidateSources('s1', 'p1', data).matched.some((item) => item.kind === 'nota' && item.refId === 'note')).toBe(true);
+    data.notes = data.notes.map((note) => ({ ...note, withdrawnAt: at }));
+    expect(candidateSources('s1', 'p1', data).matched.some((item) => item.kind === 'nota')).toBe(false);
+  });
 });

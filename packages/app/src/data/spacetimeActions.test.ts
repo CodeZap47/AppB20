@@ -50,18 +50,55 @@ describe('acciones conectadas a SpacetimeDB', () => {
   });
 
   it('convierte IDs u64 sin perder precisión y manda la invitación al reducer real', async () => {
-    const updateAssignment = vi.fn(async () => {});
+    const updateAssignmentV2 = vi.fn(async () => {});
     const inviteMember = vi.fn(async () => {});
     const removeMember = vi.fn(async () => {});
-    const { actions } = setup({ updateAssignment, inviteMember, removeMember });
+    const { actions } = setup({ updateAssignmentV2, inviteMember, removeMember });
     await actions.updateAssignment('18446744073709551614', { subjectId: '9007199254740993', termId: '7',
-      kind: 'tarea', title: 'Tarea', instructions: 'Resolver' });
-    expect(updateAssignment).toHaveBeenCalledWith({ assignmentId: 18446744073709551614n,
-      subjectId: 9007199254740993n, termId: 7n, kind: 'tarea', title: 'Tarea', instructions: 'Resolver', dueDate: '' });
+      kind: 'tarea', title: 'Tarea', instructions: 'Resolver' }, 4);
+    expect(updateAssignmentV2).toHaveBeenCalledWith({ assignmentId: 18446744073709551614n,
+      subjectId: 9007199254740993n, termId: 7n, kind: 'tarea', title: 'Tarea', instructions: 'Resolver',
+      dueDate: '', topic: '', expectedVersion: 4 });
     await actions.inviteMember('alumno@example.com', false);
     expect(inviteMember).toHaveBeenCalledWith({ email: 'alumno@example.com', isCreator: false });
     await actions.removeMember(OTHER);
     expect(removeMember).toHaveBeenCalledWith({ identity: person(OTHER) });
+  });
+
+  it('usa la versión disponible para llamadas sin versión y nunca recurre a los reducers antiguos', async () => {
+    const updateAssignmentV2 = vi.fn(async () => {});
+    const updateActivityV2 = vi.fn(async () => {});
+    const updateAssignment = vi.fn();
+    const updateActivity = vi.fn();
+    const { actions } = setup({ updateAssignmentV2, updateActivityV2, updateAssignment, updateActivity }, {
+      assignments: [{ id: 5n, version: 6 }], assignmentDetails: [{ assignmentId: 5n, topic: 'Tema existente' }],
+      activities: [{ id: 8n, version: 9 }],
+    });
+    const assignment = { subjectId: '7', kind: 'tarea' as const, title: 'Tarea', instructions: 'Resolver' };
+    const activity = { subjectId: '7', topic: 'Tema', date: '2026-10-21', title: 'Actividad', objective: '', instructions: '' };
+    await actions.updateAssignment('5', assignment);
+    expect(updateAssignmentV2).toHaveBeenLastCalledWith(expect.objectContaining({ expectedVersion: 6, topic: 'Tema existente' }));
+    await actions.updateActivity('8', activity);
+    expect(updateActivityV2).toHaveBeenLastCalledWith(expect.objectContaining({ expectedVersion: 9 }));
+    // La versión capturada por un formulario prevalece sobre una caché más reciente.
+    await actions.updateAssignment('5', assignment, 3);
+    expect(updateAssignmentV2).toHaveBeenLastCalledWith(expect.objectContaining({ expectedVersion: 3 }));
+    await actions.updateActivity('8', activity, 4);
+    expect(updateActivityV2).toHaveBeenLastCalledWith(expect.objectContaining({ expectedVersion: 4 }));
+    expect(updateAssignment).not.toHaveBeenCalled();
+    expect(updateActivity).not.toHaveBeenCalled();
+  });
+
+  it('pide recargar si una llamada sin versión no puede comprobar la publicación', () => {
+    const updateAssignmentV2 = vi.fn();
+    const updateActivityV2 = vi.fn();
+    const { actions } = setup({ updateAssignmentV2, updateActivityV2 });
+    expect(() => actions.updateAssignment('5', { subjectId: '7', kind: 'tarea', title: 'Tarea', instructions: '' }))
+      .toThrow('Actualiza la página');
+    expect(() => actions.updateActivity('8', { subjectId: '7', topic: '', date: '2026-10-21', title: 'Actividad', objective: '', instructions: '' }))
+      .toThrow('Actualiza la página');
+    expect(updateAssignmentV2).not.toHaveBeenCalled();
+    expect(updateActivityV2).not.toHaveBeenCalled();
   });
 
   it('manda fechas y participantes como tipos nativos del SDK', async () => {
@@ -117,13 +154,13 @@ describe('acciones conectadas a SpacetimeDB', () => {
     expect(openDirectConversation).toHaveBeenCalledWith({ other: person(OTHER) });
   });
 
-  it('no simula subidas ni registra archivos o stickers sin almacenamiento', async () => {
+  it('no simula subidas ni registra archivos inválidos como stickers', async () => {
     const attachWorkFile = vi.fn(async () => {});
     const createStickerPack = vi.fn(async () => {});
     const { actions } = setup({ attachWorkFile, createStickerPack });
-    const file = { name: 'tarea.pdf', size: 120 } as File;
+    const file = new File(['contenido PDF'], 'tarea.pdf', { type: 'application/pdf' });
     await expect(actions.attachWorkFile('1', file)).rejects.toThrow('almacenamiento');
-    await expect(actions.importStickers('Paquete', [file])).rejects.toThrow('almacenamiento');
+    await expect(actions.importStickers('Paquete', [file])).rejects.toThrow('no es una imagen');
     expect(attachWorkFile).not.toHaveBeenCalled();
     expect(createStickerPack).not.toHaveBeenCalled();
   });

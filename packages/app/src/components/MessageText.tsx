@@ -1,8 +1,13 @@
 import { useMemo } from 'react';
+import { Link } from 'react-router';
+import { useSnapshot } from '../data/DataContext';
+import { memberName } from '../lib/format';
+import { mentionParts } from '../lib/chat';
 import { parseMessageText } from '../lib/messages';
 
 /** Texto de un mensaje con bloques de código, código en línea y enlaces. No interpreta HTML. */
 export function MessageText({ text }: { text: string }) {
+  const { members, me } = useSnapshot();
   const blocks = useMemo(() => parseMessageText(text), [text]);
   return (
     <>
@@ -23,7 +28,11 @@ export function MessageText({ text }: { text: string }) {
                   {part.text}
                 </code>
               ) : (
-                part.text
+                mentionParts(part.text).map((piece, k) => piece.kind === 'mention' ? (
+                  <Link key={`${j}-${k}`} className={piece.memberId === me?.id ? 'mention mention--me' : 'mention'} to={`/perfil/${piece.memberId}`}>
+                    @{memberName(members, piece.memberId)}
+                  </Link>
+                ) : piece.text)
               ),
             )}
           </p>

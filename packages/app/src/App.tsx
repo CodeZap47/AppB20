@@ -6,7 +6,8 @@ import { HomePage } from './pages/HomePage';
 import { ModulePage } from './pages/ModulePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { InstallPage } from './pages/InstallPage';
-import { DirectThread, GroupThread, MessagesLayout, ThreadPlaceholder } from './pages/MessagesPage';
+import { DirectThread, GroupThread, ChannelThread, MessagesLayout, ThreadPlaceholder } from './pages/MessagesPage';
+import { RetiredContentPage } from './pages/RetiredContentPage';
 import { CommandsPage, StickersPage } from './pages/ChatToolsPage';
 import {
   AssignmentFormPage,
@@ -25,6 +26,7 @@ import { ActivitiesPage, ActivityFormPage, ActivityPage } from './pages/Activiti
 import { NoteFormPage, NotePage, NotesPage } from './pages/NotesPage';
 import { AskQuestionPage, QuestionPage, QuestionsPage } from './pages/QuestionsPage';
 import { TeachingFormPage, TeachingPage, TeachingPracticePage } from './pages/TeachingPage';
+import { RoomFormPage, RoomPage, RoomsPage } from './pages/RoomsPage';
 import { SpacedPage, SpacedCollectionPage, SpacedCollectionFormPage, SpacedCardFormPage, SpacedSessionPage } from './pages/SpacedPage';
 import { SpacetimeProvider } from './lib/spacetime';
 import { AuthProvider, useSession, useSessionStore } from './auth/AuthContext';
@@ -66,6 +68,7 @@ const router = createHashRouter([
               { index: true, element: <GroupThread /> },
               { path: 'directos', element: <ThreadPlaceholder /> },
               { path: 'directos/:conversationId', element: <DirectThread /> },
+              { path: 'canales/:channelId', element: <ChannelThread /> },
               { path: 'stickers', element: <StickersPage /> },
               { path: 'comandos', element: <CommandsPage /> },
             ],
@@ -76,6 +79,7 @@ const router = createHashRouter([
           { path: 'm/tareas/:assignmentId/editar', element: <AssignmentFormPage /> },
           { path: 'm/tareas/:assignmentId/subir', element: <SubmitWorkPage /> },
           { path: 'm/perfiles', element: <ProfilesPage /> },
+          { path: 'm/retirados', element: <RetiredContentPage /> },
           { path: 'perfil/:memberId', element: <ProfilePage /> },
           { path: 'm/cumpleanos', element: <BirthdaysPage /> },
           { path: 'm/actividades', element: <ActivitiesPage /> },
@@ -97,6 +101,10 @@ const router = createHashRouter([
           { path: 'm/aprende-ensenando', element: <TeachingPage /> },
           { path: 'm/aprende-ensenando/nueva', element: <TeachingFormPage /> },
           { path: 'm/aprende-ensenando/:practiceId', element: <TeachingPracticePage /> },
+          { path: 'm/salas', element: <RoomsPage /> },
+          { path: 'm/salas/nueva', element: <RoomFormPage /> },
+          { path: 'm/salas/:roomId', element: <RoomPage /> },
+          { path: 'm/salas/:roomId/editar', element: <RoomFormPage /> },
           { path: 'm/repaso', element: <SpacedPage /> },
           { path: 'm/repaso/nueva', element: <SpacedCollectionFormPage /> },
           { path: 'm/repaso/colecciones/:collectionId', element: <SpacedCollectionPage /> },

@@ -40,19 +40,22 @@ export const CONTRIBUTION_RULES: Record<ContributionKind, ContributionRule> = {
     points: 10,
     nouns: ['trabajo', 'trabajos'],
     label: 'Trabajo publicado',
-    rule: 'Subir un trabajo a una tarea, actividad, exposición o examen. Cuenta para cada autor.',
+    rule: 'Publicar un trabajo a una tarea, actividad, exposición o examen. Cuenta para cada autor; los borradores no suman.',
+    limit: 'Las copias idénticas del mismo autor en la misma tarea no vuelven a sumar.',
   },
   apunte: {
     points: 8,
     nouns: ['apunte', 'apuntes'],
     label: 'Apunte para el grupo',
     rule: 'Publicar un apunte visible para el grupo. Los apuntes personales no cuentan.',
+    limit: 'Las copias idénticas del mismo autor, materia y parcial no vuelven a sumar.',
   },
   guia: {
     points: 15,
     nouns: ['guía', 'guías'],
     label: 'Guía de estudio',
     rule: 'Crear la guía de estudio de una materia y parcial.',
+    limit: 'Las copias idénticas del mismo autor, materia y parcial no vuelven a sumar.',
   },
   'respuesta-aceptada': {
     points: 10,
@@ -65,6 +68,7 @@ export const CONTRIBUTION_RULES: Record<ContributionKind, ContributionRule> = {
     nouns: ['evidencia', 'evidencias'],
     label: 'Evidencia de clase',
     rule: 'Subir la evidencia de una actividad de clase. Cuenta para cada participante.',
+    limit: 'Las copias idénticas de la misma persona y actividad no vuelven a sumar.',
   },
   'revision-guia': {
     points: 5,
@@ -97,6 +101,7 @@ export const CONTRIBUTION_RULES: Record<ContributionKind, ContributionRule> = {
     nouns: ['fuente procesada', 'fuentes procesadas'],
     label: 'Fuente procesada',
     rule: 'Agregar a una guía una fuente que ya quedó procesada.',
+    limit: 'Una vez por fuente y guía, aunque se retire y se agregue de nuevo.',
   },
   comentario: {
     points: 2,
@@ -153,6 +158,10 @@ export interface ContributionWindow {
 }
 
 const LIMIT_REASON: Partial<Record<ContributionKind, string>> = {
+  trabajo: 'Ya cuenta un trabajo idéntico tuyo en esta tarea.',
+  apunte: 'Ya cuenta un apunte idéntico tuyo en esta materia y parcial.',
+  guia: 'Ya cuenta una guía idéntica tuya en esta materia y parcial.',
+  evidencia: 'Ya cuenta una evidencia idéntica tuya en esta actividad.',
   respuesta: 'Ya contó una respuesta tuya en esta pregunta.',
   correccion: 'Ya contó una corrección tuya en esta página.',
   comentario: 'Ya contó un comentario tuyo en este apunte.',
@@ -166,11 +175,14 @@ export function scoreContributions(
   events: readonly ContributionEvent[],
   window: ContributionWindow = {},
 ): ScoredEvent[] {
-  const inWindow = events
-    .filter((e) => (!window.from || e.at >= window.from) && (!window.to || e.at < window.to))
+  // Los límites pertenecen al aporte, no al filtro de fechas. Filtrar primero permitiría
+  // volver a sumar la misma corrección en cada parcial.
+  const unique = [...new Map(events.map((event) => [JSON.stringify([event.memberId, event.kind, event.refId]), event])).values()];
+  const ordered = unique
+    .filter((event) => Number.isFinite(event.at.getTime()))
     .sort((a, b) => a.at.getTime() - b.at.getTime() || a.refId.localeCompare(b.refId));
   const used = new Set<string>();
-  const scored = inWindow.map((event): ScoredEvent => {
+  const scored = ordered.map((event): ScoredEvent => {
     if (event.excluded) return { ...event, points: 0, skipped: event.excluded };
     if (event.limitKey) {
       const key = `${event.memberId}|${event.kind}|${event.limitKey}`;
@@ -185,7 +197,7 @@ export function scoreContributions(
     }
     return { ...event, points: CONTRIBUTION_RULES[event.kind].points };
   });
-  return scored.reverse();
+  return scored.filter((event) => (!window.from || event.at >= window.from) && (!window.to || event.at < window.to)).reverse();
 }
 
 export interface RankedMember {

@@ -53,20 +53,31 @@ primera versión sin IA que también requiere comprobación con cuentas reales.
 | --- | --- |
 | **Tareas y Actividades** | **Parcial.** Consignas compartidas, trabajos por alumno o equipo, avance privado, estados, revisiones, comentarios e historial de trabajos. Incluye actividades de clase y evidencias. Falta cerrar la validación de permisos, coautorías y archivos con el grupo. |
 | **Archivos privados** | Subidas por fragmentos, reanudación, cancelación y descarga con permisos, hasta **50 MiB por archivo**. Hay pruebas locales con servidor persistente; queda pendiente comprobar el recorrido en producción. |
-| **Mensajes** | **Parcial.** Canal general, conversaciones directas, reacciones y herramientas de stickers. Los canales por materia o proyecto, adjuntos con archivos reales, lectura por conversación, menciones y silenciado siguen pendientes. |
-| **Notas de clase** | **Parcial.** Apuntes personales y del grupo, revisiones y comentarios. El editor enriquecido, la organización por sesión y la restauración completa requieren trabajo adicional. |
-| **Preguntas y respuestas** | **Parcial.** Dudas, respuestas, aceptación, reapertura y búsqueda de preguntas similares. Faltan adjuntos y otras herramientas para relacionarlas con materiales. |
-| **Guías de estudio** | **Manual.** Fuentes, cobertura del temario, revisiones y compendio imprimible. La extracción de archivos, el historial recuperable y los borradores con Gemini están pendientes. |
+| **Mensajes** | Canal general y canales de materia/tema/proyecto, directos con adjuntos privados, menciones, lectura, silencio, bloqueo y reportes selectivos; stickers nativos de SpacetimeDB. |
+| **Notas de clase** | Editor estructurado, sesión y parcial, relaciones, adjuntos e historial recuperable. Publicar una nota personal crea una copia independiente para el grupo. |
+| **Preguntas y respuestas** | Adjuntos privados, aclaraciones, utilidad por integrante y enlaces a notas/guías compartidas; aceptación y reapertura. |
+| **Guías de estudio** | Manual: fuentes, cobertura, revisiones e historial recuperable con archivos y autoría. Extracción y borradores con Gemini siguen pendientes. |
 | **Ayuda entre compañeros** | **Manual.** Ofertas y solicitudes de ayuda, contactos privados y conversación al aceptar el contacto. Pendiente de validación real. |
 | **Aprende enseñando** | **Manual.** Explicaciones, preguntas de un compañero invitado, reflexión privada y publicación voluntaria de una nota. Pendiente de validación real y asistencia con IA. |
 | **Repaso espaciado** | **Manual.** Colecciones, tarjetas, cola de repaso e historial privado. Pendientes la validación real, los recordatorios y los borradores con Gemini. |
 | **Votaciones y contribuciones** | Votaciones nominales con participantes elegibles y reglas de cierre; puntos con reglas y desglose de aportes. Falta validar con datos reales y acordar la puntuación con el grupo. |
-| **Perfiles y cumpleaños** | **Parcial.** Identidad, trabajos compartidos y cumpleaños voluntarios con día y mes. Las fotos, el portafolio completo, la vista anual y los recordatorios están pendientes. |
-| **¿Qué me perdí?** | **Parcial.** Novedades y última visita. Falta completar la cobertura de módulos y separar la lectura de chats de las novedades generales. |
+| **Perfiles y cumpleaños** | Presentación voluntaria, foto privada bajo demanda, portafolio, materias y archivo de trabajos; calendario mensual/anual. Recordatorios pendientes. |
+| **¿Qué me perdí?** | Novedades de materiales, guías, votaciones abiertas, ayuda y repaso compartido; lectura de chats separada. Excluye contenido privado y retirado. |
 
-Salas de estudio, retos, revisión de código, museo de bugs, oportunidades, microproyectos,
+Salas de estudio está implementada y probada localmente sin IA: acceso abierto o privado,
+materiales, chat, temporizador y resumen. Consulta [su documentación](docs/salas-de-estudio.md).
+
+Retos, revisión de código, museo de bugs, oportunidades, microproyectos,
 simulador de exposiciones, préstamos y lenguaje de señales pertenecen al alcance futuro.
 Consulta la [definición del proyecto](docs/definicion-del-proyecto.md) para conocer su propósito.
+
+## Segunda entrega: colaboración
+
+Canales, adjuntos directos privados, lectura por conversación, bloqueo y reportes selectivos;
+notas con editor e historial, publicación voluntaria de copias personales y guías recuperables;
+aclaraciones y utilidad en preguntas, perfiles con fotos privadas, calendario anual y novedades.
+Los retiros conservan archivos y versiones; el ranking excluye borradores, retirados y duplicados.
+Consulta el [alcance y la validación de la segunda entrega](docs/segunda-entrega.md).
 
 ## Plataformas
 

@@ -140,6 +140,38 @@ describe('Aprende enseñando', () => {
     expect(button('Guardar borrador').disabled).toBe(false);
   });
 
+  for (const kind of ['note', 'guide'] as const) {
+    const path = kind === 'note' ? 'nota=private-note' : 'guia=guide-1';
+    const prepareGuide = () => { snapshot.guides = [{ id: 'guide-1', subjectId: 'subject-1', title: 'Guía de recursión', topics: ['Recursión'], sections: [], version: 1, createdBy: owner.id, createdAt: now, updatedBy: owner.id, updatedAt: now }]; };
+    it(`bloquea una ${kind === 'note' ? 'nota' : 'guía'} retirada enviada por URL y permite continuar sin fuente`, async () => {
+      prepareGuide();
+      if (kind === 'note') snapshot.notes = snapshot.notes.map((note) => ({ ...note, withdrawnAt: now }));
+      else snapshot.guides = snapshot.guides.map((guide) => ({ ...guide, withdrawnAt: now }));
+      await mount(`/m/aprende-ensenando/nueva?${path}`);
+      expect(button('Guardar borrador').disabled).toBe(true);
+      expect((input('Nota o guía') as HTMLSelectElement).selectedOptions[0]?.textContent).toBe('Fuente no disponible');
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain('Ya no puedes usar esta fuente');
+      await change(input('Nota o guía'), '');
+      await change(input('Tema'), 'Practicar sin fuente');
+      expect(button('Guardar borrador').disabled).toBe(false);
+      expect(actions.createTeachingPractice).not.toHaveBeenCalled();
+    });
+
+    it(`deshabilita guardar si la ${kind === 'note' ? 'nota' : 'guía'} seleccionada se retira con el formulario abierto`, async () => {
+      prepareGuide();
+      await mount(`/m/aprende-ensenando/nueva?${path}`);
+      await change(input('Concepto con tus palabras'), 'Mi explicación pendiente');
+      expect(button('Guardar borrador').disabled).toBe(false);
+      if (kind === 'note') await update({ notes: snapshot.notes.map((note) => ({ ...note, withdrawnAt: now })) });
+      else await update({ guides: snapshot.guides.map((guide) => ({ ...guide, withdrawnAt: now })) });
+      expect(button('Guardar borrador').disabled).toBe(true);
+      expect(input('Concepto con tus palabras').value).toBe('Mi explicación pendiente');
+      expect((input('Nota o guía') as HTMLSelectElement).selectedOptions[0]?.textContent).toBe('Fuente no disponible');
+      await click('Guardar borrador');
+      expect(actions.createTeachingPractice).not.toHaveBeenCalled();
+    });
+  }
+
   it('guarda la explicación antes de comenzar y conserva cambios locales al recibir actualizaciones', async () => {
     snapshot.teachingPractices = [practice({ status: 'draft', reviewerId: undefined })];
     await mount();

@@ -294,6 +294,9 @@ export function HelpPostPage() {
 
 function HelpContactCard({ request, me, members, subjects, posts }: { request: HelpContactRequest; me: Member; members: Member[]; subjects: Subject[]; posts: HelpPost[] }) {
   const source = useDataSource();
+  const roomData = useSnapshot();
+  const activeRoom = roomData.helpRoomLinks?.filter((link) => link.contactId === request.id)
+    .map((link) => roomData.studyRooms.find((room) => room.id === link.roomId && (room.status === 'scheduled' || room.status === 'active'))).find(Boolean);
   const { error, pending, run } = useAction();
   const received = request.recipientId === me.id;
   const otherId = received ? request.senderId : request.recipientId;
@@ -313,6 +316,7 @@ function HelpContactCard({ request, me, members, subjects, posts }: { request: H
       {request.status === 'closed' && <p className="field__hint">Este contacto está cerrado. Su historial se conserva en privado.</p>}
       {error && <p className="error" role="alert">{error}</p>}
       <div className="help-contact__actions row">
+        {activeRoom ? <Link to={`/m/salas/${encodeURIComponent(activeRoom.id)}`} className="button secondary">Abrir sala de estudio</Link> : request.status === 'accepted' && other?.status === 'active' && <Link to={`/m/salas/nueva?contacto=${encodeURIComponent(request.id)}`} className="button secondary">Organizar sesión</Link>}
         {request.conversationId && <Link to={`/m/mensajes/directos/${request.conversationId}`} className="button with-icon"><Icon name="chat" size={16} /> Abrir conversación</Link>}
         {request.status === 'pending' && (received ? <><button type="button" disabled={pending || !canAccept} onClick={() => actOnContact(() => source.respondHelpContact(request.id, 'accepted'))}>Aceptar contacto</button><button type="button" className="secondary" disabled={pending} onClick={() => actOnContact(() => source.respondHelpContact(request.id, 'rejected'))}>Rechazar</button></> : <button type="button" className="secondary" disabled={pending} onClick={() => actOnContact(() => source.cancelHelpContact(request.id))}>Cancelar solicitud</button>)}
         {request.status === 'accepted' && <button type="button" className="secondary" disabled={pending} onClick={() => actOnContact(() => source.closeHelpContact(request.id))}>Cerrar contacto</button>}

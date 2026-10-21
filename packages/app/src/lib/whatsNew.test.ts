@@ -33,6 +33,35 @@ describe('buildNews', () => {
     const latest = buildNews(data.getSnapshot()).find((n) => n.kind === 'fecha');
     expect(latest?.text).toBe('quitó la fecha de entrega de «Tarea de prueba 1»');
   });
+
+  it('incluye guías, ayuda y repaso compartido; solo votaciones abiertas', () => {
+    const snapshot = new DemoDataSource(createDemoState(), 'demo-1').getSnapshot();
+    const now = new Date();
+    snapshot.polls = [
+      { ...snapshot.polls[0]!, id: 'open-poll', createdBy: 'demo-2', closesAt: new Date(now.getTime() + 60_000) },
+      { ...snapshot.polls[0]!, id: 'closed-poll', createdBy: 'demo-2', closesAt: new Date(now.getTime() - 60_000) },
+      { ...snapshot.polls[0]!, id: 'cancelled-poll', createdBy: 'demo-2', closesAt: new Date(now.getTime() + 60_000), cancelledAt: now },
+    ];
+    snapshot.spacedCollections = [
+      { id: 'private-collection', ownerId: 'demo-2', title: 'Privada', subjectId: 's1', visibility: 'personal', version: 1, archived: false, createdAt: now, updatedAt: now, updatedBy: 'demo-2' },
+      { id: 'public-collection', ownerId: 'demo-2', title: 'Compartida', subjectId: 's1', visibility: 'group', version: 1, archived: false, createdAt: now, updatedAt: now, updatedBy: 'demo-2' },
+    ];
+    const news = buildNews(snapshot, now);
+    expect(news.filter((item) => item.kind === 'votacion').map((item) => item.key)).toEqual(['popen-poll']);
+    expect(news.filter((item) => item.kind === 'repaso').map((item) => item.key)).toEqual(['srspublic-collection']);
+    expect(news.some((item) => item.kind === 'guia')).toBe(true);
+    expect(news.some((item) => item.text.includes('Privada'))).toBe(false);
+  });
+
+  it('oculta retirados incluso para su autor y no resume información personal de prácticas', () => {
+    const snapshot = new DemoDataSource(createDemoState(), 'demo-1').getSnapshot();
+    snapshot.notes.forEach((note) => { note.withdrawnAt = new Date(); });
+    snapshot.works.forEach((work) => { work.withdrawnAt = new Date(); });
+    snapshot.guides.forEach((guide) => { guide.withdrawnAt = new Date(); });
+    const news = buildNews(snapshot);
+    expect(news.some((item) => ['nota', 'trabajo', 'guia'].includes(item.kind))).toBe(false);
+    expect(news.some((item) => item.link.includes('ensenar'))).toBe(false);
+  });
 });
 
 describe('resumen y paneles de «¿Qué me perdí?»', () => {
@@ -57,9 +86,12 @@ describe('resumen y paneles de «¿Qué me perdí?»', () => {
     const data = new DemoDataSource(createDemoState(), 'demo-3');
     const snapshot = data.getSnapshot();
     const all = unreadMessages(snapshot, undefined);
-    expect(all.group).toBe(snapshot.groupMessages.filter((m) => m.senderId !== 'demo-3').length);
+    expect(all.group).toBe(snapshot.groupMessages.filter((m) => m.senderId !== 'demo-3' && !m.deletedAt).length);
     expect(all.direct.every((d) => d.otherId !== 'demo-3')).toBe(true);
-    expect(unreadMessages(snapshot, new Date(Date.now() + 60_000)).group).toBe(0);
+    // Marcar las novedades como vistas no marca las conversaciones como leídas.
+    expect(unreadMessages(snapshot, new Date(Date.now() + 60_000)).group).toBe(all.group);
+    snapshot.conversationStates = [{ scope: 'group', conversationId: 'general', readThroughId: snapshot.groupMessages.at(-1)?.id, muted: false }];
+    expect(unreadMessages(snapshot).group).toBe(0);
   });
 
   it('lista entregas próximas y cumpleaños de hoy', () => {

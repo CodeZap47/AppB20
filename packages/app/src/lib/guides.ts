@@ -32,7 +32,7 @@ export function describeSource(ref: GuideSourceRef, data: Snapshot): SourceInfo 
     case 'trabajo': {
       const work = data.works.find((w) => w.id === ref.refId);
       const assignment = work && data.assignments.find((a) => a.id === work.assignmentId);
-      if (!work || !assignment) return undefined;
+      if (!work || work.withdrawnAt || !assignment) return undefined;
       const authors = authorsLabel(work.authorIds, data.members);
       return {
         ...base,
@@ -75,7 +75,7 @@ export function describeSource(ref: GuideSourceRef, data: Snapshot): SourceInfo 
     }
     case 'nota': {
       const note = data.notes.find((n) => n.id === ref.refId && n.visibility === 'group');
-      if (!note) return undefined;
+      if (!note || note.withdrawnAt) return undefined;
       return {
         ...base,
         label: SOURCE_KIND_LABEL.nota,
@@ -86,19 +86,19 @@ export function describeSource(ref: GuideSourceRef, data: Snapshot): SourceInfo 
         link: `/m/notas/${note.id}`,
         version: note.version,
         subjectId: note.subjectId,
-        termId: undefined,
+        termId: note.termId,
       };
     }
     case 'pregunta': {
       const question = data.questions.find((q) => q.id === ref.refId);
-      if (!question) return undefined;
+      if (!question || question.withdrawnAt) return undefined;
       return {
         ...base,
         label: SOURCE_KIND_LABEL.pregunta,
         title: question.title,
         context: question.status === 'resolved' ? 'Resuelta' : 'Sin resolver',
         link: `/m/preguntas/${question.id}`,
-        version: 1,
+        version: question.version ?? 1,
         subjectId: question.subjectId,
         termId: undefined,
       };

@@ -36,11 +36,11 @@ export function canEditMessage(viewerId: string, message: MessageLike, now: Date
 export function canDeleteMessage(
   viewerId: string,
   message: MessageLike,
-  scope: 'group' | 'direct',
+  scope: 'group' | 'direct' | 'channel',
   viewerIsAdmin: boolean,
 ): boolean {
   if (message.deletedAt) return false;
-  return message.senderId === viewerId || (scope === 'group' && viewerIsAdmin);
+  return message.senderId === viewerId || (scope !== 'direct' && viewerIsAdmin);
 }
 
 // ---------------------------------------------------------------------------
