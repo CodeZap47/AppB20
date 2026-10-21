@@ -114,8 +114,9 @@ el commit `59d17a7` terminó en **Success** y se comprobó entonces la pantalla 
 Esto no acredita la publicación de esta entrega; verificar configuración y registrar el nuevo
 resultado. Los detalles previos están en [`cloudflare-pages.md`](cloudflare-pages.md).
 
-- Repositorio `CodeZap47/AppB20`, rama de producción **`codex/pages-spacetimeauth`**. `main`
-  conserva la versión anterior; no se fusiona automáticamente.
+- Repositorio `CodeZap47/AppB20`, rama de producción **`codex/pages-spacetimeauth`**.
+  Integrar únicamente la revisión validada para publicar; `main` puede contener entregas
+  aún no activadas y las ramas no se fusionan automáticamente.
 - Raíz `/`, comando `npm run build:pages`, salida `apps/web/dist`, preset **None**.
 - Node.js `22` en `.nvmrc`.
 - Variables públicas en **`wrangler.jsonc → vars`**, incluyendo `VITE_DATA_MODE=spacetime`.
@@ -129,11 +130,21 @@ resultado. Los detalles previos están en [`cloudflare-pages.md`](cloudflare-pag
 - Para compilar localmente, `.env.pages` se crea desde `.env.pages.example`; está ignorado por
   Git y no llega a Cloudflare.
 
-El Worker `appb20` creado desde el flujo inicial con `npx wrangler deploy`, sin build y desde la
-rama antigua no es el proyecto Pages preparado. La publicación correcta compila el monorepo y
-sirve `apps/web/dist`. La guía explica este error y el fallo inicial por variables ausentes.
-El ZIP local queda como alternativa para otro proyecto de subida directa; `app-b20` se
-actualiza mediante Git.
+El Worker `appb20` creado desde el flujo inicial no es el proyecto Pages ni el Worker de
+archivos `app-b20-api`. Su integración ejecutaba `npx wrangler deploy` sin build desde la
+raíz del workspace y fallaba al detectar el proyecto. Sus builds automáticos quedaron
+deshabilitados tanto en producción como en vistas previas; ambos controles se guardaron
+y comprobaron tras recargar el panel. Se conservan el servicio, la conexión Git y su
+historial. Consultar el [registro de corrección](worker-heredado.md) antes de reactivarlo.
+No requiere desplegar código, migrar datos ni modificar R2 o Maincloud.
+
+Esta corrección se registra en `main` y en la rama de producción sin adelantar la tercera
+entrega que llegó a `main` durante la revisión. El código de esa entrega y su activación
+requieren su propio proceso de validación y publicación.
+
+La publicación de Pages compila el monorepo y sirve `apps/web/dist`; `app-b20` continúa
+actualizándose mediante Git. El ZIP local queda como alternativa para otro proyecto de
+subida directa. La guía de Pages también registra el fallo inicial por variables ausentes.
 
 ### 5. Dominio (opcional)
 
