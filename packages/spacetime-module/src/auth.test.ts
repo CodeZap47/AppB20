@@ -135,6 +135,44 @@ describe('SpacetimeAuth y acceso por invitación en módulo', () => {
     expect(() => join_group(ctx, { displayName: 'Alumno' })).toThrow(/lista autorizada/);
   });
 
+  it('reinvitar con otro rol lo corrige y se respeta al unirse', () => {
+    const { ctx, db, asOwner, asStudent, invite } = setup();
+    invite();
+    asOwner();
+    invite_member(ctx, { email: 'alumno@example.com', isCreator: true });
+    expect(db.invitation.rows.size).toBe(1);
+    expect(db.invitation.rows.get('alumno@example.com')?.isCreator).toBe(true);
+    asStudent();
+    join_group(ctx, { displayName: 'Alumno' });
+    expect(db.member.rows.get('student')?.isCreator).toBe(true);
+  });
+
+  it('rechaza correos mal escritos al invitar', () => {
+    const { ctx, db, asOwner } = setup();
+    asOwner();
+    expect(() => invite_member(ctx, { email: 'sin-arroba', isCreator: false })).toThrow(/no es válido/);
+    expect(db.invitation.rows.size).toBe(0);
+  });
+
+  it('al unirse la invitación deja de estar pendiente, también si la reinvitan', () => {
+    const { ctx, db, asOwner, asStudent, join } = setup();
+    join();
+    expect(db.invitation.rows.size).toBe(0);
+    asOwner();
+    invite_member(ctx, { email: 'alumno@example.com', isCreator: false });
+    asStudent();
+    expect(() => join_group(ctx, { displayName: 'Alumno' })).not.toThrow();
+    expect(db.invitation.rows.size).toBe(0);
+  });
+
+  it('al conectarse un miembro se limpia su invitación aceptada que quedó de antes', () => {
+    const { ctx, db, owner, join } = setup();
+    join();
+    db.invitation.insert({ email: 'alumno@example.com', isCreator: false, invitedBy: owner, createdAt: 1n });
+    on_connect(ctx, {});
+    expect(db.invitation.rows.size).toBe(0);
+  });
+
   it('vuelve a comprobar audiencia actual incluso para un miembro existente en cada reducer', () => {
     const { ctx, mutableCtx, join } = setup();
     join();

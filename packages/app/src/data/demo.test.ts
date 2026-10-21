@@ -609,10 +609,12 @@ describe('Membresía en la demo', () => {
   it('un creador invita, ve la lista y retira la invitación', () => {
     const data = source('demo-1');
     data.inviteMember(' Nuevo@Ejemplo.MX ', false);
-    data.inviteMember('nuevo@ejemplo.mx', true); // repetida: no hace nada
-    const emails = data.getSnapshot().invitations.map((i) => i.email);
-    expect(emails.filter((e) => e === 'nuevo@ejemplo.mx')).toHaveLength(1);
-    data.revokeInvitation('nuevo@ejemplo.mx');
+    data.inviteMember('nuevo@ejemplo.mx', false); // repetida: no hace nada
+    data.inviteMember('nuevo@ejemplo.mx', true); // con otro rol: lo corrige
+    const nuevas = data.getSnapshot().invitations.filter((i) => i.email === 'nuevo@ejemplo.mx');
+    expect(nuevas).toHaveLength(1);
+    expect(nuevas[0]?.isCreator).toBe(true);
+    data.revokeInvitation(' Nuevo@ejemplo.mx ');
     expect(data.getSnapshot().invitations.map((i) => i.email)).not.toContain('nuevo@ejemplo.mx');
   });
 

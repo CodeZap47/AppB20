@@ -970,7 +970,9 @@ export const on_connect = spacetimedb.clientConnected((ctx) => {
   // HTTP /call también ejecuta el ciclo de conexión. La identidad técnica solo llega a los
   // handlers que la aceptan expresamente; no adquiere membresía ni puede leer vistas del grupo.
   if (isOwner(ctx) || isFileService(ctx) || ai.isAiService(ctx) || notifications.isNotificationService(ctx) || trash.isMaintenanceService(ctx)) return;
-  verifiedEmail(ctx);
+  const email = verifiedEmail(ctx);
+  // Limpia invitaciones aceptadas antes de que join_group las borrara al unirse.
+  if (ctx.db.member.identity.find(ctx.sender)) ctx.db.invitation.email.delete(email);
 });
 
 /** Los client IDs no son secretos. Una tabla nueva conserva app_config y datos existentes. */
@@ -1014,7 +1016,15 @@ export const invite_member = spacetimedb.reducer(
   (ctx, { email, isCreator }) => {
     requireCreator(ctx);
     const normalized = requireText(email, 'El correo', 320).toLowerCase();
-    if (ctx.db.invitation.email.find(normalized)) return;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(normalized)) throw new SenderError('Ese correo no es válido.');
+    const existing = ctx.db.invitation.email.find(normalized);
+    if (existing) {
+      // Reinvitar con otro rol lo corrige antes de que la persona se una.
+      if (existing.isCreator === isCreator) return;
+      ctx.db.invitation.email.update({ ...existing, isCreator });
+      log(ctx, 'update', 'invitation', normalized);
+      return;
+    }
     ctx.db.invitation.insert({
       email: normalized,
       isCreator,
@@ -1029,11 +1039,17 @@ export const join_group = spacetimedb.reducer(
   { displayName: t.string() },
   (ctx, { displayName }) => {
     const email = verifiedEmail(ctx);
-    const invite = ctx.db.invitation.email.find(email);
-    if (!invite) throw new SenderError('Tu correo no está en la lista autorizada del grupo.');
     const existing = ctx.db.member.identity.find(ctx.sender);
     if (existing?.status === 'removed') throw new SenderError('Tu acceso fue dado de baja.');
-    if (existing) return;
+    if (existing) {
+      // Una reinvitación a quien ya es miembro no debe quedar como pendiente.
+      ctx.db.invitation.email.delete(email);
+      return;
+    }
+    const invite = ctx.db.invitation.email.find(email);
+    if (!invite) throw new SenderError('Tu correo no está en la lista autorizada del grupo.');
+    // Al aceptarla deja de estar pendiente: la lista muestra solo a quien falta por unirse.
+    ctx.db.invitation.email.delete(email);
     ctx.db.member.insert({
       identity: ctx.sender,
       displayName: requireText(displayName, 'El nombre', 80),
@@ -4327,7 +4343,7 @@ export const my_member = spacetimedb.view(
   },
 );
 
-/** Lista autorizada: solo la ven los creadores, que son quienes invitan. */
+/** Invitaciones pendientes: solo la ven los creadores, que son quienes invitan. */
 export const invitations = spacetimedb.view(
   { name: 'invitations', public: true },
   t.array(invitation.rowType),

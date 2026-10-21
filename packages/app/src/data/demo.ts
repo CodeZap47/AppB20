@@ -877,7 +877,16 @@ export class DemoDataSource implements DataSource {
     this.#requireCreator();
     const normalized = requireText(email, 'El correo', 320).toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(normalized)) throw new Error('Ese correo no es válido.');
-    if (this.#state.invitations.some((i) => i.email === normalized)) return;
+    const existing = this.#state.invitations.find((i) => i.email === normalized);
+    if (existing) {
+      // Reinvitar con otro rol lo corrige antes de que la persona se una.
+      if (existing.isCreator === isCreator) return;
+      this.#state.invitations = this.#state.invitations.map((i) =>
+        i.email === normalized ? { ...i, isCreator } : i,
+      );
+      this.#emit();
+      return;
+    }
     this.#state.invitations = [
       ...this.#state.invitations,
       { email: normalized, isCreator, invitedBy: this.#viewerId, createdAt: this.#now() },
@@ -887,7 +896,8 @@ export class DemoDataSource implements DataSource {
 
   revokeInvitation(email: string) {
     this.#requireCreator();
-    this.#state.invitations = this.#state.invitations.filter((i) => i.email !== email);
+    const normalized = email.trim().toLowerCase();
+    this.#state.invitations = this.#state.invitations.filter((i) => i.email !== normalized);
     this.#emit();
   }
 
