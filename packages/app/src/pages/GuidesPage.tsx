@@ -286,6 +286,9 @@ export function GuidePage() {
           <Link to={`/m/aprende-ensenando/nueva?guia=${encodeURIComponent(guide.id)}`} className="button secondary">
             Practicar explicándolo
           </Link>
+          <Link to={`/m/exposiciones/nueva?guia=${encodeURIComponent(guide.id)}`} className="button secondary">
+            Ensayar exposición
+          </Link>
           <Link to={`/m/guias/${guide.id}/editar`} className="button secondary with-icon">
             <Icon name="edit" size={16} /> Editar
           </Link>

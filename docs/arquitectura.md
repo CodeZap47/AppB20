@@ -297,3 +297,13 @@ La papelera de 30 días, Gemini, programación de recordatorios y push pertenece
 posteriores; no se consideran implementados por elegir SpacetimeDB para alojarlos. El SDK
 del cliente y del módulo está fijado en `2.12.0`, con bindings regenerados; la versión de CLI,
 las pruebas del runtime y las compilaciones se registran al verificar la entrega.
+
+## Exposiciones por texto
+
+`PresentationActions` y `PresentationsSnapshot` incorporan prácticas, intentos, preguntas,
+retroalimentación y autoobservaciones separadas. Cinco tablas privadas y sus vistas exigen
+membresía activa y propiedad o invitación expresa. Los revisores solo reciben intentos
+concluidos; `my_presentation_personal` es exclusiva del autor, sin excepción administrativa.
+Las versiones y los identificadores de petición evitan sobrescrituras y duplicados. Las
+preguntas locales y la validación se comparten entre demo y servidor mediante `@b20/core`.
+No hay puntos ni novedades comunitarias por ensayar. Ver [reglas](exposiciones.md).

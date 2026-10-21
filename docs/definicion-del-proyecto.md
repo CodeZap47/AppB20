@@ -748,6 +748,13 @@ generación de borradores con Gemini queda pendiente de su integración general.
 
 ### 7.10. Simulador de exposiciones y preguntas
 
+**Primera versión implementada:** ensayos por texto sin IA, con configuración por materia y
+parcial, referencias opcionales versionadas, preguntas de apoyo locales y revisión voluntaria
+de un compañero. Cada intento conserva su explicación y contexto; las autoobservaciones y
+siguientes pasos son exclusivos del autor, también frente a administradores. Los detalles,
+permisos y validaciones están en [Exposiciones](exposiciones.md). Audio y Gemini quedan para
+sus integraciones posteriores.
+
 **Propósito:** ensayar explicaciones y preparar respuestas antes de una exposición o, posteriormente, una entrevista técnica.
 
 **Funciones propuestas**

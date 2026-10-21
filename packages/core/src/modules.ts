@@ -187,7 +187,8 @@ export const MODULES: readonly ModuleInfo[] = [
     section: '7.10',
     summary: 'Ensayo por texto antes de evaluar audio.',
     stage: 3,
-    worksWithoutAi: false,
+    worksWithoutAi: true,
+    ready: true,
   },
   {
     id: 'senales',

@@ -1,4 +1,5 @@
 import { CURRICULUM } from '@b20/core';
+import { createPresentationActions } from './presentationActions';
 import { Identity, Timestamp } from 'spacetimedb';
 import type { DbConnection } from '../module_bindings';
 import type { ResourceTargetKind } from './types';
@@ -87,6 +88,7 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
   };
 
   return {
+    ...createPresentationActions(getConnection, identity),
     saveSpacedCollection: (input) => {
       const fields = { collectionId: optionalId(input.id), subjectId: id(input.subjectId), termId: optionalId(input.termId),
         title: input.title, visibility: input.visibility, expectedVersion: input.expectedVersion };

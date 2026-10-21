@@ -369,6 +369,9 @@ export type MyLastSeen = __Infer<typeof MyLastSeen>;
 export const MyMember = __t.object("MyMember", {});
 export type MyMember = __Infer<typeof MyMember>;
 
+export const MyPresentationPersonal = __t.object("MyPresentationPersonal", {});
+export type MyPresentationPersonal = __Infer<typeof MyPresentationPersonal>;
+
 export const MyProgress = __t.object("MyProgress", {});
 export type MyProgress = __Infer<typeof MyProgress>;
 
@@ -504,6 +507,105 @@ export type PollVotes = __Infer<typeof PollVotes>;
 
 export const Polls = __t.object("Polls", {});
 export type Polls = __Infer<typeof Polls>;
+
+export const PresentationAttempt = __t.object("PresentationAttempt", {
+  id: __t.u64(),
+  practiceId: __t.u64(),
+  number: __t.u32(),
+  subjectId: __t.u64(),
+  termId: __t.option(__t.u64()),
+  title: __t.string(),
+  topic: __t.string(),
+  audience: __t.string(),
+  targetMinutes: __t.u32(),
+  keyPoints: __t.array(__t.string()),
+  sourceKind: __t.option(__t.string()),
+  sourceId: __t.option(__t.u64()),
+  sourceVersion: __t.option(__t.u32()),
+  status: __t.string(),
+  body: __t.string(),
+  version: __t.u32(),
+  requestId: __t.string(),
+  creationVersion: __t.u32(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+  completedAt: __t.option(__t.timestamp()),
+});
+export type PresentationAttempt = __Infer<typeof PresentationAttempt>;
+
+export const PresentationAttempts = __t.object("PresentationAttempts", {});
+export type PresentationAttempts = __Infer<typeof PresentationAttempts>;
+
+export const PresentationFeedback = __t.object("PresentationFeedback", {});
+export type PresentationFeedback = __Infer<typeof PresentationFeedback>;
+
+export const PresentationFeedbackEntry = __t.object("PresentationFeedbackEntry", {
+  id: __t.u64(),
+  attemptId: __t.u64(),
+  authorId: __t.identity(),
+  clarity: __t.string(),
+  examples: __t.string(),
+  decisions: __t.string(),
+  limitations: __t.string(),
+  comment: __t.string(),
+  version: __t.u32(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type PresentationFeedbackEntry = __Infer<typeof PresentationFeedbackEntry>;
+
+export const PresentationPersonal = __t.object("PresentationPersonal", {
+  attemptId: __t.u64(),
+  clarity: __t.string(),
+  examples: __t.string(),
+  decisions: __t.string(),
+  limitations: __t.string(),
+  nextSteps: __t.string(),
+});
+export type PresentationPersonal = __Infer<typeof PresentationPersonal>;
+
+export const PresentationPractice = __t.object("PresentationPractice", {
+  id: __t.u64(),
+  ownerId: __t.identity(),
+  subjectId: __t.u64(),
+  termId: __t.option(__t.u64()),
+  reviewerId: __t.option(__t.identity()),
+  title: __t.string(),
+  topic: __t.string(),
+  audience: __t.string(),
+  targetMinutes: __t.u32(),
+  keyPoints: __t.array(__t.string()),
+  sourceKind: __t.option(__t.string()),
+  sourceId: __t.option(__t.u64()),
+  sourceVersion: __t.option(__t.u32()),
+  archived: __t.bool(),
+  version: __t.u32(),
+  requestId: __t.string(),
+  creationHash: __t.string(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type PresentationPractice = __Infer<typeof PresentationPractice>;
+
+export const PresentationPractices = __t.object("PresentationPractices", {});
+export type PresentationPractices = __Infer<typeof PresentationPractices>;
+
+export const PresentationQuestion = __t.object("PresentationQuestion", {
+  id: __t.u64(),
+  attemptId: __t.u64(),
+  authorId: __t.identity(),
+  kind: __t.string(),
+  text: __t.string(),
+  answer: __t.string(),
+  version: __t.u32(),
+  requestId: __t.string(),
+  createdAt: __t.timestamp(),
+  answeredAt: __t.option(__t.timestamp()),
+});
+export type PresentationQuestion = __Infer<typeof PresentationQuestion>;
+
+export const PresentationQuestions = __t.object("PresentationQuestions", {});
+export type PresentationQuestions = __Infer<typeof PresentationQuestions>;
 
 export const Question = __t.object("Question", {
   id: __t.u64(),
@@ -895,3 +997,4 @@ export type WorkRevisions = __Infer<typeof WorkRevisions>;
 
 export const Works = __t.object("Works", {});
 export type Works = __Infer<typeof Works>;
+

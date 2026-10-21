@@ -38,10 +38,13 @@ import AcceptAnswerReducer from "./accept_answer_reducer";
 import AddEvidenceReducer from "./add_evidence_reducer";
 import AddGuideSourcesReducer from "./add_guide_sources_reducer";
 import AddStickerReducer from "./add_sticker_reducer";
+import AnswerPresentationQuestionReducer from "./answer_presentation_question_reducer";
 import AnswerQuestionReducer from "./answer_question_reducer";
 import AnswerTeachingQuestionReducer from "./answer_teaching_question_reducer";
+import ArchivePresentationPracticeReducer from "./archive_presentation_practice_reducer";
 import ArchiveSpacedCardReducer from "./archive_spaced_card_reducer";
 import ArchiveSpacedCollectionReducer from "./archive_spaced_collection_reducer";
+import AskPresentationQuestionReducer from "./ask_presentation_question_reducer";
 import AskQuestionReducer from "./ask_question_reducer";
 import AskTeachingQuestionReducer from "./ask_teaching_question_reducer";
 import AssertActiveMemberReducer from "./assert_active_member_reducer";
@@ -55,12 +58,14 @@ import CastVoteReducer from "./cast_vote_reducer";
 import CloseHelpContactReducer from "./close_help_contact_reducer";
 import CommentAcademicReducer from "./comment_academic_reducer";
 import CommentNoteReducer from "./comment_note_reducer";
+import CompletePresentationAttemptReducer from "./complete_presentation_attempt_reducer";
 import CompleteTeachingPracticeReducer from "./complete_teaching_practice_reducer";
 import CreateActivityReducer from "./create_activity_reducer";
 import CreateAssignmentReducer from "./create_assignment_reducer";
 import CreateAssignmentV2Reducer from "./create_assignment_v_2_reducer";
 import CreateGuideReducer from "./create_guide_reducer";
 import CreatePollReducer from "./create_poll_reducer";
+import CreatePresentationAttemptReducer from "./create_presentation_attempt_reducer";
 import CreateStickerPackReducer from "./create_sticker_pack_reducer";
 import CreateSubjectReducer from "./create_subject_reducer";
 import CreateTeachingPracticeReducer from "./create_teaching_practice_reducer";
@@ -103,6 +108,9 @@ import SaveCalendarReducer from "./save_calendar_reducer";
 import SaveChatCommandReducer from "./save_chat_command_reducer";
 import SaveHelpPostReducer from "./save_help_post_reducer";
 import SaveNoteReducer from "./save_note_reducer";
+import SavePresentationAttemptReducer from "./save_presentation_attempt_reducer";
+import SavePresentationFeedbackReducer from "./save_presentation_feedback_reducer";
+import SavePresentationPracticeReducer from "./save_presentation_practice_reducer";
 import SaveSpacedCardReducer from "./save_spaced_card_reducer";
 import SaveSpacedCollectionReducer from "./save_spaced_collection_reducer";
 import SaveTeachingPracticeReducer from "./save_teaching_practice_reducer";
@@ -113,6 +121,7 @@ import SendHelpContactReducer from "./send_help_contact_reducer";
 import SetAuthConfigReducer from "./set_auth_config_reducer";
 import SetFileServiceReducer from "./set_file_service_reducer";
 import SetHelpPostStatusReducer from "./set_help_post_status_reducer";
+import SetPresentationReviewerReducer from "./set_presentation_reviewer_reducer";
 import SetProgressReducer from "./set_progress_reducer";
 import SetResourceCapacityReducer from "./set_resource_capacity_reducer";
 import SetSpacedEnrollmentReducer from "./set_spaced_enrollment_reducer";
@@ -166,6 +175,7 @@ import MyDirectMessagesRow from "./my_direct_messages_table";
 import MyHelpContactRequestsRow from "./my_help_contact_requests_table";
 import MyLastSeenRow from "./my_last_seen_table";
 import MyMemberRow from "./my_member_table";
+import MyPresentationPersonalRow from "./my_presentation_personal_table";
 import MyProgressRow from "./my_progress_table";
 import MySpacedEnrollmentsRow from "./my_spaced_enrollments_table";
 import MySpacedProgressRow from "./my_spaced_progress_table";
@@ -177,6 +187,10 @@ import PageRevisionsRow from "./page_revisions_table";
 import PageSnapshotsRow from "./page_snapshots_table";
 import PollVotesRow from "./poll_votes_table";
 import PollsRow from "./polls_table";
+import PresentationAttemptsRow from "./presentation_attempts_table";
+import PresentationFeedbackRow from "./presentation_feedback_table";
+import PresentationPracticesRow from "./presentation_practices_table";
+import PresentationQuestionsRow from "./presentation_questions_table";
 import QuestionsRow from "./questions_table";
 import ResourceFilesRow from "./resource_files_table";
 import SpacedCardsRow from "./spaced_cards_table";
@@ -368,6 +382,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyMemberRow),
+  myPresentationPersonal: __table({
+    name: 'my_presentation_personal',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyPresentationPersonalRow),
   myProgress: __table({
     name: 'my_progress',
     indexes: [
@@ -445,6 +466,34 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, PollsRow),
+  presentationAttempts: __table({
+    name: 'presentation_attempts',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, PresentationAttemptsRow),
+  presentationFeedback: __table({
+    name: 'presentation_feedback',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, PresentationFeedbackRow),
+  presentationPractices: __table({
+    name: 'presentation_practices',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, PresentationPracticesRow),
+  presentationQuestions: __table({
+    name: 'presentation_questions',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, PresentationQuestionsRow),
   questions: __table({
     name: 'questions',
     indexes: [
@@ -579,10 +628,13 @@ const reducersSchema = __reducers(
   __reducerSchema("add_evidence", AddEvidenceReducer),
   __reducerSchema("add_guide_sources", AddGuideSourcesReducer),
   __reducerSchema("add_sticker", AddStickerReducer),
+  __reducerSchema("answer_presentation_question", AnswerPresentationQuestionReducer),
   __reducerSchema("answer_question", AnswerQuestionReducer),
   __reducerSchema("answer_teaching_question", AnswerTeachingQuestionReducer),
+  __reducerSchema("archive_presentation_practice", ArchivePresentationPracticeReducer),
   __reducerSchema("archive_spaced_card", ArchiveSpacedCardReducer),
   __reducerSchema("archive_spaced_collection", ArchiveSpacedCollectionReducer),
+  __reducerSchema("ask_presentation_question", AskPresentationQuestionReducer),
   __reducerSchema("ask_question", AskQuestionReducer),
   __reducerSchema("ask_teaching_question", AskTeachingQuestionReducer),
   __reducerSchema("assert_active_member", AssertActiveMemberReducer),
@@ -596,12 +648,14 @@ const reducersSchema = __reducers(
   __reducerSchema("close_help_contact", CloseHelpContactReducer),
   __reducerSchema("comment_academic", CommentAcademicReducer),
   __reducerSchema("comment_note", CommentNoteReducer),
+  __reducerSchema("complete_presentation_attempt", CompletePresentationAttemptReducer),
   __reducerSchema("complete_teaching_practice", CompleteTeachingPracticeReducer),
   __reducerSchema("create_activity", CreateActivityReducer),
   __reducerSchema("create_assignment", CreateAssignmentReducer),
   __reducerSchema("create_assignment_v_2", CreateAssignmentV2Reducer),
   __reducerSchema("create_guide", CreateGuideReducer),
   __reducerSchema("create_poll", CreatePollReducer),
+  __reducerSchema("create_presentation_attempt", CreatePresentationAttemptReducer),
   __reducerSchema("create_sticker_pack", CreateStickerPackReducer),
   __reducerSchema("create_subject", CreateSubjectReducer),
   __reducerSchema("create_teaching_practice", CreateTeachingPracticeReducer),
@@ -644,6 +698,9 @@ const reducersSchema = __reducers(
   __reducerSchema("save_chat_command", SaveChatCommandReducer),
   __reducerSchema("save_help_post", SaveHelpPostReducer),
   __reducerSchema("save_note", SaveNoteReducer),
+  __reducerSchema("save_presentation_attempt", SavePresentationAttemptReducer),
+  __reducerSchema("save_presentation_feedback", SavePresentationFeedbackReducer),
+  __reducerSchema("save_presentation_practice", SavePresentationPracticeReducer),
   __reducerSchema("save_spaced_card", SaveSpacedCardReducer),
   __reducerSchema("save_spaced_collection", SaveSpacedCollectionReducer),
   __reducerSchema("save_teaching_practice", SaveTeachingPracticeReducer),
@@ -654,6 +711,7 @@ const reducersSchema = __reducers(
   __reducerSchema("set_auth_config", SetAuthConfigReducer),
   __reducerSchema("set_file_service", SetFileServiceReducer),
   __reducerSchema("set_help_post_status", SetHelpPostStatusReducer),
+  __reducerSchema("set_presentation_reviewer", SetPresentationReviewerReducer),
   __reducerSchema("set_progress", SetProgressReducer),
   __reducerSchema("set_resource_capacity", SetResourceCapacityReducer),
   __reducerSchema("set_spaced_enrollment", SetSpacedEnrollmentReducer),
@@ -719,6 +777,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "my_last_seen": Omit<typeof tablesSchema.schemaType.tables["myLastSeen"], "accessorName"> & { readonly accessorName: "my_last_seen" };
     /** @deprecated Use `myMember` instead. This alias will be removed in the next major version. */
     readonly "my_member": Omit<typeof tablesSchema.schemaType.tables["myMember"], "accessorName"> & { readonly accessorName: "my_member" };
+    /** @deprecated Use `myPresentationPersonal` instead. This alias will be removed in the next major version. */
+    readonly "my_presentation_personal": Omit<typeof tablesSchema.schemaType.tables["myPresentationPersonal"], "accessorName"> & { readonly accessorName: "my_presentation_personal" };
     /** @deprecated Use `myProgress` instead. This alias will be removed in the next major version. */
     readonly "my_progress": Omit<typeof tablesSchema.schemaType.tables["myProgress"], "accessorName"> & { readonly accessorName: "my_progress" };
     /** @deprecated Use `mySpacedEnrollments` instead. This alias will be removed in the next major version. */
@@ -737,6 +797,14 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "page_snapshots": Omit<typeof tablesSchema.schemaType.tables["pageSnapshots"], "accessorName"> & { readonly accessorName: "page_snapshots" };
     /** @deprecated Use `pollVotes` instead. This alias will be removed in the next major version. */
     readonly "poll_votes": Omit<typeof tablesSchema.schemaType.tables["pollVotes"], "accessorName"> & { readonly accessorName: "poll_votes" };
+    /** @deprecated Use `presentationAttempts` instead. This alias will be removed in the next major version. */
+    readonly "presentation_attempts": Omit<typeof tablesSchema.schemaType.tables["presentationAttempts"], "accessorName"> & { readonly accessorName: "presentation_attempts" };
+    /** @deprecated Use `presentationFeedback` instead. This alias will be removed in the next major version. */
+    readonly "presentation_feedback": Omit<typeof tablesSchema.schemaType.tables["presentationFeedback"], "accessorName"> & { readonly accessorName: "presentation_feedback" };
+    /** @deprecated Use `presentationPractices` instead. This alias will be removed in the next major version. */
+    readonly "presentation_practices": Omit<typeof tablesSchema.schemaType.tables["presentationPractices"], "accessorName"> & { readonly accessorName: "presentation_practices" };
+    /** @deprecated Use `presentationQuestions` instead. This alias will be removed in the next major version. */
+    readonly "presentation_questions": Omit<typeof tablesSchema.schemaType.tables["presentationQuestions"], "accessorName"> & { readonly accessorName: "presentation_questions" };
     /** @deprecated Use `resourceFiles` instead. This alias will be removed in the next major version. */
     readonly "resource_files": Omit<typeof tablesSchema.schemaType.tables["resourceFiles"], "accessorName"> & { readonly accessorName: "resource_files" };
     /** @deprecated Use `spacedCards` instead. This alias will be removed in the next major version. */
@@ -797,6 +865,7 @@ const tableAccessorAliases = {
   "my_help_contact_requests": "myHelpContactRequests",
   "my_last_seen": "myLastSeen",
   "my_member": "myMember",
+  "my_presentation_personal": "myPresentationPersonal",
   "my_progress": "myProgress",
   "my_spaced_enrollments": "mySpacedEnrollments",
   "my_spaced_progress": "mySpacedProgress",
@@ -806,6 +875,10 @@ const tableAccessorAliases = {
   "page_revisions": "pageRevisions",
   "page_snapshots": "pageSnapshots",
   "poll_votes": "pollVotes",
+  "presentation_attempts": "presentationAttempts",
+  "presentation_feedback": "presentationFeedback",
+  "presentation_practices": "presentationPractices",
+  "presentation_questions": "presentationQuestions",
   "resource_files": "resourceFiles",
   "spaced_cards": "spacedCards",
   "spaced_collections": "spacedCollections",
@@ -871,6 +944,8 @@ export type DbView = __DbViewBase & {
   readonly "my_last_seen": __DbViewBase["myLastSeen"];
   /** @deprecated Use `myMember` instead. This alias will be removed in the next major version. */
   readonly "my_member": __DbViewBase["myMember"];
+  /** @deprecated Use `myPresentationPersonal` instead. This alias will be removed in the next major version. */
+  readonly "my_presentation_personal": __DbViewBase["myPresentationPersonal"];
   /** @deprecated Use `myProgress` instead. This alias will be removed in the next major version. */
   readonly "my_progress": __DbViewBase["myProgress"];
   /** @deprecated Use `mySpacedEnrollments` instead. This alias will be removed in the next major version. */
@@ -889,6 +964,14 @@ export type DbView = __DbViewBase & {
   readonly "page_snapshots": __DbViewBase["pageSnapshots"];
   /** @deprecated Use `pollVotes` instead. This alias will be removed in the next major version. */
   readonly "poll_votes": __DbViewBase["pollVotes"];
+  /** @deprecated Use `presentationAttempts` instead. This alias will be removed in the next major version. */
+  readonly "presentation_attempts": __DbViewBase["presentationAttempts"];
+  /** @deprecated Use `presentationFeedback` instead. This alias will be removed in the next major version. */
+  readonly "presentation_feedback": __DbViewBase["presentationFeedback"];
+  /** @deprecated Use `presentationPractices` instead. This alias will be removed in the next major version. */
+  readonly "presentation_practices": __DbViewBase["presentationPractices"];
+  /** @deprecated Use `presentationQuestions` instead. This alias will be removed in the next major version. */
+  readonly "presentation_questions": __DbViewBase["presentationQuestions"];
   /** @deprecated Use `resourceFiles` instead. This alias will be removed in the next major version. */
   readonly "resource_files": __DbViewBase["resourceFiles"];
   /** @deprecated Use `spacedCards` instead. This alias will be removed in the next major version. */
@@ -951,6 +1034,8 @@ export type Tables = __TablesBase & {
   readonly "my_last_seen": __TablesBase["myLastSeen"];
   /** @deprecated Use `myMember` instead. This alias will be removed in the next major version. */
   readonly "my_member": __TablesBase["myMember"];
+  /** @deprecated Use `myPresentationPersonal` instead. This alias will be removed in the next major version. */
+  readonly "my_presentation_personal": __TablesBase["myPresentationPersonal"];
   /** @deprecated Use `myProgress` instead. This alias will be removed in the next major version. */
   readonly "my_progress": __TablesBase["myProgress"];
   /** @deprecated Use `mySpacedEnrollments` instead. This alias will be removed in the next major version. */
@@ -969,6 +1054,14 @@ export type Tables = __TablesBase & {
   readonly "page_snapshots": __TablesBase["pageSnapshots"];
   /** @deprecated Use `pollVotes` instead. This alias will be removed in the next major version. */
   readonly "poll_votes": __TablesBase["pollVotes"];
+  /** @deprecated Use `presentationAttempts` instead. This alias will be removed in the next major version. */
+  readonly "presentation_attempts": __TablesBase["presentationAttempts"];
+  /** @deprecated Use `presentationFeedback` instead. This alias will be removed in the next major version. */
+  readonly "presentation_feedback": __TablesBase["presentationFeedback"];
+  /** @deprecated Use `presentationPractices` instead. This alias will be removed in the next major version. */
+  readonly "presentation_practices": __TablesBase["presentationPractices"];
+  /** @deprecated Use `presentationQuestions` instead. This alias will be removed in the next major version. */
+  readonly "presentation_questions": __TablesBase["presentationQuestions"];
   /** @deprecated Use `resourceFiles` instead. This alias will be removed in the next major version. */
   readonly "resource_files": __TablesBase["resourceFiles"];
   /** @deprecated Use `spacedCards` instead. This alias will be removed in the next major version. */
@@ -1043,3 +1136,4 @@ export class DbConnection extends __DbConnectionImpl<typeof REMOTE_MODULE> {
     return new SubscriptionBuilder(this);
   };
 }
+

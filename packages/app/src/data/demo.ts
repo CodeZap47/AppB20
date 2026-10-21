@@ -1,4 +1,5 @@
 import {
+  presentationGuidingQuestions,
   cleanHelpPost,
   helpText,
   HELP_LIMITS,
@@ -120,6 +121,8 @@ import type {
 import { toDay } from '../lib/format';
 import { referencesIn } from '../lib/references';
 import { DemoAcademicStore } from './demoAcademic';
+import { DemoPresentationStore, emptyPresentationsSnapshot, type PresentationDemoState } from './presentationDemo';
+import type { PresentationPracticeInput, PresentationAttemptInput, PresentationFeedbackInput } from './presentationTypes';
 
 /**
  * Fuente de datos en memoria para desarrollar la interfaz antes de conectar SpacetimeDB.
@@ -130,7 +133,7 @@ import { DemoAcademicStore } from './demoAcademic';
  * ningún compañero real.
  */
 
-interface State {
+interface State extends PresentationDemoState {
   invitations: Invitation[];
   members: Member[];
   subjects: Subject[];
@@ -174,6 +177,7 @@ interface State {
 
 function emptyState(): State {
   return {
+    ...emptyPresentationsSnapshot(), presentationRequests: [],
     invitations: [], members: [], subjects: [], terms: [], calendar: [], assignments: [],
     works: [], workFiles: [], revisions: [], groupMessages: [], directConversations: [],
     directMessages: [], reactions: [], stickerPacks: [], stickers: [], chatCommands: [],
@@ -222,11 +226,14 @@ export class DemoDataSource implements DataSource {
   #disposed = false;
   #objectUrls = new Set<string>();
   #academic: DemoAcademicStore;
+  #presentations: DemoPresentationStore;
 
   constructor(state: State, viewerId: Id, now: () => Date = () => new Date()) {
     this.#state = state;
     this.#viewerId = viewerId;
     this.#now = now;
+    this.#presentations = new DemoPresentationStore({ state: () => this.#state, active: () => this.#activeMember(),
+      id: () => this.#id(), now: () => this.#now(), emit: () => this.#emit() });
     this.#academic = new DemoAcademicStore({ state: () => this.#state, active: () => this.#activeMember(),
       id: () => this.#id(), now: () => this.#now(), emit: () => this.#emit(),
       updateAssignment: (id, input, expected) => this.updateAssignment(id, input, expected),
@@ -279,6 +286,7 @@ export class DemoDataSource implements DataSource {
     const me = s.members.find((m) => m.id === this.#viewerId);
     if (me?.status !== 'active') {
       return {
+        ...emptyPresentationsSnapshot(),
         connection: this.#disposed ? 'offline' : 'ready',
         connectionError: this.#disposed ? 'La sesión de prueba ya terminó.' : undefined,
         me,
@@ -351,6 +359,7 @@ export class DemoDataSource implements DataSource {
       ),
     );
     return {
+      ...this.#presentations.snapshot(me.id),
       connection: 'ready',
       me,
       members: s.members,
@@ -1341,6 +1350,16 @@ export class DemoDataSource implements DataSource {
     );
     this.#emit();
   }
+
+  savePresentationPractice(input: PresentationPracticeInput) { return this.#presentations.savePresentationPractice(input); }
+  setPresentationReviewer(practiceId: Id, reviewerId: Id | undefined, expectedVersion: number) { return this.#presentations.setPresentationReviewer(practiceId, reviewerId, expectedVersion); }
+  archivePresentationPractice(practiceId: Id, archived: boolean, expectedVersion: number) { return this.#presentations.archivePresentationPractice(practiceId, archived, expectedVersion); }
+  createPresentationAttempt(practiceId: Id, requestId: string, expectedVersion: number) { return this.#presentations.createPresentationAttempt(practiceId, requestId, expectedVersion); }
+  savePresentationAttempt(attemptId: Id, input: PresentationAttemptInput, expectedVersion: number) { return this.#presentations.savePresentationAttempt(attemptId, input, expectedVersion); }
+  completePresentationAttempt(attemptId: Id, expectedVersion: number) { return this.#presentations.completePresentationAttempt(attemptId, expectedVersion); }
+  askPresentationQuestion(attemptId: Id, text: string, requestId: string) { return this.#presentations.askPresentationQuestion(attemptId, text, requestId); }
+  answerPresentationQuestion(questionId: Id, answer: string, expectedVersion: number) { return this.#presentations.answerPresentationQuestion(questionId, answer, expectedVersion); }
+  savePresentationFeedback(attemptId: Id, input: PresentationFeedbackInput, expectedVersion?: number) { return this.#presentations.savePresentationFeedback(attemptId, input, expectedVersion); }
 
   #spacedCollection(collectionId: Id): SpacedCollection {
     const me = this.#activeMember();
@@ -2660,6 +2679,44 @@ export function createDemoState(now = new Date()): State {
       { pollId: 'p5', voterId: 'demo-4', choices: [0], votedAt: minutesAgo(1700) },
       { pollId: 'p5', voterId: 'demo-1', choices: [1], votedAt: minutesAgo(1000) },
     ],
+    presentationPractices: [
+      { id: 'px1', ownerId: 'demo-1', reviewerId: 'demo-2', subjectId: LOGICA, termId: `${LOGICA}-p2`,
+        title: 'Condicionales de prueba', topic: 'Condicionales', audience: 'Compañeros del primer cuatrimestre', targetMinutes: 3,
+        keyPoints: ['Condiciones', 'Ejemplo cotidiano', 'Límites'], sourceKind: 'note', sourceId: 'n1', sourceVersion: 1,
+        archived: false, version: 2, createdAt: minutesAgo(120), updatedAt: minutesAgo(90) },
+      { id: 'px2', ownerId: 'demo-3', reviewerId: 'demo-1', subjectId: FUNDAMENTOS,
+        title: 'Ciclos de prueba', topic: 'Ciclos', audience: 'Compañeros que empiezan a programar', targetMinutes: 4,
+        keyPoints: ['Repetición', 'Condición de salida'], sourceKind: 'note', sourceId: 'n2', sourceVersion: 1,
+        archived: false, version: 2, createdAt: minutesAgo(100), updatedAt: minutesAgo(70) },
+      { id: 'px3', ownerId: 'demo-1', subjectId: LOGICA,
+        title: 'Variables de prueba', topic: 'Variables', audience: 'Compañeros', targetMinutes: 2,
+        keyPoints: ['Valores y nombres'], archived: false, version: 1, createdAt: minutesAgo(30), updatedAt: minutesAgo(30) },
+    ],
+    presentationAttempts: [
+      { id: 'pxa1', practiceId: 'px1', subjectId: LOGICA, termId: `${LOGICA}-p2`, number: 1, status: 'completed', title: 'Condicionales de prueba', topic: 'Condicionales',
+        audience: 'Compañeros del primer cuatrimestre', targetMinutes: 3, keyPoints: ['Condiciones', 'Ejemplo cotidiano', 'Límites'],
+        body: 'Una condición decide si se ejecuta una instrucción. Por ejemplo, si llueve, llevamos paraguas. Elegimos este ejemplo porque conecta una decisión cotidiana con el código. El ejemplo supone dos resultados y no representa situaciones ambiguas.',
+        sourceKind: 'note', sourceId: 'n1', sourceVersion: 1, version: 3, createdAt: minutesAgo(110), updatedAt: minutesAgo(90), completedAt: minutesAgo(90) },
+      { id: 'pxa2', practiceId: 'px2', subjectId: FUNDAMENTOS, number: 1, status: 'completed', title: 'Ciclos de prueba', topic: 'Ciclos',
+        audience: 'Compañeros que empiezan a programar', targetMinutes: 4, keyPoints: ['Repetición', 'Condición de salida'],
+        body: 'Un ciclo permite repetir instrucciones. Para saludar a cada persona de una lista, recorremos sus nombres uno por uno. Este enfoque evita copiar la misma instrucción. Debemos definir cuándo terminar; de lo contrario, el ciclo podría repetirse sin fin.',
+        sourceKind: 'note', sourceId: 'n2', sourceVersion: 1, version: 3, createdAt: minutesAgo(95), updatedAt: minutesAgo(70), completedAt: minutesAgo(70) },
+    ],
+    presentationPersonal: [
+      { attemptId: 'pxa1', clarity: 'Me falta ordenar la conclusión.', examples: 'El paraguas ayuda a explicar la decisión.', decisions: '', limitations: 'Distinguir supuestos.', nextSteps: 'Practicar una conclusión de dos frases.' },
+      { attemptId: 'pxa2', clarity: 'Observación privada de otro alumno.', examples: '', decisions: '', limitations: '', nextSteps: 'Repasar la condición de salida en privado.' },
+    ],
+    presentationQuestions: [
+      ...['pxa1', 'pxa2'].flatMap((attemptId) => presentationGuidingQuestions(attemptId === 'pxa1'
+        ? { title: 'Condicionales de prueba', topic: 'Condicionales', audience: 'Compañeros del primer cuatrimestre', targetMinutes: 3, keyPoints: ['Condiciones', 'Ejemplo cotidiano', 'Límites'] }
+        : { title: 'Ciclos de prueba', topic: 'Ciclos', audience: 'Compañeros que empiezan a programar', targetMinutes: 4, keyPoints: ['Repetición', 'Condición de salida'] }
+      ).map((text, index) => ({ id: `pxq-${attemptId}-${index}`, attemptId, authorId: attemptId === 'pxa1' ? 'demo-1' : 'demo-3',
+        kind: 'guided' as const, text, answer: index === 0 ? 'Respuesta de ejemplo conservada con este intento.' : '', version: index === 0 ? 2 : 1, createdAt: minutesAgo(70) }))),
+    ],
+    presentationFeedback: [
+      { id: 'pxf1', attemptId: 'pxa1', authorId: 'demo-2', clarity: 'La idea principal se entiende.', examples: 'El ejemplo es concreto.', decisions: '', limitations: 'Explica qué ocurre cuando no llueve.', comment: 'Retroalimentación de prueba.', version: 1, createdAt: minutesAgo(60), updatedAt: minutesAgo(60) },
+    ],
+    presentationRequests: [],
     spacedCollections: [
       { id: 'sd1', subjectId: LOGICA, termId: `${LOGICA}-p1`, title: 'Decisiones y lógica · colección de prueba',
         visibility: 'group', ownerId: 'demo-1', version: 1, archived: false,

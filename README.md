@@ -171,6 +171,7 @@ Para publicar servicios y configurar producción, sigue la [guía de despliegue]
 - [Arquitectura](docs/arquitectura.md): componentes, datos y permisos.
 - [Autenticación y acceso](docs/spacetimeauth.md): clientes, retornos e invitaciones.
 - [Tareas y Actividades](docs/tareas-actividades.md): consignas, trabajos, evidencias e historial.
+- [Exposiciones](docs/exposiciones.md): ensayos por texto, preguntas y siguientes intentos privados.
 - [Archivos en SpacetimeDB](docs/archivos-spacetime.md): límites, transferencias y compatibilidad.
 - [Cloudflare Pages](docs/cloudflare-pages.md): configuración de la web/PWA.
 - [Despliegue](docs/despliegue.md): publicación de servicios y comprobaciones de producción.

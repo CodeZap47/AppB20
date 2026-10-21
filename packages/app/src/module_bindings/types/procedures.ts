@@ -25,3 +25,4 @@ export type GetResourceUploadStatusArgs = __Infer<typeof GetResourceUploadStatus
 export type GetResourceUploadStatusResult = __Infer<typeof GetResourceUploadStatusProcedure.returnType>;
 export type ReadResourceChunkArgs = __Infer<typeof ReadResourceChunkProcedure.params>;
 export type ReadResourceChunkResult = __Infer<typeof ReadResourceChunkProcedure.returnType>;
+

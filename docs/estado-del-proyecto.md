@@ -49,7 +49,7 @@ Aprende enseñando y Repaso se conserva como trabajo existente.
 | 7.7 Museo de bugs | Pendiente; se integrará en Preguntas. | Plantilla, etiquetas y referencias. | 4 |
 | 7.8 Aprende enseñando | Manual local: explicación, invitado, preguntas, reflexión privada y publicación de nota. | Validación real; preguntas con IA tras cerrar BYOK. | 3–4 |
 | 7.9 Repaso espaciado | Manual local: colecciones, tarjetas, cola e historial privados. | Validación real, borradores Gemini y recordatorios. Mantener intervalos existentes de 1/3/7/14/30/60/120 días. | 3–4 |
-| 7.10 Exposiciones | Pendiente. | Ensayos por texto, preguntas, observaciones y siguientes intentos privados. | 5 |
+| 7.10 Exposiciones | Texto manual: ensayos versionados, preguntas, observaciones privadas y revisor voluntario; ver [reglas](exposiciones.md). | Audio y generación con Gemini quedan para sus integraciones. La publicación se verifica por separado. | 5 |
 | 7.11 Préstamos | Pendiente. | Catálogo, acuerdo privado, reserva, entrega y devolución sin doble préstamo. | 5 |
 | 7.12 Oportunidades | Pendiente. | Fichas manuales, filtros, plazos, fuente, búsqueda de equipo y reportes. | 4 |
 

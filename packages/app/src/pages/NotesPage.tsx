@@ -210,6 +210,9 @@ export function NotePage() {
         <Link to={`/m/aprende-ensenando/nueva?nota=${encodeURIComponent(note.id)}`} className="button secondary">
           Practicar explicándolo
         </Link>
+        <Link to={`/m/exposiciones/nueva?nota=${encodeURIComponent(note.id)}`} className="button secondary">
+          Ensayar exposición
+        </Link>
         {note.authorId === me?.id && (
           <Link to={`/m/notas/${note.id}/editar`} className="button secondary">
             Editar

@@ -1,9 +1,12 @@
 import type { DbConnection } from '../module_bindings';
 import type { Snapshot } from './types';
 import { enrichAcademicSnapshot } from './academicSnapshot';
+import { emptyPresentationsSnapshot } from './presentationDemo';
+import { readPresentationsSnapshot, PRESENTATION_VIEWS } from './presentationSnapshot';
 
 /** Solo vistas públicas del módulo; nunca tablas privadas ni SELECT * de toda la base. */
 export const PUBLIC_VIEWS = [
+  ...PRESENTATION_VIEWS,
   'my_member', 'members', 'invitations', 'subjects', 'terms', 'calendar',
   'assignments', 'page_revisions', 'works', 'work_authors', 'work_files',
   'assignment_details', 'my_progress', 'work_details', 'work_revisions', 'work_reviews',
@@ -19,6 +22,7 @@ export const PUBLIC_VIEWS = [
 
 export function emptySnapshot(connection: Snapshot['connection'], connectionError?: string): Snapshot {
   return {
+    ...emptyPresentationsSnapshot(),
     connection,
     ...(connectionError ? { connectionError } : {}),
     me: undefined,
@@ -118,6 +122,7 @@ export function readSnapshot(connection: Pick<DbConnection, 'db'>, identity: str
   return enrichAcademicSnapshot(connection, {
     myProgress: [], workRevisions: [], workReviews: [], academicComments: [],
     resourceFiles: [], activityLinks: [], pageSnapshots: [],
+    ...readPresentationsSnapshot(connection, identity, members),
     connection: 'ready',
     me,
     members,

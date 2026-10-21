@@ -22,6 +22,9 @@ import type {
   SpacedVisibility,
 } from '@b20/core';
 
+import type { PresentationActions, PresentationsSnapshot } from './presentationTypes';
+export type * from './presentationTypes';
+
 export type Id = string;
 
 export interface SpacedCollection {
@@ -655,7 +658,7 @@ export interface PollVote {
 }
 
 /** Lo que el usuario actual puede ver, igual que las vistas del servidor. */
-export interface Snapshot {
+export interface Snapshot extends PresentationsSnapshot {
   spacedUnavailableCards: SpacedUnavailableCard[];
   spacedCollections: SpacedCollection[];
   spacedCards: SpacedCard[];
@@ -752,7 +755,7 @@ export interface PublishWorkInput {
 export type MaybePromise<T> = T | Promise<T>;
 
 /** Acciones: corresponden uno a uno con los reducers del módulo. */
-export interface Actions {
+export interface Actions extends PresentationActions {
   replaceSpacedCardSource(cardId: Id, expectedVersion: number, sourceKind: SpacedSourceKind, sourceId: Id): MaybePromise<void>;
   saveSpacedCollection(input: SpacedCollectionInput): MaybePromise<Id>;
   publishSpacedCollection(collectionId: Id, expectedVersion: number): MaybePromise<void>;
