@@ -16,6 +16,9 @@ interface AcademicState {
 }
 
 interface Context {
+  extraTarget?(kind: ResourceTargetKind, id: Id, editable: boolean): { version?: number };
+  captureExtra?(kind: ResourceTargetKind, id: Id): void;
+  changedExtra?(kind: ResourceTargetKind, id: Id): void;
   state(): AcademicState;
   active(): Member;
   id(): Id;
@@ -52,7 +55,7 @@ export class DemoAcademicStore {
 
   constructor(private ctx: Context) {}
 
-  private resources(): ResourceFile[] {
+  resources(): ResourceFile[] {
     const ownIds = new Set(this.files.map((file) => file.id));
     return [
       ...this.ctx.state().workFiles.filter((file) => !ownIds.has(`legacy:${file.id}`)).map((file): ResourceFile => ({
@@ -78,7 +81,10 @@ export class DemoAcademicStore {
   private target(kind: ResourceTargetKind, id: Id, editable = false) {
     const me = this.ctx.active();
     const state = this.ctx.state();
-    if (!['assignment', 'activity', 'work', 'evidence'].includes(kind)) throw new Error('Tipo de publicación inválido.');
+    if (!['assignment', 'activity', 'work', 'evidence'].includes(kind)) {
+      if (this.ctx.extraTarget) return this.ctx.extraTarget(kind, id, editable);
+      throw new Error('Tipo de publicación inválido.');
+    }
     if (kind === 'work') return this.work(id, editable);
     if (kind === 'evidence') {
       const row = state.evidences.find((evidence) => evidence.id === id);
@@ -153,7 +159,7 @@ export class DemoAcademicStore {
     return {
       myProgress: this.progress.filter((item) => item.ownerId === ownerId).map(({ ownerId: _owner, ...item }) => item),
       workRevisions, workReviews: this.reviews, academicComments: this.comments,
-      resourceFiles: resources, activityLinks: this.links, pageSnapshots,
+      resourceFiles: resources.filter((file) => { try { this.target(file.targetKind, file.targetId); return true; } catch { return false; } }), activityLinks: this.links, pageSnapshots,
       works: state.works.map((work): Work => ({ ...work, topic: work.topic ?? '',
         status: work.status === 'final' && this.reviews.some((review) => review.workId === work.id &&
           review.version === work.version && !work.authorIds.includes(review.reviewerId)) ? 'reviewed' : work.status ?? 'draft' })),
@@ -246,7 +252,7 @@ export class DemoAcademicStore {
     }
   }
 
-  private restoreFiles(kind: ResourceTargetKind, id: Id, ids: Id[]) {
+  restoreFiles(kind: ResourceTargetKind, id: Id, ids: Id[]) {
     const desired = new Set(ids);
     this.files = this.resources().map((file) => file.targetKind === kind && file.targetId === id
       ? { ...file, removedAt: desired.has(file.id) ? undefined : this.ctx.now() } : file);
@@ -284,6 +290,9 @@ export class DemoAcademicStore {
 
   private changedFiles(kind: ResourceTargetKind, id: Id) {
     const state = this.ctx.state();
+    if (!['assignment', 'activity', 'work', 'evidence'].includes(kind)) {
+      this.ctx.changedExtra?.(kind, id); this.ctx.emit(); return;
+    }
     if (kind === 'work') {
       const work = this.work(id);
       state.works = state.works.map((row) => row.id === id ? { ...row, version: row.version + 1,
@@ -316,7 +325,8 @@ export class DemoAcademicStore {
     if (transfer.signal?.aborted) throw new DOMException('Cancelaste la transferencia.', 'AbortError');
     if (kind === 'work') this.captureWork(id);
     else if (kind === 'evidence') this.capturePage('activity', (row as Evidence).activityId);
-    else this.capturePage(kind, id);
+    else if (kind === 'assignment' || kind === 'activity') this.capturePage(kind, id);
+    else this.ctx.captureExtra?.(kind, id);
     const fileId = crypto.randomUUID();
     const url = typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : undefined;
     if (url) this.urls.add(url);
@@ -336,7 +346,8 @@ export class DemoAcademicStore {
     checkVersion(row.version ?? 1, expectedVersion);
     if (file.targetKind === 'work') this.captureWork(file.targetId);
     else if (file.targetKind === 'evidence') this.capturePage('activity', (row as Evidence).activityId);
-    else this.capturePage(file.targetKind, file.targetId);
+    else if (file.targetKind === 'assignment' || file.targetKind === 'activity') this.capturePage(file.targetKind, file.targetId);
+    else this.ctx.captureExtra?.(file.targetKind, file.targetId);
     this.files = [...this.files.filter((entry) => entry.id !== fileId), { ...file, removedAt: this.ctx.now() }];
     this.changedFiles(file.targetKind, file.targetId);
   }
@@ -344,6 +355,7 @@ export class DemoAcademicStore {
   restoreResourceFile(fileId: Id, expectedVersion: number) {
     const file = this.resources().find((entry) => entry.id === fileId);
     if (!file) throw new Error('El archivo no existe.');
+    this.target(file.targetKind, file.targetId);
     if (file.targetKind !== 'evidence') throw new Error('Restaura este archivo desde el historial de la publicación.');
     const row = this.target('evidence', file.targetId, true);
     if (!file.removedAt) return;
@@ -364,6 +376,18 @@ export class DemoAcademicStore {
     const response = await fetch(file.url, { signal: transfer.signal });
     if (!response.ok) throw new Error('No se pudo descargar el archivo.');
     return response.blob();
+  }
+
+  copyFiles(fromNoteId: Id, toNoteId: Id): Map<Id, Id> {
+    this.target('note', fromNoteId, true);
+    const aliases = new Map<Id, Id>();
+    for (const file of this.resources().filter((f) => f.targetKind === 'note' && f.targetId === fromNoteId && !f.removedAt)) {
+      const id = `published-${toNoteId}-${file.id}`;
+      aliases.set(file.id, id);
+      this.files.push({ ...file, id, targetId: toNoteId, createdAt: this.ctx.now() });
+      const blob = this.blobs.get(file.id); if (blob) this.blobs.set(id, blob);
+    }
+    return aliases;
   }
 
   dispose() {

@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { useSnapshot } from '../data/DataContext';
 import type { Id } from '../data/types';
 import { Icon } from './Icon';
+import { StickerImage } from './StickerImage';
 
 /** Panel de stickers sobre el cuadro de texto: un paquete a la vez, y tocar uno lo envía. */
 export function StickerPicker({
@@ -81,7 +82,7 @@ export function StickerPicker({
                   aria-label={`Enviar sticker ${i + 1} de ${pack?.name}`}
                   onClick={() => onPick(s.id)}
                 >
-                  <img src={s.url} alt="" width={72} height={72} loading="lazy" draggable={false} />
+                  <StickerImage id={s.id} size={72} alt="" />
                 </button>
               ))}
           </div>

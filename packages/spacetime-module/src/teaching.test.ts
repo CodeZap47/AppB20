@@ -66,6 +66,7 @@ function setup() {
       identity: person, status: 'active', isCreator: person === admin,
     }))),
     subject: tableStore('id', [{ id: 1n }, { id: 2n }]),
+    contentStatus: tableStore('key'),
     note: tableStore('id', [
       { id: 101n, author: owner, subjectId: 1n, visibility: 'personal', version: 2, body: 'Fuente secreta' },
       { id: 102n, author: third, subjectId: 1n, visibility: 'group', version: 1 },

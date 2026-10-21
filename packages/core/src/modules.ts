@@ -104,6 +104,7 @@ export const MODULES: readonly ModuleInfo[] = [
     summary: 'Horarios, inscripción y temporizador.',
     stage: 2,
     worksWithoutAi: true,
+    ready: true,
   },
   {
     id: 'ayuda',

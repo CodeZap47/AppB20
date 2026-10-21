@@ -6,7 +6,9 @@ import type { Answer, Member, Question, Subject } from '../data/types';
 import { Avatar } from '../components/Avatar';
 import { Empty } from '../components/Empty';
 import { Icon } from '../components/Icon';
-import { RichText } from '../components/RichText';
+import { ResourceSection } from '../components/AcademicTools';
+import { StructuredEditor, StructuredText } from '../components/StructuredText';
+import { ContentWithdrawal } from '../components/ContentWithdrawal';
 import { useAction } from '../components/useAction';
 import { formatDate, formatListTime, formatTime, memberName } from '../lib/format';
 import { previewText } from '../lib/messages';
@@ -23,6 +25,7 @@ const STATES = [
   { id: 'abiertas', label: 'Abiertas' },
   { id: 'resueltas', label: 'Resueltas' },
   { id: 'mias', label: 'Mis preguntas' },
+  { id: 'retiradas', label: 'Retiradas' },
 ] as const;
 type StateFilter = (typeof STATES)[number]['id'];
 const isStateFilter = (value: string | null): value is StateFilter =>
@@ -46,6 +49,8 @@ function inState(
   answers: Answer[],
   meId?: string,
 ): boolean {
+  if (state === 'retiradas') return Boolean(question.withdrawnAt);
+  if (question.withdrawnAt) return false;
   switch (state) {
     case 'sin-respuesta':
       return question.status === 'open' && answersOf(question.id, answers).length === 0;
@@ -464,21 +469,8 @@ export function AskQuestionPage() {
 
           <section className="form__section">
             <h2>Contexto</h2>
-            <label className="field">
-              <span className="field__label">
-                Qué intentaste <span className="field__optional">opcional</span>
-              </span>
-              <textarea
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                rows={8}
-                className="mono"
-              />
-              <span className="field__hint">
-                Qué esperabas, qué pasó y el error exacto. Para pegar código, enciérralo entre
-                líneas con ```.
-              </span>
-            </label>
+            <StructuredEditor label="Qué intentaste (opcional)" value={body} onChange={setBody} rows={8} />
+            <p className="field__hint">Qué esperabas, qué pasó y el error exacto. Al publicar podrás adjuntar imágenes y documentos a esta pregunta.</p>
           </section>
 
           {error && (
@@ -526,7 +518,12 @@ function AnswerCard({
   accepted: boolean;
   onAccept?: () => void;
 }) {
+  const data = useSnapshot();
+  const source = useDataSource();
+  const { error, pending, run } = useAction();
   const author = members.find((m) => m.id === answer.authorId);
+  const useful = data.answerUsefulness.filter((item) => item.answerId === answer.id);
+  const mine = useful.some((item) => item.memberId === meId);
   return (
     <article className={accepted ? 'panel qa-answer answer--accepted' : 'panel qa-answer'}>
       {accepted && (
@@ -541,19 +538,28 @@ function AnswerCard({
           <span className="muted"> · {formatTime(answer.createdAt)}</span>
         </span>
       </header>
-      <RichText text={answer.body} />
+      <StructuredText text={answer.body} />
+      <ContentWithdrawal kind="answer" id={answer.id} version={answer.version ?? 1} withdrawnAt={answer.withdrawnAt}
+        canEdit={answer.authorId === meId || data.me?.isCreator} reasonRequired={answer.authorId !== meId} />
+      <ResourceSection kind="answer" id={answer.id} version={answer.version ?? 1} canEdit={answer.authorId === meId && !answer.withdrawnAt} title="Archivos de esta respuesta" />
+      <div className="row">
+        <span className="muted">{useful.length} {useful.length === 1 ? 'compañero la encontró útil' : 'compañeros la encontraron útil'}</span>
+        {meId && answer.authorId !== meId && !answer.withdrawnAt && <button type="button" className="secondary" aria-pressed={mine} disabled={pending} onClick={() => void run(() => source.toggleAnswerUsefulness(answer.id))}>{mine ? 'Quitar mi señal de utilidad' : 'Esta explicación es útil'}</button>}
+      </div>
+      {error && <p className="error" role="alert">{error}</p>}
       {accepted && (
         <p className="field__hint">
           Que le haya servido no la hace infalible: revisa el razonamiento.
         </p>
       )}
-      {onAccept && (
+      {onAccept && !answer.withdrawnAt && (
         <div className="form__actions">
           <button type="button" className="secondary with-icon" onClick={onAccept}>
             <Icon name="check" size={16} /> Me ayudó esta respuesta
           </button>
         </div>
       )}
+      <QuestionClarifications questionId={answer.questionId} answerId={answer.id} />
     </article>
   );
 }
@@ -638,7 +644,7 @@ export function QuestionPage() {
             {formatTime(question.createdAt)}
           </p>
         </div>
-        {isAuthor && question.status === 'resolved' && (
+        {isAuthor && !question.withdrawnAt && question.status === 'resolved' && (
           <div className="row">
             <button
               type="button"
@@ -650,6 +656,8 @@ export function QuestionPage() {
           </div>
         )}
       </header>
+      <ContentWithdrawal kind="question" id={question.id} version={question.version ?? 1} withdrawnAt={question.withdrawnAt}
+        canEdit={isAuthor || me?.isCreator} reasonRequired={!isAuthor} />
 
       <div className="detail">
         <div className="detail__main">
@@ -662,11 +670,15 @@ export function QuestionPage() {
               </span>
             </header>
             {question.body ? (
-              <RichText text={question.body} />
+              <StructuredText text={question.body} />
             ) : (
               <p className="muted">Sin más contexto que la pregunta.</p>
             )}
+            <ResourceSection kind="question" id={question.id} version={question.version ?? 1} canEdit={isAuthor && !question.withdrawnAt} title="Archivos de la pregunta" />
+            <QuestionClarifications questionId={question.id} />
           </section>
+
+          <QuestionReferences question={question} />
 
           <h2 className="section-title">
             Respuestas <span className="muted">{list.length}</span>
@@ -680,7 +692,7 @@ export function QuestionPage() {
               meId={me?.id}
               accepted={false}
               onAccept={
-                isAuthor ? () => run(() => source.acceptAnswer(question.id, a.id)) : undefined
+                isAuthor && !question.withdrawnAt ? () => run(() => source.acceptAnswer(question.id, a.id)) : undefined
               }
             />
           ))}
@@ -698,21 +710,9 @@ export function QuestionPage() {
             </p>
           )}
 
-          <form className="panel form qa-reply" onSubmit={submit}>
-            <label className="field">
-              <span className="field__label">
-                {isAuthor ? 'Agregar algo o responder' : 'Tu respuesta'}
-              </span>
-              <textarea
-                value={answer}
-                onChange={(e) => setAnswer(e.target.value)}
-                rows={5}
-                className="mono"
-              />
-              <span className="field__hint">
-                Explica el razonamiento, no solo el resultado. Para código usa ```.
-              </span>
-            </label>
+          {!question.withdrawnAt && <form className="panel form qa-reply" onSubmit={submit}>
+            <StructuredEditor label={isAuthor ? 'Agregar algo o responder' : 'Tu respuesta'} value={answer} onChange={setAnswer} rows={5} />
+            <p className="field__hint">Explica el razonamiento, no solo el resultado. Las aclaraciones se escriben junto a la pregunta o respuesta correspondiente.</p>
             {error && (
               <p className="error" role="alert">
                 {error}
@@ -723,7 +723,7 @@ export function QuestionPage() {
                 <Icon name="send" size={16} /> Responder
               </button>
             </div>
-          </form>
+          </form>}
         </div>
 
         <aside className="detail__side">
@@ -770,4 +770,51 @@ export function QuestionPage() {
       </div>
     </>
   );
+}
+
+/** Hilos separados de las respuestas: nunca cuentan como solución ni como respuesta aceptada. */
+function QuestionClarifications({ questionId, answerId }: { questionId: string; answerId?: string }) {
+  const { questionComments, members, me, questions, answers } = useSnapshot();
+  const source = useDataSource();
+  const { error, pending, run } = useAction();
+  const [text, setText] = useState('');
+  const comments = questionComments.filter((item) => item.questionId === questionId && item.answerId === answerId);
+  const withdrawn = Boolean(questions.find((question) => question.id === questionId)?.withdrawnAt || (answerId && answers.find((answer) => answer.id === answerId)?.withdrawnAt));
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (await run(async () => { await source.commentQuestion(questionId, text, answerId); return true; })) setText('');
+  };
+  return <details className="academic-comments">
+    <summary>Aclaraciones ({comments.length})</summary>
+    <p className="field__hint">Pide contexto o comenta esta {answerId ? 'respuesta' : 'pregunta'}. Las aclaraciones quedan separadas de las soluciones.</p>
+    {comments.map((comment) => <article className="academic-comment" key={comment.id}><p className="muted">{memberName(members, comment.authorId)} · {formatTime(comment.createdAt)}</p><StructuredText text={comment.text} /></article>)}
+    {me && !withdrawn && <form className="form" onSubmit={(event) => void submit(event)}><label className="field"><span className="field__label">Pedir una aclaración</span><textarea aria-label={answerId ? 'Aclaración sobre esta respuesta' : 'Aclaración sobre la pregunta'} value={text} onChange={(event) => setText(event.target.value)} maxLength={2000} rows={3} required /></label><button type="submit" disabled={pending || !text.trim()}>Publicar aclaración</button></form>}
+    {error && <p className="error" role="alert">{error}</p>}
+  </details>;
+}
+
+function QuestionReferences({ question }: { question: Question }) {
+  const { notes, guides, questionLinks, me } = useSnapshot();
+  const source = useDataSource();
+  const { error, pending, run } = useAction();
+  const [editing, setEditing] = useState(false);
+  const [noteIds, setNoteIds] = useState<string[]>([]);
+  const [guideIds, setGuideIds] = useState<string[]>([]);
+  const links = questionLinks.filter((link) => link.questionId === question.id);
+  const toggle = (ids: string[], id: string) => ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id];
+  const start = () => {
+    setNoteIds(links.filter((link) => link.targetKind === 'note').map((link) => link.targetId));
+    setGuideIds(links.filter((link) => link.targetKind === 'guide').map((link) => link.targetId));
+    setEditing(true);
+  };
+  return <section className="panel"><h2 className="label">Notas y guías relacionadas</h2>
+    {links.length ? <ul className="links">{links.map((link) => <li key={link.id}><Link to={link.targetKind === 'note' ? `/m/notas/${link.targetId}` : `/m/guias/${link.targetId}`}>{link.targetKind === 'note' ? notes.find((note) => note.id === link.targetId)?.title ?? 'Nota compartida' : guides.find((guide) => guide.id === link.targetId)?.title ?? 'Guía de estudio'}</Link></li>)}</ul> : <p className="muted">Todavía no hay notas ni guías enlazadas.</p>}
+    {me && !question.withdrawnAt && !editing && <button type="button" className="secondary" onClick={start}>Enlazar material que amplíe la explicación</button>}
+    {editing && <form className="form" onSubmit={(event) => { event.preventDefault(); void run(async () => { await source.saveQuestionLinks(question.id, noteIds, guideIds); setEditing(false); }); }}>
+      <fieldset className="field"><legend>Notas compartidas de esta materia</legend>{notes.filter((note) => note.visibility === 'group' && note.subjectId === question.subjectId).map((note) => <label className="academic-choice" key={note.id}><input type="checkbox" checked={noteIds.includes(note.id)} onChange={() => setNoteIds(toggle(noteIds, note.id))} />{note.title}</label>)}</fieldset>
+      <fieldset className="field"><legend>Guías de esta materia</legend>{guides.filter((guide) => guide.subjectId === question.subjectId).map((guide) => <label className="academic-choice" key={guide.id}><input type="checkbox" checked={guideIds.includes(guide.id)} onChange={() => setGuideIds(toggle(guideIds, guide.id))} />{guide.title}</label>)}</fieldset>
+      <div className="row"><button type="submit" disabled={pending}>Guardar material relacionado</button><button type="button" className="secondary" disabled={pending} onClick={() => setEditing(false)}>Cancelar</button></div>
+    </form>}
+    {error && <p className="error" role="alert">{error}</p>}
+  </section>;
 }

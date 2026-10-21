@@ -8,6 +8,7 @@ import { Icon } from '../components/Icon';
 import { useAction } from '../components/useAction';
 import { memberName } from '../lib/format';
 import { prepareStickers, type PreparedStickers } from '../lib/stickerImport';
+import { StickerImage } from '../components/StickerImage';
 
 function ToolHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
@@ -247,7 +248,7 @@ export function StickersPage() {
               <li key={p.id} className="pack">
                 <span className="pack__cover" aria-hidden="true">
                   {cover(p.id).map((s) => (
-                    <img key={s.id} src={s.url} alt="" width={40} height={40} />
+                    <StickerImage key={s.id} id={s.id} size={40} alt="" />
                   ))}
                 </span>
                 <span className="pack__body">
@@ -299,7 +300,7 @@ export function StickersPage() {
               <li key={p.id} className="pack">
                 <span className="pack__cover" aria-hidden="true">
                   {cover(p.id).map((s) => (
-                    <img key={s.id} src={s.url} alt="" width={40} height={40} />
+                    <StickerImage key={s.id} id={s.id} size={40} alt="" />
                   ))}
                 </span>
                 <span className="pack__body">

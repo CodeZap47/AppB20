@@ -6,6 +6,8 @@ import type { Id, MessageReaction } from '../data/types';
 import { peopleList } from '../lib/format';
 import { resolveReference, type Reference } from '../lib/references';
 import { Icon, type IconName } from './Icon';
+import { StickerImage } from './StickerImage';
+export { StickerImage } from './StickerImage';
 
 const REF_ICON: Record<Exclude<Reference['kind'], 'sticker'>, IconName> = {
   tarea: 'folder',
@@ -38,26 +40,6 @@ export function RefCard({ reference }: { reference: Reference }) {
         {ref.context && <span className="ref-card__context">{ref.context}</span>}
       </span>
     </Link>
-  );
-}
-
-export function StickerImage({ id, size = 140 }: { id: Id; size?: number }) {
-  const { stickers } = useSnapshot();
-  const sticker = stickers.find((s) => s.id === id);
-  if (!sticker) {
-    return <span className="sticker sticker--missing">Sticker no disponible</span>;
-  }
-  return (
-    <img
-      className="sticker"
-      src={sticker.url}
-      alt="Sticker"
-      width={size}
-      height={size}
-      loading="lazy"
-      decoding="async"
-      draggable={false}
-    />
   );
 }
 

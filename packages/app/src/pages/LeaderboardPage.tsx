@@ -364,7 +364,7 @@ function RulesPanel() {
         })}
       </ul>
       <p className="muted">
-        No suman: {NOT_SCORED.join(', ')}. Lo que se borra deja de contar. Son puntos de prueba: se
+        No suman: {NOT_SCORED.join(', ')}. Los borradores y los aportes retirados no cuentan. Las copias idénticas del mismo autor y contexto no vuelven a sumar; se conserva el primer aporte y su fecha. Se comparan texto y referencias de archivos, sin interpretar el código ni suponer que dos archivos distintos contienen los mismos bytes. Restaurar un aporte recupera su puntuación original sin duplicarla. Los límites se conservan al cambiar de periodo. Son puntos de prueba: se
         ajustarán después de probarlos con el grupo.
       </p>
     </section>

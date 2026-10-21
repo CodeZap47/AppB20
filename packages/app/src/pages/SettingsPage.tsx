@@ -21,6 +21,7 @@ export function SettingsPage() {
   return (
     <>
       <h1>Ajustes</h1>
+      <section><h2>Publicaciones retiradas</h2><p>Consulta y recupera tus publicaciones retiradas. La administración también puede revisar retiros del grupo.</p><Link to="/m/retirados">Abrir publicaciones retiradas</Link></section>
 
       {session?.status === 'signedIn' && (
         <section>
