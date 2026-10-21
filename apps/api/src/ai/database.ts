@@ -75,7 +75,7 @@ export function createAiDatabase(env: AiWorkerEnv, fetchFn: typeof fetch = fetch
       throw new AiApiError(503, 'database_unavailable', 'No pudimos confirmar la operación. Consulta su estado antes de repetirla.');
     }
     try {
-      const data: unknown = JSON.parse(await boundedText(response, 1024 * 1024));
+      const data: unknown = JSON.parse(await boundedText(response, name === 'guide_ai' ? 4 * 1024 * 1024 : 1024 * 1024));
       const parsed: unknown = typeof data === 'string' ? JSON.parse(data) : data;
       if (parsed && typeof parsed === 'object' && 'ok' in parsed && parsed.ok === false) {
         const code = 'code' in parsed ? String(parsed.code) : 'access_changed';

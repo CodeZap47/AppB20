@@ -16,6 +16,7 @@
     "VITE_SPACETIMEAUTH_AUTHORITY": "https://auth.spacetimedb.com/oidc",
     "VITE_SPACETIMEAUTH_REDIRECT_URI": "",
     "VITE_SPACETIMEAUTH_POST_LOGOUT_REDIRECT_URI": "",
-    "VITE_API_URL": "https://app-b20-api.sucanasta1.workers.dev"
+    "VITE_API_URL": "https://app-b20-api.sucanasta1.workers.dev",
+    "VITE_AI_API_URL": "https://app-b20-ai.aguaseero.workers.dev"
   }
 }

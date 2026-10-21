@@ -6,6 +6,7 @@
   "compatibility_date": "2026-10-21",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
+  "preview_urls": false,
   "observability": { "enabled": true, "head_sampling_rate": 1 },
   "vars": {
     "CORS_ORIGINS": "https://app-b20.pages.dev,http://localhost:5173,capacitor://localhost,https://localhost",

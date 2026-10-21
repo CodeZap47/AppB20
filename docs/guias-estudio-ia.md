@@ -46,11 +46,15 @@ Usar Node 22 y SpacetimeDB 2.12.
 
 | Comprobación | Estado |
 |---|---|
-| Implementación y validación local | Completada: 1 077 pruebas, tipos y compilaciones con Node 22; migración aditiva y reinicio persistente aprobados |
-| Despliegue SpacetimeDB → Worker → Pages | Pendiente |
+| Implementación y validación local | Completada: 1 078 pruebas, tipos y compilaciones con Node 22; migración aditiva y reinicio persistente aprobados |
+| Despliegue SpacetimeDB → Worker → Pages | Módulo y Worker publicados; Pages en preparación |
 | Prueba real Gemini, dos fuentes ≤10 000 caracteres, salida ≤1 500 tokens, una llamada | Pendiente de clave en Ajustes y confirmación de la vista previa |
 | Aceptación con cuentas del grupo después de recargar | Pendiente de participación de sus titulares |
 
 No se ha realizado ninguna llamada real a Gemini durante las pruebas automáticas. La simulación no se importa como contenido del grupo. EX-2, EX-3 y los demás módulos quedan fuera de esta entrega.
 
-Integración final sobre `cda8030` (versión publicada de Salas y Exposiciones), en la rama aislada `codex/guias-estudio`. Las pruebas globales aprobaron 572 casos de la app, 112 de contratos, 254 del módulo, 94 de la API y 45 de la web. El ensayo persistente aprobó diez grupos de comprobaciones y siete pasos simulados, con cero llamadas reales a Gemini.
+Integración final sobre `cda8030` (versión publicada de Salas y Exposiciones), en la rama aislada `codex/guias-estudio`. Las pruebas globales aprobaron 572 casos de la app, 112 de contratos, 254 del módulo, 95 de la API y 45 de la web. El ensayo persistente aprobó diez grupos de comprobaciones y siete pasos simulados, con cero llamadas reales a Gemini.
+
+Despliegue del módulo: `--delete-data=never`, base `app-b20-34245`. Se compararon las 88 tablas previas y sus 290 registros: no cambió ni faltó ninguno. Servicio IA: https://app-b20-ai.aguaseero.workers.dev, comprobado saludable y con rechazo 401 sin sesión. Las credenciales técnicas temporales se eliminaron después de confirmar su almacenamiento en Cloudflare Secrets.
+
+Para activar el servicio del grupo adulto confirmado se publica con `wrangler deploy --config apps/api/wrangler.ai.jsonc --var AI_ENABLED:true`; el archivo conserva el valor predeterminado desactivado para instalaciones nuevas. El servicio de archivos anterior continúa separado.

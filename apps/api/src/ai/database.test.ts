@@ -34,3 +34,10 @@ describe('Puente IA de procedimientos autorizados', () => {
     expect(cancelled).toBe(true);
   });
 });
+
+it('admite una guía Unicode editada con historial de pasos sin ampliar el límite de EX-1', async () => {
+  const value = { result: '界'.repeat(450_000) };
+  const db = createAiDatabase(env, (async () => Response.json(JSON.stringify(value))) as typeof fetch);
+  expect(await db.user('student', 'guide_ai', { action: 'getDraft' })).toEqual(value);
+  await expect(db.user('student', 'ai_get_generation', {})).rejects.toMatchObject({ code: 'protocol' });
+});
