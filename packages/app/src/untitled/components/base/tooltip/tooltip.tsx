@@ -66,7 +66,7 @@ export const Tooltip = ({
                 crossOffset={crossOffset ?? calculatedCrossOffset}
                 className={(state) =>
                     cx(
-                        "b20-navigation-overlay",
+                        "b20-navigation-overlay b20-messaging-overlay",
                         state.isEntering && "ease-out animate-in",
                         state.isExiting && "ease-in animate-out",
                         typeof className === "function" ? className(state) : className,

@@ -22,7 +22,7 @@ function makeActions() { return {
   getStudyRoomClock: vi.fn().mockResolvedValue(now),
   controlStudyRoomTimer: vi.fn().mockResolvedValue(undefined),
   saveStudyRoomSummary: vi.fn().mockResolvedValue(undefined),
-  sendStudyRoomEntry: vi.fn().mockResolvedValue('e2'),
+  sendStudyRoomEntry: vi.fn<DataSource['sendStudyRoomEntry']>().mockResolvedValue('e2'),
   respondStudyRoomInvitation: vi.fn().mockResolvedValue(undefined),
   createTeachingPractice: vi.fn().mockResolvedValue('p1'),
   createStudyRoom: vi.fn().mockResolvedValue('r2'),
@@ -71,11 +71,13 @@ describe('Salas de estudio', () => {
     expect(container.textContent).not.toContain('Comenzar sesión');
   });
   it('muestra solo la ficha al invitado y permite aceptar sin entregar conversación ni resumen', async () => {
-    data.me = data.members[1]; data.roomMembers = [{ roomId: room.id, memberId: 'peer', status: 'invited', updatedAt: now }]; data.roomEntries = []; data.roomSummaries = []; data.roomTimers = [];
+    data.me = data.members[1]; data.roomMembers = [{ roomId: room.id, memberId: 'peer', status: 'invited', updatedAt: now }];
     await mount();
     expect(container.textContent).toContain('Tienes una invitación');
     expect(container.textContent).not.toContain('Conversación de la sala');
     expect(container.textContent).not.toContain('Resumen colaborativo');
+    expect(container.textContent).not.toContain('Pregunta interna de la sala');
+    expect(container.textContent).not.toContain('Resumen guardado');
     await click('Aceptar invitación');
     expect(actions.respondStudyRoomInvitation).toHaveBeenCalledWith('r1', true);
   });
@@ -152,5 +154,68 @@ describe('Salas de estudio', () => {
     await act(async () => finishEntry('e2'));
     expect(field('Mensaje').disabled).toBe(false);
     expect(field('Mensaje').value).toBe('');
+  });
+  it.each([
+    ['message', 'Un ejemplo para comenzar'],
+    ['question', '¿Cuál es el caso base?'],
+    ['conclusion', 'La llamada termina al llegar al caso base'],
+  ] as const)('envía un aporte de tipo %s y limpia el texto solo tras guardarlo', async (kind, text) => {
+    await mount();
+    await change('Tipo de aporte', kind);
+    await change('Mensaje', text);
+    await click('Enviar aporte');
+    expect(actions.sendStudyRoomEntry).toHaveBeenCalledWith('r1', kind, text, expect.any(String));
+    expect(field('Mensaje').value).toBe('');
+    expect(field('Tipo de aporte').value).toBe(kind);
+  });
+  it('conserva texto, tipo e identificador cuando falla un aporte y permite reintentar sin duplicarlo', async () => {
+    actions.sendStudyRoomEntry.mockRejectedValueOnce(new Error('No se pudo enviar el aporte.'));
+    await mount();
+    await change('Tipo de aporte', 'conclusion');
+    await change('Mensaje', 'Conclusión que quiero conservar');
+    await click('Enviar aporte');
+    expect(actions.sendStudyRoomEntry).toHaveBeenCalledTimes(1);
+    const firstCall = actions.sendStudyRoomEntry.mock.calls[0]!;
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('No se pudo enviar el aporte.');
+    expect(field('Mensaje').value).toBe('Conclusión que quiero conservar');
+    expect(field('Tipo de aporte').value).toBe('conclusion');
+    expect(button('Enviar aporte').disabled).toBe(false);
+    await click('Enviar aporte');
+    expect(actions.sendStudyRoomEntry.mock.calls[1]).toEqual(firstCall);
+    expect(field('Mensaje').value).toBe('');
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    await change('Mensaje', 'Otro aporte');
+    await click('Enviar aporte');
+    expect(actions.sendStudyRoomEntry).toHaveBeenCalledTimes(3);
+    expect(actions.sendStudyRoomEntry.mock.calls[2]![3]).not.toBe(firstCall[3]);
+  });
+  it('permite saltos de línea y composición de texto, y envía con Ctrl o Cmd más Enter', async () => {
+    await mount();
+    await change('Mensaje', 'Primera línea\nSegunda línea');
+    const textarea = field('Mensaje');
+    const newline = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    await act(async () => { textarea.dispatchEvent(newline); });
+    expect(newline.defaultPrevented).toBe(false);
+    expect(actions.sendStudyRoomEntry).not.toHaveBeenCalled();
+    const composing = new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, isComposing: true, bubbles: true, cancelable: true });
+    await act(async () => { textarea.dispatchEvent(composing); });
+    expect(composing.defaultPrevented).toBe(false);
+    expect(actions.sendStudyRoomEntry).not.toHaveBeenCalled();
+    await act(async () => { textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true })); });
+    expect(actions.sendStudyRoomEntry).toHaveBeenCalledWith('r1', 'message', 'Primera línea\nSegunda línea', expect.any(String));
+    await change('Mensaje', 'También desde Mac');
+    await act(async () => { textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true, cancelable: true })); });
+    expect(actions.sendStudyRoomEntry).toHaveBeenLastCalledWith('r1', 'message', 'También desde Mac', expect.any(String));
+  });
+  it.each(['completed', 'cancelled'] as const)('conserva el historial sin formulario cuando la sala está %s', async (status) => {
+    data.studyRooms = [{ ...room, status }];
+    await mount();
+    const conversation = container.querySelector('.messaging-room')!;
+    expect(conversation.textContent).toContain('Pregunta interna de la sala');
+    expect(conversation.textContent).toContain('Solo lectura');
+    expect(conversation.textContent).toContain('El chat quedó de consulta');
+    expect(conversation.querySelector('form')).toBeNull();
+    expect(conversation.querySelector('textarea')).toBeNull();
+    expect(actions.sendStudyRoomEntry).not.toHaveBeenCalled();
   });
 });

@@ -5,6 +5,7 @@ import { chatTarget } from '../lib/chat';
 import { formatTime, memberName } from '../lib/format';
 import { ResourceDownloads } from './AcademicTools';
 import { useAction } from './useAction';
+import { ChatButton, ChatTextArea } from './messaging/Messaging';
 
 export function ConversationMute({ scope, conversationId }: { scope: MessageScope; conversationId: Id }) {
   const source = useDataSource();
@@ -12,10 +13,10 @@ export function ConversationMute({ scope, conversationId }: { scope: MessageScop
   const { error, pending, run } = useAction();
   const muted = conversationStates.find((row) => row.scope === scope && row.conversationId === conversationId)?.muted ?? false;
   return <div className="chat-control">
-    <button className="button secondary" type="button" aria-pressed={muted} disabled={pending}
+    <ChatButton variant="secondary" className="button secondary" type="button" aria-pressed={muted} disabled={pending}
       onClick={() => void run(() => source.setConversationMuted(scope, conversationId, !muted))}>
       {muted ? 'Activar avisos' : 'Silenciar'}
-    </button>
+    </ChatButton>
     {error && <p className="error" role="alert">{error}</p>}
   </div>;
 }
@@ -34,16 +35,16 @@ export function ReportMessageForm({ scope, message, onClose }: { scope: MessageS
     const saved = await run(async () => { await source.reportMessage({ scope, messageId: message.id, reason, shareText, attachmentIds }); return true; });
     if (saved) onClose();
   };
-  return <section className="panel chat-report" aria-label="Reportar mensaje">
+  return <section className="panel chat-report messaging-report" aria-label="Reportar mensaje">
     <h3>Reportar este mensaje</h3>
     <p>Solo tú y los creadores de la app verán el reporte. Elige qué evidencia compartir; el resto de la conversación queda privado.</p>
     <form className="form" onSubmit={(event) => void submit(event)}>
-      <label className="field"><span className="field__label">Motivo del reporte</span><textarea value={reason} onChange={(event) => setReason(event.target.value)} required maxLength={2000} rows={3} /></label>
+      <label className="field"><span className="field__label">Motivo del reporte</span><ChatTextArea aria-label="Motivo del reporte" value={reason} onChange={(event) => setReason(event.target.value)} required maxLength={2000} rows={3} /></label>
       <label className="chat-check"><input type="checkbox" checked={shareText} onChange={(event) => setShareText(event.target.checked)} /> Compartir el texto de este mensaje</label>
       {shareText && <blockquote className="chat-report__evidence">{message.text}</blockquote>}
       {files.map((file) => <label className="chat-check" key={file.id}><input type="checkbox" checked={attachmentIds.includes(file.id)} onChange={(event) => setAttachmentIds((current) => event.target.checked ? [...current, file.id] : current.filter((id) => id !== file.id))} /> Compartir {file.name}</label>)}
       {error && <p className="error" role="alert">{error}</p>}
-      <div className="row"><button type="submit" disabled={pending || !reason.trim()}>Enviar reporte</button><button type="button" className="secondary" onClick={onClose} disabled={pending}>Cancelar reporte</button></div>
+      <div className="row"><ChatButton type="submit" disabled={pending || !reason.trim()}>Enviar reporte</ChatButton><ChatButton type="button" variant="secondary" className="secondary" onClick={onClose} disabled={pending}>Cancelar reporte</ChatButton></div>
     </form>
   </section>;
 }
@@ -61,7 +62,7 @@ export function MessageReportsPanel() {
       <p>{report.reason}</p>
       {report.evidenceText && <blockquote className="chat-report__evidence">{report.evidenceText}</blockquote>}
       {'attachmentIds' in report && Array.isArray(report.attachmentIds) && <ResourceDownloads files={resourceFiles.filter((file) => report.attachmentIds.includes(file.id))} />}
-      {me?.isCreator && report.status === 'open' && <button type="button" className="secondary" disabled={pending} onClick={() => void run(() => source.resolveMessageReport(report.id))}>Marcar como atendido</button>}
+      {me?.isCreator && report.status === 'open' && <ChatButton type="button" variant="secondary" className="secondary" disabled={pending} onClick={() => void run(() => source.resolveMessageReport(report.id))}>Marcar como atendido</ChatButton>}
     </article>)}
     {error && <p className="error" role="alert">{error}</p>}
   </details>;

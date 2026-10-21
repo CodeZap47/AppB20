@@ -5,6 +5,15 @@
 @import "tailwindcss/utilities.css" layer(utilities) source(none) important;
 
 @source "../**/*.{ts,tsx}";
+@source "../../components/messaging/**/*.{ts,tsx}";
+@source "../../components/Composer.tsx";
+@source "../../components/MessageList.tsx";
+@source "../../components/MessageParts.tsx";
+@source "../../components/MessageText.tsx";
+@source "../../components/ChatControls.tsx";
+@source "../../pages/MessagesPage.tsx";
+@source "../../pages/QuestionsPage.tsx";
+@source "../../pages/RoomsPage.tsx";
 
 @plugin "tailwindcss-react-aria-components";
 @plugin "tailwindcss-animate";
@@ -27,19 +36,20 @@
   transition-timing-function: inherit;
 }
 
-/* Reset only the B20 navigation surfaces and their React Aria portals. */
-:is(.b20-navigation, .b20-navigation-overlay),
-:is(.b20-navigation, .b20-navigation-overlay) *,
-:is(.b20-navigation, .b20-navigation-overlay)::before,
-:is(.b20-navigation, .b20-navigation-overlay)::after,
-:is(.b20-navigation, .b20-navigation-overlay) ::before,
-:is(.b20-navigation, .b20-navigation-overlay) ::after {
+/* Reset only the B20 navigation, messaging surfaces and their React Aria portals. */
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay),
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay) *,
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay)::before,
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay)::after,
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay) ::before,
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay) ::after {
   box-sizing: border-box;
   border: 0 solid;
 }
 
-:is(.b20-navigation, .b20-navigation-overlay) :where(button, input, optgroup, select, textarea),
-button.b20-navigation-overlay {
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay) :where(button, input, optgroup, select, textarea),
+button.b20-navigation-overlay,
+button.b20-messaging-overlay {
   font: inherit;
   font-feature-settings: inherit;
   font-variation-settings: inherit;
@@ -50,34 +60,34 @@ button.b20-navigation-overlay {
   padding: 0;
 }
 
-:is(.b20-navigation, .b20-navigation-overlay) :where(button, [role="button"]) {
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay) :where(button, [role="button"]) {
   cursor: pointer;
 }
 
-:is(.b20-navigation, .b20-navigation-overlay) :where(button, input, select, textarea):disabled {
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay) :where(button, input, select, textarea):disabled {
   cursor: default;
 }
 
-:is(.b20-navigation, .b20-navigation-overlay) :where(ol, ul, menu) {
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay) :where(ol, ul, menu) {
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-:is(.b20-navigation, .b20-navigation-overlay) :where(p, h1, h2, h3, h4, blockquote) {
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay) :where(p, h1, h2, h3, h4, blockquote) {
   margin: 0;
 }
 
-:is(.b20-navigation, .b20-navigation-overlay) :where(img, svg, video, canvas, audio) {
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay) :where(img, svg, video, canvas, audio) {
   display: block;
   vertical-align: middle;
 }
 
-:is(.b20-navigation, .b20-navigation-overlay) :where(img, video) {
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay) :where(img, video) {
   max-width: 100%;
   height: auto;
 }
 
-:is(.b20-navigation, .b20-navigation-overlay) [hidden] {
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay) [hidden] {
   display: none !important;
 }

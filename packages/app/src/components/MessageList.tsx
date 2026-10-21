@@ -14,7 +14,7 @@ import type { Id, Member, MessageScope } from '../data/types';
 import { formatClock, formatDayLabel, hueOf, memberName } from '../lib/format';
 import { groupByDay, type ChatMessage } from '../lib/messages';
 import { messagePreview, referencesIn, stickerOnly, stripReferences } from '../lib/references';
-import { Avatar } from './Avatar';
+import { ChatAvatar, ChatBubble, ChatButton } from './messaging/Messaging';
 import { Icon } from './Icon';
 import { MessageMenu, ReactionBar, RefCard, StickerImage, type MenuAction } from './MessageParts';
 import { MessageText } from './MessageText';
@@ -112,8 +112,8 @@ export function MessageList({
         id={domId(m.id)}
         className={['msg', flash === m.id && 'msg--flash'].filter(Boolean).join(' ')}
       >
-        <div
-          className={['bubble', sticker && 'bubble--sticker', m.deletedAt && 'bubble--deleted']
+        <ChatBubble
+          className={['bubble', 'messaging-bubble', sticker && 'bubble--sticker', m.deletedAt && 'bubble--deleted']
             .filter(Boolean)
             .join(' ')}
         >
@@ -161,7 +161,7 @@ export function MessageList({
             {m.editedAt && !m.deletedAt && <span className="bubble__edited">editado · </span>}
             <time dateTime={m.sentAt.toISOString()}>{formatClock(m.sentAt)}</time>
           </span>
-        </div>
+        </ChatBubble>
         {!m.deletedAt && (
           <MessageMenu
             mine={mine}
@@ -268,7 +268,11 @@ export function MessageList({
                       tabIndex={-1}
                       aria-hidden="true"
                     >
-                      <Avatar member={members.find((m) => m.id === run.senderId)} size={32} />
+                      <ChatAvatar
+                        name={memberName(members, run.senderId)}
+                        src={members.find((m) => m.id === run.senderId)?.photoUrl}
+                        size="xs"
+                      />
                     </Link>
                   )}
                   <div className="run__bubbles">
@@ -290,14 +294,14 @@ export function MessageList({
         ))}
       </div>
       {away && (
-        <button type="button" className="thread__jump" onClick={() => toBottom(true)}>
+        <ChatButton variant="secondary" type="button" className="thread__jump" onClick={() => toBottom(true)}>
           <Icon name="down" size={18} />
           {unseen > 0 ? (
             <span>{unseen === 1 ? '1 mensaje nuevo' : `${unseen} mensajes nuevos`}</span>
           ) : (
             <span className="sr-only">Ir al último mensaje</span>
           )}
-        </button>
+        </ChatButton>
       )}
     </div>
   );

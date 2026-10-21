@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { Fragment, useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { ROOM_LIMITS, roomRemainingMs, roomTimerMinutesError } from '@b20/core';
 import { Empty } from '../components/Empty';
@@ -6,10 +6,11 @@ import { Icon } from '../components/Icon';
 import { RichText } from '../components/RichText';
 import { SubjectSelect } from '../components/SubjectSelect';
 import { useAction } from '../components/useAction';
+import { ChatAvatar, ChatBubble, ChatButton, ChatTextArea } from '../components/messaging/Messaging';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import type { Snapshot } from '../data/types';
 import type { StudyRoom, StudyRoomEntryKind, StudyRoomMaterialKind, StudyRoomMember, StudyRoomSummary, StudyRoomTimer } from '../data/roomTypes';
-import { formatTime, memberName } from '../lib/format';
+import { formatClock, formatDayLabel, formatTime, memberName } from '../lib/format';
 import { matches } from '../lib/search';
 import '../rooms.css';
 
@@ -200,13 +201,63 @@ function RoomMaterials({ room, data }: { room: StudyRoom; data: Snapshot }) {
 
 function RoomConversation({ room, data }: { room: StudyRoom; data: Snapshot }) {
   const source = useDataSource();
+  const headingId = useId();
+  const keyboardHintId = useId();
   const [text, setText] = useState('');
   const [kind, setKind] = useState<StudyRoomEntryKind>('message');
   const requestId = useRef(crypto.randomUUID());
   const { error, pending, run } = useAction();
   const entries = data.roomEntries.filter((entry) => entry.roomId === room.id).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-  return <section className="panel form"><h2>Conversación de la sala</h2><p className="field__hint">Solo los participantes pueden consultar estos mensajes, dudas y conclusiones.</p><ol className="rooms-entries">{entries.map((entry) => <li key={entry.id}><header><strong>{memberName(data.members, entry.authorId)}</strong><span className="badge">{ENTRY_KIND[entry.kind]}</span><time dateTime={entry.createdAt.toISOString()} className="muted">{formatTime(entry.createdAt)}</time></header><RichText text={entry.text} /></li>)}</ol>{!entries.length && <p className="muted">La conversación está lista para comenzar.</p>}
-    {activeRoom(room) ? <form className="form" onSubmit={(event) => { event.preventDefault(); if (!text.trim() || pending) return; void run(async () => { await source.sendStudyRoomEntry(room.id, kind, text, requestId.current); setText(''); requestId.current = crypto.randomUUID(); }); }}><label className="field">Tipo de aporte<select value={kind} disabled={pending} onChange={(event) => setKind(event.target.value as StudyRoomEntryKind)}>{Object.entries(ENTRY_KIND).map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label><label className="field">Mensaje<textarea value={text} disabled={pending} onChange={(event) => setText(event.target.value)} rows={3} maxLength={ROOM_LIMITS.entry} required /></label><div className="form__actions"><button disabled={pending || !text.trim()}>{pending ? 'Enviando…' : 'Enviar aporte'}</button></div></form> : <p className="muted">El chat quedó de consulta al {room.status === 'completed' ? 'finalizar' : 'cancelar'} la sala.</p>}{error && <p className="error" role="alert">{error}</p>}
+  const writable = activeRoom(room);
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!writable || !text.trim() || pending) return;
+    void run(async () => {
+      await source.sendStudyRoomEntry(room.id, kind, text, requestId.current);
+      setText('');
+      requestId.current = crypto.randomUUID();
+    });
+  };
+
+  return <section className="panel b20-messaging messaging-room" aria-labelledby={headingId}>
+    <header className="messaging-room__header">
+      <span className="messaging-room__icon" aria-hidden="true"><Icon name="chat" size={22} /></span>
+      <div className="messaging-room__heading"><h2 id={headingId}>Conversación de la sala</h2><p>Solo los participantes pueden consultar estos mensajes, dudas y conclusiones.</p></div>
+      <span className={`messaging-room__status${writable ? '' : ' messaging-room__status--readonly'}`}>{writable ? `${room.participantCount} participantes` : 'Solo lectura'}</span>
+    </header>
+    <ol className="messaging-room__thread" aria-label="Aportes de la sala" aria-live="polite" aria-relevant="additions text" tabIndex={0}>
+      {entries.map((entry, index) => {
+        const mine = entry.authorId === data.me?.id;
+        const author = data.members.find((member) => member.id === entry.authorId);
+        const name = memberName(data.members, entry.authorId);
+        const previousEntry = entries[index - 1];
+        const newDay = !previousEntry || previousEntry.createdAt.toDateString() !== entry.createdAt.toDateString();
+        return <Fragment key={entry.id}>
+          {newDay && <li className="messaging-day"><span>{formatDayLabel(entry.createdAt)}</span></li>}
+          <li className={`messaging-room__message${mine ? ' messaging-room__message--mine' : ''}`}>
+            <ChatAvatar name={name} src={author?.photoUrl} size="sm" />
+            <div className="messaging-room__body">
+              <div className="messaging-room__meta"><strong>{mine ? 'Tú' : name}</strong><span className={`messaging-room__kind messaging-room__kind--${entry.kind}`}>{ENTRY_KIND[entry.kind]}</span><time dateTime={entry.createdAt.toISOString()} title={formatTime(entry.createdAt)}>{formatClock(entry.createdAt)}</time></div>
+              <ChatBubble className="messaging-room__bubble"><RichText text={entry.text} /></ChatBubble>
+            </div>
+          </li>
+        </Fragment>;
+      })}
+      {!entries.length && <li className="messaging-room__empty"><Icon name="chat" size={28} /><strong>La conversación está lista para comenzar.</strong><span>Comparte una duda o una idea con los participantes.</span></li>}
+    </ol>
+    {writable ? <form className="messaging-room__composer" onSubmit={submit} aria-busy={pending}>
+      <div className="messaging-room__composer-fields">
+        <label className="field">Tipo de aporte<select value={kind} disabled={pending} onChange={(event) => setKind(event.target.value as StudyRoomEntryKind)}>{Object.entries(ENTRY_KIND).map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
+        <label className="field">Mensaje<ChatTextArea aria-label="Mensaje" value={text} disabled={pending} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => {
+          if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.nativeEvent.isComposing) {
+            event.preventDefault();
+            event.currentTarget.form?.requestSubmit();
+          }
+        }} aria-describedby={keyboardHintId} placeholder="Comparte un mensaje, una duda o una conclusión…" rows={3} maxLength={ROOM_LIMITS.entry} required /></label>
+      </div>
+      <div className="messaging-room__composer-footer"><span id={keyboardHintId} className="field__hint">Enter para una nueva línea · Ctrl o ⌘ + Enter para enviar</span><ChatButton type="submit" disabled={pending || !text.trim()} loading={pending}><Icon name="send" size={16} />{pending ? 'Enviando…' : 'Enviar aporte'}</ChatButton></div>
+      {error && <p className="error" role="alert">{error}</p>}
+    </form> : <p className="messaging-room__readonly"><Icon name="lock" size={16} />El chat quedó de consulta al {room.status === 'completed' ? 'finalizar' : 'cancelar'} la sala.</p>}
   </section>;
 }
 
