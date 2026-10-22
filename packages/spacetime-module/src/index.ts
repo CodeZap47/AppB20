@@ -32,6 +32,8 @@ import * as rooms from './roomsHandlers';
 import * as nativeStickers from './nativeStickersHandlers';
 import { aiTables } from './aiTables';
 import * as ai from './aiHandlers';
+import { moodleTables } from './moodleTables';
+import * as moodle from './moodleHandlers';
 import { notificationTables, notification, notificationPreference } from './notificationTables';
 import * as notifications from './notificationHandlers';
 import { invitationEmailTables, invitationEmail } from './invitationEmailTables';
@@ -811,6 +813,7 @@ const spacetimedb = schema({
   ...helpVersionTables,
   ...teachingVersionTables,
   ...aiTables,
+  ...moodleTables,
   ...notificationTables,
   ...invitationEmailTables,
   ...trashTables,
@@ -3257,6 +3260,17 @@ export const ai_finish_generation = spacetimedb.procedure({ payload: t.string() 
   (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, ai.aiFinishGeneration)));
 export const ai_get_generation = spacetimedb.procedure({ payload: t.string() }, t.string(),
   (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, ai.aiGetGeneration)));
+
+/** Moodle → calendario: el Worker importa con su identidad técnica y las tareas quedan a nombre de `actor`. */
+const moodleDeps: moodle.MoodleDeps = {
+  saveRevision: (ctx, id, version, content, actor) => saveRevision(ctx, 'assignment', id, version, content, actor),
+  savePageSnapshot: (ctx, id) => savePageSnapshot(ctx, 'assignment', id),
+  setAssignmentTopic,
+};
+export const set_moodle_sync = spacetimedb.reducer({ identity: t.identity(), actor: t.identity(), enabled: t.bool() },
+  (ctx, input) => { moodle.setMoodleSync(ctx, input); log(ctx, 'configure', 'moodle_sync', '0'); });
+export const moodle_ingest = spacetimedb.procedure({ payload: t.string() }, t.string(),
+  (ctx, { payload }) => ctx.withTx((tx) => moodle.moodleResponse(tx, payload, moodleDeps)));
 
 export const set_file_service = spacetimedb.reducer({ identity: t.identity() }, (ctx, { identity }) => {
   if (!isOwner(ctx)) throw new SenderError('Solo el propietario configura el servicio de archivos.');

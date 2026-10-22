@@ -11,6 +11,7 @@ import { aiWorkerRoutes, aiPublicError } from './ai/routes.ts';
 import { guideAiRoutes } from './ai/guideRoutes.ts';
 import { examRoutes } from './ai/examRoutes.ts';
 import { agentAiRoutes } from './ai/agentRoutes.ts';
+import { moodleRoutes } from './integrations/moodleRoutes.ts';
 import type { AgentProvider } from './ai/agentProvider.ts';
 import type { GuideProvider } from './ai/guideProvider.ts';
 import type { AiProvider } from './ai/provider.ts';
@@ -20,6 +21,7 @@ interface WorkerOptions {
   auth?: AuthOptions;
   database?: (env: FileWorkerEnv) => FileDatabase;
   aiDatabase?: (env: AiWorkerEnv) => AiDatabase;
+  moodleFetch?: typeof fetch;
   aiProvider?: AiProvider;
   guideProvider?: GuideProvider;
   agentProvider?: AgentProvider;
@@ -82,6 +84,8 @@ export function createWorkerApp(options: WorkerOptions = {}) {
   app.route('/ai/exams', examRoutes());
   app.route('/ai/agent', agentAiRoutes({ provider: options.agentProvider }));
   app.route('/ai', aiWorkerRoutes({ provider: options.aiProvider }));
+  // Autenticada con su propio secreto: la extensión de Moodle no tiene sesión de B20.
+  app.route('/integrations/moodle', moodleRoutes({ fetchFn: options.moodleFetch }));
   app.use('/files/*', async (c, next) => {
     if (!c.env.FILES) return c.json({ error: 'La compatibilidad con archivos anteriores no está configurada en este servicio.' }, 503);
     let auth: AuthOptions;
