@@ -19,6 +19,7 @@ interface ImportMetaEnv {
   readonly VITE_SPACETIMEAUTH_REDIRECT_URI?: string;
   readonly VITE_SPACETIMEAUTH_POST_LOGOUT_REDIRECT_URI?: string;
   readonly VITE_VAPID_PUBLIC_KEY?: string;
+  readonly VITE_DEV_AUTH_BYPASS?: string;
 }
 
 interface ImportMeta {

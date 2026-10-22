@@ -10,7 +10,7 @@ import { ResourceSection } from '../components/AcademicTools';
 import { StructuredEditor, StructuredText } from '../components/StructuredText';
 import { ContentWithdrawal } from '../components/ContentWithdrawal';
 import { useAction } from '../components/useAction';
-import { formatDate, formatListTime, formatTime, memberName } from '../lib/format';
+import { formatListTime, formatTime, memberName } from '../lib/format';
 import { previewText } from '../lib/messages';
 import { currentPlacement, lastPeriod, rememberPeriod } from '../lib/period';
 import { matches, normalize, similarity } from '../lib/search';
@@ -65,6 +65,28 @@ function inState(
   }
 }
 
+/** Orden de la lista; el valor es el que va en la URL (`?orden=`). */
+const SORTS = [
+  { id: '', label: 'Actividad reciente' },
+  { id: 'nuevas', label: 'Más nuevas' },
+  { id: 'respuestas', label: 'Más respondidas' },
+] as const;
+type Sort = (typeof SORTS)[number]['id'];
+const isSort = (value: string | null): value is Sort => SORTS.some((s) => s.id === value);
+
+function sorter(sort: Sort, answers: Answer[]): (a: Question, b: Question) => number {
+  switch (sort) {
+    case 'nuevas':
+      return (a, b) => b.createdAt.getTime() - a.createdAt.getTime();
+    case 'respuestas':
+      return (a, b) =>
+        answersOf(b.id, answers).length - answersOf(a.id, answers).length ||
+        lastActivity(b, answers).getTime() - lastActivity(a, answers).getTime();
+    default:
+      return (a, b) => lastActivity(b, answers).getTime() - lastActivity(a, answers).getTime();
+  }
+}
+
 function StatusBadge({ question, answerCount }: { question: Question; answerCount: number }) {
   if (question.status === 'resolved') {
     return <span className="badge badge--resolved">Resuelta</span>;
@@ -99,6 +121,67 @@ function similarQuestions(
     .map((x) => x.q);
 }
 
+/**
+ * Recuadro de respuestas de la tarjeta: el número y el estado en texto, no solo en color.
+ * Sin respuestas se marca en ámbar; resuelta, en verde con una palomita.
+ */
+function AnswerStat({ count, resolved }: { count: number; resolved: boolean }) {
+  const tone = resolved ? 'resolved' : count ? 'open' : 'unanswered';
+  return (
+    <span className={`qa-stat qa-stat--${tone}`}>
+      <span className="qa-stat__count">
+        {resolved && <Icon name="check" size={16} />}
+        {count}
+      </span>
+      <span className="qa-stat__label">
+        {resolved ? 'resuelta' : count ? (count === 1 ? 'respuesta' : 'respuestas') : 'sin respuesta'}
+      </span>
+    </span>
+  );
+}
+
+/** Contenido de la tarjeta; lo comparten la lista y la vista previa del formulario. */
+function QuestionCardBody({
+  title,
+  context,
+  excerpt,
+  author,
+  authorLabel,
+  count,
+  resolved,
+  withdrawn,
+  when,
+}: {
+  title: string;
+  context: string;
+  excerpt: string;
+  author?: Member;
+  authorLabel: string;
+  count: number;
+  resolved: boolean;
+  withdrawn?: boolean;
+  when: string;
+}) {
+  return (
+    <>
+      <AnswerStat count={count} resolved={resolved} />
+      <span className="qa-card__body">
+        <span className="work-card__top">
+          {withdrawn && <span className="badge">Retirada</span>}
+          <span className="work-card__context">{context}</span>
+        </span>
+        <strong className="work-card__title">{title}</strong>
+        {excerpt && <span className="work-card__excerpt">{excerpt}</span>}
+        <span className="work-card__footer">
+          <Avatar member={author} size={24} />
+          <span className="work-card__authors">{authorLabel}</span>
+          <span className="work-card__date">{when}</span>
+        </span>
+      </span>
+    </>
+  );
+}
+
 function QuestionCard({
   question,
   answers,
@@ -112,32 +195,65 @@ function QuestionCard({
   members: Member[];
   meId?: string;
 }) {
-  const count = answersOf(question.id, answers).length;
-  const excerpt = previewText(question.body);
   const author = members.find((m) => m.id === question.authorId);
   return (
     <li>
-      <Link to={`/m/preguntas/${question.id}`} className="work-card">
-        <span className="work-card__top">
-          <StatusBadge question={question} answerCount={count} />
-          <span className="work-card__context">{contextOf(question, subjects)}</span>
-        </span>
-        <strong className="work-card__title">{question.title}</strong>
-        {excerpt && <span className="work-card__excerpt">{excerpt}</span>}
-        <span className="work-card__footer">
-          <Avatar member={author} size={24} />
-          <span className="work-card__authors">
-            {question.authorId === meId ? 'Tú' : (author?.displayName ?? 'Alguien')}
-          </span>
-          <span className="qa-count">
-            <Icon name="chat" size={14} />
-            {count}
-            <span className="sr-only"> {count === 1 ? 'respuesta' : 'respuestas'}</span>
-          </span>
-          <span className="work-card__date">{formatListTime(lastActivity(question, answers))}</span>
-        </span>
+      <Link to={`/m/preguntas/${question.id}`} className="work-card qa-card">
+        <QuestionCardBody
+          title={question.title}
+          context={contextOf(question, subjects)}
+          excerpt={previewText(question.body)}
+          author={author}
+          authorLabel={question.authorId === meId ? 'Tú' : (author?.displayName ?? 'Alguien')}
+          count={answersOf(question.id, answers).length}
+          resolved={question.status === 'resolved'}
+          withdrawn={Boolean(question.withdrawnAt)}
+          when={formatListTime(lastActivity(question, answers))}
+        />
       </Link>
     </li>
+  );
+}
+
+/** Dudas sin respuesta de otras personas, las que más tiempo llevan esperando primero. */
+function NeedsHelp({ questions, answers, subjects, meId, onShowAll }: {
+  questions: Question[];
+  answers: Answer[];
+  subjects: Subject[];
+  meId?: string;
+  onShowAll: () => void;
+}) {
+  const waiting = questions
+    .filter((q) => !q.withdrawnAt && q.status === 'open' && q.authorId !== meId)
+    .filter((q) => answersOf(q.id, answers).length === 0)
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  if (!waiting.length) return null;
+  return (
+    <section className="qa-help" aria-labelledby="qa-help-title">
+      <header className="qa-help__header">
+        <h2 id="qa-help-title">Puedes ayudar</h2>
+        <span className="muted">
+          {waiting.length === 1 ? 'Una duda sigue' : `${waiting.length} dudas siguen`} sin respuesta
+        </span>
+        {waiting.length > 3 && (
+          <button type="button" className="link-button" onClick={onShowAll}>
+            Ver todas
+          </button>
+        )}
+      </header>
+      <ul className="qa-help__list">
+        {waiting.slice(0, 3).map((q) => (
+          <li key={q.id}>
+            <Link to={`/m/preguntas/${q.id}`}>
+              <strong>{q.title}</strong>
+              <span className="muted">
+                {contextOf(q, subjects)} · {formatListTime(q.createdAt)}
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -149,6 +265,8 @@ export function QuestionsPage() {
   const stateParam = params.get('estado');
   const state: StateFilter = isStateFilter(stateParam) ? stateParam : '';
   const subjectId = params.get('materia') ?? '';
+  const sortParam = params.get('orden');
+  const sort: Sort = isSort(sortParam) ? sortParam : '';
 
   const update = (changes: Record<string, string>) =>
     setParams(
@@ -178,7 +296,7 @@ export function QuestionsPage() {
   const beforeSubject = byQuery.filter((q) => inState(state, q, answers, me?.id));
   const shown = beforeState
     .filter((q) => inState(state, q, answers, me?.id))
-    .sort((a, b) => lastActivity(b, answers).getTime() - lastActivity(a, answers).getTime());
+    .sort(sorter(sort, answers));
   const subjectChips = subjects
     .filter((s) => questions.some((q) => q.subjectId === s.id))
     .sort(bySubject)
@@ -228,7 +346,28 @@ export function QuestionsPage() {
                 onChange={(e) => update({ q: e.target.value })}
               />
             </label>
+            <select
+              aria-label="Ordenar preguntas"
+              value={sort}
+              onChange={(e) => update({ orden: e.target.value })}
+            >
+              {SORTS.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
           </div>
+
+          {!filtering && (
+            <NeedsHelp
+              questions={questions}
+              answers={answers}
+              subjects={subjects}
+              meId={me?.id}
+              onShowAll={() => update({ estado: 'sin-respuesta' })}
+            />
+          )}
 
           <div className="chips chips--scroll" role="group" aria-label="Estado">
             {STATES.map((s) => (
@@ -307,7 +446,7 @@ export function QuestionsPage() {
                 : 'Prueba con otras palabras o quita algún filtro. Si nadie la ha hecho, pregúntala tú.'}
             </Empty>
           ) : (
-            <ul className="work-grid">
+            <ul className="work-grid qa-grid">
               {shown.map((q) => (
                 <QuestionCard
                   key={q.id}
@@ -331,7 +470,7 @@ export function AskQuestionPage() {
   const source = useDataSource();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { questions, subjects, calendar } = useSnapshot();
+  const { me, questions, answers, subjects, calendar } = useSnapshot();
   const { error, run } = useAction();
   const preset = subjects.find((s) => s.id === params.get('materia'));
   const [period, setPeriod] = useState(
@@ -405,17 +544,20 @@ export function AskQuestionPage() {
                   <Icon name="search" size={16} /> ¿Ya la preguntaron? Revisa antes de publicar:
                 </p>
                 <ul className="links">
-                  {similar.map((q) => (
-                    <li key={q.id}>
-                      <Link to={`/m/preguntas/${q.id}`}>
-                        <strong>{q.title}</strong>
-                        <span className="muted">
-                          {q.status === 'resolved' ? 'Resuelta' : 'Abierta'} ·{' '}
-                          {contextOf(q, subjects)}
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
+                  {similar.map((q) => {
+                    const count = answersOf(q.id, answers).length;
+                    return (
+                      <li key={q.id}>
+                        <Link to={`/m/preguntas/${q.id}`}>
+                          <strong>{q.title}</strong>
+                          <span className="muted">
+                            {q.status === 'resolved' ? 'Resuelta' : count ? 'Abierta' : 'Sin respuesta'} ·{' '}
+                            {count} {count === 1 ? 'respuesta' : 'respuestas'} · {contextOf(q, subjects)}
+                          </span>
+                        </Link>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}
@@ -490,6 +632,24 @@ export function AskQuestionPage() {
 
         <aside className="detail__side">
           <section className="panel">
+            <h2 className="label">Así la verá el grupo</h2>
+            <div className="work-card qa-card qa-card--preview" aria-hidden="true">
+              <QuestionCardBody
+                title={title.trim() || 'Tu pregunta aparecerá aquí'}
+                context={
+                  (subjects.find((s) => s.id === subjectId)?.name ?? 'Materia') +
+                  (topic.trim() ? ` · ${topic.trim()}` : '')
+                }
+                excerpt={previewText(body)}
+                author={me}
+                authorLabel="Tú"
+                count={0}
+                resolved={false}
+                when="ahora"
+              />
+            </div>
+          </section>
+          <section className="panel">
             <h2 className="label">Para que te respondan rápido</h2>
             <ul className="qa-tips">
               <li>Busca primero en la lista; quizá ya está resuelta.</li>
@@ -524,41 +684,48 @@ function AnswerCard({
   const author = members.find((m) => m.id === answer.authorId);
   const useful = data.answerUsefulness.filter((item) => item.answerId === answer.id);
   const mine = useful.some((item) => item.memberId === meId);
+  const canMark = meId && answer.authorId !== meId && !answer.withdrawnAt;
   return (
     <article className={accepted ? 'panel qa-answer answer--accepted' : 'panel qa-answer'}>
-      {accepted && (
-        <p className="qa-answer__accepted">
-          <Icon name="check" size={16} /> Le ayudó a quien preguntó
-        </p>
-      )}
       <header className="qa-answer__meta">
         <Avatar member={author} size={28} />
-        <span>
+        <span className="qa-answer__who">
           <strong>{answer.authorId === meId ? 'Tú' : (author?.displayName ?? 'Alguien')}</strong>
           <span className="muted"> · {formatTime(answer.createdAt)}</span>
         </span>
+        {accepted && (
+          <span className="qa-answer__accepted">
+            <Icon name="check" size={16} /> Le ayudó a quien preguntó
+          </span>
+        )}
       </header>
       <StructuredText text={answer.body} />
       <ContentWithdrawal kind="answer" id={answer.id} version={answer.version ?? 1} withdrawnAt={answer.withdrawnAt}
         canEdit={answer.authorId === meId || data.me?.isCreator} reasonRequired={answer.authorId !== meId} />
       <ResourceSection kind="answer" id={answer.id} version={answer.version ?? 1} canEdit={answer.authorId === meId && !answer.withdrawnAt} title="Archivos de esta respuesta" />
-      <div className="row">
-        <span className="muted">{useful.length} {useful.length === 1 ? 'compañero la encontró útil' : 'compañeros la encontraron útil'}</span>
-        {meId && answer.authorId !== meId && !answer.withdrawnAt && <button type="button" className="secondary" aria-pressed={mine} disabled={pending} onClick={() => void run(() => source.toggleAnswerUsefulness(answer.id))}>{mine ? 'Quitar mi señal de utilidad' : 'Esta explicación es útil'}</button>}
-      </div>
-      {error && <p className="error" role="alert">{error}</p>}
       {accepted && (
         <p className="field__hint">
           Que le haya servido no la hace infalible: revisa el razonamiento.
         </p>
       )}
-      {onAccept && !answer.withdrawnAt && (
-        <div className="form__actions">
+      <footer className="qa-answer__actions">
+        <span className="qa-answer__useful">
+          {useful.length
+            ? `Útil para ${useful.length} ${useful.length === 1 ? 'compañero' : 'compañeros'}`
+            : 'Nadie la ha marcado como útil'}
+        </span>
+        {canMark && (
+          <button type="button" className="secondary" aria-pressed={mine} disabled={pending} onClick={() => void run(() => source.toggleAnswerUsefulness(answer.id))}>
+            {mine ? 'Quitar mi señal de utilidad' : 'Esta explicación es útil'}
+          </button>
+        )}
+        {onAccept && !answer.withdrawnAt && (
           <button type="button" className="secondary with-icon" onClick={onAccept}>
             <Icon name="check" size={16} /> Me ayudó esta respuesta
           </button>
-        </div>
-      )}
+        )}
+      </footer>
+      {error && <p className="error" role="alert">{error}</p>}
       <QuestionClarifications questionId={answer.questionId} answerId={answer.id} />
     </article>
   );
@@ -568,7 +735,7 @@ function AnswerCard({
 export function QuestionPage() {
   const { questionId = '' } = useParams();
   const source = useDataSource();
-  const { me, questions, answers, members, subjects, notes, museumEntries } = useSnapshot();
+  const { me, questions, answers, members, subjects, notes, museumEntries, answerUsefulness } = useSnapshot();
   const { error, run } = useAction();
   const [answer, setAnswer] = useState('');
   const question = questions.find((q) => q.id === questionId);
@@ -595,8 +762,15 @@ export function QuestionPage() {
   const list = answersOf(question.id, answers).sort(
     (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
   );
+  const usefulCount = (answerId: string) =>
+    answerUsefulness.filter((item) => item.answerId === answerId).length;
   const accepted = list.find((a) => a.id === question.acceptedAnswerId);
-  const rest = list.filter((a) => a !== accepted);
+  // Después de la aceptada, las que más compañeros encontraron útiles; a igual señal, la más antigua.
+  const rest = list
+    .filter((a) => a !== accepted)
+    .sort((a, b) => usefulCount(b.id) - usefulCount(a.id));
+  const usefulTotal = list.reduce((total, a) => total + usefulCount(a.id), 0);
+  const open = !question.withdrawnAt && question.status === 'open';
   const similar = similarQuestions(
     `${question.title} ${question.topic}`,
     question.subjectId,
@@ -620,12 +794,28 @@ export function QuestionPage() {
     if (await run(() => source.answerQuestion(question.id, answer.trim()))) setAnswer('');
   };
 
+  // El enrutador usa el hash de la URL, así que el salto al formulario se hace a mano.
+  const goToReply = () => {
+    const form = document.getElementById('responder');
+    form?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    form?.querySelector('textarea')?.focus({ preventScroll: true });
+  };
+
   return (
     <>
       <Link to="/m/preguntas" className="back with-icon">
         <Icon name="back" size={16} /> Preguntas y respuestas
       </Link>
-      {museumEntries.some((entry) => entry.questionId === question.id) && <p className="panel">Esta pregunta pertenece al <Link to="/m/museo-bugs">Museo de bugs</Link>. Consulta allí la ficha corregida y su historial; este hilo conserva el enunciado original y la discusión.</p>}
+      {museumEntries.some((entry) => entry.questionId === question.id) && (
+        <p className="qa-notice">
+          <Icon name="folder" size={18} />
+          <span>
+            Esta pregunta pertenece al <Link to="/m/museo-bugs">Museo de bugs</Link>. Consulta allí
+            la ficha corregida y su historial; este hilo conserva el enunciado original y la
+            discusión.
+          </span>
+        </p>
+      )}
       <header className="page-header">
         <div>
           <p className="eyebrow">
@@ -639,37 +829,24 @@ export function QuestionPage() {
             {question.topic && ` · ${question.topic}`}
           </p>
           <h1>{question.title}</h1>
-          <p className="muted">
-            <StatusBadge question={question} answerCount={list.length} />{' '}
-            {isAuthor ? 'Preguntaste' : `Preguntó ${memberName(members, question.authorId)}`},{' '}
-            {formatTime(question.createdAt)}
+          <p className="qa-byline">
+            <StatusBadge question={question} answerCount={list.length} />
+            <span className="qa-byline__author">
+              <Avatar member={author} size={22} />
+              <span className="muted">
+                {isAuthor ? 'Preguntaste' : `Preguntó ${author?.displayName ?? 'alguien'}`} ·{' '}
+                {formatTime(question.createdAt)}
+              </span>
+            </span>
           </p>
         </div>
-        {isAuthor && !question.withdrawnAt && question.status === 'resolved' && (
-          <div className="row">
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => run(() => source.reopenQuestion(question.id))}
-            >
-              Reabrir pregunta
-            </button>
-          </div>
-        )}
       </header>
       <ContentWithdrawal kind="question" id={question.id} version={question.version ?? 1} withdrawnAt={question.withdrawnAt}
         canEdit={isAuthor || me?.isCreator} reasonRequired={!isAuthor} />
 
       <div className="detail">
         <div className="detail__main">
-          <section className="panel">
-            <header className="qa-answer__meta">
-              <Avatar member={author} size={28} />
-              <span>
-                <strong>{isAuthor ? 'Tú' : (author?.displayName ?? 'Alguien')}</strong>
-                <span className="muted"> · {formatDate(question.createdAt)}</span>
-              </span>
-            </header>
+          <section className="panel qa-question">
             {question.body ? (
               <StructuredText text={question.body} />
             ) : (
@@ -678,8 +855,6 @@ export function QuestionPage() {
             <ResourceSection kind="question" id={question.id} version={question.version ?? 1} canEdit={isAuthor && !question.withdrawnAt} title="Archivos de la pregunta" />
             <QuestionClarifications questionId={question.id} />
           </section>
-
-          <QuestionReferences question={question} />
 
           <h2 className="section-title">
             Respuestas <span className="muted">{list.length}</span>
@@ -704,14 +879,7 @@ export function QuestionPage() {
                 : '¿Sabes cómo resolverla? Tu explicación también le sirve al resto del grupo.'}
             </Empty>
           )}
-          {isAuthor && question.status === 'open' && list.length > 0 && (
-            <p className="field__hint">
-              Cuando una respuesta te sirva, márcala con «Me ayudó esta respuesta»: la pregunta
-              queda resuelta y la respuesta aparece primero.
-            </p>
-          )}
-
-          {!question.withdrawnAt && <form className="panel form qa-reply" onSubmit={submit}>
+          {!question.withdrawnAt && <form id="responder" className="panel form qa-reply" onSubmit={submit}>
             <StructuredEditor label={isAuthor ? 'Agregar algo o responder' : 'Tu respuesta'} value={answer} onChange={setAnswer} rows={5} />
             <p className="field__hint">Explica el razonamiento, no solo el resultado. Las aclaraciones se escriben junto a la pregunta o respuesta correspondiente.</p>
             {error && (
@@ -728,6 +896,48 @@ export function QuestionPage() {
         </div>
 
         <aside className="detail__side">
+          <section className="panel qa-status">
+            <h2 className="label">Estado de la pregunta</h2>
+            <dl className="facts">
+              <dt>Estado</dt>
+              <dd>
+                {question.withdrawnAt ? (
+                  <span className="badge">Retirada</span>
+                ) : (
+                  <StatusBadge question={question} answerCount={list.length} />
+                )}
+              </dd>
+              <dt>Respuestas</dt>
+              <dd>{list.length}</dd>
+              <dt>Señales de utilidad</dt>
+              <dd>{usefulTotal}</dd>
+              <dt>Última actividad</dt>
+              <dd>{formatListTime(lastActivity(question, answers))}</dd>
+            </dl>
+            {isAuthor && open && list.length > 0 && (
+              <p className="field__hint">
+                Cuando una respuesta te sirva, márcala con «Me ayudó esta respuesta»: la pregunta
+                queda resuelta y la respuesta aparece primero.
+              </p>
+            )}
+            {open && !isAuthor && (
+              <button type="button" className="with-icon qa-status__action" onClick={goToReply}>
+                <Icon name="reply" size={16} /> Escribir una respuesta
+              </button>
+            )}
+            {isAuthor && !question.withdrawnAt && question.status === 'resolved' && (
+              <button
+                type="button"
+                className="secondary qa-status__action"
+                onClick={() => run(() => source.reopenQuestion(question.id))}
+              >
+                Reabrir pregunta
+              </button>
+            )}
+          </section>
+
+          <QuestionReferences question={question} />
+
           <section className="panel">
             <h2 className="label">Preguntas parecidas</h2>
             {similar.length ? (

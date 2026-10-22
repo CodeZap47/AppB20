@@ -19,5 +19,8 @@ export const config = {
   spacetimeAuthRedirectUri: import.meta.env.VITE_SPACETIMEAUTH_REDIRECT_URI ?? '',
   spacetimeAuthPostLogoutRedirectUri:
     import.meta.env.VITE_SPACETIMEAUTH_POST_LOGOUT_REDIRECT_URI ?? '',
+  /** Omite SpacetimeAuth solo en `vite dev` con datos simulados. */
+  devAuthBypass: import.meta.env.DEV && import.meta.env.VITE_DATA_MODE !== 'spacetime' &&
+    import.meta.env.VITE_DEV_AUTH_BYPASS === 'true',
   vapidPublicKey: import.meta.env.VITE_VAPID_PUBLIC_KEY ?? '',
 } as const;

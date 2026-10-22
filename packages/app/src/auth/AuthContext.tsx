@@ -12,8 +12,33 @@ import { RememberedUserStore } from './persistence';
 import { AuthContext, type SignInOptions } from './accessContext';
 import { SupabaseAuthProvider } from './SupabaseAuthProvider';
 
+export function AuthProvider(props: { clientId: string; platform?: Platform; children: ReactNode }) {
+  return config.devAuthBypass ? <DevAuthProvider>{props.children}</DevAuthProvider> : <OidcAuthProvider {...props} />;
+}
+
+/** Solo `vite dev` con datos simulados: sesión local sin SpacetimeAuth. Nunca llega a un build. */
+function DevAuthProvider({ children }: { children: ReactNode }) {
+  const store = useMemo(() => new SessionStore({ onSignOut: async () => {} }), []);
+  const signIn = () => { store.receiveToken(devIdToken()); };
+  useEffect(() => {
+    signIn();
+    return () => store.dispose();
+  }, [store]);
+  return <AuthContext value={{ store, signIn, busy: false }}>{children}</AuthContext>;
+}
+
+function devIdToken(): string {
+  const encode = (value: object) => btoa(JSON.stringify(value)).replace(/\+/g, '-').replace(/\//g, '_');
+  return [
+    encode({ alg: 'none', typ: 'JWT' }),
+    encode({ sub: 'dev-local', email: 'dev@localhost', email_verified: true, name: 'Desarrollo local',
+      exp: Math.floor(Date.now() / 1000) + 30 * 24 * 3600 }),
+    'dev',
+  ].join('.');
+}
+
 /** OIDC Authorization Code + PKCE. Cada presentación usa el navegador apropiado a su plataforma. */
-export function AuthProvider({ clientId, platform = 'web', children }: {
+function OidcAuthProvider({ clientId, platform = 'web', children }: {
   clientId: string; platform?: Platform; children: ReactNode;
 }) {
   if (config.authProvider === 'supabase') return <SupabaseAuthProvider platform={platform}>{children}</SupabaseAuthProvider>;
