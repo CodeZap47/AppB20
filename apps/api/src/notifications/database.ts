@@ -4,6 +4,8 @@ export function createNotificationCall(configuration: NotificationDatabaseConfig
   const uri = new URL(configuration.uri.replace(/^ws:/, 'http:').replace(/^wss:/, 'https:'));
   if (!['https:', 'http:'].includes(uri.protocol) || uri.username || uri.password || !configuration.serviceToken || !configuration.module) throw new Error('Notification database is not configured.');
   return async <T>(name: string, input: Record<string, unknown>): Promise<T> => {
+    // SpacetimeDB 2.12 no tiene ruta HTTP propia para procedures: /call prueba un reducer y luego el procedure,
+    // así que cada llamada deja en el log "External attempt to call nonexistent reducer" aunque responda 200.
     const response = await fetchFn(new URL(`/v1/database/${encodeURIComponent(configuration.module)}/call/${name}`, uri.origin), { method: 'POST', headers: { Authorization: `Bearer ${configuration.serviceToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify([JSON.stringify(input)]), redirect: 'manual', signal: AbortSignal.timeout(10_000) });
     if (!response.ok) { await response.body?.cancel(); throw new Error('Notification state could not be confirmed.'); }
     const reader = response.body?.getReader(); if (!reader) throw new Error('Empty notification response.');

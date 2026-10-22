@@ -10,6 +10,7 @@ describe('mantenimiento Cloudflare con estado en SpacetimeDB', () => {
     const request = vi.fn().mockImplementation(async () => Response.json({ processed: 20, remaining: 100 }));
     expect(await runRetentionMaintenance({ uri: 'wss://example.invalid', module: 'b20', token: 'synthetic-service-token' }, request)).toEqual({ enabled: true, processed: 100, remaining: 100 });
     expect(request).toHaveBeenCalledTimes(5);
+    expect(String(request.mock.calls[0]?.[0])).toBe('https://example.invalid/v1/database/b20/call/purge_due');
     expect(request.mock.calls[0]?.[1]).toMatchObject({ body: '[20]', redirect: 'manual' });
   });
   it('rechaza una respuesta dudosa sin inventar que se limpiaron datos', async () => {

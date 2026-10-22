@@ -3,7 +3,7 @@ import { createNotificationCall } from './database';
 const config = { uri: 'wss://example.spacetimedb.com', module: 'b20', serviceToken: 'private-token' };
 describe('bridge privado de notificaciones', () => {
   it('envía un único payload string y admite DTO JSON y bool nativo', async () => {
-    const fetchFn = vi.fn(async (_url, init) => { expect(init?.redirect).toBe('manual'); expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer private-token'); expect(JSON.parse(init!.body as string)).toEqual(['{"limit":8}']); return new Response(JSON.stringify(JSON.stringify({ jobs: [] }))); }) as unknown as typeof fetch;
+    const fetchFn = vi.fn(async (url, init) => { expect(String(url)).toBe('https://example.spacetimedb.com/v1/database/b20/call/notifications_claim'); expect(init?.redirect).toBe('manual'); expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer private-token'); expect(JSON.parse(init!.body as string)).toEqual(['{"limit":8}']); return new Response(JSON.stringify(JSON.stringify({ jobs: [] }))); }) as unknown as typeof fetch;
     expect(await createNotificationCall(config, fetchFn)('notifications_claim', { limit: 8 })).toEqual({ jobs: [] });
     expect(await createNotificationCall(config, async () => new Response('true'))('notifications_authorize', {})).toBe(true);
   });
