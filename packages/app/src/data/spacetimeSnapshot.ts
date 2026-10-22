@@ -13,12 +13,15 @@ import { emptyPractice } from './practiceTypes';
 import { PRACTICE_VIEWS, readPracticeSnapshot } from './practiceSnapshot';
 import { emptyCommunity4 } from './community4Types';
 import { readCommunity4Snapshot } from './community4Snapshot';
+import { emptyAgent } from './agentTypes';
+import { AGENT_VIEWS, readAgentSnapshot } from './agentSnapshot';
 import { emptyFeed } from './feedTypes';
 import { readFeedSnapshot } from './feedSnapshot';
 
 /** Solo vistas públicas del módulo; nunca tablas privadas ni SELECT * de toda la base. */
 export const PUBLIC_VIEWS = [
   ...PRACTICE_VIEWS,
+  ...AGENT_VIEWS,
   'museum_entries', 'museum_revisions', 'opportunities', 'opportunity_revisions', 'opportunity_interests', 'opportunity_feedback',
   'feed_reactions', 'feed_posts', 'feed_comments',
   'my_notifications', 'my_notification_preferences', 'my_push_installations',
@@ -47,6 +50,7 @@ export function emptySnapshot(connection: Snapshot['connection'], connectionErro
     trashEntries: [],
     ...emptyPractice(),
     ...emptyCommunity4(),
+    ...emptyAgent(),
     ...emptyFeed(),
     ...emptyPresentationsSnapshot(),
     ...emptyStudyRooms(),
@@ -155,6 +159,7 @@ export function readSnapshot(connection: Pick<DbConnection, 'db'>, identity: str
     trashEntries: [],
     ...emptyPractice(),
     ...emptyCommunity4(),
+    ...emptyAgent(),
     ...emptyFeed(),
     ...emptyStudyRooms(),
     ...emptyDelivery2(),
@@ -356,5 +361,5 @@ export function readSnapshot(connection: Pick<DbConnection, 'db'>, identity: str
     lastSeenAt: [...db.myLastSeen.iter()].find((row) => row.identity.toHexString() === identity)?.at.toDate(),
   }, identity), identity), identity);
   return { ...enrichNotificationsSnapshot(connection, snapshot, identity), trashEntries: readTrashEntries(connection),
-    ...readPracticeSnapshot(connection, identity, members), ...readCommunity4Snapshot(connection, snapshot, identity), ...readFeedSnapshot(connection, snapshot, identity) };
+    ...readPracticeSnapshot(connection, identity, members), ...readCommunity4Snapshot(connection, snapshot, identity), ...readAgentSnapshot(connection, snapshot, identity), ...readFeedSnapshot(connection, snapshot, identity) };
 }

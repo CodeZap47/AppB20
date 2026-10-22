@@ -34,6 +34,7 @@
     "test:spacetime:community4": "node scripts/smoke-spacetime-community4.mjs",
     "test:spacetime:ai-study": "node scripts/smoke-spacetime-ai-study.mjs",
     "test:spacetime:teaching-versions": "node scripts/smoke-spacetime-teaching-versions.mjs",
+    "test:spacetime:agent": "node scripts/smoke-spacetime-agent.mjs",
     "spacetime:publish": "spacetime publish --server http://localhost:3000 --module-path packages/spacetime-module app-b20",
     "spacetime:publish:maincloud": "spacetime publish --server maincloud --module-path packages/spacetime-module --delete-data=never app-b20-34245",
     "spacetime:generate": "spacetime generate --lang typescript --out-dir packages/app/src/module_bindings --module-path packages/spacetime-module",

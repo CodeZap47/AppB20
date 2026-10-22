@@ -7,6 +7,7 @@ import { type Infer as __Infer } from "spacetimedb";
 
 // Import all procedure arg schemas
 import * as AddStickerNativeProcedure from "../add_sticker_native_procedure";
+import * as AgentAiProcedure from "../agent_ai_procedure";
 import * as AiAuthorizeGenerationProcedure from "../ai_authorize_generation_procedure";
 import * as AiAuthorizeKeyProcedure from "../ai_authorize_key_procedure";
 import * as AiClaimGenerationProcedure from "../ai_claim_generation_procedure";
@@ -48,6 +49,8 @@ import * as TeachingSaveV2Procedure from "../teaching_save_v_2_procedure";
 
 export type AddStickerNativeArgs = __Infer<typeof AddStickerNativeProcedure.params>;
 export type AddStickerNativeResult = __Infer<typeof AddStickerNativeProcedure.returnType>;
+export type AgentAiArgs = __Infer<typeof AgentAiProcedure.params>;
+export type AgentAiResult = __Infer<typeof AgentAiProcedure.returnType>;
 export type AiAuthorizeGenerationArgs = __Infer<typeof AiAuthorizeGenerationProcedure.params>;
 export type AiAuthorizeGenerationResult = __Infer<typeof AiAuthorizeGenerationProcedure.returnType>;
 export type AiAuthorizeKeyArgs = __Infer<typeof AiAuthorizeKeyProcedure.params>;

@@ -1,7 +1,9 @@
 import type { AiCiphertext } from './crypto.ts';
 
 export interface AiSecrets { AI_SERVICE_TOKEN?: string; AI_MASTER_KEYS_JSON?: string }
-export type AiWorkerEnv = FileWorkerEnv & AiSecrets;
+/** Pasos del agente con Gemini habilitados, separados por comas; vacío los apaga todos (AG-4). */
+export interface AgentAiVars { AGENT_AI_STEPS?: string }
+export type AiWorkerEnv = FileWorkerEnv & AiSecrets & AgentAiVars;
 export class AiApiError extends Error {
   constructor(readonly status: 400 | 401 | 403 | 404 | 409 | 413 | 429 | 503, readonly code: string, message: string) { super(message); }
 }
@@ -11,8 +13,8 @@ export interface AiDatabase {
 }
 export interface AiAuthorizedKey { actor: string; intentId: string; keyId: string; expiresAt: number }
 export interface AiEncryptedKey extends AiCiphertext { keyId: string; provider: 'gemini' }
-const USER_PROCEDURES = new Set(['exam_action', 'guide_ai', 'ai_status', 'ai_key_status', 'ai_set_consent', 'ai_authorize_key', 'ai_delete_key', 'ai_prepare', 'ai_authorize_generation', 'ai_get_generation', 'ai_list_generations', 'ai_publish_generation']);
-const SERVICE_PROCEDURES = new Set(['guide_ai', 'ai_commit_key', 'ai_claim_generation', 'ai_finish_generation']);
+const USER_PROCEDURES = new Set(['exam_action', 'guide_ai', 'agent_ai', 'ai_status', 'ai_key_status', 'ai_set_consent', 'ai_authorize_key', 'ai_delete_key', 'ai_prepare', 'ai_authorize_generation', 'ai_get_generation', 'ai_list_generations', 'ai_publish_generation']);
+const SERVICE_PROCEDURES = new Set(['guide_ai', 'agent_ai', 'ai_commit_key', 'ai_claim_generation', 'ai_finish_generation']);
 const ERRORS: Record<string, [AiApiError['status'], string]> = {
   invalid: [400, 'Revisa los datos de la solicitud.'], unauthorized: [403, 'Ya no tienes acceso a este material.'],
   unavailable: [503, 'El servicio IA no está disponible.'], quota: [429, 'Llegaste al límite de generación. Intenta más tarde.'],

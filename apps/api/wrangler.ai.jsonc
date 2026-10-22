@@ -23,6 +23,7 @@
     "AI_ENABLED": "true",
     "AI_MASTER_VERSION": "v1",
     "GEMINI_MODEL": "gemini-3.8-flash",
+    "AGENT_AI_STEPS": "",
     "NOTIFICATIONS_ENABLED": "true",
     "VAPID_PUBLIC_KEY": "BDcU2DLr4bYXsOFyDIR5GJIPFDP8lg0UTdSUg4T7HhSvrO0fIK_YEuXE1cxySQIjYANBXvGBxmL-r6t4bN6nBBo",
     "VAPID_SUBJECT": "https://app-b20.pages.dev",

@@ -16,6 +16,7 @@
     "AI_ENABLED": "false",
     "AI_MASTER_VERSION": "v1",
     "GEMINI_MODEL": "",
+    "AGENT_AI_STEPS": "",
     "NOTIFICATIONS_ENABLED": "false"
   },
   "secrets": { "required": ["FILE_SERVICE_TOKEN"] },

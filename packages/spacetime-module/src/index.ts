@@ -46,6 +46,9 @@ import * as feed from './feedHandlers';
 import { teachingVersionTables, teachingHead } from './teachingVersioning';
 import * as teachingVersions from './teachingVersioning';
 import { helpVersionTables, helpVersion } from './helpVersioning';
+import { agentTables, agentProfile, agentStyleSource, agentStyleSnapshot, agentSession, agentSuggestion, agentOriginalityCheck, agentExpiry } from './agentTables';
+import { agentAiDispatch } from './agentAiHandlers';
+import * as agent from './agentHandlers';
 import * as helpVersioning from './helpVersioning';
 import { guideAiTables } from './guideAiTables';
 import { guideAiResponse, guideAiSourceAvailability } from './guideAiHandlers';
@@ -797,6 +800,7 @@ const retentionExpiry = table({ name: 'retention_expiry' }, {
 });
 
 const spacetimedb = schema({
+  ...agentTables,
   ...practiceTables,
   ...community4Tables,
   ...feedTables,
@@ -1100,6 +1104,7 @@ export const remove_member = spacetimedb.reducer(
     if (!row) throw new SenderError('Ese miembro no existe.');
     ctx.db.member.identity.update({ ...row, status: 'removed' });
     rooms.removeGroupMember(ctx, identity);
+    agent.purgeAgentOwner(ctx.db, identity);
     log(ctx, 'remove', 'member', identity.toHexString());
   },
 );
@@ -4888,6 +4893,27 @@ export const feed_reactions = spacetimedb.view({ name: 'feed_reactions', public:
 export const feed_posts = spacetimedb.view({ name: 'feed_posts', public: true }, t.array(feedPost.rowType), ctx => [...ctx.db.feedPost.iter()].filter(row => feed.postReadable(ctx.db, ctx.sender, row.id)));
 export const feed_comments = spacetimedb.view({ name: 'feed_comments', public: true }, t.array(feedComment.rowType), ctx => [...ctx.db.feedComment.iter()].filter(row => feed.commentReadable(ctx.db, ctx.sender, row)));
 
+// Agente personal (7.13, AG-3): todo es privado del dueño.
+export const enable_agent = spacetimedb.reducer({ premisesVersion: t.u32() }, agent.enableAgent);
+export const disable_agent = spacetimedb.reducer(agent.disableAgent);
+export const train_agent = spacetimedb.reducer({ sources: t.string(), expectedStyleVersion: t.u32() }, agent.trainAgent);
+export const start_agent_session = spacetimedb.reducer({ assignmentId: t.u64(), requestId: t.string() }, agent.startAgentSession);
+export const save_agent_draft = spacetimedb.reducer({ sessionId: t.u64(), expectedDraftVersion: t.u32(), stage: t.string(), draft: t.string() }, agent.saveAgentDraft);
+export const delete_agent_session = spacetimedb.reducer({ sessionId: t.u64() }, agent.deleteAgentSession);
+export const propose_agent_suggestions = spacetimedb.reducer({ sessionId: t.u64(), draftVersion: t.u32(), suggestions: t.string() }, agent.proposeAgentSuggestions);
+export const resolve_agent_suggestion = spacetimedb.reducer({ suggestionId: t.u64(), accept: t.bool() }, agent.resolveAgentSuggestion);
+export const check_agent_originality = spacetimedb.reducer({ sessionId: t.u64(), draftVersion: t.u32() }, agent.checkAgentOriginality);
+export const acknowledge_agent_match = spacetimedb.reducer({ checkId: t.u64(), refKey: t.string() }, agent.acknowledgeAgentMatch);
+/** Gemini del agente (AG-4): procedimiento privado, como el resto de la IA. */
+export const agent_ai = spacetimedb.procedure({ payload: t.string() }, t.string(),
+  (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, agentAiDispatch)));
+export const expire_agent_session = spacetimedb.reducer({ onSchedule: agentExpiry }, { event: agentExpiry.rowType }, (ctx, { event }) => agent.expireAgentSession(ctx, event));
+export const my_agent_profile = spacetimedb.view({ name: 'my_agent_profile', public: true }, t.array(agentProfile.rowType), ctx => [...ctx.db.agentProfile.iter()].filter(row => agent.agentReadable(ctx.db, ctx.sender, row.owner)));
+export const my_agent_sources = spacetimedb.view({ name: 'my_agent_sources', public: true }, t.array(agentStyleSource.rowType), ctx => isActive(ctx.db, ctx.sender) ? [...ctx.db.agentStyleSource.owner.filter(ctx.sender)] : []);
+export const my_agent_style_snapshots = spacetimedb.view({ name: 'my_agent_style_snapshots', public: true }, t.array(agentStyleSnapshot.rowType), ctx => isActive(ctx.db, ctx.sender) ? [...ctx.db.agentStyleSnapshot.owner.filter(ctx.sender)] : []);
+export const my_agent_sessions = spacetimedb.view({ name: 'my_agent_sessions', public: true }, t.array(agentSession.rowType), ctx => isActive(ctx.db, ctx.sender) ? [...ctx.db.agentSession.owner.filter(ctx.sender)] : []);
+export const my_agent_suggestions = spacetimedb.view({ name: 'my_agent_suggestions', public: true }, t.array(agentSuggestion.rowType), ctx => isActive(ctx.db, ctx.sender) ? [...ctx.db.agentSuggestion.owner.filter(ctx.sender)] : []);
+export const my_agent_originality_checks = spacetimedb.view({ name: 'my_agent_originality_checks', public: true }, t.array(agentOriginalityCheck.rowType), ctx => isActive(ctx.db, ctx.sender) ? [...ctx.db.agentOriginalityCheck.owner.filter(ctx.sender)] : []);
 // Ayuda: migración aditiva para versiones, historia propia e intenciones idempotentes.
 export const help_mutate = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => helpVersioning.helpResponse(() => ctx.withTx(tx => helpVersioning.mutateHelp(tx, payload))));
 export const help_read_history = spacetimedb.procedure({ postId: t.u64() }, t.string(), (ctx, { postId }) => helpVersioning.helpResponse(() => ctx.withTx(tx => helpVersioning.readHelpHistory(tx, postId))));

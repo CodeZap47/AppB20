@@ -6,6 +6,7 @@ import { ResourceTransport } from './resourceTransport';
 import { config } from '../config';
 import { AiClient } from './aiClient';
 import { createGuideAiActions } from './guideAiClient';
+import { createAgentAiActions } from './agentAiClient';
 import { createExamActions } from './examClient';
 
 export interface ConnectionOptions {
@@ -160,6 +161,6 @@ export function createSpacetimeDataSource(options: ConnectionOptions, factory?: 
   source.setAiClient(ai);
   const files = new ResourceTransport({ getConnection: source.getConnection, getIdentity: source.getIdentity,
     legacy: legacyApiUrl ? { apiUrl: legacyApiUrl, getToken: options.getToken ?? (() => options.token) } : undefined });
-  return Object.assign(source, createSpacetimeActions(source.getConnection, source.getIdentity, files), createGuideAiActions(ai), createExamActions(ai)) as
+  return Object.assign(source, createSpacetimeActions(source.getConnection, source.getIdentity, files), createGuideAiActions(ai), createExamActions(ai), createAgentAiActions(ai)) as
     SpacetimeDataSource & Actions;
 }
