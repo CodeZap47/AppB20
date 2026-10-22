@@ -17,7 +17,8 @@
     "VITE_SPACETIMEAUTH_AUTHORITY": "https://auth.spacetimedb.com/oidc",
     "VITE_SPACETIMEAUTH_REDIRECT_URI": "",
     "VITE_SPACETIMEAUTH_POST_LOGOUT_REDIRECT_URI": "",
-    "VITE_API_URL": "https://app-b20-api.sucanasta1.workers.dev",
+    // Vacío: ningún archivo usa ya R2; todos viven en SpacetimeDB.
+    "VITE_API_URL": "",
     "VITE_AI_API_URL": "https://app-b20-ai.aguaseero.workers.dev",
     "VITE_VAPID_PUBLIC_KEY": "BDcU2DLr4bYXsOFyDIR5GJIPFDP8lg0UTdSUg4T7HhSvrO0fIK_YEuXE1cxySQIjYANBXvGBxmL-r6t4bN6nBBo"
   }
