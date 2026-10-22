@@ -1,5 +1,11 @@
 /** Configuración pública del cliente. Ningún secreto vive aquí (sección 2, protección técnica). */
 export const config = {
+  authProvider: import.meta.env.VITE_AUTH_PROVIDER === 'supabase' ? 'supabase' : 'spacetimeauth',
+  supabaseUrl: import.meta.env.VITE_SUPABASE_URL ?? '',
+  supabasePublishableKey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? '',
+  supabasePasskeysEnabled: import.meta.env.VITE_SUPABASE_PASSKEYS_ENABLED === 'true',
+  supabaseOAuthProviders: String(import.meta.env.VITE_SUPABASE_OAUTH_PROVIDERS ?? '').split(',').filter((p): p is 'google' | 'github' => p === 'google' || p === 'github'),
+  socialAuthEnabled: import.meta.env.VITE_SOCIAL_AUTH_ENABLED === 'true',
   dataMode: import.meta.env.VITE_DATA_MODE === 'spacetime' ? 'spacetime' : 'demo',
   spacetimeUri: import.meta.env.VITE_SPACETIME_URI ?? 'ws://localhost:3000',
   spacetimeDb: import.meta.env.VITE_SPACETIME_DB ?? 'app-b20',

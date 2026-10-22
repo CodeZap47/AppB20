@@ -1,3 +1,4 @@
+import { memberIdentityFor } from './authIdentity';
 import { SenderError, t, table } from 'spacetimedb/server';
 import { aiCanonical, aiHash, aiUuid } from '../../core/src/ai';
 import type { TeachingExplanation } from '../../core/src/teaching';
@@ -52,11 +53,11 @@ export function saveTeachingVersion(ctx: Ctx, payload: string): string {
   if (typeof input.practiceId !== 'string' || !/^[1-9]\d{0,19}$/.test(input.practiceId) || BigInt(input.practiceId) > 18_446_744_073_709_551_615n) fail('La práctica no está disponible.');
   const practiceId = BigInt(input.practiceId);
   const row = ctx.db.teachingPractice.id.find(practiceId);
-  if (!row?.owner.isEqual(ctx.sender)) fail('Solo el autor puede guardar esta práctica.');
+  if (!row?.owner.isEqual(memberIdentityFor(ctx))) fail('Solo el autor puede guardar esta práctica.');
   if (!Number.isInteger(input.expectedVersion) || Number(input.expectedVersion) < 1 || !aiUuid(input.requestId)) fail('Actualiza la aplicación: indica la versión y el identificador de guardado.');
   const value: Fields = { initial: explanation(input.initial), revised: explanation(input.revised), reflection: string(input.reflection, 12_000), topicsToReview: string(input.topicsToReview, 4000) };
   const digest = aiHash({ practiceId: input.practiceId, expectedVersion: input.expectedVersion, ...value });
-  const key = `${ctx.sender.toHexString()}:${input.requestId.toLowerCase()}`;
+  const key = `${memberIdentityFor(ctx).toHexString()}:${input.requestId.toLowerCase()}`;
   const receipt = ctx.db.teachingIntent.key.find(key);
   if (receipt) { if (receipt.digest !== digest) fail('Este identificador ya se utilizó para otro guardado.'); return JSON.stringify({ id: String(receipt.practiceId), version: receipt.version }); }
   const current = teachingVersion(ctx.db, practiceId);
@@ -75,12 +76,12 @@ export function saveTeachingVersion(ctx: Ctx, payload: string): string {
     ctx.db.teachingPersonal.practiceId.update({ ...personal, reflection: value.reflection, topicsToReview: value.topicsToReview });
     version++; capture(ctx, next, version, value);
   }
-  ctx.db.teachingIntent.insert({ key, actor: ctx.sender, digest, practiceId, version });
+  ctx.db.teachingIntent.insert({ key, actor: memberIdentityFor(ctx), digest, practiceId, version });
   return JSON.stringify({ id: String(practiceId), version });
 }
 export function readTeachingHistory(ctx: Ctx, practiceId: bigint): string {
   activeMember(ctx); const row = ctx.db.teachingPractice.id.find(practiceId);
-  if (!row?.owner.isEqual(ctx.sender)) fail('Solo el autor puede consultar el historial de esta práctica.');
+  if (!row?.owner.isEqual(memberIdentityFor(ctx))) fail('Solo el autor puede consultar el historial de esta práctica.');
   const current = teachingVersion(ctx.db, practiceId);
   capture(ctx, row, current);
   return JSON.stringify([...ctx.db.teachingRevision.practiceId.filter(practiceId)].sort((a, b) => b.version - a.version).slice(0, 30)

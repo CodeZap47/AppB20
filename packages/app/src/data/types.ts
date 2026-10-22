@@ -726,6 +726,8 @@ export interface PollVote {
 
 /** Lo que el usuario actual puede ver, igual que las vistas del servidor. */
 export interface Snapshot extends StudyRoomsSnapshot, NotificationsSnapshot, PresentationsSnapshot, PracticeSnapshot, Community4Snapshot, FeedSnapshot, AgentSnapshot {
+  typingPresence: { memberId: Id; scope: MessageScope; conversationId: Id; expiresAt: Date }[];
+  onboardingCompleted: boolean;
   trashEntries: TrashEntry[];
   contributionOrigins: { kind: OriginContributionKind; refId: Id; memberId: Id; creditedAt: Date; duplicateOf?: Id }[];
   chatChannels: ChatChannel[];
@@ -837,6 +839,8 @@ export type MaybePromise<T> = T | Promise<T>;
 
 /** Acciones: corresponden uno a uno con los reducers del módulo. */
 export interface Actions extends Delivery2Actions, StudyRoomActions, NotificationActions, TrashActions, PresentationActions, PracticeActions, Community4Actions, FeedActions, GuideAiActions, ExamActions, AgentActions, AgentAiActions {
+  setTyping(scope: MessageScope, conversationId: Id, typing: boolean): MaybePromise<void>;
+  completeOnboarding(): MaybePromise<void>;
   replaceSpacedCardSource(cardId: Id, expectedVersion: number, sourceKind: SpacedSourceKind, sourceId: Id): MaybePromise<void>;
   saveSpacedCollection(input: SpacedCollectionInput): MaybePromise<Id>;
   publishSpacedCollection(collectionId: Id, expectedVersion: number): MaybePromise<void>;

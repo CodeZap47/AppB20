@@ -51,7 +51,7 @@ export function createRequireAuth<E extends Env = { Variables: AuthVariables }>(
       const { payload } = await jwtVerify(token, config.jwks, {
         issuer: config.issuer,
         audience: config.audiences,
-        algorithms: ['RS256'],
+        algorithms: ['RS256', 'ES256'],
         requiredClaims: ['sub', 'iss', 'aud', 'exp', 'iat', 'email', 'email_verified'],
       });
       if (typeof payload.sub !== 'string' || !payload.sub ||

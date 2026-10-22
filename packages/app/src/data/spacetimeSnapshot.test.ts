@@ -16,7 +16,7 @@ const table = (rows: unknown[] = []) => ({ iter: () => rows.values() });
 /** Tables are stubbed at the cache boundary; production rows remain inferred from generated bindings. */
 function connection(overrides: Record<string, unknown[]> = {}): Pick<DbConnection, 'db'> {
   const names = [
-    'myMember', 'members', 'invitations', 'invitationEmailStatuses', 'subjects', 'terms', 'calendar', 'assignments',
+    'myMember', 'myAuthIdentity', 'members', 'invitations', 'invitationEmailStatuses', 'subjects', 'terms', 'calendar', 'assignments',
     'pageRevisions', 'works', 'workAuthors', 'workFiles', 'groupMessages',
     'myDirectConversations', 'myDirectMessages', 'messageReactions', 'stickerPacks',
     'stickers', 'myChatCommands', 'birthdays', 'activities', 'evidences', 'notes',
@@ -34,6 +34,12 @@ function connection(overrides: Record<string, unknown[]> = {}): Pick<DbConnectio
 }
 
 describe('snapshot de SpacetimeDB', () => {
+  it('acepta una membresía anterior solo con el vínculo propio de la sesión actual', () => {
+    const linked = connection({ myAuthIdentity: [{ sessionIdentity: identity(OTHER), memberIdentity: identity() }] });
+    expect(readSnapshot(linked, OTHER).me?.id).toBe(ID);
+    const unrelated = connection({ myAuthIdentity: [{ sessionIdentity: identity('unrelated'), memberIdentity: identity() }] });
+    expect(readSnapshot(unrelated, OTHER).me).toBeUndefined();
+  });
   it('une recursos nuevos y heredados sin duplicados y conserva historial y avance privado', () => {
     const data = readSnapshot(connection({
       works: [{ id: 9n, assignmentId: 17n, title: 'Actual', description: '', version: 3,

@@ -8,12 +8,21 @@ import { parsePagesOrigin, parseWebOrigin } from './src/canonicalOrigin.ts';
 // `--mode capacitor` genera la misma app para el APK Android, sin service worker de PWA:
 // en el APK se conserva la bandeja; el push nativo sigue pendiente.
 export default defineConfig(({ mode }) => {
+  const brand = process.env.VITE_BRAND === 'campus' ? 'campus' : 'studio';
+  const designPreview = mode === 'design-preview';
   if (mode === 'pages') {
     const env = loadEnv(mode, '../..', 'VITE_');
     if (env.VITE_DATA_MODE && !['demo', 'spacetime'].includes(env.VITE_DATA_MODE)) {
       throw new Error('VITE_DATA_MODE debe ser demo o spacetime.');
     }
-    const required = ['VITE_WEB_ORIGIN', 'VITE_SPACETIME_URI', 'VITE_SPACETIME_DB', 'VITE_SPACETIMEAUTH_CLIENT_ID'];
+    const required = ['VITE_WEB_ORIGIN', 'VITE_SPACETIME_URI', 'VITE_SPACETIME_DB',
+      ...(env.VITE_AUTH_PROVIDER === 'supabase' ? ['VITE_SUPABASE_URL', 'VITE_SUPABASE_PUBLISHABLE_KEY'] : ['VITE_SPACETIMEAUTH_CLIENT_ID'])];
+    if (env.VITE_AUTH_PROVIDER && !['supabase', 'spacetimeauth'].includes(env.VITE_AUTH_PROVIDER)) {
+      throw new Error('VITE_AUTH_PROVIDER debe ser supabase o spacetimeauth.');
+    }
+    if (env.VITE_AUTH_PROVIDER === 'supabase' && !env.VITE_SUPABASE_PUBLISHABLE_KEY?.startsWith('sb_publishable_')) {
+      throw new Error('Usa una clave pública sb_publishable_ de Supabase en el cliente.');
+    }
     for (const key of required) {
       if (!env[key]?.trim()) {
         throw new Error(`Falta ${key}. Configura las variables del build de Pages o copia .env.pages.example a .env.pages.`);
@@ -30,6 +39,7 @@ export default defineConfig(({ mode }) => {
       ['VITE_SPACETIME_URI', 'wss:'],
       ['VITE_API_URL', 'https:'],
       ['VITE_AI_API_URL', 'https:'],
+      ['VITE_SUPABASE_URL', 'https:'],
       ['VITE_SPACETIMEAUTH_REDIRECT_URI', 'https:'],
       ['VITE_SPACETIMEAUTH_POST_LOGOUT_REDIRECT_URI', 'https:'],
     ] as const;
@@ -48,6 +58,10 @@ export default defineConfig(({ mode }) => {
     }
   }
   return {
+  build: designPreview ? { rollupOptions: { input: {
+    app: fileURLToPath(new URL('./index.html', import.meta.url)),
+    preview: fileURLToPath(new URL('./design-preview.html', import.meta.url)),
+  } } } : undefined,
   envDir: '../..',
   resolve: {
     alias: { '@b20-ui': fileURLToPath(new URL('../../packages/app/src/untitled', import.meta.url)) },
@@ -75,7 +89,7 @@ export default defineConfig(({ mode }) => {
           scope: './',
           display: 'standalone',
           background_color: '#f7f7f9',
-          theme_color: '#2f5bea',
+          theme_color: brand === 'campus' ? '#3152a0' : '#6942b5',
           icons: [
             { src: 'icons/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
             // TODO(Etapa 0): agregar PNG 192, 512 y apple-touch-icon 180 para iPhone.

@@ -30,3 +30,4 @@ export * from './agent';
 export * from './agentStyle';
 export * from './agentAi';
 export * from './profiles';
+export { hasRoyalBanner } from './royalAdmins';

@@ -234,7 +234,8 @@ describe('integración real de Aprende enseñando en la aplicación', () => {
       expect((await moduleLink(module.id)).getAttribute('aria-current'), module.id).toBe('page');
     }
     expect(desktop.querySelector('.b20-slim-account')?.textContent).toContain('Perfil simulado');
-  });
+    // This checks the full module catalog, including animated navigation and both new hubs.
+  }, 15_000);
 
   it('abre Avisos desde el pie y actualiza su contador cuando los avisos se leen', async () => {
     const desktop = container.querySelector<HTMLElement>('.b20-slim-desktop')!;

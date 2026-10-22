@@ -1,3 +1,4 @@
+import { memberIdentityFor } from './authIdentity';
 import { Identity, Timestamp } from 'spacetimedb';
 import { SenderError } from 'spacetimedb/server';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -49,21 +50,21 @@ function actorIdentity(value: unknown) {
 }
 export function isAiService(ctx: Ctx): boolean {
   const configured = ctx.db.aiServiceConfig.id.find(0)?.identity;
-  return !!configured && configured.isEqual(ctx.sender) && !ctx.db.appConfig.id.find(0)?.owner.isEqual(ctx.sender)
-    && !ctx.db.fileServiceConfig.id.find(0)?.identity.isEqual(ctx.sender)
-    && hex(ctx.env.B20_FILE_SERVICE_IDENTITY ?? '') !== hex(ctx.sender.toHexString())
-    && !ctx.db.notificationServiceConfig.id.find(0)?.identity.isEqual(ctx.sender) && !ctx.db.maintenanceService.id.find(0)?.identity.isEqual(ctx.sender)
-    && hex(ctx.env.B20_MAINTENANCE_IDENTITY ?? '') !== hex(ctx.sender.toHexString());
+  return !!configured && configured.isEqual(memberIdentityFor(ctx)) && !ctx.db.appConfig.id.find(0)?.owner.isEqual(memberIdentityFor(ctx))
+    && !ctx.db.fileServiceConfig.id.find(0)?.identity.isEqual(memberIdentityFor(ctx))
+    && hex(ctx.env.B20_FILE_SERVICE_IDENTITY ?? '') !== hex(memberIdentityFor(ctx).toHexString())
+    && !ctx.db.notificationServiceConfig.id.find(0)?.identity.isEqual(memberIdentityFor(ctx)) && !ctx.db.maintenanceService.id.find(0)?.identity.isEqual(memberIdentityFor(ctx))
+    && hex(ctx.env.B20_MAINTENANCE_IDENTITY ?? '') !== hex(memberIdentityFor(ctx).toHexString());
 }
 function service(ctx: Ctx) { if (!isAiService(ctx)) fail('forbidden', 'Solo el servicio de IA puede realizar esta operación.'); }
 function enabled(ctx: Ctx) { if (!ctx.db.aiServiceConfig.id.find(0)?.enabled) fail('ai_disabled', 'La IA real todavía no está habilitada para este grupo.'); }
-function consent(ctx: Ctx, actor = ctx.sender) {
+function consent(ctx: Ctx, actor = memberIdentityFor(ctx)) {
   const row = ctx.db.aiConsent.actor.find(actor);
   if (!row?.accepted || row.version !== AI_CONSENT_VERSION) fail('consent_required', 'Confirma el consentimiento vigente antes de enviar material.');
 }
 export function setAiService(ctx: Ctx, input: { identity: Identity; enabled: boolean; dailyTokenBudget: number }) {
-  if (!ctx.db.appConfig.id.find(0)?.owner.isEqual(ctx.sender)) fail('forbidden', 'Solo el propietario configura el servicio de IA.');
-  if (input.identity.isEqual(ctx.sender) || ctx.db.member.identity.find(input.identity) || ctx.db.fileServiceConfig.id.find(0)?.identity.isEqual(input.identity)
+  if (!ctx.db.appConfig.id.find(0)?.owner.isEqual(memberIdentityFor(ctx))) fail('forbidden', 'Solo el propietario configura el servicio de IA.');
+  if (input.identity.isEqual(memberIdentityFor(ctx)) || ctx.db.member.identity.find(input.identity) || ctx.db.fileServiceConfig.id.find(0)?.identity.isEqual(input.identity)
     || hex(ctx.env.B20_FILE_SERVICE_IDENTITY ?? '') === hex(input.identity.toHexString())
     || ctx.db.notificationServiceConfig.id.find(0)?.identity.isEqual(input.identity) || ctx.db.maintenanceService.id.find(0)?.identity.isEqual(input.identity)
     || hex(ctx.env.B20_MAINTENANCE_IDENTITY ?? '') === hex(input.identity.toHexString())) fail('invalid_service_identity', 'IA necesita una identidad técnica exclusiva.');
@@ -74,13 +75,13 @@ export function setAiService(ctx: Ctx, input: { identity: Identity; enabled: boo
 export function aiStatus(ctx: Ctx) {
   activeMember(ctx);
   const policy = ctx.db.aiServiceConfig.id.find(0);
-  const accepted = ctx.db.aiConsent.actor.find(ctx.sender);
-  return { actor: hex(ctx.sender.toHexString()), enabled: policy?.enabled ?? false,
+  const accepted = ctx.db.aiConsent.actor.find(memberIdentityFor(ctx));
+  return { actor: hex(memberIdentityFor(ctx).toHexString()), enabled: policy?.enabled ?? false,
     consentVersion: AI_CONSENT_VERSION, consented: accepted?.accepted === true && accepted.version === AI_CONSENT_VERSION,
-    configured: !!ctx.db.aiKey.actor.find(ctx.sender), model: '', limits: { ...AI_LIMITS, dailyEstimatedTokens: policy?.dailyTokenBudget ?? 100_000 } };
+    configured: !!ctx.db.aiKey.actor.find(memberIdentityFor(ctx)), model: '', limits: { ...AI_LIMITS, dailyEstimatedTokens: policy?.dailyTokenBudget ?? 100_000 } };
 }
 export function aiKeyStatus(ctx: Ctx) {
-  activeMember(ctx); const key = ctx.db.aiKey.actor.find(ctx.sender);
+  activeMember(ctx); const key = ctx.db.aiKey.actor.find(memberIdentityFor(ctx));
   return { configured: !!key, provider: 'gemini', ...(key ? { keyId: key.keyId, updatedAt: date(key.updatedAt) } : {}) };
 }
 function cancelPending(ctx: Ctx, actor: Identity) {
@@ -94,9 +95,9 @@ function cancelPending(ctx: Ctx, actor: Identity) {
 export function aiSetConsent(ctx: Ctx, input: Record<string, unknown>) {
   activeMember(ctx);
   if (input.version !== AI_CONSENT_VERSION || typeof input.accepted !== 'boolean') fail('invalid_request', 'Consentimiento inválido.');
-  const row = { actor: ctx.sender, version: AI_CONSENT_VERSION, accepted: input.accepted, updatedAt: ctx.timestamp };
-  if (ctx.db.aiConsent.actor.find(ctx.sender)) ctx.db.aiConsent.actor.update(row); else ctx.db.aiConsent.insert(row);
-  if (!row.accepted) cancelPending(ctx, ctx.sender);
+  const row = { actor: memberIdentityFor(ctx), version: AI_CONSENT_VERSION, accepted: input.accepted, updatedAt: ctx.timestamp };
+  if (ctx.db.aiConsent.actor.find(memberIdentityFor(ctx))) ctx.db.aiConsent.actor.update(row); else ctx.db.aiConsent.insert(row);
+  if (!row.accepted) cancelPending(ctx, memberIdentityFor(ctx));
   return { version: row.version, accepted: row.accepted };
 }
 export function aiAuthorizeKey(ctx: Ctx, input: Record<string, unknown>) {
@@ -105,14 +106,14 @@ export function aiAuthorizeKey(ctx: Ctx, input: Record<string, unknown>) {
   if (input.provider !== 'gemini') fail('invalid_request', 'Proveedor no admitido.');
   const prior = ctx.db.aiKeyIntent.id.find(id);
   if (prior) {
-    if (!prior.actor.isEqual(ctx.sender) || prior.keyId !== keyId || prior.provider !== input.provider) fail('conflict', 'La intención ya pertenece a otra solicitud.');
+    if (!prior.actor.isEqual(memberIdentityFor(ctx)) || prior.keyId !== keyId || prior.provider !== input.provider) fail('conflict', 'La intención ya pertenece a otra solicitud.');
     if (prior.status === 'cancelled' || prior.expiresAt.microsSinceUnixEpoch <= ctx.timestamp.microsSinceUnixEpoch) fail('intent_expired', 'La intención venció. Crea otra.');
-    return { actor: hex(ctx.sender.toHexString()), intentId: id, keyId, expiresAt: date(prior.expiresAt), committed: prior.status === 'committed' };
+    return { actor: hex(memberIdentityFor(ctx).toHexString()), intentId: id, keyId, expiresAt: date(prior.expiresAt), committed: prior.status === 'committed' };
   }
   // Only the most recently authorized replacement may commit.
-  for (const row of ctx.db.aiKeyIntent.actor.filter(ctx.sender)) if (row.status === 'pending') ctx.db.aiKeyIntent.id.update({ ...row, status: 'cancelled' });
-  const row = ctx.db.aiKeyIntent.insert({ id, actor: ctx.sender, keyId, provider: 'gemini', status: 'pending', createdAt: ctx.timestamp, expiresAt: expiry(ctx, 5) });
-  return { actor: hex(ctx.sender.toHexString()), intentId: id, keyId, expiresAt: date(row.expiresAt), committed: false };
+  for (const row of ctx.db.aiKeyIntent.actor.filter(memberIdentityFor(ctx))) if (row.status === 'pending') ctx.db.aiKeyIntent.id.update({ ...row, status: 'cancelled' });
+  const row = ctx.db.aiKeyIntent.insert({ id, actor: memberIdentityFor(ctx), keyId, provider: 'gemini', status: 'pending', createdAt: ctx.timestamp, expiresAt: expiry(ctx, 5) });
+  return { actor: hex(memberIdentityFor(ctx).toHexString()), intentId: id, keyId, expiresAt: date(row.expiresAt), committed: false };
 }
 export function aiCommitKey(ctx: Ctx, input: Record<string, unknown>) {
   service(ctx); const actor = actorIdentity(input.actor); const intentId = uuid(input.intentId, 'La intención');
@@ -135,7 +136,7 @@ export function aiCommitKey(ctx: Ctx, input: Record<string, unknown>) {
   return { configured: true, keyId };
 }
 export function aiDeleteKey(ctx: Ctx) {
-  activeMember(ctx); cancelPending(ctx, ctx.sender); ctx.db.aiKey.actor.delete(ctx.sender);
+  activeMember(ctx); cancelPending(ctx, memberIdentityFor(ctx)); ctx.db.aiKey.actor.delete(memberIdentityFor(ctx));
   return { configured: false };
 }
 
@@ -161,7 +162,7 @@ function resolveTeachingSource(ctx: Ctx, id: bigint, actor: Identity): AiSourceS
     omissions: ['Solo se envía la explicación guardada; se excluyen reflexión, temas personales, respuestas, historial y datos del compañero.'] };
 }
 /** Resolve only academic record fields. No client-supplied text reaches the provider. */
-export function resolveAiSource(ctx: Ctx, kind: string, refId: string, actor = ctx.sender): AiSourceSnapshot {
+export function resolveAiSource(ctx: Ctx, kind: string, refId: string, actor = memberIdentityFor(ctx)): AiSourceSnapshot {
   if (!/^[1-9][0-9]*$/.test(refId) || BigInt(refId) > 18_446_744_073_709_551_615n) fail('invalid_request', 'Referencia inválida.');
   const id = BigInt(refId);
   if (kind === 'teaching') return resolveTeachingSource(ctx, id, actor);
@@ -280,11 +281,11 @@ export function aiPrepare(ctx: Ctx, raw: Record<string, unknown>) {
   if (JSON.stringify(preparation).length > 256_000) fail('quota', 'La vista previa excede el límite. Reduce el alcance.');
   const previous = ctx.db.aiPreparation.id.find(id);
   if (previous) {
-    if (!previous.actor.isEqual(ctx.sender) || previous.fingerprint !== preparation.fingerprint) fail('conflict', 'La preparación ya pertenece a otro contenido.');
+    if (!previous.actor.isEqual(memberIdentityFor(ctx)) || previous.fingerprint !== preparation.fingerprint) fail('conflict', 'La preparación ya pertenece a otro contenido.');
     if (previous.expiresAt.microsSinceUnixEpoch <= ctx.timestamp.microsSinceUnixEpoch) fail('expired', 'La preparación venció. Crea otra.');
     return JSON.parse(previous.json) as AiPreparation;
   }
-  ctx.db.aiPreparation.insert({ id, actor: ctx.sender, fingerprint: preparation.fingerprint, model,
+  ctx.db.aiPreparation.insert({ id, actor: memberIdentityFor(ctx), fingerprint: preparation.fingerprint, model,
     json: JSON.stringify(preparation), requestJson, createdAt: ctx.timestamp, expiresAt: expiry(ctx, 30) });
   return preparation;
 }
@@ -343,35 +344,35 @@ export function aiAuthorizeGeneration(ctx: Ctx, raw: Record<string, unknown>) {
   const requestHash = aiHash({ preparationId, fingerprint, config });
   const previous = ctx.db.aiGeneration.id.find(id);
   if (previous) {
-    if (!previous.actor.isEqual(ctx.sender) || previous.requestHash !== requestHash) fail('conflict', 'Este UUID ya pertenece a otra solicitud.');
-    validPreparation(ctx, preparationId, ctx.sender, false);
-    expireGenerations(ctx, ctx.sender);
+    if (!previous.actor.isEqual(memberIdentityFor(ctx)) || previous.requestHash !== requestHash) fail('conflict', 'Este UUID ya pertenece a otra solicitud.');
+    validPreparation(ctx, preparationId, memberIdentityFor(ctx), false);
+    expireGenerations(ctx, memberIdentityFor(ctx));
     return generationDto(ctx, ctx.db.aiGeneration.id.find(id)!);
   }
   if (raw.allowNew === false) fail('ai_disabled', 'La IA real todavía no está habilitada para este grupo.');
   const model = text(raw.model, 'El modelo');
   enabled(ctx); consent(ctx);
-  const { row, prep } = validPreparation(ctx, preparationId, ctx.sender, true);
+  const { row, prep } = validPreparation(ctx, preparationId, memberIdentityFor(ctx), true);
   if (row.fingerprint !== fingerprint || row.model !== model || aiHash(prep.config) !== aiHash(config)) fail('conflict', 'La vista previa o el modelo cambió. Prepara de nuevo.');
   if (!prep.canGenerate) fail('invalid_request', 'Falta resolver fuentes o cobertura antes de generar.');
-  const key = ctx.db.aiKey.actor.find(ctx.sender);
+  const key = ctx.db.aiKey.actor.find(memberIdentityFor(ctx));
   if (!key) fail('key_required', 'Configura tu clave personal antes de generar.');
-  expireGenerations(ctx, ctx.sender);
-  const rows = [...ctx.db.aiGeneration.actor.filter(ctx.sender)];
+  expireGenerations(ctx, memberIdentityFor(ctx));
+  const rows = [...ctx.db.aiGeneration.actor.filter(memberIdentityFor(ctx))];
   if (rows.some((generation) => generation.status === 'queued' || generation.status === 'running')) fail('quota', 'Ya tienes una generación en curso.');
   if (raw.acknowledgeUnknown !== true && rows.some((generation) => generation.status === 'unknown'
     && generation.createdAt.microsSinceUnixEpoch > ctx.timestamp.microsSinceUnixEpoch - DAY)) {
     fail('unknown_confirmation_required', 'Hay un envío de resultado incierto. Confirma el riesgo de consumo adicional antes de solicitar otra generación.');
   }
-  const reservations = [...ctx.db.aiReservation.actor.filter(ctx.sender)];
+  const reservations = [...ctx.db.aiReservation.actor.filter(memberIdentityFor(ctx))];
   const sinceHour = ctx.timestamp.microsSinceUnixEpoch - HOUR; const sinceDay = ctx.timestamp.microsSinceUnixEpoch - DAY;
   if (reservations.filter((reservation) => reservation.createdAt.microsSinceUnixEpoch > sinceHour).length >= AI_LIMITS.requestsPerHour
     || reservations.filter((reservation) => reservation.createdAt.microsSinceUnixEpoch > sinceDay).length >= AI_LIMITS.requestsPerDay) fail('quota', 'Alcanzaste el límite de generaciones.');
   const estimatedTokens = estimateAiQuestionTokens(prep, config);
   const spent = reservations.filter((reservation) => reservation.createdAt.microsSinceUnixEpoch > sinceDay && reservation.status !== 'released').reduce((total, reservation) => total + reservation.estimatedTokens, 0);
   if (spent + estimatedTokens > (ctx.db.aiServiceConfig.id.find(0)?.dailyTokenBudget ?? AI_LIMITS.dailyEstimatedTokens)) fail('quota', 'La generación supera el presupuesto diario estimado.');
-  ctx.db.aiReservation.insert({ id, actor: ctx.sender, estimatedTokens, status: 'reserved', createdAt: ctx.timestamp });
-  const generation = ctx.db.aiGeneration.insert({ id, actor: ctx.sender, preparationId, requestHash, configJson: JSON.stringify(config), keyId: key.keyId,
+  ctx.db.aiReservation.insert({ id, actor: memberIdentityFor(ctx), estimatedTokens, status: 'reserved', createdAt: ctx.timestamp });
+  const generation = ctx.db.aiGeneration.insert({ id, actor: memberIdentityFor(ctx), preparationId, requestHash, configJson: JSON.stringify(config), keyId: key.keyId,
     model, status: 'queued', createdAt: ctx.timestamp, claimedAt: undefined, inputTokens: undefined, outputTokens: undefined, resultJson: '', errorCode: '', errorMessage: '' });
   return generationDto(ctx, generation);
 }
@@ -428,15 +429,15 @@ export function aiFinishGeneration(ctx: Ctx, input: Record<string, unknown>) {
 export function aiGetGeneration(ctx: Ctx, input: Record<string, unknown>) {
   activeMember(ctx); const id = uuid(input.id, 'La generación');
   const generation = ctx.db.aiGeneration.id.find(id);
-  if (!generation || !generation.actor.isEqual(ctx.sender)) fail('unavailable', 'La generación no está disponible.');
-  validPreparation(ctx, generation.preparationId, ctx.sender, false);
-  expireGenerations(ctx, ctx.sender);
+  if (!generation || !generation.actor.isEqual(memberIdentityFor(ctx))) fail('unavailable', 'La generación no está disponible.');
+  validPreparation(ctx, generation.preparationId, memberIdentityFor(ctx), false);
+  expireGenerations(ctx, memberIdentityFor(ctx));
   return generationDto(ctx, ctx.db.aiGeneration.id.find(id)!);
 }
 
 export function aiListGenerations(ctx: Ctx) {
   activeMember(ctx);
-  const rows = [...ctx.db.aiGeneration.actor.filter(ctx.sender)].sort((a, b) => a.createdAt.microsSinceUnixEpoch < b.createdAt.microsSinceUnixEpoch ? 1 : -1).slice(0, 30);
+  const rows = [...ctx.db.aiGeneration.actor.filter(memberIdentityFor(ctx))].sort((a, b) => a.createdAt.microsSinceUnixEpoch < b.createdAt.microsSinceUnixEpoch ? 1 : -1).slice(0, 30);
   return rows.flatMap((row) => {
     try { return [aiGetGeneration(ctx, { id: row.id })]; } catch { return []; }
   });
@@ -444,12 +445,12 @@ export function aiListGenerations(ctx: Ctx) {
 export function aiPublishGeneration(ctx: Ctx, input: Record<string, unknown>) {
   activeMember(ctx); const id = uuid(input.id, 'El borrador');
   const generation = ctx.db.aiGeneration.id.find(id);
-  if (!generation?.actor.isEqual(ctx.sender) || generation.status !== 'succeeded') fail('unavailable', 'El borrador no está disponible.');
+  if (!generation?.actor.isEqual(memberIdentityFor(ctx)) || generation.status !== 'succeeded') fail('unavailable', 'El borrador no está disponible.');
   const config = validateAiGenerationConfig(JSON.parse(generation.configJson));
   if (config.purpose === 'teaching_questions' || config.purpose === 'spaced_cards') return acceptStudyDraft(ctx, generation, input);
   const prior = ctx.db.aiPublication.generationId.find(id);
   if (prior) return { targetKind: prior.targetKind, targetId: String(prior.targetId) };
-  const { prep } = validPreparation(ctx, generation.preparationId, ctx.sender, false);
+  const { prep } = validPreparation(ctx, generation.preparationId, memberIdentityFor(ctx), false);
   if (prep.sources.some((source) => source.visibility !== 'group')) fail('forbidden', 'Comparte expresamente las fuentes personales antes de publicar un borrador para el grupo.');
   const draft = validateAiStudyDraft(JSON.parse(generation.resultJson), prep, config);
   const usedSources = new Set(draft.sections.flatMap((section) => section.citations.flatMap((citation) => prep.fragments.find((entry) => entry.id === citation)!.origins.map((origin) => `${origin.kind}:${origin.refId}`))));
@@ -468,38 +469,38 @@ export function aiPublishGeneration(ctx: Ctx, input: Record<string, unknown>) {
   if (draft.purpose === 'guide') {
     const guide = ctx.db.studyGuide.insert({ id: 0n, subjectId: BigInt(prep.subjectId), termId: prep.termId ? BigInt(prep.termId) : undefined,
       title: draft.title, topics: prep.topics, sections: sections.map((section, index) => index === 0 ? `Borrador generado con Gemini, revisado y publicado por su solicitante.\n\n${section}` : section),
-      version: 1, createdBy: ctx.sender, createdAt: ctx.timestamp, updatedBy: ctx.sender, updatedAt: ctx.timestamp });
+      version: 1, createdBy: memberIdentityFor(ctx), createdAt: ctx.timestamp, updatedBy: memberIdentityFor(ctx), updatedAt: ctx.timestamp });
     const kinds: Record<string, string> = { note: 'nota', assignment: 'tarea', activity: 'actividad', work: 'trabajo' };
     const references = new Map<string, { kind: string; refId: bigint; sourceVersion: number; topics: string[] }>();
     for (const source of citedSources) {
       const origins = kinds[source.kind] ? [source] : source.kind === 'evidence'
         ? [{ kind: 'activity', refId: String(ctx.db.evidence.id.find(BigInt(source.refId))!.activityId), version: ctx.db.activity.id.find(ctx.db.evidence.id.find(BigInt(source.refId))!.activityId)!.version }]
         : source.origins;
-      for (const origin of origins) if (kinds[origin.kind] && canReadTarget(ctx.db, ctx.sender, origin.kind, BigInt(origin.refId)) && !withdrawn(ctx.db, origin.kind, BigInt(origin.refId))
+      for (const origin of origins) if (kinds[origin.kind] && canReadTarget(ctx.db, memberIdentityFor(ctx), origin.kind, BigInt(origin.refId)) && !withdrawn(ctx.db, origin.kind, BigInt(origin.refId))
         && (origin.kind !== 'note' || ctx.db.note.id.find(BigInt(origin.refId))?.visibility === 'group')) {
         references.set(`${origin.kind}:${origin.refId}`, { kind: kinds[origin.kind]!, refId: BigInt(origin.refId), sourceVersion: origin.version, topics: source.topics });
       }
     }
     for (const reference of references.values()) ctx.db.guideSource.insert({ id: 0n, guideId: guide.id, ...reference,
-      status: 'processed', reason: '', addedBy: ctx.sender, addedAt: ctx.timestamp });
+      status: 'processed', reason: '', addedBy: memberIdentityFor(ctx), addedAt: ctx.timestamp });
     if (!references.size) ctx.db.studyGuide.id.update({ ...guide, sections: guide.sections.map((section, index) => index === 0 ? `${section}\n\nReferencias utilizadas: ${citations}` : section) });
-    captureGuide(ctx, guide.id, ctx.sender); targetId = guide.id; targetKind = 'guide';
+    captureGuide(ctx, guide.id, memberIdentityFor(ctx)); targetId = guide.id; targetKind = 'guide';
   } else {
     const body = `${sections.map((section, index) => `## ${draft.sections[index]!.heading}\n\n${section}`).join('\n\n')}\n\nOrigen Gemini. Fuentes: ${citations}`;
     if (body.length > 50_000) fail('invalid_result', 'La explicación y sus referencias superan el tamaño de una nota. Prepara menos material.');
     const note = ctx.db.note.insert({ id: 0n, subjectId: BigInt(prep.subjectId), topic: prep.topics.join(', ').slice(0, 120), title: draft.title,
-      body, tags: ['gemini'], visibility: 'group', source: 'ai', author: ctx.sender,
+      body, tags: ['gemini'], visibility: 'group', source: 'ai', author: memberIdentityFor(ctx),
       version: 1, createdAt: ctx.timestamp, updatedAt: ctx.timestamp });
     ctx.db.noteDetail.insert({ noteId: note.id, termId: prep.termId ? BigInt(prep.termId) : undefined, session: '', assignmentIds: [], activityIds: [], questionIds: [], publishedFromId: undefined, publishedFromVersion: undefined });
-    captureNote(ctx, note.id, ctx.sender); targetId = note.id; targetKind = 'note';
+    captureNote(ctx, note.id, memberIdentityFor(ctx)); targetId = note.id; targetKind = 'note';
   }
-  ctx.db.aiPublication.insert({ generationId: id, actor: ctx.sender, targetKind, targetId, createdAt: ctx.timestamp });
+  ctx.db.aiPublication.insert({ generationId: id, actor: memberIdentityFor(ctx), targetKind, targetId, createdAt: ctx.timestamp });
   return { targetKind, targetId: String(targetId) };
 }
 
 /** Explicit, atomic acceptance only; never publishes an explanation or changes review scheduling. */
 function acceptStudyDraft(ctx: Ctx, generation: GenerationRow, input: Record<string, unknown>) {
-  const { prep } = validPreparation(ctx, generation.preparationId, ctx.sender, false);
+  const { prep } = validPreparation(ctx, generation.preparationId, memberIdentityFor(ctx), false);
   const config = validateAiGenerationConfig(JSON.parse(generation.configJson));
   const draft = validateAiModuleDraft(JSON.parse(generation.resultJson), prep, config);
   if (input.reviewed !== true || !Array.isArray(input.selection) || !input.selection.length || input.selection.length > 20) fail('invalid_request', 'Revisa y selecciona expresamente los elementos que quieres incorporar.');
@@ -512,7 +513,7 @@ function acceptStudyDraft(ctx: Ctx, generation: GenerationRow, input: Record<str
     expectedCollectionVersion: input.expectedCollectionVersion });
   const prior = ctx.db.aiStudyAcceptance.generationId.find(generation.id);
   if (prior) {
-    if (!prior.actor.isEqual(ctx.sender) || prior.requestHash !== requestHash) fail('conflict', 'Este borrador ya se incorporó con otra selección.');
+    if (!prior.actor.isEqual(memberIdentityFor(ctx)) || prior.requestHash !== requestHash) fail('conflict', 'Este borrador ya se incorporó con otra selección.');
     return JSON.parse(prior.resultJson) as unknown;
   }
   let result: { targetKind: string; targetId: string; acceptedIds: string[] };
@@ -521,11 +522,11 @@ function acceptStudyDraft(ctx: Ctx, generation: GenerationRow, input: Record<str
     if (!source) fail('invalid_request', 'Falta la explicación guardada.');
     const practiceId = BigInt(source.refId);
     const practice = ctx.db.teachingPractice.id.find(practiceId);
-    if (!practice?.owner.isEqual(ctx.sender) || practice.status !== 'practicing') fail('forbidden', 'La práctica ya no admite preguntas.');
+    if (!practice?.owner.isEqual(memberIdentityFor(ctx)) || practice.status !== 'practicing') fail('forbidden', 'La práctica ya no admite preguntas.');
     const reviewed = entries.map((entry) => ({ ...draft.questions[Number(entry.index)]!, text: text(entry.text, 'La pregunta revisada', 3900) }));
     validateAiModuleDraft({ purpose: draft.purpose, questions: reviewed }, prep, config);
     const acceptedIds = reviewed.map((question) => String(ctx.db.teachingQuestion.insert({ id: 0n, practiceId,
-      author: ctx.sender, kind: 'guided', text: `Gemini · revisada por su autor: ${question.text}`, answer: '',
+      author: memberIdentityFor(ctx), kind: 'guided', text: `Gemini · revisada por su autor: ${question.text}`, answer: '',
       createdAt: ctx.timestamp, answeredAt: undefined }).id));
     ctx.db.teachingPractice.id.update({ ...practice, updatedAt: ctx.timestamp });
     result = { targetKind: 'teaching', targetId: String(practiceId), acceptedIds };
@@ -533,7 +534,7 @@ function acceptStudyDraft(ctx: Ctx, generation: GenerationRow, input: Record<str
     const collectionId = text(input.collectionId, 'La colección', 20);
     if (!/^[1-9][0-9]*$/.test(collectionId) || BigInt(collectionId) > 18_446_744_073_709_551_615n) fail('invalid_request', 'Colección inválida.');
     const collection = ctx.db.spacedCollection.id.find(BigInt(collectionId));
-    if (!collection || collection.archived || (collection.visibility !== 'group' && !collection.ownerId.isEqual(ctx.sender))) fail('forbidden', 'La colección ya no está disponible.');
+    if (!collection || collection.archived || (collection.visibility !== 'group' && !collection.ownerId.isEqual(memberIdentityFor(ctx)))) fail('forbidden', 'La colección ya no está disponible.');
     if (collection.subjectId !== BigInt(prep.subjectId) || collection.version !== input.expectedCollectionVersion) fail('conflict', 'La colección cambió o pertenece a otra materia.');
     if (collection.visibility === 'group' && prep.sources.some((source) => source.visibility !== 'group')) fail('forbidden', 'Las fuentes personales solo pueden usarse en colecciones personales.');
     if (entries.some((entry) => typeof entry.hint !== 'string')) fail('invalid_request', 'La pista revisada debe ser texto.');
@@ -551,12 +552,12 @@ function acceptStudyDraft(ctx: Ctx, generation: GenerationRow, input: Record<str
       if (explanation.length > 20_000) fail('invalid_request', 'La explicación con referencias excede el tamaño de una tarjeta. Reduce el texto revisado.');
       return { id: 0n, collectionId: collection.id, question: card.question, explanation, hint: card.hint,
         sourceKind: origin.kind, sourceId: BigInt(origin.refId), sourceVersion: origin.version,
-        version: 1, archived: false, createdBy: ctx.sender, updatedBy: ctx.sender, createdAt: ctx.timestamp, updatedAt: ctx.timestamp };
+        version: 1, archived: false, createdBy: memberIdentityFor(ctx), updatedBy: memberIdentityFor(ctx), createdAt: ctx.timestamp, updatedAt: ctx.timestamp };
     });
     const acceptedIds = pendingCards.map((card) => String(ctx.db.spacedCard.insert(card).id));
     result = { targetKind: 'spaced_collection', targetId: collectionId, acceptedIds };
   }
-  ctx.db.aiStudyAcceptance.insert({ generationId: generation.id, actor: ctx.sender, requestHash, resultJson: JSON.stringify(result), createdAt: ctx.timestamp });
+  ctx.db.aiStudyAcceptance.insert({ generationId: generation.id, actor: memberIdentityFor(ctx), requestHash, resultJson: JSON.stringify(result), createdAt: ctx.timestamp });
   return result;
 }
 

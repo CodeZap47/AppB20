@@ -1,3 +1,4 @@
+import { memberIdentityFor } from './authIdentity';
 import { SenderError } from 'spacetimedb/server';
 import { aiHash, aiRecord, aiSourceFingerprint, aiUuid, sanitizeAiText, validateAiGenerationConfig,
   type AiGenerationConfig, type AiPreparation } from '../../core/src/ai';
@@ -30,12 +31,12 @@ function examConfig(value: unknown) {
   if (config.purpose !== undefined && config.purpose !== 'questions') fail('invalid', 'Exámenes solo admite generaciones de preguntas.');
   return config;
 }
-function own(ctx: Ctx, examId: unknown) { activeMember(ctx); const exam = ctx.db.studyExam.id.find(uuid(examId)); if (!exam || !exam.owner.isEqual(ctx.sender)) fail('unavailable', 'Este examen no está disponible para editarlo.'); return exam; }
-function readable(ctx: Ctx, examId: unknown) { activeMember(ctx); const exam = ctx.db.studyExam.id.find(uuid(examId)); if (!exam || !(exam.owner.isEqual(ctx.sender) || exam.visibility === 'group')) fail('unavailable', 'El examen no está disponible.'); return exam; }
+function own(ctx: Ctx, examId: unknown) { activeMember(ctx); const exam = ctx.db.studyExam.id.find(uuid(examId)); if (!exam || !exam.owner.isEqual(memberIdentityFor(ctx))) fail('unavailable', 'Este examen no está disponible para editarlo.'); return exam; }
+function readable(ctx: Ctx, examId: unknown) { activeMember(ctx); const exam = ctx.db.studyExam.id.find(uuid(examId)); if (!exam || !(exam.owner.isEqual(memberIdentityFor(ctx)) || exam.visibility === 'group')) fail('unavailable', 'El examen no está disponible.'); return exam; }
 function requireVersion(ctx: Ctx, examId: string, version: unknown) { const row = ctx.db.examVersion.key.find(`${examId}:${integer(version, 'Versión')}`); if (!row) fail('unavailable', 'La versión no existe.'); return row; }
 function data(row: VersionRow) { return JSON.parse(row.json) as StoredVersion; }
 function attemptData(row: AttemptRow) { return JSON.parse(row.json) as StoredAttempt; }
-function ownAttempt(ctx: Ctx, attemptId: unknown) { activeMember(ctx); const row = ctx.db.examAttempt.id.find(uuid(attemptId)); if (!row || !row.actor.isEqual(ctx.sender)) fail('unavailable', 'El intento no está disponible.'); return row; }
+function ownAttempt(ctx: Ctx, attemptId: unknown) { activeMember(ctx); const row = ctx.db.examAttempt.id.find(uuid(attemptId)); if (!row || !row.actor.isEqual(memberIdentityFor(ctx))) fail('unavailable', 'El intento no está disponible.'); return row; }
 function bump(ctx: Ctx, exam: ExamRow, changes: Partial<ExamRow> = {}) { const next = { ...exam, ...changes, revision: exam.revision + 1, updatedAt: ctx.timestamp }; ctx.db.studyExam.id.update(next); return next; }
 function mutable(ctx: Ctx, raw: Record<string, unknown>) {
   const exam = own(ctx, raw.examId); expectVersion(exam.revision, integer(raw.expectedRevision, 'Revisión'));
@@ -44,13 +45,13 @@ function mutable(ctx: Ctx, raw: Record<string, unknown>) {
   return { exam, version, value: data(version) };
 }
 function operation(ctx: Ctx, raw: Record<string, unknown>) {
-  const requestId = uuid(raw.requestId, 'La solicitud'); const key = `${ctx.sender.toHexString()}:${requestId}`;
+  const requestId = uuid(raw.requestId, 'La solicitud'); const key = `${memberIdentityFor(ctx).toHexString()}:${requestId}`;
   const hash = aiHash(raw); const previous = ctx.db.examOperation.key.find(key);
   if (previous && (previous.requestHash !== hash || previous.action !== raw.action)) fail('conflict', 'La solicitud ya pertenece a otra operación.');
   return { key, hash, previous, requestId };
 }
 function remember(ctx: Ctx, raw: Record<string, unknown>, op: ReturnType<typeof operation>, examId: string, attemptId = '') {
-  ctx.db.examOperation.insert({ key: op.key, actor: ctx.sender, action: String(raw.action), requestHash: op.hash, examId, attemptId, createdAt: ctx.timestamp });
+  ctx.db.examOperation.insert({ key: op.key, actor: memberIdentityFor(ctx), action: String(raw.action), requestHash: op.hash, examId, attemptId, createdAt: ctx.timestamp });
 }
 function preparations(version: StoredVersion) { return [version.preparation]; }
 function prepIssues(ctx: Ctx, prep: AiPreparation): ExamSourceIssue[] {
@@ -100,7 +101,7 @@ function versionDto(ctx: Ctx, exam: ExamRow, row: VersionRow): ExamDraft {
     ...(value.timeLimitSeconds ? { timeLimitSeconds: value.timeLimitSeconds } : {}), preparation: value.preparation, questions: value.questions };
 }
 function examSummary(ctx: Ctx, exam: ExamRow): ExamSummary {
-  const isOwner = exam.owner.isEqual(ctx.sender); const number = isOwner ? exam.draftVersion ?? exam.readyVersion : exam.readyVersion;
+  const isOwner = exam.owner.isEqual(memberIdentityFor(ctx)); const number = isOwner ? exam.draftVersion ?? exam.readyVersion : exam.readyVersion;
   const value = number ? data(requireVersion(ctx, exam.id, number)) : undefined;
   return { id: exam.id, revision: isOwner ? exam.revision : exam.readyVersion ?? 0, title: isOwner ? value?.title ?? exam.title : exam.title, subjectId: String(exam.subjectId), ...(exam.termId ? { termId: String(exam.termId) } : {}),
     ownerId: exam.owner.toHexString(), visibility: exam.visibility as 'personal' | 'group', archived: exam.archived, readyVersion: exam.readyVersion,
@@ -108,7 +109,7 @@ function examSummary(ctx: Ctx, exam: ExamRow): ExamSummary {
     createdAt: at(exam.createdAt), updatedAt: isOwner ? at(exam.updatedAt) : value?.approvedAt ?? at(exam.createdAt), canEdit: isOwner, sourceIssues: value ? versionIssues(ctx, value) : [] };
 }
 function detail(ctx: Ctx, exam: ExamRow): ExamDetail {
-  const owner = exam.owner.isEqual(ctx.sender);
+  const owner = exam.owner.isEqual(memberIdentityFor(ctx));
   const rows = [...ctx.db.examVersion.examId.filter(exam.id)].filter((row) => owner || row.state === 'ready' && row.version === exam.readyVersion).sort((a, b) => b.version - a.version);
   let draft: ExamDraft | undefined;
   if (owner) { const row = rows.find((item) => item.version === (exam.draftVersion ?? exam.readyVersion)); if (row && !versionIssues(ctx, data(row)).some((issue) => issue.state === 'unavailable')) draft = versionDto(ctx, exam, row); }
@@ -116,7 +117,7 @@ function detail(ctx: Ctx, exam: ExamRow): ExamDetail {
 }
 function generation(ctx: Ctx, generationId: unknown) {
   const row = ctx.db.aiGeneration.id.find(uuid(generationId)); const prepRow = row && ctx.db.aiPreparation.id.find(row.preparationId);
-  if (!row || !row.actor.isEqual(ctx.sender) || row.status !== 'succeeded' || !prepRow || !prepRow.actor.isEqual(ctx.sender)) fail('unavailable', 'La generación terminada no está disponible.');
+  if (!row || !row.actor.isEqual(memberIdentityFor(ctx)) || row.status !== 'succeeded' || !prepRow || !prepRow.actor.isEqual(memberIdentityFor(ctx))) fail('unavailable', 'La generación terminada no está disponible.');
   const preparation = JSON.parse(prepRow.json) as AiPreparation;
   const config = examConfig(JSON.parse(row.configJson));
   const questions = validatedQuestions(obj(JSON.parse(row.resultJson)).questions, preparation, config);
@@ -129,10 +130,10 @@ function importGeneration(ctx: Ctx, raw: Record<string, unknown>): ExamDetail {
   if (used) { const exam = own(ctx, used.examId); remember(ctx, raw, op, exam.id); return detail(ctx, exam); }
   const title = text(raw.title, 'El título'); const timeLimitSeconds = timeLimit(raw.timeLimitSeconds);
   if (ctx.db.studyExam.id.find(op.requestId)) fail('conflict', 'El identificador ya pertenece a otro examen.');
-  const exam = ctx.db.studyExam.insert({ id: op.requestId, owner: ctx.sender, title, subjectId: BigInt(generated.value.preparation.subjectId), termId: generated.value.preparation.termId ? BigInt(generated.value.preparation.termId) : undefined,
+  const exam = ctx.db.studyExam.insert({ id: op.requestId, owner: memberIdentityFor(ctx), title, subjectId: BigInt(generated.value.preparation.subjectId), termId: generated.value.preparation.termId ? BigInt(generated.value.preparation.termId) : undefined,
     visibility: 'personal', archived: false, revision: 1, readyVersion: undefined, draftVersion: 1, createdAt: ctx.timestamp, updatedAt: ctx.timestamp });
   ctx.db.examVersion.insert({ key: `${exam.id}:1`, examId: exam.id, version: 1, state: 'draft', json: JSON.stringify({ ...generated.value, title, timeLimitSeconds }), createdAt: ctx.timestamp });
-  ctx.db.examGenerationImport.insert({ generationId: generated.row.id, actor: ctx.sender, examId: exam.id, version: 1 });
+  ctx.db.examGenerationImport.insert({ generationId: generated.row.id, actor: memberIdentityFor(ctx), examId: exam.id, version: 1 });
   remember(ctx, raw, op, exam.id); return detail(ctx, exam);
 }
 
@@ -159,7 +160,7 @@ function replaceQuestions(ctx: Ctx, raw: Record<string, unknown>): ExamDetail {
   const preparation = all ? prep : value.preparation;
   const next = { ...value, questions, preparation, config: all ? generated.value.config : value.config,
     hasPersonalSources: all ? generated.value.hasPersonalSources : value.hasPersonalSources };
-  ctx.db.examVersion.key.update({ ...version, json: JSON.stringify(next) }); ctx.db.examGenerationImport.insert({ generationId: generated.row.id, actor: ctx.sender, examId: exam.id, version: version.version });
+  ctx.db.examVersion.key.update({ ...version, json: JSON.stringify(next) }); ctx.db.examGenerationImport.insert({ generationId: generated.row.id, actor: memberIdentityFor(ctx), examId: exam.id, version: version.version });
   remember(ctx, raw, op, exam.id); return detail(ctx, bump(ctx, exam));
 }
 function forkVersion(ctx: Ctx, raw: Record<string, unknown>): ExamDetail {
@@ -212,7 +213,7 @@ function attemptSummary(row: AttemptRow): ExamAttemptSummary {
 }
 function attemptDto(ctx: Ctx, initial: AttemptRow): ExamAttempt {
   const row = expireAttempt(ctx, initial); const value = attemptData(row); const version = data(requireVersion(ctx, row.examId, row.version));
-  const exam = ctx.db.studyExam.id.find(row.examId); const mayReadExam = !!exam && (exam.owner.isEqual(ctx.sender) || exam.visibility === 'group');
+  const exam = ctx.db.studyExam.id.find(row.examId); const mayReadExam = !!exam && (exam.owner.isEqual(memberIdentityFor(ctx)) || exam.visibility === 'group');
   const sourceIssues = versionIssues(ctx, version); const answers: ExamAttempt['answers'] = [];
   const unavailable = new Set(sourceIssues.filter((issue) => issue.state === 'unavailable').map((issue) => `${issue.kind}:${issue.refId}`));
   const questions = value.order.map((order): ExamAttempt['questions'][number] => {
@@ -235,13 +236,13 @@ function attemptDto(ctx: Ctx, initial: AttemptRow): ExamAttempt {
 function startAttempt(ctx: Ctx, raw: Record<string, unknown>): ExamAttempt {
   const op = operation(ctx, raw); if (op.previous) return attemptDto(ctx, ownAttempt(ctx, op.previous.attemptId));
   const exam = readable(ctx, raw.examId); const version = requireVersion(ctx, exam.id, raw.version);
-  if (exam.archived || version.state !== 'ready' || !exam.owner.isEqual(ctx.sender) && version.version !== exam.readyVersion) fail('unavailable', 'Elige una versión lista y disponible para iniciar.');
+  if (exam.archived || version.state !== 'ready' || !exam.owner.isEqual(memberIdentityFor(ctx)) && version.version !== exam.readyVersion) fail('unavailable', 'Elige una versión lista y disponible para iniciar.');
   if (raw.mode !== 'practice' && raw.mode !== 'simulation') fail('invalid', 'Modalidad inválida.');
   const value = data(version); requireAccess(ctx, value);
   if (ctx.db.examAttempt.id.find(op.requestId)) fail('conflict', 'El identificador ya pertenece a otro intento.');
   const startedAt = now(ctx); const stored: StoredAttempt = { title: value.title, mode: raw.mode, startedAt,
     ...(value.timeLimitSeconds ? { deadlineAt: startedAt + value.timeLimitSeconds * 1000 } : {}), order: examAttemptOrder(value.questions, op.requestId), answers: {} };
-  const row = ctx.db.examAttempt.insert({ id: op.requestId, actor: ctx.sender, examId: exam.id, version: version.version, revision: 1, state: 'active', json: JSON.stringify(stored), startedAt: ctx.timestamp });
+  const row = ctx.db.examAttempt.insert({ id: op.requestId, actor: memberIdentityFor(ctx), examId: exam.id, version: version.version, revision: 1, state: 'active', json: JSON.stringify(stored), startedAt: ctx.timestamp });
   remember(ctx, raw, op, exam.id, row.id); return attemptDto(ctx, row);
 }
 function answerAttempt(ctx: Ctx, raw: Record<string, unknown>): ExamAttempt {
@@ -249,7 +250,7 @@ function answerAttempt(ctx: Ctx, raw: Record<string, unknown>): ExamAttempt {
   let row = expireAttempt(ctx, ownAttempt(ctx, raw.attemptId)); if (row.state === 'closed') return attemptDto(ctx, row);
   expectVersion(row.revision, integer(raw.expectedRevision, 'Revisión'));
   const value = attemptData(row); const version = data(requireVersion(ctx, row.examId, row.version)); const exam = ctx.db.studyExam.id.find(row.examId);
-  if (!exam || !(exam.owner.isEqual(ctx.sender) || exam.visibility === 'group')) fail('unavailable', 'El examen ya no está disponible.');
+  if (!exam || !(exam.owner.isEqual(memberIdentityFor(ctx)) || exam.visibility === 'group')) fail('unavailable', 'El examen ya no está disponible.');
   const question = version.questions.find((item) => item.id === raw.questionId);
   if (!question || !question.options.some((option) => option.id === raw.optionId)) fail('invalid', 'Elige una opción existente de esta pregunta.');
   if (!questionAvailable(ctx, version, question)) fail('unavailable', 'La fuente de esta pregunta ya no está disponible.');
@@ -272,12 +273,12 @@ function finishAttempt(ctx: Ctx, raw: Record<string, unknown>): ExamAttempt {
 
 function dispatch(ctx: Ctx, raw: Record<string, unknown>): unknown {
   activeMember(ctx);
-  if (raw.action === 'listExams') return [...ctx.db.studyExam.iter()].filter((exam) => exam.owner.isEqual(ctx.sender)
+  if (raw.action === 'listExams') return [...ctx.db.studyExam.iter()].filter((exam) => exam.owner.isEqual(memberIdentityFor(ctx))
     ? raw.includeArchived === true || !exam.archived
     : exam.visibility === 'group' && exam.readyVersion !== undefined && !exam.archived).map((exam) => examSummary(ctx, exam)).sort((a, b) => b.updatedAt - a.updatedAt);
   if (raw.action === 'getExam') return detail(ctx, readable(ctx, raw.examId));
   if (raw.action === 'getVersion') { const exam = own(ctx, raw.examId); return versionDto(ctx, exam, requireVersion(ctx, exam.id, raw.version)); }
-  if (raw.action === 'listGenerations') return [...ctx.db.aiGeneration.actor.filter(ctx.sender)].filter((row) => {
+  if (raw.action === 'listGenerations') return [...ctx.db.aiGeneration.actor.filter(memberIdentityFor(ctx))].filter((row) => {
     if (!ctx.db.aiPreparation.id.find(row.preparationId)) return false;
     const config = JSON.parse(row.configJson) as AiGenerationConfig;
     return config.purpose === undefined || config.purpose === 'questions';
@@ -293,7 +294,7 @@ function dispatch(ctx: Ctx, raw: Record<string, unknown>): unknown {
   if (raw.action === 'setArchived') { const exam = own(ctx, raw.examId); expectVersion(exam.revision, integer(raw.expectedRevision, 'Revisión')); if (typeof raw.archived !== 'boolean') fail('invalid', 'Archivo inválido.'); return detail(ctx, bump(ctx, exam, { archived: raw.archived })); }
   if (raw.action === 'startAttempt') return startAttempt(ctx, raw);
   if (raw.action === 'getAttempt') return attemptDto(ctx, ownAttempt(ctx, raw.attemptId));
-  if (raw.action === 'listAttempts') return [...ctx.db.examAttempt.actor.filter(ctx.sender)].filter((row) => raw.examId === undefined || row.examId === raw.examId).map((row) => attemptSummary(expireAttempt(ctx, row))).sort((a, b) => b.startedAt - a.startedAt);
+  if (raw.action === 'listAttempts') return [...ctx.db.examAttempt.actor.filter(memberIdentityFor(ctx))].filter((row) => raw.examId === undefined || row.examId === raw.examId).map((row) => attemptSummary(expireAttempt(ctx, row))).sort((a, b) => b.startedAt - a.startedAt);
   if (raw.action === 'saveAnswer' || raw.action === 'confirmAnswer') return answerAttempt(ctx, raw);
   if (raw.action === 'finishAttempt') return finishAttempt(ctx, raw);
   return fail('invalid', 'Operación de Exámenes no admitida.');

@@ -48,6 +48,10 @@ import { PlatformContext } from './components/PlatformContext';
 import { DataProvider } from './data/DataContext';
 import { createDemoState, DemoDataSource } from './data/demo';
 import type { Platform } from './platform';
+import { ThemeProvider } from './design/Theme';
+import { AssignmentCalendarPage, SubjectsPage } from './pages/AcademicHubPages';
+import { useSupabaseAuth } from './auth/SupabaseAuthProvider';
+import { PasswordRecoveryPage } from './auth/SupabaseSignInForm';
 
 /**
  * Se usa hash routing porque funciona igual en la web, en las páginas empaquetadas de la
@@ -67,6 +71,9 @@ export const routes: RouteObject[] = [
           { index: true, element: <WhatsNewPage /> },
           { path: 'm/inicio', element: <WhatsNewPage /> },
           { path: 'modulos', element: <HomePage /> },
+          { path: 'm/calendario', element: <AssignmentCalendarPage /> },
+          { path: 'm/materias', element: <SubjectsPage /> },
+          { path: 'm/materias/:subjectId', element: <SubjectsPage /> },
           {
             path: 'm/mensajes',
             element: <MessagesLayout />,
@@ -170,17 +177,19 @@ export function App({ platform }: { platform: Platform }) {
       ? config.spacetimeAuthExtensionClientId || config.spacetimeAuthClientId
       : config.spacetimeAuthClientId;
   return (
-    <PlatformContext value={platform}>
+    <ThemeProvider><PlatformContext value={platform}>
       <AuthProvider clientId={clientId} platform={platform}>
         <SignedInGate />
       </AuthProvider>
-    </PlatformContext>
+    </PlatformContext></ThemeProvider>
   );
 }
 
 /** Una sesión real puede usar fixtures privados en memoria o el grupo real según configuración. */
 function SignedInGate() {
   const session = useSession();
+  const supabase = useSupabaseAuth();
+  if (supabase?.recovery) return <PasswordRecoveryPage />;
   if (session?.status !== 'signedIn') return <SignInPage />;
   if (config.dataMode === 'demo') {
     return <DemoApp subject={session.profile.subject} key={session.profile.subject} />;

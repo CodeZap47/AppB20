@@ -1,5 +1,6 @@
 import type { INavigator, NavigateParams, StateStore, UserManager } from 'oidc-client-ts';
 import { matchesCallback } from './oidc';
+import { rememberSession } from './persistence';
 
 interface ChromeStorageArea {
   get(keys: string | null): Promise<Record<string, unknown>>;
@@ -12,7 +13,7 @@ interface ChromeAuth {
     launchWebAuthFlow(options: { url: string; interactive: boolean; abortOnLoadForNonInteractive?: boolean;
       timeoutMsForNonInteractive?: number }): Promise<string | undefined>;
   };
-  storage: { session: ChromeStorageArea };
+  storage: { session: ChromeStorageArea; local?: ChromeStorageArea };
 }
 
 export function getChromeAuth(): ChromeAuth | undefined {
@@ -35,6 +36,29 @@ export class ChromeSessionStateStore implements StateStore {
   }
   async getAllKeys(): Promise<string[]> {
     return Object.keys(await this.area.get(null)).filter((k) => k.startsWith(this.prefix)).map((k) => k.slice(this.prefix.length));
+  }
+}
+
+export class ChromeRememberedUserStore implements StateStore {
+  constructor(private session: ChromeStorageArea, private persistent?: ChromeStorageArea, private prefix = 'b20.oidc.user.') {}
+  async get(key: string): Promise<string | null> {
+    const local = this.persistent && await new ChromeSessionStateStore(this.persistent, this.prefix).get(key);
+    return local ?? new ChromeSessionStateStore(this.session, this.prefix).get(key);
+  }
+  async set(key: string, value: string): Promise<void> {
+    await this.remove(key);
+    const area = rememberSession() && this.persistent ? this.persistent : this.session;
+    await new ChromeSessionStateStore(area, this.prefix).set(key, value);
+  }
+  async remove(key: string): Promise<string | null> {
+    const previous = await this.get(key);
+    await new ChromeSessionStateStore(this.session, this.prefix).remove(key);
+    if (this.persistent) await new ChromeSessionStateStore(this.persistent, this.prefix).remove(key);
+    return previous;
+  }
+  async getAllKeys(): Promise<string[]> {
+    return [...new Set([...await new ChromeSessionStateStore(this.session, this.prefix).getAllKeys(),
+      ...this.persistent ? await new ChromeSessionStateStore(this.persistent, this.prefix).getAllKeys() : []])];
   }
 }
 

@@ -20,6 +20,7 @@ import { readFeedSnapshot } from './feedSnapshot';
 
 /** Solo vistas públicas del módulo; nunca tablas privadas ni SELECT * de toda la base. */
 export const PUBLIC_VIEWS = [
+  'typing_presence', 'my_onboarding',
   ...PRACTICE_VIEWS,
   ...AGENT_VIEWS,
   'museum_entries', 'museum_revisions', 'opportunities', 'opportunity_revisions', 'opportunity_interests', 'opportunity_feedback',
@@ -30,7 +31,7 @@ export const PUBLIC_VIEWS = [
   ...PRESENTATION_VIEWS,
   'chat_channels', 'channel_messages', 'my_conversation_states', 'my_blocked_members', 'my_message_reports', 'member_profiles', 'member_profile_covers',
   'note_details', 'note_versions', 'guide_versions', 'question_comments', 'answer_usefulness', 'question_links', 'resource_versions', 'content_statuses', 'contribution_origins',
-  'my_member', 'members', 'invitations', 'invitation_email_statuses', 'subjects', 'terms', 'calendar',
+  'my_member', 'my_auth_identity', 'members', 'invitations', 'invitation_email_statuses', 'subjects', 'terms', 'calendar',
   'assignments', 'page_revisions', 'works', 'work_authors', 'work_files',
   'assignment_details', 'my_progress', 'work_details', 'work_revisions', 'work_reviews',
   'academic_comments', 'resource_files', 'activity_links', 'page_snapshots', 'evidence_details',
@@ -93,6 +94,9 @@ export function readSnapshot(connection: Pick<DbConnection, 'db'>, identity: str
     isCreator: row.isCreator,
     joinedAt: row.joinedAt.toDate(),
   }));
+  // La vista propia debe enlazar explícitamente la sesión actual; una caché antigua no basta.
+  const linked = [...db.myAuthIdentity?.iter() ?? []].find((row) => row.sessionIdentity.toHexString() === identity);
+  identity = linked?.memberIdentity.toHexString() ?? identity;
   const memberRow = [...db.myMember.iter()].find((row) => row.identity.toHexString() === identity);
   const me = memberRow ? {
     id: memberRow.identity.toHexString(),

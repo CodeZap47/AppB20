@@ -63,6 +63,7 @@ import CommentAcademicReducer from "./comment_academic_reducer";
 import CommentFeedPostReducer from "./comment_feed_post_reducer";
 import CommentNoteReducer from "./comment_note_reducer";
 import CommentQuestionReducer from "./comment_question_reducer";
+import CompleteOnboardingReducer from "./complete_onboarding_reducer";
 import CompletePresentationAttemptReducer from "./complete_presentation_attempt_reducer";
 import CompleteTeachingPracticeReducer from "./complete_teaching_practice_reducer";
 import ControlStudyRoomTimerReducer from "./control_study_room_timer_reducer";
@@ -97,6 +98,7 @@ import InviteStudyRoomMemberReducer from "./invite_study_room_member_reducer";
 import JoinGroupReducer from "./join_group_reducer";
 import JoinStudyRoomReducer from "./join_study_room_reducer";
 import LeaveStudyRoomReducer from "./leave_study_room_reducer";
+import LinkAuthIdentityReducer from "./link_auth_identity_reducer";
 import MarkAllNotificationsReadReducer from "./mark_all_notifications_read_reducer";
 import MarkConversationReadReducer from "./mark_conversation_read_reducer";
 import MarkNotificationReadReducer from "./mark_notification_read_reducer";
@@ -197,7 +199,9 @@ import SetSpacedEnrollmentReducer from "./set_spaced_enrollment_reducer";
 import SetStickerPackSharedReducer from "./set_sticker_pack_shared_reducer";
 import SetStudyRoomMaterialReducer from "./set_study_room_material_reducer";
 import SetStudyRoomStatusReducer from "./set_study_room_status_reducer";
+import SetSupabaseAuthReducer from "./set_supabase_auth_reducer";
 import SetTeachingReviewerReducer from "./set_teaching_reviewer_reducer";
+import SetTypingReducer from "./set_typing_reducer";
 import ShareBirthdayReducer from "./share_birthday_reducer";
 import StartAgentSessionReducer from "./start_agent_session_reducer";
 import StartTeachingPracticeReducer from "./start_teaching_practice_reducer";
@@ -205,6 +209,7 @@ import ToggleAnswerUsefulnessReducer from "./toggle_answer_usefulness_reducer";
 import ToggleFeedReactionReducer from "./toggle_feed_reaction_reducer";
 import ToggleReactionReducer from "./toggle_reaction_reducer";
 import TrainAgentReducer from "./train_agent_reducer";
+import UnlinkAuthIdentityReducer from "./unlink_auth_identity_reducer";
 import UpdateActivityReducer from "./update_activity_reducer";
 import UpdateActivityV2Reducer from "./update_activity_v_2_reducer";
 import UpdateAssignmentReducer from "./update_assignment_reducer";
@@ -313,6 +318,7 @@ import MyAgentSessionsRow from "./my_agent_sessions_table";
 import MyAgentSourcesRow from "./my_agent_sources_table";
 import MyAgentStyleSnapshotsRow from "./my_agent_style_snapshots_table";
 import MyAgentSuggestionsRow from "./my_agent_suggestions_table";
+import MyAuthIdentityRow from "./my_auth_identity_table";
 import MyBlockedMembersRow from "./my_blocked_members_table";
 import MyChallengeProgressRow from "./my_challenge_progress_table";
 import MyChatCommandsRow from "./my_chat_commands_table";
@@ -326,6 +332,7 @@ import MyMemberRow from "./my_member_table";
 import MyMessageReportsRow from "./my_message_reports_table";
 import MyNotificationPreferencesRow from "./my_notification_preferences_table";
 import MyNotificationsRow from "./my_notifications_table";
+import MyOnboardingRow from "./my_onboarding_table";
 import MyPresentationPersonalRow from "./my_presentation_personal_table";
 import MyProgressRow from "./my_progress_table";
 import MyPushInstallationsRow from "./my_push_installations_table";
@@ -372,6 +379,7 @@ import SubjectsRow from "./subjects_table";
 import TeachingPracticesRow from "./teaching_practices_table";
 import TeachingQuestionsRow from "./teaching_questions_table";
 import TermsRow from "./terms_table";
+import TypingPresenceRow from "./typing_presence_table";
 import WorkAuthorsRow from "./work_authors_table";
 import WorkDetailsRow from "./work_details_table";
 import WorkFilesRow from "./work_files_table";
@@ -712,6 +720,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyAgentSuggestionsRow),
+  myAuthIdentity: __table({
+    name: 'my_auth_identity',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyAuthIdentityRow),
   myBlockedMembers: __table({
     name: 'my_blocked_members',
     indexes: [
@@ -803,6 +818,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyNotificationsRow),
+  myOnboarding: __table({
+    name: 'my_onboarding',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyOnboardingRow),
   myPresentationPersonal: __table({
     name: 'my_presentation_personal',
     indexes: [
@@ -1125,6 +1147,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, TermsRow),
+  typingPresence: __table({
+    name: 'typing_presence',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, TypingPresenceRow),
   workAuthors: __table({
     name: 'work_authors',
     indexes: [
@@ -1200,6 +1229,7 @@ const reducersSchema = __reducers(
   __reducerSchema("comment_feed_post", CommentFeedPostReducer),
   __reducerSchema("comment_note", CommentNoteReducer),
   __reducerSchema("comment_question", CommentQuestionReducer),
+  __reducerSchema("complete_onboarding", CompleteOnboardingReducer),
   __reducerSchema("complete_presentation_attempt", CompletePresentationAttemptReducer),
   __reducerSchema("complete_teaching_practice", CompleteTeachingPracticeReducer),
   __reducerSchema("control_study_room_timer", ControlStudyRoomTimerReducer),
@@ -1234,6 +1264,7 @@ const reducersSchema = __reducers(
   __reducerSchema("join_group", JoinGroupReducer),
   __reducerSchema("join_study_room", JoinStudyRoomReducer),
   __reducerSchema("leave_study_room", LeaveStudyRoomReducer),
+  __reducerSchema("link_auth_identity", LinkAuthIdentityReducer),
   __reducerSchema("mark_all_notifications_read", MarkAllNotificationsReadReducer),
   __reducerSchema("mark_conversation_read", MarkConversationReadReducer),
   __reducerSchema("mark_notification_read", MarkNotificationReadReducer),
@@ -1334,7 +1365,9 @@ const reducersSchema = __reducers(
   __reducerSchema("set_sticker_pack_shared", SetStickerPackSharedReducer),
   __reducerSchema("set_study_room_material", SetStudyRoomMaterialReducer),
   __reducerSchema("set_study_room_status", SetStudyRoomStatusReducer),
+  __reducerSchema("set_supabase_auth", SetSupabaseAuthReducer),
   __reducerSchema("set_teaching_reviewer", SetTeachingReviewerReducer),
+  __reducerSchema("set_typing", SetTypingReducer),
   __reducerSchema("share_birthday", ShareBirthdayReducer),
   __reducerSchema("start_agent_session", StartAgentSessionReducer),
   __reducerSchema("start_teaching_practice", StartTeachingPracticeReducer),
@@ -1342,6 +1375,7 @@ const reducersSchema = __reducers(
   __reducerSchema("toggle_feed_reaction", ToggleFeedReactionReducer),
   __reducerSchema("toggle_reaction", ToggleReactionReducer),
   __reducerSchema("train_agent", TrainAgentReducer),
+  __reducerSchema("unlink_auth_identity", UnlinkAuthIdentityReducer),
   __reducerSchema("update_activity", UpdateActivityReducer),
   __reducerSchema("update_activity_v_2", UpdateActivityV2Reducer),
   __reducerSchema("update_assignment", UpdateAssignmentReducer),
@@ -1485,6 +1519,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "my_agent_style_snapshots": Omit<typeof tablesSchema.schemaType.tables["myAgentStyleSnapshots"], "accessorName"> & { readonly accessorName: "my_agent_style_snapshots" };
     /** @deprecated Use `myAgentSuggestions` instead. This alias will be removed in the next major version. */
     readonly "my_agent_suggestions": Omit<typeof tablesSchema.schemaType.tables["myAgentSuggestions"], "accessorName"> & { readonly accessorName: "my_agent_suggestions" };
+    /** @deprecated Use `myAuthIdentity` instead. This alias will be removed in the next major version. */
+    readonly "my_auth_identity": Omit<typeof tablesSchema.schemaType.tables["myAuthIdentity"], "accessorName"> & { readonly accessorName: "my_auth_identity" };
     /** @deprecated Use `myBlockedMembers` instead. This alias will be removed in the next major version. */
     readonly "my_blocked_members": Omit<typeof tablesSchema.schemaType.tables["myBlockedMembers"], "accessorName"> & { readonly accessorName: "my_blocked_members" };
     /** @deprecated Use `myChallengeProgress` instead. This alias will be removed in the next major version. */
@@ -1511,6 +1547,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "my_notification_preferences": Omit<typeof tablesSchema.schemaType.tables["myNotificationPreferences"], "accessorName"> & { readonly accessorName: "my_notification_preferences" };
     /** @deprecated Use `myNotifications` instead. This alias will be removed in the next major version. */
     readonly "my_notifications": Omit<typeof tablesSchema.schemaType.tables["myNotifications"], "accessorName"> & { readonly accessorName: "my_notifications" };
+    /** @deprecated Use `myOnboarding` instead. This alias will be removed in the next major version. */
+    readonly "my_onboarding": Omit<typeof tablesSchema.schemaType.tables["myOnboarding"], "accessorName"> & { readonly accessorName: "my_onboarding" };
     /** @deprecated Use `myPresentationPersonal` instead. This alias will be removed in the next major version. */
     readonly "my_presentation_personal": Omit<typeof tablesSchema.schemaType.tables["myPresentationPersonal"], "accessorName"> & { readonly accessorName: "my_presentation_personal" };
     /** @deprecated Use `myProgress` instead. This alias will be removed in the next major version. */
@@ -1589,6 +1627,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "teaching_practices": Omit<typeof tablesSchema.schemaType.tables["teachingPractices"], "accessorName"> & { readonly accessorName: "teaching_practices" };
     /** @deprecated Use `teachingQuestions` instead. This alias will be removed in the next major version. */
     readonly "teaching_questions": Omit<typeof tablesSchema.schemaType.tables["teachingQuestions"], "accessorName"> & { readonly accessorName: "teaching_questions" };
+    /** @deprecated Use `typingPresence` instead. This alias will be removed in the next major version. */
+    readonly "typing_presence": Omit<typeof tablesSchema.schemaType.tables["typingPresence"], "accessorName"> & { readonly accessorName: "typing_presence" };
     /** @deprecated Use `workAuthors` instead. This alias will be removed in the next major version. */
     readonly "work_authors": Omit<typeof tablesSchema.schemaType.tables["workAuthors"], "accessorName"> & { readonly accessorName: "work_authors" };
     /** @deprecated Use `workDetails` instead. This alias will be removed in the next major version. */
@@ -1656,6 +1696,7 @@ const tableAccessorAliases = {
   "my_agent_sources": "myAgentSources",
   "my_agent_style_snapshots": "myAgentStyleSnapshots",
   "my_agent_suggestions": "myAgentSuggestions",
+  "my_auth_identity": "myAuthIdentity",
   "my_blocked_members": "myBlockedMembers",
   "my_challenge_progress": "myChallengeProgress",
   "my_chat_commands": "myChatCommands",
@@ -1669,6 +1710,7 @@ const tableAccessorAliases = {
   "my_message_reports": "myMessageReports",
   "my_notification_preferences": "myNotificationPreferences",
   "my_notifications": "myNotifications",
+  "my_onboarding": "myOnboarding",
   "my_presentation_personal": "myPresentationPersonal",
   "my_progress": "myProgress",
   "my_push_installations": "myPushInstallations",
@@ -1708,6 +1750,7 @@ const tableAccessorAliases = {
   "study_rooms": "studyRooms",
   "teaching_practices": "teachingPractices",
   "teaching_questions": "teachingQuestions",
+  "typing_presence": "typingPresence",
   "work_authors": "workAuthors",
   "work_details": "workDetails",
   "work_files": "workFiles",
@@ -1811,6 +1854,8 @@ export type DbView = __DbViewBase & {
   readonly "my_agent_style_snapshots": __DbViewBase["myAgentStyleSnapshots"];
   /** @deprecated Use `myAgentSuggestions` instead. This alias will be removed in the next major version. */
   readonly "my_agent_suggestions": __DbViewBase["myAgentSuggestions"];
+  /** @deprecated Use `myAuthIdentity` instead. This alias will be removed in the next major version. */
+  readonly "my_auth_identity": __DbViewBase["myAuthIdentity"];
   /** @deprecated Use `myBlockedMembers` instead. This alias will be removed in the next major version. */
   readonly "my_blocked_members": __DbViewBase["myBlockedMembers"];
   /** @deprecated Use `myChallengeProgress` instead. This alias will be removed in the next major version. */
@@ -1837,6 +1882,8 @@ export type DbView = __DbViewBase & {
   readonly "my_notification_preferences": __DbViewBase["myNotificationPreferences"];
   /** @deprecated Use `myNotifications` instead. This alias will be removed in the next major version. */
   readonly "my_notifications": __DbViewBase["myNotifications"];
+  /** @deprecated Use `myOnboarding` instead. This alias will be removed in the next major version. */
+  readonly "my_onboarding": __DbViewBase["myOnboarding"];
   /** @deprecated Use `myPresentationPersonal` instead. This alias will be removed in the next major version. */
   readonly "my_presentation_personal": __DbViewBase["myPresentationPersonal"];
   /** @deprecated Use `myProgress` instead. This alias will be removed in the next major version. */
@@ -1915,6 +1962,8 @@ export type DbView = __DbViewBase & {
   readonly "teaching_practices": __DbViewBase["teachingPractices"];
   /** @deprecated Use `teachingQuestions` instead. This alias will be removed in the next major version. */
   readonly "teaching_questions": __DbViewBase["teachingQuestions"];
+  /** @deprecated Use `typingPresence` instead. This alias will be removed in the next major version. */
+  readonly "typing_presence": __DbViewBase["typingPresence"];
   /** @deprecated Use `workAuthors` instead. This alias will be removed in the next major version. */
   readonly "work_authors": __DbViewBase["workAuthors"];
   /** @deprecated Use `workDetails` instead. This alias will be removed in the next major version. */
@@ -2007,6 +2056,8 @@ export type Tables = __TablesBase & {
   readonly "my_agent_style_snapshots": __TablesBase["myAgentStyleSnapshots"];
   /** @deprecated Use `myAgentSuggestions` instead. This alias will be removed in the next major version. */
   readonly "my_agent_suggestions": __TablesBase["myAgentSuggestions"];
+  /** @deprecated Use `myAuthIdentity` instead. This alias will be removed in the next major version. */
+  readonly "my_auth_identity": __TablesBase["myAuthIdentity"];
   /** @deprecated Use `myBlockedMembers` instead. This alias will be removed in the next major version. */
   readonly "my_blocked_members": __TablesBase["myBlockedMembers"];
   /** @deprecated Use `myChallengeProgress` instead. This alias will be removed in the next major version. */
@@ -2033,6 +2084,8 @@ export type Tables = __TablesBase & {
   readonly "my_notification_preferences": __TablesBase["myNotificationPreferences"];
   /** @deprecated Use `myNotifications` instead. This alias will be removed in the next major version. */
   readonly "my_notifications": __TablesBase["myNotifications"];
+  /** @deprecated Use `myOnboarding` instead. This alias will be removed in the next major version. */
+  readonly "my_onboarding": __TablesBase["myOnboarding"];
   /** @deprecated Use `myPresentationPersonal` instead. This alias will be removed in the next major version. */
   readonly "my_presentation_personal": __TablesBase["myPresentationPersonal"];
   /** @deprecated Use `myProgress` instead. This alias will be removed in the next major version. */
@@ -2111,6 +2164,8 @@ export type Tables = __TablesBase & {
   readonly "teaching_practices": __TablesBase["teachingPractices"];
   /** @deprecated Use `teachingQuestions` instead. This alias will be removed in the next major version. */
   readonly "teaching_questions": __TablesBase["teachingQuestions"];
+  /** @deprecated Use `typingPresence` instead. This alias will be removed in the next major version. */
+  readonly "typing_presence": __TablesBase["typingPresence"];
   /** @deprecated Use `workAuthors` instead. This alias will be removed in the next major version. */
   readonly "work_authors": __TablesBase["workAuthors"];
   /** @deprecated Use `workDetails` instead. This alias will be removed in the next major version. */

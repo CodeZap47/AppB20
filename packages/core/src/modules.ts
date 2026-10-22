@@ -24,6 +24,8 @@ export interface ModuleInfo {
 }
 
 export const MODULES: readonly ModuleInfo[] = [
+  { id: 'calendario', title: 'Calendario de entregas', section: '3.2', summary: 'Tareas en su fecha de entrega y agenda por día.', stage: 1, worksWithoutAi: true, ready: true },
+  { id: 'materias', title: 'Materias', section: '3.2', summary: 'Consignas y apuntes compartidos por materia.', stage: 1, worksWithoutAi: true, ready: true },
   {
     id: 'inicio',
     title: '¿Qué me perdí?',

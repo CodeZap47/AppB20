@@ -1,3 +1,4 @@
+import { memberIdentityFor } from './authIdentity';
 import { Identity } from 'spacetimedb';
 import { SenderError } from 'spacetimedb/server';
 import { AI_CONSENT_VERSION, AI_LIMITS, aiHash, aiRecord, aiUuid, sanitizeAiText } from '../../core/src/ai';
@@ -23,7 +24,7 @@ function version(value: unknown): number { if (!Number.isInteger(value) || Numbe
 function milliseconds(ctx: Ctx) { return Number(ctx.timestamp.microsSinceUnixEpoch / 1000n); }
 function ownedDraft(ctx: Ctx, value: unknown) {
   activeMember(ctx); const row = ctx.db.guideAiDraft.id.find(id(value));
-  if (!row || !row.actor.isEqual(ctx.sender)) fail('unavailable', 'El borrador no está disponible.');
+  if (!row || !row.actor.isEqual(memberIdentityFor(ctx))) fail('unavailable', 'El borrador no está disponible.');
   return row;
 }
 function actor(value: unknown) {
@@ -33,7 +34,7 @@ function actor(value: unknown) {
 function service(ctx: Ctx) { if (!isAiService(ctx)) fail('unauthorized', 'Solo el servicio de IA puede registrar este resultado.'); }
 
 /** Guías deliberately adds questions without enabling them as EX-1 question sources. */
-export function resolveGuideAiSource(ctx: Ctx, kind: string, refId: string, person = ctx.sender) {
+export function resolveGuideAiSource(ctx: Ctx, kind: string, refId: string, person = memberIdentityFor(ctx)) {
   const ref = decimal(refId);
   if (!isActive(ctx.db, person) || !canReadTarget(ctx.db, person, kind, ref) || withdrawn(ctx.db, kind, ref)) fail('unavailable', 'Una fuente ya no está disponible.');
   if (kind === 'question') {
@@ -61,7 +62,7 @@ export function resolveGuideAiSource(ctx: Ctx, kind: string, refId: string, pers
   return source;
 }
 
-function readableCurrentFile(ctx: Ctx, fileId: string, person = ctx.sender) {
+function readableCurrentFile(ctx: Ctx, fileId: string, person = memberIdentityFor(ctx)) {
   const file = ctx.db.resourceFile.id.find(fileId);
   if (!file || file.removedAt !== undefined) fail('unavailable', 'El adjunto ya no está disponible en esta versión.');
   resolveGuideAiSource(ctx, file.targetKind, String(file.targetId), person);
@@ -97,15 +98,15 @@ export function saveGuideTranscription(ctx: Ctx, raw: Record<string, unknown>) {
     text: segments.map((segment) => segment.text).join('\n'), segments, omissions: raw.omissions,
     reviewed: true, createdAt: prior ? Number(prior.createdAt.microsSinceUnixEpoch / 1000n) : milliseconds(ctx), label: 'Texto preparado y revisado por el alumno' });
   if (prior) {
-    if (!prior.actor.isEqual(ctx.sender) || prior.json !== json) fail('conflict', 'La transcripción ya pertenece a otra preparación.');
+    if (!prior.actor.isEqual(memberIdentityFor(ctx)) || prior.json !== json) fail('conflict', 'La transcripción ya pertenece a otra preparación.');
     return JSON.parse(prior.json) as unknown;
   }
-  ctx.db.guideAiTranscription.insert({ id: transcriptionId, actor: ctx.sender, fileId, fileHash,
+  ctx.db.guideAiTranscription.insert({ id: transcriptionId, actor: memberIdentityFor(ctx), fileId, fileHash,
     targetKind: file.targetKind, targetId: file.targetId, targetVersion: expectedVersion, json, createdAt: ctx.timestamp });
   return JSON.parse(json) as unknown;
 }
 
-export function getGuideTranscription(ctx: Ctx, transcriptionId: string, person = ctx.sender, requireSame = true): GuideAiTranscription {
+export function getGuideTranscription(ctx: Ctx, transcriptionId: string, person = memberIdentityFor(ctx), requireSame = true): GuideAiTranscription {
   const row = ctx.db.guideAiTranscription.id.find(id(transcriptionId));
   if (!isActive(ctx.db, person) || !row || !row.actor.isEqual(person)) fail('unavailable', 'La transcripción no está disponible.');
   const file = requireSame ? readableCurrentFile(ctx, row.fileId, person) : ctx.db.resourceFile.id.find(row.fileId);
@@ -117,7 +118,7 @@ export function getGuideTranscription(ctx: Ctx, transcriptionId: string, person 
   return parsed as unknown as GuideAiTranscription;
 }
 
-function preparedSnapshots(ctx: Ctx, input: ReturnType<typeof validateGuideAiPrepareInput>, person = ctx.sender, requireSame = true): GuideAiSnapshot[] {
+function preparedSnapshots(ctx: Ctx, input: ReturnType<typeof validateGuideAiPrepareInput>, person = memberIdentityFor(ctx), requireSame = true): GuideAiSnapshot[] {
   return input.sources.map((ref) => {
     const resolved = resolveGuideAiSource(ctx, ref.kind, ref.refId, person);
     const snapshot = { ...resolved, kind: ref.kind, fields: [...resolved.fields] } as GuideAiSnapshot;
@@ -182,23 +183,23 @@ export function prepareGuideAi(ctx: Ctx, raw: Record<string, unknown>): GuideAiD
   const preparation = buildGuideAiPreparation(input, preparedSnapshots(ctx, input), { id: draftId, model, now: milliseconds(ctx) });
   const prior = ctx.db.guideAiDraft.id.find(draftId);
   if (prior) {
-    if (!prior.actor.isEqual(ctx.sender) || draftValue(prior).preparation.fingerprint !== preparation.fingerprint) fail('conflict', 'La preparación pertenece a otra selección. Crea una nueva para actualizar las fuentes.');
+    if (!prior.actor.isEqual(memberIdentityFor(ctx)) || draftValue(prior).preparation.fingerprint !== preparation.fingerprint) fail('conflict', 'La preparación pertenece a otra selección. Crea una nueva para actualizar las fuentes.');
     return draftValue(prior);
   }
   const steps: GuideAiStep[] = preparation.batches.length <= 1 ? [{ id: 'direct', kind: 'direct', state: 'pending' }]
     : [...preparation.batches.map((batch) => ({ id: batch.id, batchId: batch.id, kind: 'summary' as const, state: 'pending' as const })), { id: 'synthesis', kind: 'synthesis', state: 'pending' }];
   const draft: GuideAiDraft = { id: draftId, revision: 1, state: 'prepared', title: input.title, subjectId: input.subjectId, ...(input.termId ? { termId: input.termId } : {}),
     preparation, steps, createdAt: milliseconds(ctx), updatedAt: milliseconds(ctx), completedSteps: 0, totalSteps: steps.length };
-  ctx.db.guideAiDraft.insert({ id: draftId, actor: ctx.sender, revision: 1, state: draft.state, json: JSON.stringify(draft), createdAt: ctx.timestamp, updatedAt: ctx.timestamp }); return draft;
+  ctx.db.guideAiDraft.insert({ id: draftId, actor: memberIdentityFor(ctx), revision: 1, state: draft.state, json: JSON.stringify(draft), createdAt: ctx.timestamp, updatedAt: ctx.timestamp }); return draft;
 }
 function reprepareGuideAiDraft(ctx: Ctx, raw: Record<string, unknown>): GuideAiDraft {
   const row = ownedDraft(ctx, raw.id); const draft = draftValue(row); const requestId = id(raw.requestId, 'La actualización');
-  validDraftSources(ctx, draft, ctx.sender, false);
+  validDraftSources(ctx, draft, memberIdentityFor(ctx), false);
   const input = validateGuideAiPrepareInput(raw.input); const model = string(raw.model, 'El modelo');
   const refreshHash = aiHash({ input, model });
   if (draft.refreshRequestId === requestId) {
     if ((draft as GuideAiDraft & { refreshHash?: string }).refreshHash !== refreshHash) fail('conflict', 'La actualización ya pertenece a otra selección.');
-    validDraftSources(ctx, draft, ctx.sender, false);
+    validDraftSources(ctx, draft, memberIdentityFor(ctx), false);
     return draft;
   }
   expectVersion(draft.revision, version(raw.expectedRevision));
@@ -242,15 +243,15 @@ function expireGuideSteps(ctx: Ctx, person: Identity) {
   }
 }
 function authorizeGuideStep(ctx: Ctx, raw: Record<string, unknown>) {
-  activeMember(ctx); expireGuideSteps(ctx, ctx.sender); const row = ownedDraft(ctx, raw.id); const draft = draftValue(row);
+  activeMember(ctx); expireGuideSteps(ctx, memberIdentityFor(ctx)); const row = ownedDraft(ctx, raw.id); const draft = draftValue(row);
   if (raw.model !== draft.preparation.model || raw.fingerprint !== draft.preparation.fingerprint) fail('conflict', 'La vista previa o el modelo cambió. Prepara nuevamente.');
   const generationId = id(raw.generationId, 'El envío'); const prior = ctx.db.aiGeneration.id.find(generationId);
   if (prior) {
-    if (!prior.actor.isEqual(ctx.sender) || prior.preparationId !== draft.id) fail('conflict', 'El envío pertenece a otra operación.');
-    validDraftSources(ctx, draft, ctx.sender, false);
-    return { actor: ctx.sender.toHexString(), draft };
+    if (!prior.actor.isEqual(memberIdentityFor(ctx)) || prior.preparationId !== draft.id) fail('conflict', 'El envío pertenece a otra operación.');
+    validDraftSources(ctx, draft, memberIdentityFor(ctx), false);
+    return { actor: memberIdentityFor(ctx).toHexString(), draft };
   }
-  if (draft.steps.some((step) => step.generationId === generationId && step.state === 'pending')) { validDraftSources(ctx, draft, ctx.sender, false); return { actor: ctx.sender.toHexString(), draft }; }
+  if (draft.steps.some((step) => step.generationId === generationId && step.state === 'pending')) { validDraftSources(ctx, draft, memberIdentityFor(ctx), false); return { actor: memberIdentityFor(ctx).toHexString(), draft }; }
   expectVersion(draft.revision, version(raw.expectedRevision));
   if (raw.confirmed !== true) fail('consent', 'Confirma expresamente el envío del texto preparado.');
   if (raw.allowNew !== true) fail('disabled', 'La IA real todavía no está habilitada.');
@@ -258,18 +259,18 @@ function authorizeGuideStep(ctx: Ctx, raw: Record<string, unknown>) {
   if (['published', 'cancelled', 'ready'].includes(draft.state)) fail('conflict', 'Este borrador no tiene pasos pendientes.');
   if (!draft.preparation.canGenerate) fail('invalid', 'Resuelve las fuentes y cobertura pendientes.');
   if (draft.completedSteps === 0 && draft.preparation.expiresAt <= milliseconds(ctx)) fail('expired', 'La vista previa venció. Prepara otra selección antes del primer envío.');
-  validDraftSources(ctx, draft, ctx.sender);
+  validDraftSources(ctx, draft, memberIdentityFor(ctx));
   const step = draft.steps.find((entry) => entry.state !== 'succeeded');
   if (!step || step.state === 'running') fail('conflict', 'Ya hay un paso en curso.');
-  const hasUnknown = [...ctx.db.aiGeneration.actor.filter(ctx.sender)].some((generation) => generation.status === 'unknown' && generation.createdAt.microsSinceUnixEpoch > ctx.timestamp.microsSinceUnixEpoch - 86_400_000_000n);
+  const hasUnknown = [...ctx.db.aiGeneration.actor.filter(memberIdentityFor(ctx))].some((generation) => generation.status === 'unknown' && generation.createdAt.microsSinceUnixEpoch > ctx.timestamp.microsSinceUnixEpoch - 86_400_000_000n);
   if ((step.state === 'unknown' || hasUnknown) && raw.acknowledgeUnknown !== true) fail('unknown_confirmation_required', 'Confirma el posible consumo adicional del envío de resultado incierto.');
   // Authorization never sends or reserves. The restricted claim below does both atomically.
-  const key = ctx.db.aiKey.actor.find(ctx.sender); if (!key) fail('unavailable', 'Configura tu clave personal antes de generar.');
+  const key = ctx.db.aiKey.actor.find(memberIdentityFor(ctx)); if (!key) fail('unavailable', 'Configura tu clave personal antes de generar.');
   step.generationId = generationId; step.state = 'pending'; step.error = undefined;
   const authorized = { ...draft, state: 'prepared' as const,
     authorization: { generationId, keyId: key.keyId, acknowledgeUnknown: raw.acknowledgeUnknown === true } };
   const next = saveDraft(ctx, authorized);
-  return { actor: ctx.sender.toHexString(), draft: next, acknowledgeUnknown: raw.acknowledgeUnknown === true };
+  return { actor: memberIdentityFor(ctx).toHexString(), draft: next, acknowledgeUnknown: raw.acknowledgeUnknown === true };
 }
 function fragmentsForStep(draft: GuideAiDraft, step: GuideAiStep): GuideAiFragment[] {
   if (step.kind === 'synthesis') {
@@ -370,25 +371,25 @@ function publishGuideAi(ctx: Ctx, raw: Record<string, unknown>): GuideAiDraft {
   const row = ownedDraft(ctx, raw.id); const draft = draftValue(row); const requestId = id(raw.requestId, 'La publicación');
   if (draft.state === 'published') {
     if (draft.publicationRequestId !== requestId || (raw.guideId !== undefined && raw.guideId !== draft.publishedGuideId)) fail('conflict', 'Este borrador ya se publicó mediante otra solicitud.');
-    validDraftSources(ctx, draft, ctx.sender, false);
+    validDraftSources(ctx, draft, memberIdentityFor(ctx), false);
     return draft;
   }
   expectVersion(draft.revision, version(raw.expectedRevision));
   if (draft.state !== 'ready' || !draft.result) fail('invalid', 'Completa y revisa el borrador antes de publicarlo.');
   if (draft.needsCitationReview) fail('invalid', 'Revisa las citas y guarda el borrador después de actualizar sus fuentes antes de publicar.');
-  validDraftSources(ctx, draft, ctx.sender); const result = validateGuideAiResult(draft.result, draft.preparation);
+  validDraftSources(ctx, draft, memberIdentityFor(ctx)); const result = validateGuideAiResult(draft.result, draft.preparation);
   const input = draft.preparation.input; const subjectId = decimal(input.subjectId); const termId = input.termId ? decimal(input.termId) : undefined;
   if (!ctx.db.subject.id.find(subjectId) || (termId !== undefined && ctx.db.term.id.find(termId)?.subjectId !== subjectId)) fail('conflict', 'La clasificación ya no está disponible.');
   const existing = raw.guideId !== undefined ? requireGuide(ctx, decimal(raw.guideId)) : undefined;
   if (existing) {
-    if (!canReadTarget(ctx.db, ctx.sender, 'guide', existing.id) || withdrawn(ctx.db, 'guide', existing.id)) fail('unavailable', 'La guía ya no está disponible.');
+    if (!canReadTarget(ctx.db, memberIdentityFor(ctx), 'guide', existing.id) || withdrawn(ctx.db, 'guide', existing.id)) fail('unavailable', 'La guía ya no está disponible.');
     if (existing.subjectId !== subjectId || existing.termId !== termId) fail('conflict', 'La materia y el parcial deben coincidir con el borrador.');
     expectVersion(existing.version, version(raw.expectedVersion)); captureGuide(ctx, existing.id);
   }
   const sections = result.sections.map((section) => section.content);
-  const guide = existing ? { ...existing, title: result.title, topics: input.topics, sections, version: existing.version + 1, updatedBy: ctx.sender, updatedAt: ctx.timestamp }
+  const guide = existing ? { ...existing, title: result.title, topics: input.topics, sections, version: existing.version + 1, updatedBy: memberIdentityFor(ctx), updatedAt: ctx.timestamp }
     : ctx.db.studyGuide.insert({ id: 0n, subjectId, termId, title: result.title, topics: input.topics, sections, version: 1,
-      createdBy: ctx.sender, createdAt: ctx.timestamp, updatedBy: ctx.sender, updatedAt: ctx.timestamp });
+      createdBy: memberIdentityFor(ctx), createdAt: ctx.timestamp, updatedBy: memberIdentityFor(ctx), updatedAt: ctx.timestamp });
   if (existing) { ctx.db.studyGuide.id.update(guide); for (const source of ctx.db.guideSource.guideId.filter(guide.id)) ctx.db.guideSource.id.delete(source.id); }
   const cited = new Set(result.sections.flatMap((section) => section.citations));
   const grouped = new Map<string, { kind: string; refId: bigint; version: number; used: boolean; topics: Set<string> }>();
@@ -405,13 +406,13 @@ function publishGuideAi(ctx: Ctx, raw: Record<string, unknown>): GuideAiDraft {
     ctx.db.guideSource.insert({ id: 0n, guideId: guide.id, kind: source.kind, refId: source.refId,
       sourceVersion: source.version,
       status: source.used ? 'processed' : 'pending', reason: source.used ? '' : 'Preparada, pero no citada en esta versión.', topics: [...source.topics],
-      addedBy: ctx.sender, addedAt: ctx.timestamp });
+      addedBy: memberIdentityFor(ctx), addedAt: ctx.timestamp });
   }
   ctx.db.guideAiProvenance.insert({ key: `${guide.id}:${guide.version}`, guideId: guide.id, guideVersion: guide.version,
     json: JSON.stringify({ purpose: 'study_guide', model: draft.generationModel ?? draft.preparation.model, editedAfterGeneration: draft.editedAfterGeneration === true, preparationFingerprint: draft.preparation.fingerprint,
       sources: draft.preparation.sources, fragments: draft.preparation.fragments.filter((fragment) => cited.has(fragment.id)),
       citations: result.sections, generatedAt: Math.max(draft.createdAt, ...draft.steps.filter((step) => step.kind !== 'summary' && step.state === 'succeeded').map((step) => step.finishedAt ?? draft.createdAt)) }) });
-  captureGuide(ctx, guide.id, ctx.sender); log(ctx, existing ? 'update' : 'create', 'study_guide', guide.id);
+  captureGuide(ctx, guide.id, memberIdentityFor(ctx)); log(ctx, existing ? 'update' : 'create', 'study_guide', guide.id);
   return saveDraft(ctx, { ...draft, state: 'published', publishedGuideId: String(guide.id), publishedGuideVersion: guide.version, publicationRequestId: requestId });
 }
 
@@ -472,11 +473,11 @@ function readableProvenance(ctx: Ctx, json: string, scope: { subjectId: string; 
   const availableOrigins = new Map<string, GuideAiFragment['origins']>();
   for (const fragment of fragments) {
     availableOrigins.set(fragment.id, fragment.origins.filter((origin) => {
-      const current = availableOrigin(ctx.db, ctx.sender, origin); return !!current && inGuideScope(current, scope);
+      const current = availableOrigin(ctx.db, memberIdentityFor(ctx), origin); return !!current && inGuideScope(current, scope);
     }));
   }
   const currentSources = sources.map((source) => {
-    const current = publicSourceState(ctx.db, ctx.sender, source.kind, source.refId);
+    const current = publicSourceState(ctx.db, memberIdentityFor(ctx), source.kind, source.refId);
     const available = !!current && inGuideScope(current, scope);
     const availableFragmentIds = available ? source.fragmentIds.filter((fragmentId) => availableOrigins.get(fragmentId)?.some((origin) => originBelongsToSource(ctx.db, origin, source))) : [];
     return { ...source, ...(!available ? { title: 'Fuente no disponible' } : {}), available, availableFragmentIds };
@@ -542,13 +543,13 @@ function guideAiDispatch(ctx: Ctx, payload: string): string {
   if (raw.action === 'finishStep') return JSON.stringify(finishGuideStep(ctx, raw));
   if (raw.action === 'publish') return JSON.stringify(publishGuideAi(ctx, raw));
   if (raw.action === 'listDrafts') {
-    activeMember(ctx); expireGuideSteps(ctx, ctx.sender); return JSON.stringify([...ctx.db.guideAiDraft.actor.filter(ctx.sender)].map((row) => summary(draftValue(row))));
+    activeMember(ctx); expireGuideSteps(ctx, memberIdentityFor(ctx)); return JSON.stringify([...ctx.db.guideAiDraft.actor.filter(memberIdentityFor(ctx))].map((row) => summary(draftValue(row))));
   }
-  if (raw.action === 'getDraft') { activeMember(ctx); expireGuideSteps(ctx, ctx.sender); const row = ownedDraft(ctx, raw.id); const draft = draftValue(row); validDraftSources(ctx, draft, ctx.sender, false); return JSON.stringify(draft); }
+  if (raw.action === 'getDraft') { activeMember(ctx); expireGuideSteps(ctx, memberIdentityFor(ctx)); const row = ownedDraft(ctx, raw.id); const draft = draftValue(row); validDraftSources(ctx, draft, memberIdentityFor(ctx), false); return JSON.stringify(draft); }
   if (raw.action === 'saveDraft') {
     const row = ownedDraft(ctx, raw.id); const draft = draftValue(row); expectVersion(draft.revision, version(raw.expectedRevision));
     if (!draft.result || draft.state !== 'ready') fail('conflict', 'Solo se edita un borrador terminado y privado.');
-    validDraftSources(ctx, draft, ctx.sender, false); const result = validateGuideAiResult(raw.result, draft.preparation);
+    validDraftSources(ctx, draft, memberIdentityFor(ctx), false); const result = validateGuideAiResult(raw.result, draft.preparation);
     return JSON.stringify(saveDraft(ctx, { ...draft, result, title: result.title, needsCitationReview: false, editedAfterGeneration: true }));
   }
   if (raw.action === 'cancelDraft') {
@@ -556,7 +557,7 @@ function guideAiDispatch(ctx: Ctx, payload: string): string {
     if (draft.state === 'published') fail('conflict', 'Una guía publicada ya no es un borrador.');
     for (const step of draft.steps) if (step.state === 'pending' || step.state === 'failed' || step.state === 'unknown') step.state = 'cancelled';
     const cancelled = saveDraft(ctx, { ...draft, state: 'cancelled' });
-    try { validDraftSources(ctx, cancelled, ctx.sender, false); return JSON.stringify(cancelled); }
+    try { validDraftSources(ctx, cancelled, memberIdentityFor(ctx), false); return JSON.stringify(cancelled); }
     catch (error) {
       if (!(error instanceof SenderError)) throw error;
       // Cancellation remains possible after access loss. Redaction changes only the reply,
@@ -569,7 +570,7 @@ function guideAiDispatch(ctx: Ctx, payload: string): string {
   }
   if (raw.action === 'getProvenance') {
     activeMember(ctx); const guideId = decimal(raw.guideId); const guideVersion = version(raw.version);
-    if (!canReadTarget(ctx.db, ctx.sender, 'guide', guideId) || withdrawn(ctx.db, 'guide', guideId)) fail('unavailable', 'La guía no está disponible.');
+    if (!canReadTarget(ctx.db, memberIdentityFor(ctx), 'guide', guideId) || withdrawn(ctx.db, 'guide', guideId)) fail('unavailable', 'La guía no está disponible.');
     const stored = ctx.db.guideAiProvenance.key.find(`${guideId}:${guideVersion}`);
     const guide = [...ctx.db.guideVersion.guideId.filter(guideId)].find((row) => row.version === guideVersion) ?? requireGuide(ctx, guideId);
     return stored ? JSON.stringify(readableProvenance(ctx, stored.json, { subjectId: String(guide.subjectId), termId: guide.termId?.toString() })) : 'null';

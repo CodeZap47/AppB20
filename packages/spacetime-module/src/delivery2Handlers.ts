@@ -1,3 +1,4 @@
+import { memberIdentityFor } from './authIdentity';
 import { SenderError } from 'spacetimedb/server';
 import { Identity } from 'spacetimedb';
 import { retentionBlocksRead } from './trashHandlers';
@@ -135,7 +136,7 @@ export function captureGuide(ctx: Ctx, id: bigint, actor?: Ctx['sender'], restor
     sources: [...ctx.db.guideSource.guideId.filter(id)].map(({ kind, refId, sourceVersion, status, reason, topics, addedBy, addedAt }) => ({ kind, refId, sourceVersion, status, reason, topics, addedBy, addedAt })),
     attachmentIds: attachmentIds(ctx, 'guide', id), editedBy: actor ?? row.updatedBy, editedAt: row.updatedAt, restoredFromVersion });
 }
-export function bumpExtra(ctx: Ctx, kind: string, id: bigint, actor = ctx.sender) {
+export function bumpExtra(ctx: Ctx, kind: string, id: bigint, actor = memberIdentityFor(ctx)) {
   const version = extraVersion(ctx, kind, id) + 1;
   if (kind === 'note') {
     ctx.db.note.id.update({ ...ctx.db.note.id.find(id)!, version, updatedAt: ctx.timestamp }); captureNote(ctx, id, actor);
@@ -190,7 +191,7 @@ export function conversationAccess(ctx: Ctx, scope: string, conversationId: stri
   if (scope === 'channel') { channel(ctx, id); return; }
   if (scope === 'direct') {
     const row = ctx.db.directConversation.id.find(id);
-    if (row && (row.userA.isEqual(ctx.sender) || row.userB.isEqual(ctx.sender))) return;
+    if (row && (row.userA.isEqual(memberIdentityFor(ctx)) || row.userB.isEqual(memberIdentityFor(ctx)))) return;
   }
   throw new SenderError('No participas en esa conversación.');
 }
@@ -204,7 +205,7 @@ export function createChatChannel(ctx: Ctx, input: { name: string; kind: string;
   if ([...ctx.db.chatChannel.iter()].some((c) => c.kind === input.kind && c.subjectId === input.subjectId && c.name.toLowerCase() === name.toLowerCase() && !c.archivedAt)) {
     throw new SenderError('Ya existe un canal con ese nombre y clasificación.');
   }
-  ctx.db.chatChannel.insert({ id: 0n, ...input, subjectId: input.subjectId, name, createdBy: ctx.sender, createdAt: ctx.timestamp, archivedAt: undefined });
+  ctx.db.chatChannel.insert({ id: 0n, ...input, subjectId: input.subjectId, name, createdBy: memberIdentityFor(ctx), createdAt: ctx.timestamp, archivedAt: undefined });
 }
 export function sendChannelMessage(ctx: Ctx, input: { channelId: bigint; text: string; replyToId?: bigint }) {
   channel(ctx, input.channelId, true); validateMentions(ctx, input.text);
@@ -212,7 +213,7 @@ export function sendChannelMessage(ctx: Ctx, input: { channelId: bigint; text: s
     const reply = ctx.db.channelMessage.id.find(input.replyToId);
     if (!reply || reply.channelId !== input.channelId || reply.deletedAt) throw new SenderError('La respuesta no pertenece a este canal.');
   }
-  const message = ctx.db.channelMessage.insert({ id: 0n, ...input, replyToId: input.replyToId, text: messageText(ctx, input.text), sender: ctx.sender, sentAt: ctx.timestamp,
+  const message = ctx.db.channelMessage.insert({ id: 0n, ...input, replyToId: input.replyToId, text: messageText(ctx, input.text), sender: memberIdentityFor(ctx), sentAt: ctx.timestamp,
     editedAt: undefined, deletedAt: undefined, deletedBy: undefined });
   return message.id;
 }
@@ -221,10 +222,10 @@ export function markConversationRead(ctx: Ctx, input: { scope: string; conversat
   const found = readableMessage(ctx, input.scope, input.messageId);
   const actual = found.scope === 'direct' ? found.row.conversationId.toString() : found.scope === 'channel' ? found.row.channelId.toString() : 'general';
   if (actual !== input.conversationId) throw new SenderError('El mensaje pertenece a otra conversación.');
-  const key = `${ctx.sender.toHexString()}:${input.scope}:${input.conversationId}`;
+  const key = `${memberIdentityFor(ctx).toHexString()}:${input.scope}:${input.conversationId}`;
   const old = ctx.db.conversationState.key.find(key);
   if (old?.readThroughId !== undefined && old.readThroughId >= input.messageId) return;
-  const row = { key, memberId: ctx.sender, scope: input.scope, conversationId: input.conversationId,
+  const row = { key, memberId: memberIdentityFor(ctx), scope: input.scope, conversationId: input.conversationId,
     readThroughId: input.messageId, muted: old?.muted ?? false, updatedAt: ctx.timestamp };
   if (old) ctx.db.conversationState.key.update(row); else ctx.db.conversationState.insert(row);
 }
@@ -232,14 +233,14 @@ export function reportMessage(ctx: Ctx, input: { scope: string; messageId: bigin
   activeMember(ctx);
   const found = readableMessage(ctx, input.scope, input.messageId);
   if (found.row.deletedAt) throw new SenderError('El mensaje ya se eliminó.');
-  if (found.row.sender.isEqual(ctx.sender)) throw new SenderError('No puedes reportar tu propio mensaje.');
+  if (found.row.sender.isEqual(memberIdentityFor(ctx))) throw new SenderError('No puedes reportar tu propio mensaje.');
   const kind = `${input.scope}_message`;
   const ids = [...new Set(input.attachmentIds)];
   if (ids.length > 20 || ids.some((id) => {
     const file = ctx.db.resourceFile.id.find(id);
     return !file || file.targetKind !== kind || file.targetId !== input.messageId || file.removedAt !== undefined;
   })) throw new SenderError('Solo puedes compartir adjuntos activos de este mensaje.');
-  ctx.db.messageReport.insert({ id: 0n, reporter: ctx.sender, scope: input.scope, messageId: input.messageId,
+  ctx.db.messageReport.insert({ id: 0n, reporter: memberIdentityFor(ctx), scope: input.scope, messageId: input.messageId,
     reason: requireText(input.reason, 'El motivo', 2000), evidenceText: input.shareText ? found.row.text : '', attachmentIds: ids,
     createdAt: ctx.timestamp, status: 'open', resolvedBy: undefined, resolvedAt: undefined });
 }

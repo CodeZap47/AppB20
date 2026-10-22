@@ -1,3 +1,4 @@
+import { memberIdentityFor } from './authIdentity';
 import { Identity } from 'spacetimedb';
 import { SenderError } from 'spacetimedb/server';
 import { AI_CONSENT_VERSION, AI_LIMITS, aiHash, aiUuid } from '../../core/src/ai';
@@ -102,31 +103,31 @@ const recentUnknown = (ctx: Ctx, owner: Person) => [...ctx.db.aiGeneration.actor
 /** Vista previa: lo que se enviaría y su consumo estimado. No guarda ni reserva nada. */
 function preview(ctx: Ctx, raw: Record<string, unknown>) {
   activeMember(ctx); const step = check(() => agentAiStep(raw.step));
-  const { payload, estimatedTokens } = prepare(ctx, ctx.sender, step, raw.sessionId);
+  const { payload, estimatedTokens } = prepare(ctx, memberIdentityFor(ctx), step, raw.sessionId);
   return { step, payload, systemInstruction: agentAiSystemInstruction(payload), estimatedTokens };
 }
 
 function authorize(ctx: Ctx, raw: Record<string, unknown>) {
-  activeMember(ctx); expire(ctx, ctx.sender);
+  activeMember(ctx); expire(ctx, memberIdentityFor(ctx));
   const id = uuid(raw.generationId); const prior = ctx.db.agentAiRun.id.find(id);
-  if (prior) { if (!prior.owner.isEqual(ctx.sender)) fail('conflict', 'El envío pertenece a otra persona.'); return { actor: ctx.sender.toHexString(), run: dto(prior) }; }
+  if (prior) { if (!prior.owner.isEqual(memberIdentityFor(ctx))) fail('conflict', 'El envío pertenece a otra persona.'); return { actor: memberIdentityFor(ctx).toHexString(), run: dto(prior) }; }
   if (ctx.db.aiGeneration.id.find(id)) fail('conflict', 'El identificador ya se usó con otra solicitud.');
   const step = check(() => agentAiStep(raw.step));
   if (raw.confirmed !== true) fail('consent', 'Revisa la vista previa y confirma el envío.');
   if (raw.allowNew !== true) fail('disabled', 'Este paso del agente todavía no está habilitado.');
   if (typeof raw.model !== 'string' || !/^[\w.-]{1,200}$/.test(raw.model)) fail('invalid', 'El modelo no es válido.');
-  const consent = ctx.db.aiConsent.actor.find(ctx.sender);
+  const consent = ctx.db.aiConsent.actor.find(memberIdentityFor(ctx));
   if (!consent?.accepted || consent.version !== AI_CONSENT_VERSION) fail('consent_required', 'Acepta el consentimiento vigente antes de generar.');
-  const key = ctx.db.aiKey.actor.find(ctx.sender); if (!key) fail('key_required', 'Configura tu clave de Gemini primero.');
-  if ([...ctx.db.agentAiRun.owner.filter(ctx.sender)].some((r) => r.state === 'pending' || r.state === 'running')) fail('quota', 'Tu agente ya tiene un envío en curso.');
-  if (recentUnknown(ctx, ctx.sender) && raw.acknowledgeUnknown !== true) fail('unknown_confirmation_required', 'Confirma el posible consumo adicional del envío de resultado incierto.');
-  const prepared = prepare(ctx, ctx.sender, step, raw.sessionId);
+  const key = ctx.db.aiKey.actor.find(memberIdentityFor(ctx)); if (!key) fail('key_required', 'Configura tu clave de Gemini primero.');
+  if ([...ctx.db.agentAiRun.owner.filter(memberIdentityFor(ctx))].some((r) => r.state === 'pending' || r.state === 'running')) fail('quota', 'Tu agente ya tiene un envío en curso.');
+  if (recentUnknown(ctx, memberIdentityFor(ctx)) && raw.acknowledgeUnknown !== true) fail('unknown_confirmation_required', 'Confirma el posible consumo adicional del envío de resultado incierto.');
+  const prepared = prepare(ctx, memberIdentityFor(ctx), step, raw.sessionId);
   if (raw.expectedTokens !== undefined && raw.expectedTokens !== prepared.estimatedTokens) fail('source_changed', 'El material cambió desde la vista previa. Revísalo de nuevo.');
-  const row = ctx.db.agentAiRun.insert({ id, owner: ctx.sender, step, sessionId: prepared.session?.id, draftVersion: prepared.session?.draftVersion ?? 0,
+  const row = ctx.db.agentAiRun.insert({ id, owner: memberIdentityFor(ctx), step, sessionId: prepared.session?.id, draftVersion: prepared.session?.draftVersion ?? 0,
     styleVersion: prepared.agent.styleVersion, model: raw.model, keyId: key.keyId, acknowledgeUnknown: raw.acknowledgeUnknown === true,
     payload: JSON.stringify(prepared.payload), refs: prepared.refs, estimatedTokens: prepared.estimatedTokens, state: 'pending', result: '', error: '',
     applied: false, createdAt: ctx.timestamp, startedAt: undefined, finishedAt: undefined });
-  return { actor: ctx.sender.toHexString(), run: dto(row) };
+  return { actor: memberIdentityFor(ctx).toHexString(), run: dto(row) };
 }
 
 /** Solo el servicio de IA: vuelve a comprobar todo, reserva presupuesto y entrega la clave cifrada. */
@@ -220,13 +221,13 @@ function finish(ctx: Ctx, raw: Record<string, unknown>) {
 }
 
 function get(ctx: Ctx, raw: Record<string, unknown>) {
-  activeMember(ctx); expire(ctx, ctx.sender); const row = ctx.db.agentAiRun.id.find(uuid(raw.generationId));
-  if (!row || !row.owner.isEqual(ctx.sender)) fail('unavailable', 'El envío no está disponible.');
+  activeMember(ctx); expire(ctx, memberIdentityFor(ctx)); const row = ctx.db.agentAiRun.id.find(uuid(raw.generationId));
+  if (!row || !row.owner.isEqual(memberIdentityFor(ctx))) fail('unavailable', 'El envío no está disponible.');
   return dto(row);
 }
 function list(ctx: Ctx, raw: Record<string, unknown>) {
-  activeMember(ctx); expire(ctx, ctx.sender); const session = sessionId(raw.sessionId);
-  return [...ctx.db.agentAiRun.owner.filter(ctx.sender)].filter((r) => session === undefined || r.sessionId === session)
+  activeMember(ctx); expire(ctx, memberIdentityFor(ctx)); const session = sessionId(raw.sessionId);
+  return [...ctx.db.agentAiRun.owner.filter(memberIdentityFor(ctx))].filter((r) => session === undefined || r.sessionId === session)
     .sort((a, b) => Number(b.createdAt.microsSinceUnixEpoch - a.createdAt.microsSinceUnixEpoch)).map(dto);
 }
 

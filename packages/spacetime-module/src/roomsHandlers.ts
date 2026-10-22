@@ -1,3 +1,4 @@
+import { memberIdentityFor } from './authIdentity';
 import { SenderError } from 'spacetimedb/server';
 import { Timestamp } from 'spacetimedb';
 import { activeMember, expectVersion, isActive, log, requireSubject, requireText, type Ctx, type ViewDb } from './moduleContext';
@@ -38,12 +39,12 @@ function readRoom(ctx: Ctx, roomId: bigint) {
 }
 function memberRoom(ctx: Ctx, roomId: bigint) {
   const row = readRoom(ctx, roomId);
-  if (!joined(ctx.db, roomId, ctx.sender)) throw new SenderError('Inscríbete en la sala para acceder a su contenido.');
+  if (!joined(ctx.db, roomId, memberIdentityFor(ctx))) throw new SenderError('Inscríbete en la sala para acceder a su contenido.');
   return row;
 }
 function ownRoom(ctx: Ctx, roomId: bigint) {
   const row = memberRoom(ctx, roomId);
-  if (!row.organizer.isEqual(ctx.sender)) throw new SenderError('Solo el organizador puede hacer esto.');
+  if (!row.organizer.isEqual(memberIdentityFor(ctx))) throw new SenderError('Solo el organizador puede hacer esto.');
   return row;
 }
 function requireOngoing(row: Room) {
@@ -94,7 +95,7 @@ export interface CreateRoomInput {
 export function createRoom(ctx: Ctx, input: CreateRoomInput) {
   activeMember(ctx);
   const requestId = requestToken(input.requestId);
-  if ([...ctx.db.studyRoom.organizer.filter(ctx.sender)].some((row) => row.requestId === requestId)) return;
+  if ([...ctx.db.studyRoom.organizer.filter(memberIdentityFor(ctx))].some((row) => row.requestId === requestId)) return;
   requireSubject(ctx, input.subjectId);
   if (!['group', 'private'].includes(input.visibility)) throw new SenderError('La visibilidad no es válida.');
   const fields = metadata(input);
@@ -102,32 +103,32 @@ export function createRoom(ctx: Ctx, input: CreateRoomInput) {
   if (input.helpContactId !== undefined) {
     contact = ctx.db.helpContactRequest.id.find(input.helpContactId);
     if (!contact || contact.status !== 'accepted'
-      || (!contact.sender.isEqual(ctx.sender) && !contact.recipient.isEqual(ctx.sender))
+      || (!contact.sender.isEqual(memberIdentityFor(ctx)) && !contact.recipient.isEqual(memberIdentityFor(ctx)))
       || !isActive(ctx.db, contact.sender) || !isActive(ctx.db, contact.recipient)
       || contact.subjectId !== input.subjectId) throw new SenderError('El contacto aceptado de Ayuda no está disponible.');
     const existing = [...ctx.db.helpRoomLink.contactId.filter(contact.id)]
       .find((link) => activeStatuses.includes(ctx.db.studyRoom.id.find(link.roomId)?.status ?? ''));
     if (existing) {
       const room = ctx.db.studyRoom.id.find(existing.roomId)!;
-      if (!canPreview(ctx.db, room, ctx.sender)) throw new SenderError('Este contacto ya tiene una sala activa; pide una nueva invitación al organizador.');
+      if (!canPreview(ctx.db, room, memberIdentityFor(ctx))) throw new SenderError('Este contacto ya tiene una sala activa; pide una nueva invitación al organizador.');
       return;
     }
   }
   if ((input.sourceId === undefined) !== (input.sourceKind === undefined)) throw new SenderError('El material de origen está incompleto.');
   const materialVersion = input.sourceId !== undefined
     ? sourceVersion(ctx.db, input.sourceKind!, input.sourceId, input.subjectId) : undefined;
-  const room = ctx.db.studyRoom.insert({ id: 0n, requestId, organizer: ctx.sender, subjectId: input.subjectId,
+  const room = ctx.db.studyRoom.insert({ id: 0n, requestId, organizer: memberIdentityFor(ctx), subjectId: input.subjectId,
     ...fields, visibility: input.visibility, status: 'scheduled', version: 1, participantCount: 1,
     createdAt: ctx.timestamp, updatedAt: ctx.timestamp });
-  insertMember(ctx, room.id, ctx.sender, 'joined');
+  insertMember(ctx, room.id, memberIdentityFor(ctx), 'joined');
   ctx.db.roomTimer.insert({ roomId: room.id, phase: 'study', state: 'idle', studyMinutes: 25, breakMinutes: 5,
-    remainingMs: 25n * 60_000n, startedAt: undefined, version: 1, updatedBy: ctx.sender, updatedAt: ctx.timestamp });
-  ctx.db.roomSummary.insert({ roomId: room.id, text: '', version: 1, updatedBy: ctx.sender, updatedAt: ctx.timestamp, publishedNoteId: undefined });
+    remainingMs: 25n * 60_000n, startedAt: undefined, version: 1, updatedBy: memberIdentityFor(ctx), updatedAt: ctx.timestamp });
+  ctx.db.roomSummary.insert({ roomId: room.id, text: '', version: 1, updatedBy: memberIdentityFor(ctx), updatedAt: ctx.timestamp, publishedNoteId: undefined });
   if (input.sourceId !== undefined) ctx.db.roomMaterial.insert({ id: 0n, roomId: room.id, kind: input.sourceKind!,
-    sourceId: input.sourceId, sourceVersion: materialVersion!, addedBy: ctx.sender, addedAt: ctx.timestamp });
+    sourceId: input.sourceId, sourceVersion: materialVersion!, addedBy: memberIdentityFor(ctx), addedAt: ctx.timestamp });
   if (contact) {
     ctx.db.helpRoomLink.insert({ id: 0n, contactId: contact.id, roomId: room.id, memberA: contact.sender, memberB: contact.recipient });
-    insertMember(ctx, room.id, contact.sender.isEqual(ctx.sender) ? contact.recipient : contact.sender, 'invited', ctx.sender);
+    insertMember(ctx, room.id, contact.sender.isEqual(memberIdentityFor(ctx)) ? contact.recipient : contact.sender, 'invited', memberIdentityFor(ctx));
   }
 }
 export function updateRoom(ctx: Ctx, input: { roomId: bigint; title: string; topic: string; objective: string; startsAt: Timestamp; endsAt: Timestamp; capacity?: number; expectedVersion: number }) {
@@ -137,32 +138,32 @@ export function updateRoom(ctx: Ctx, input: { roomId: bigint; title: string; top
 }
 export function joinRoom(ctx: Ctx, input: { roomId: bigint }) {
   const room = readRoom(ctx, input.roomId); requireOngoing(room);
-  const member = participation(ctx.db, room.id, ctx.sender);
+  const member = participation(ctx.db, room.id, memberIdentityFor(ctx));
   if (member?.status === 'joined') return;
   if (member?.status === 'removed') throw new SenderError('El organizador debe volver a invitarte antes de entrar.');
   if (room.visibility !== 'group') throw new SenderError('Acepta una invitación para entrar a esta sala privada.');
   checkSpace(ctx.db, room);
-  insertMember(ctx, room.id, ctx.sender, 'joined'); updateCount(ctx, room);
+  insertMember(ctx, room.id, memberIdentityFor(ctx), 'joined'); updateCount(ctx, room);
 }
 export function leaveRoom(ctx: Ctx, input: { roomId: bigint }) {
   const room = memberRoom(ctx, input.roomId);
-  if (room.organizer.isEqual(ctx.sender)) throw new SenderError('El organizador debe cancelar la sala en lugar de abandonarla.');
-  insertMember(ctx, room.id, ctx.sender, 'left'); updateCount(ctx, room);
+  if (room.organizer.isEqual(memberIdentityFor(ctx))) throw new SenderError('El organizador debe cancelar la sala en lugar de abandonarla.');
+  insertMember(ctx, room.id, memberIdentityFor(ctx), 'left'); updateCount(ctx, room);
 }
 export function inviteMember(ctx: Ctx, input: { roomId: bigint; memberId: Identity }) {
   const room = ownRoom(ctx, input.roomId); requireOngoing(room);
   if (!isActive(ctx.db, input.memberId)) throw new SenderError('El integrante ya no está activo.');
   if (participation(ctx.db, room.id, input.memberId)?.status === 'joined') return;
-  insertMember(ctx, room.id, input.memberId, 'invited', ctx.sender);
+  insertMember(ctx, room.id, input.memberId, 'invited', memberIdentityFor(ctx));
   updateCount(ctx, room);
 }
 export function respondInvitation(ctx: Ctx, input: { roomId: bigint; accepted: boolean }) {
   const room = readRoom(ctx, input.roomId); requireOngoing(room);
-  const member = participation(ctx.db, room.id, ctx.sender);
+  const member = participation(ctx.db, room.id, memberIdentityFor(ctx));
   if (member?.status === 'joined' && input.accepted) return;
   if (member?.status !== 'invited') throw new SenderError('No tienes una invitación pendiente para esta sala.');
   if (input.accepted) checkSpace(ctx.db, room);
-  insertMember(ctx, room.id, ctx.sender, input.accepted ? 'joined' : 'declined'); updateCount(ctx, room);
+  insertMember(ctx, room.id, memberIdentityFor(ctx), input.accepted ? 'joined' : 'declined'); updateCount(ctx, room);
 }
 export function removeMember(ctx: Ctx, input: { roomId: bigint; memberId: Identity }) {
   const room = ownRoom(ctx, input.roomId); requireOngoing(room);
@@ -189,20 +190,20 @@ export function setMaterial(ctx: Ctx, input: { roomId: bigint; kind: string; sou
   const version = sourceVersion(ctx.db, input.kind, input.sourceId, room.subjectId);
   if (previous) return;
   ctx.db.roomMaterial.insert({ id: 0n, roomId: room.id, kind: input.kind, sourceId: input.sourceId,
-    sourceVersion: version, addedBy: ctx.sender, addedAt: ctx.timestamp });
+    sourceVersion: version, addedBy: memberIdentityFor(ctx), addedAt: ctx.timestamp });
 }
 export function sendEntry(ctx: Ctx, input: { roomId: bigint; kind: string; text: string; requestId: string }) {
   const room = memberRoom(ctx, input.roomId);
   const requestId = requestToken(input.requestId);
   if (!['message', 'question', 'conclusion'].includes(input.kind)) throw new SenderError('El tipo de aporte no es válido.');
   const text = requireText(input.text, 'El mensaje', ROOM_LIMITS.entry);
-  const previous = [...ctx.db.roomEntry.roomId.filter(room.id)].find((r) => r.author.isEqual(ctx.sender) && r.requestId === requestId);
+  const previous = [...ctx.db.roomEntry.roomId.filter(room.id)].find((r) => r.author.isEqual(memberIdentityFor(ctx)) && r.requestId === requestId);
   if (previous) {
     if (previous.kind !== input.kind || previous.text !== text) throw new SenderError('El intento ya se usó para otro mensaje.');
     return;
   }
   requireOngoing(room);
-  ctx.db.roomEntry.insert({ id: 0n, roomId: room.id, author: ctx.sender, kind: input.kind,
+  ctx.db.roomEntry.insert({ id: 0n, roomId: room.id, author: memberIdentityFor(ctx), kind: input.kind,
     text, requestId, createdAt: ctx.timestamp });
 }
 function remaining(timer: Timer, now: Timestamp) {
@@ -215,7 +216,7 @@ function stopTimer(ctx: Ctx, roomId: bigint) {
   const timer = ctx.db.roomTimer.roomId.find(roomId);
   if (!timer) return;
   ctx.db.roomTimer.roomId.update({ ...timer, remainingMs: remaining(timer, ctx.timestamp), state: 'paused', startedAt: undefined,
-    version: timer.version + 1, updatedBy: ctx.sender, updatedAt: ctx.timestamp });
+    version: timer.version + 1, updatedBy: memberIdentityFor(ctx), updatedAt: ctx.timestamp });
 }
 export function controlTimer(ctx: Ctx, input: { roomId: bigint; action: string; expectedVersion: number; studyMinutes?: number; breakMinutes?: number }) {
   const room = memberRoom(ctx, input.roomId); requireOngoing(room);
@@ -247,7 +248,7 @@ export function controlTimer(ctx: Ctx, input: { roomId: bigint; action: string; 
     phase = phase === 'study' ? 'break' : 'study'; state = 'running'; remainingMs = duration(phase); startedAt = ctx.timestamp;
   } else throw new SenderError('La acción del temporizador no es válida.');
   ctx.db.roomTimer.roomId.update({ ...timer, phase, state, studyMinutes, breakMinutes, remainingMs, startedAt,
-    version: timer.version + 1, updatedBy: ctx.sender, updatedAt: ctx.timestamp });
+    version: timer.version + 1, updatedBy: memberIdentityFor(ctx), updatedAt: ctx.timestamp });
 }
 export function saveSummary(ctx: Ctx, input: { roomId: bigint; text: string; expectedVersion: number }) {
   const room = memberRoom(ctx, input.roomId);
@@ -256,7 +257,7 @@ export function saveSummary(ctx: Ctx, input: { roomId: bigint; text: string; exp
   if (!summary) throw new SenderError('El resumen no está disponible.');
   expectVersion(summary.version, input.expectedVersion);
   ctx.db.roomSummary.roomId.update({ ...summary, text: optionalText(input.text, 'El resumen', ROOM_LIMITS.summary),
-    version: summary.version + 1, updatedBy: ctx.sender, updatedAt: ctx.timestamp });
+    version: summary.version + 1, updatedBy: memberIdentityFor(ctx), updatedAt: ctx.timestamp });
 }
 export function publishSummary(ctx: Ctx, input: { roomId: bigint; expectedVersion: number }) {
   const room = ownRoom(ctx, input.roomId);
@@ -270,7 +271,7 @@ export function publishSummary(ctx: Ctx, input: { roomId: bigint; expectedVersio
     tags: ['sala-de-estudio'], visibility: 'group', source: 'student', author: room.organizer, version: 1,
     createdAt: ctx.timestamp, updatedAt: ctx.timestamp });
   ctx.db.roomSummary.roomId.update({ ...summary, publishedNoteId: note.id, version: summary.version + 1,
-    updatedBy: ctx.sender, updatedAt: ctx.timestamp });
+    updatedBy: memberIdentityFor(ctx), updatedAt: ctx.timestamp });
   log(ctx, 'create', 'note', note.id);
 }
 

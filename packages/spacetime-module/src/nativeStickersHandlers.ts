@@ -1,3 +1,4 @@
+import { memberIdentityFor } from './authIdentity';
 import { SenderError } from 'spacetimedb/server';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { activeMember, isActive, requireText, type Ctx, type ViewDb } from './moduleContext';
@@ -26,7 +27,7 @@ export function visibleStickerIds(db: ViewDb, sender: Ctx['sender']): Set<bigint
 function ownPack(ctx: Ctx, id: bigint) {
   activeMember(ctx);
   const pack = ctx.db.stickerPack.id.find(id);
-  if (!pack || !pack.owner.isEqual(ctx.sender)) throw new SenderError('Solo quien importó el paquete puede cambiarlo.');
+  if (!pack || !pack.owner.isEqual(memberIdentityFor(ctx))) throw new SenderError('Solo quien importó el paquete puede cambiarlo.');
   return pack;
 }
 function imageType(bytes: Uint8Array): string | undefined {
@@ -42,12 +43,12 @@ export function createStickerPackNative(ctx: Ctx, input: { requestId: string; na
   const name = requireText(input.name, 'El nombre del paquete', 60);
   const prior = ctx.db.stickerImport.requestId.find(input.requestId);
   if (prior) {
-    if (!prior.owner.isEqual(ctx.sender) || prior.name !== name) throw new SenderError('Esta importación ya corresponde a otro paquete.');
+    if (!prior.owner.isEqual(memberIdentityFor(ctx)) || prior.name !== name) throw new SenderError('Esta importación ya corresponde a otro paquete.');
     if (!ctx.db.stickerPack.id.find(prior.packId)) throw new SenderError('El paquete ya fue retirado. Inicia una importación nueva.');
     return prior.packId;
   }
-  const pack = ctx.db.stickerPack.insert({ id: 0n, owner: ctx.sender, name, shared: false, createdAt: ctx.timestamp });
-  ctx.db.stickerImport.insert({ requestId: input.requestId, owner: ctx.sender, name, packId: pack.id, createdAt: ctx.timestamp });
+  const pack = ctx.db.stickerPack.insert({ id: 0n, owner: memberIdentityFor(ctx), name, shared: false, createdAt: ctx.timestamp });
+  ctx.db.stickerImport.insert({ requestId: input.requestId, owner: memberIdentityFor(ctx), name, packId: pack.id, createdAt: ctx.timestamp });
   return pack.id;
 }
 export function addStickerNative(ctx: Ctx, input: { requestId: string; packId: bigint; name: string; contentType: string; animated: boolean; bytes: Uint8Array }): bigint {
@@ -77,7 +78,7 @@ export function addStickerNative(ctx: Ctx, input: { requestId: string; packId: b
 }
 export function readStickerBytes(ctx: Ctx, input: { stickerId: bigint }) {
   activeMember(ctx);
-  if (!visibleStickerIds(ctx.db, ctx.sender).has(input.stickerId)) throw new SenderError('El sticker no está disponible.');
+  if (!visibleStickerIds(ctx.db, memberIdentityFor(ctx)).has(input.stickerId)) throw new SenderError('El sticker no está disponible.');
   const sticker = ctx.db.sticker.id.find(input.stickerId); const blob = ctx.db.stickerBlob.stickerId.find(input.stickerId);
   if (!sticker || !blob) throw new SenderError('El sticker no tiene bytes nativos disponibles.');
   return { bytes: blob.bytes, contentType: sticker.contentType };

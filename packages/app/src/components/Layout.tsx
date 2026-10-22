@@ -1,4 +1,5 @@
 import { Link, Outlet, useLocation, useMatches } from 'react-router';
+import { useLayoutEffect } from 'react';
 import { SidebarNavigationSlim } from '@b20-ui/components/application/app-navigation/sidebar-navigation/sidebar-slim';
 import { Tooltip } from '@b20-ui/components/base/tooltip/tooltip';
 import { Pressable } from 'react-aria-components';
@@ -8,6 +9,7 @@ import { Avatar } from './Avatar';
 import { buildNavigation, resolveActiveUrl } from './navigation';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import { DemoDataSource } from '../data/demo';
+import { WelcomeTour } from './WelcomeTour';
 
 const NAVIGATION = buildNavigation();
 
@@ -23,6 +25,11 @@ export function Layout() {
   const compact = platform === 'extension-panel';
   // Una ruta con `handle: { fill: true }` (el chat) usa todo el alto en vez de alargar la página.
   const fill = useMatches().some((m) => (m.handle as { fill?: boolean } | undefined)?.fill);
+  useLayoutEffect(() => {
+    // New screens begin at their heading; chat retains its own conversation scroll.
+    const scrolling = document.scrollingElement;
+    if (!fill && typeof scrolling?.scrollTo === 'function') scrolling.scrollTo({ top: 0, behavior: 'instant' });
+  }, [location.pathname, fill]);
   const shell = ['shell', 'shell--slim', compact && 'shell--compact', fill && 'shell--fill'].filter(Boolean).join(' ');
   const profileLabel = simulated ? 'Perfil simulado' : 'Mi perfil';
 
@@ -51,8 +58,9 @@ export function Layout() {
       </div>
       <main className="content">
         <DemoBanner />
-        <Outlet />
+        <div className="route-surface" data-enter={fill ? undefined : location.pathname} key={fill ? 'chat' : location.pathname}><Outlet /></div>
       </main>
+      <WelcomeTour />
     </div>
   );
 }

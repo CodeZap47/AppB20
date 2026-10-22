@@ -1,4 +1,6 @@
 import { useId, type ReactNode } from 'react';
+import { ThemeSwitch } from '../design/Theme';
+import { Icon } from '../components/Icon';
 
 /** Marco visual del acceso. La autenticación y la elección de datos viven fuera de él. */
 export function AuthFrame({ title, description, variant = 'compact', busy = false, children }: {
@@ -15,15 +17,15 @@ export function AuthFrame({ title, description, variant = 'compact', busy = fals
         <span className="auth-brand__mark" aria-hidden="true">B20</span>
         <span className="auth-brand__caption">Espacio del grupo</span>
       </header>
+      {variant === 'welcome' && <ThemeSwitch />}
       <div className="auth-layout">
         {variant === 'welcome' && (
           <div className="auth-intro">
-            <p className="auth-intro__title">Tu grupo,<br />en un mismo lugar.</p>
+            <p className="auth-intro__title">Buenas ideas.<br />Mejor <span>en grupo.</span></p>
             <p className="auth-intro__description">
-              Comparte materiales, organiza tus tareas y sigue las conversaciones de tu grupo.
-              Aprender juntos empieza aquí.
+              Tus apuntes, tus entregas y tu gente.<br />Un espacio para aprender y llegar más lejos, juntos.
             </p>
-            <StudyComposition />
+            <LearningComposition />
           </div>
         )}
         <section className="auth-card" aria-labelledby={titleId}>
@@ -38,22 +40,12 @@ export function AuthFrame({ title, description, variant = 'compact', busy = fals
 }
 
 /** Tres trazos de un cuaderno se encuentran en un mismo espacio, como el grupo. */
-function StudyComposition() {
-  return (
-    <svg className="auth-composition" viewBox="0 0 520 238" fill="none" aria-hidden="true" focusable="false">
-      <path className="auth-composition__rule" d="M0 64h520M0 119h520M0 174h520" />
-      <path className="auth-composition__margin" d="M42 10v218" />
-      <path className="auth-composition__trace" d="M42 64h68c57 0 55 55 112 55h88" />
-      <path className="auth-composition__trace auth-composition__trace--middle" d="M42 119h268" />
-      <path className="auth-composition__trace" d="M42 174h68c57 0 55-55 112-55h88" />
-      <circle className="auth-composition__point" cx="42" cy="64" r="5" />
-      <circle className="auth-composition__point" cx="42" cy="119" r="5" />
-      <circle className="auth-composition__point" cx="42" cy="174" r="5" />
-      <path className="auth-composition__bracket" d="M284 34h38a26 26 0 0 1 26 26v118a26 26 0 0 1-26 26h-38" />
-      <rect className="auth-composition__tile" x="290" y="77" width="128" height="84" rx="20" />
-      <text className="auth-composition__word" x="354" y="130" textAnchor="middle">B20</text>
-      <circle className="auth-composition__end" cx="468" cy="119" r="6" />
-      <path className="auth-composition__trace" d="M418 119h44" />
-    </svg>
-  );
+function LearningComposition() {
+  return <div className="learning-composition" aria-hidden="true">
+    <div className="learning-orbit learning-orbit--one" /><div className="learning-orbit learning-orbit--two" />
+    <div className="learning-symbol"><svg viewBox="0 0 100 100" fill="none"><path d="M50 4v92M4 50h92M18 18l64 64M18 82l64-64" stroke="currentColor" strokeWidth="18" /></svg></div>
+    <div className="learning-note"><Icon name="file" size={24} /><span>Lo entendiste.<br /><strong>Ahora compártelo.</strong></span><div className="learning-note__lines"><i /><i /><i /></div></div>
+    <div className="learning-pill"><Icon name="users" size={19} /><span>Hecho entre compañeros</span></div>
+    <span className="learning-word">b20.</span>
+  </div>;
 }

@@ -1,5 +1,6 @@
 @import './untitled/styles/foundation.css';
 @import './components/messaging/messaging.css';
+@import './design/edition.css';
 
 :root {
   --bg: #f7f7f9;

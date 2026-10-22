@@ -6,6 +6,7 @@ import {
   periodLabel,
   WORK_KIND_LABEL,
   workKindGroup,
+  hasRoyalBanner,
 } from '@b20/core';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import type { Id, Member, Snapshot, Subject } from '../data/types';
@@ -778,6 +779,9 @@ export function ProfilePage() {
   const member = members.find((m) => m.id === memberId);
   const profile = data.memberProfiles.find((entry) => entry.memberId === memberId);
   const searchRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (memberId === me?.id && params.get('personalizar') === '1') setEditingPresentation(true);
+  }, [memberId, me?.id, params]);
 
   // ⌘K / Ctrl+K lleva al buscador del perfil, como indica el atajo junto al campo.
   useEffect(() => {
@@ -863,7 +867,7 @@ export function ProfilePage() {
           <Icon name="forward" size={14} />
           <span aria-current="page">{profile?.preferredName || member.displayName}</span>
         </nav>
-        <ProfileCover cover={profile?.cover} />
+        {hasRoyalBanner(member) ? <div className="royal-cover" aria-label="Distintivo de administración lamerapoya"><div className="royal-cover__title"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m4 9 6 6 6-10 6 10 6-6-3 15H7L4 9Zm4 19h16" /></svg><strong>lamerapoya</strong><span>Administración de B20</span></div></div> : <ProfileCover cover={profile?.cover} />}
         <div className="profile-hero__photo">
           <ProfilePhoto member={member} profile={profile} size={120} />
           {member.isCreator && (
@@ -959,18 +963,7 @@ export function ProfilePage() {
         </p>
       )}
       {editingPresentation && isMe && <ProfileEditor member={member} profile={profile} onDone={() => setEditingPresentation(false)} />}
-      {profile && <section className="panel">
-        <h2>Presentación</h2>
-        {profile.bio && <p style={{ whiteSpace: 'pre-wrap' }}>{profile.bio}</p>}
-        <dl className="facts">
-          {profile.interests.length > 0 && <><dt>Intereses</dt><dd>{profile.interests.join(', ')}</dd></>}
-          {profile.learningGoals && <><dt>Objetivos de aprendizaje</dt><dd>{profile.learningGoals}</dd></>}
-          {profile.skills.length > 0 && <><dt>Puede explicar</dt><dd>{profile.skills.join(', ')}</dd></>}
-          {profile.helpTopics.length > 0 && <><dt>Busca apoyo en</dt><dd>{profile.helpTopics.join(', ')}</dd></>}
-          {profile.subjectIds.length > 0 && <><dt>Materias que cursa</dt><dd>{profile.subjectIds.map((id) => subjects.find((subject) => subject.id === id)?.name).filter(Boolean).join(', ')}</dd></>}
-        </dl>
-        {profile.portfolioLinks.length > 0 && <><h3>Portafolio</h3><ul className="links">{profile.portfolioLinks.map((url) => <li key={url}><a href={url} target="_blank" rel="noopener noreferrer">{url}</a></li>)}</ul></>}
-      </section>}
+
 
       <div className="detail">
         <div className="detail__main">
@@ -1002,6 +995,18 @@ export function ProfilePage() {
         </div>
 
         <aside className="detail__side">
+          {profile && <section className="panel profile-about">
+        <h2>Presentación</h2>
+        {profile.bio && <p style={{ whiteSpace: 'pre-wrap' }}>{profile.bio}</p>}
+        <dl className="facts">
+          {profile.interests.length > 0 && <><dt>Intereses</dt><dd>{profile.interests.join(', ')}</dd></>}
+          {profile.learningGoals && <><dt>Objetivos de aprendizaje</dt><dd>{profile.learningGoals}</dd></>}
+          {profile.skills.length > 0 && <><dt>Puede explicar</dt><dd>{profile.skills.join(', ')}</dd></>}
+          {profile.helpTopics.length > 0 && <><dt>Busca apoyo en</dt><dd>{profile.helpTopics.join(', ')}</dd></>}
+          {profile.subjectIds.length > 0 && <><dt>Materias que cursa</dt><dd>{profile.subjectIds.map((id) => subjects.find((subject) => subject.id === id)?.name).filter(Boolean).join(', ')}</dd></>}
+        </dl>
+        {profile.portfolioLinks.length > 0 && <><h3>Portafolio</h3><ul className="links">{profile.portfolioLinks.map((url) => <li key={url}><a href={url} target="_blank" rel="noopener noreferrer">{url}</a></li>)}</ul></>}
+      </section>}
           <section className="panel">
             <h2 className="label">Datos</h2>
             <dl className="facts">

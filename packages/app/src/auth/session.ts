@@ -1,6 +1,6 @@
 /** Estado de presentación de la sesión OIDC. La biblioteca OIDC administra las credenciales. */
 export interface SessionProfile {
-  /** `sub` estable de SpacetimeAuth. */
+  /** `sub` estable del proveedor de autenticación. */
   subject: string;
   email: string;
   name: string;
@@ -19,6 +19,7 @@ interface IdTokenClaims {
   name?: unknown;
   preferred_username?: unknown;
   picture?: unknown;
+  user_metadata?: { full_name?: unknown; name?: unknown; avatar_url?: unknown };
   exp?: unknown;
 }
 
@@ -41,8 +42,10 @@ export function decodeIdToken(token: string): (SessionProfile & { expiresAt: num
     subject: claims.sub,
     email: claims.email.trim().toLowerCase(),
     name: typeof claims.name === 'string' ? claims.name :
-      typeof claims.preferred_username === 'string' ? claims.preferred_username : claims.email,
-    picture: typeof claims.picture === 'string' ? claims.picture : undefined,
+      typeof claims.preferred_username === 'string' ? claims.preferred_username :
+      typeof claims.user_metadata?.full_name === 'string' ? claims.user_metadata.full_name : claims.email,
+    picture: typeof claims.picture === 'string' ? claims.picture :
+      typeof claims.user_metadata?.avatar_url === 'string' ? claims.user_metadata.avatar_url : undefined,
     expiresAt: claims.exp * 1000,
   };
 }
@@ -84,7 +87,7 @@ export class SessionStore {
   receiveToken(token: string): boolean {
     const decoded = decodeIdToken(token);
     if (!decoded || decoded.expiresAt <= this.#deps.now()) {
-      this.signedOut('SpacetimeAuth no entregó una sesión vigente con correo verificado.');
+      this.signedOut('El proveedor no entregó una sesión vigente con correo verificado.');
       return false;
     }
     if (this.#state.status === 'signedIn' && this.#state.token === token && this.#timer !== undefined) return true;
@@ -108,7 +111,7 @@ export class SessionStore {
   signOut(): void {
     this.signedOut();
     void this.#deps.onSignOut().catch(() => {
-      this.signedOut('Saliste de B20, pero no se pudo cerrar la sesión de SpacetimeAuth. Vuelve a intentarlo.');
+      this.signedOut('Saliste de B20, pero no se pudo cerrar la sesión con el proveedor. Vuelve a intentarlo.');
     });
   }
 

@@ -311,7 +311,7 @@ export function NoteFormPage() {
   const [noteSource, setNoteSource] = useState<NoteSource>(existing?.source ?? 'student');
   const [termId, setTermId] = useState(existing?.termId ?? '');
   const [session, setSession] = useState(existing?.session ?? '');
-  const [assignmentIds, setAssignmentIds] = useState(existing?.assignmentIds ?? []);
+  const [assignmentIds, setAssignmentIds] = useState(existing?.assignmentIds ?? assignments.filter((assignment) => assignment.id === params.get('tarea') && assignment.subjectId === (preset ?? subjects[0]?.id)).map((assignment) => assignment.id));
   const [activityIds, setActivityIds] = useState(existing?.activityIds ?? []);
   const [questionIds, setQuestionIds] = useState(existing?.questionIds ?? []);
   const [baseVersion] = useState(existing?.version);

@@ -49,7 +49,7 @@ export function buildOidcSettings(options: AuthOptions): UserManagerSettings {
     popup_redirect_uri: redirectUri,
     popup_post_logout_redirect_uri: logoutUri,
     silent_redirect_uri: redirectUri,
-    scope: 'openid profile email',
+    scope: 'openid profile email offline_access',
     response_type: 'code',
     response_mode: 'query',
     // React inicia/detiene la renovación al montar/desmontar; el constructor no deja timers huérfanos en StrictMode.

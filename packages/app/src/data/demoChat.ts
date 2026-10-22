@@ -25,6 +25,8 @@ const clean = (value: string, label: string, limit: number) => {
   if (!result || result.length > limit) throw new Error(`${label}: escribe entre 1 y ${limit} caracteres.`);
   return result;
 };
+type Presence = Snapshot['typingPresence'][number];
+const sharedPresence = new WeakMap<object, Map<string, Presence>>();
 
 /** Canales, convivencia y archivos de la simulación, con el mismo aislamiento por usuario. */
 export class DemoChatStore {
@@ -36,7 +38,30 @@ export class DemoChatStore {
   private files: ResourceFile[] = [];
   private blobs = new Map<Id, Blob>();
   private versions = new Map<string, number>();
-  constructor(private ctx: Context) {}
+  private presence: Map<string, Presence>;
+  constructor(private ctx: Context) {
+    const state = ctx.state();
+    this.presence = sharedPresence.get(state) ?? new Map();
+    sharedPresence.set(state, this.presence);
+  }
+
+  setTyping(scope: MessageScope, conversationId: Id, typing: boolean) {
+    this.thread(scope, conversationId);
+    const me = this.ctx.active();
+    if (scope === 'channel' && this.channel(conversationId).archivedAt) throw new Error('El canal está archivado.');
+    if (scope === 'direct') {
+      const chat = this.ctx.state().directConversations.find((row) => row.id === conversationId)!;
+      const other = chat.participantIds.find((id) => id !== me.id)!;
+      if (!this.ctx.state().members.some((member) => member.id === other && member.status === 'active')) throw new Error('El compañero no está activo.');
+      this.assertDirectAllowed(other);
+    }
+    const now = this.ctx.now();
+    for (const [key, row] of this.presence) if (row.expiresAt <= now) this.presence.delete(key);
+    const key = `${me.id}:${scope}:${conversationId}`;
+    if (typing) this.presence.set(key, { memberId: me.id, scope, conversationId, expiresAt: new Date(now.getTime() + 7000) });
+    else this.presence.delete(key);
+    this.ctx.emit();
+  }
 
   handles(kind: string): boolean { return ['group_message', 'direct_message', 'channel_message'].includes(kind); }
   private scope(kind: string): MessageScope {
@@ -214,9 +239,14 @@ export class DemoChatStore {
   }
   snapshot(base: Snapshot): Snapshot {
     const me = base.me;
-    if (!me || me.status !== 'active') return { ...base, chatChannels: [], channelMessages: [], conversationStates: [], blockedMembers: [], messageReports: [] };
+    if (!me || me.status !== 'active') return { ...base, typingPresence: [], chatChannels: [], channelMessages: [], conversationStates: [], blockedMembers: [], messageReports: [] };
     const withVersion = <T extends MessageFields>(row: T, scope: MessageScope): T => ({ ...row, version: this.versionOf(scope, row.id) });
-    return { ...base, groupMessages: base.groupMessages.map((row) => withVersion(row, 'group')), directMessages: base.directMessages.map((row) => withVersion(row, 'direct')),
+    return { ...base, typingPresence: [...this.presence.values()].filter((row) => {
+      if (!base.members.some((member) => member.id === row.memberId && member.status === 'active')) return false;
+      if (this.blocks.some((block) => (block.ownerId === me.id && block.memberId === row.memberId) || (block.ownerId === row.memberId && block.memberId === me.id))) return false;
+      if (row.scope === 'direct') return base.directConversations.some((chat) => chat.id === row.conversationId && chat.participantIds.includes(me.id));
+      return row.scope === 'group' || this.channels.some((chat) => chat.id === row.conversationId && !chat.archivedAt);
+    }), groupMessages: base.groupMessages.map((row) => withVersion(row, 'group')), directMessages: base.directMessages.map((row) => withVersion(row, 'direct')),
       chatChannels: this.channels.map((row) => ({ ...row })), channelMessages: this.messages.map((row) => withVersion(row, 'channel')),
       conversationStates: this.states.filter((row) => row.memberId === me.id).map(({ memberId: _owner, ...row }) => ({ ...row })),
       blockedMembers: this.blocks.filter((row) => row.ownerId === me.id).map(({ memberId }) => ({ memberId })),

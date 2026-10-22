@@ -16,6 +16,8 @@ vi.mock('spacetimedb/server', () => {
 import {
   assert_active_member, invite_member, join_group, my_member, on_connect,
   remove_member, revoke_invitation, set_auth_config, subjects,
+  link_auth_identity, unlink_auth_identity, update_profile,
+  set_supabase_auth,
 } from './index';
 
 const issuer = 'https://auth.spacetimedb.com/oidc';
@@ -52,6 +54,7 @@ function setup() {
     notificationServiceConfig: tableStore('id'),
     maintenanceService: tableStore('id'),
     member: tableStore('identity'),
+    authIdentityLink: tableStore('sessionIdentity'),
     invitation: tableStore('email'),
     invitationEmail: tableStore('email'),
     subject: tableStore('id', [{ id: 1, name: 'Privado del grupo' }]),
@@ -86,6 +89,72 @@ function setup() {
 }
 
 describe('SpacetimeAuth y acceso por invitación en módulo', () => {
+  it('el propietario añade Supabase sin cortar el acceso anterior y puede revocarlo por separado', () => {
+    const { ctx, mutableCtx, asOwner, asStudent, join } = setup();
+    join(); asOwner();
+    const supabaseIssuer = 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1';
+    set_supabase_auth(ctx, { issuer: supabaseIssuer, audiences: ['authenticated'], enabled: true });
+    asStudent();
+    expect(() => assert_active_member(ctx, {})).not.toThrow();
+    mutableCtx.senderAuth.jwt!.issuer = supabaseIssuer;
+    mutableCtx.senderAuth.jwt!.audience = ['authenticated'];
+    expect(() => assert_active_member(ctx, {})).not.toThrow();
+    expect(() => set_supabase_auth(ctx, { issuer: supabaseIssuer, audiences: ['authenticated'], enabled: false })).toThrow(/propietario/);
+    asOwner();
+    set_supabase_auth(ctx, { issuer: supabaseIssuer, audiences: [], enabled: false });
+    asStudent();
+    expect(() => assert_active_member(ctx, {})).toThrow(/Emisor/);
+    mutableCtx.senderAuth.jwt!.issuer = issuer;
+    mutableCtx.senderAuth.jwt!.audience = ['web-client'];
+    expect(() => assert_active_member(ctx, {})).not.toThrow();
+  });
+  it('admite Supabase con audiencia configurada, pero nunca confía en metadatos de correo editables', () => {
+    const { ctx, mutableCtx, db, asOwner, asStudent, invite } = setup();
+    invite(); asOwner();
+    const supabaseIssuer = 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1';
+    set_auth_config(ctx, { issuer: supabaseIssuer, audiences: ['authenticated'] });
+    asStudent();
+    Object.assign(mutableCtx.senderAuth.jwt!, { issuer: supabaseIssuer, audience: ['authenticated'],
+      fullPayload: { email: 'alumno@example.com', user_metadata: { email_verified: true } } });
+    expect(() => join_group(ctx, { displayName: 'Alumno' })).toThrow(/correo verificado/);
+    mutableCtx.senderAuth.jwt!.fullPayload.email_verified = true;
+    join_group(ctx, { displayName: 'Alumno' });
+    expect(db.member.rows.size).toBe(1);
+    expect(() => assert_active_member(ctx, {})).not.toThrow();
+  });
+
+  it('vincula el login nuevo a la membresía existente y conserva permisos y perfil', () => {
+    const { ctx, mutableCtx, db, student, asOwner, join } = setup();
+    join(); asOwner();
+    const next = identity('supabase-login');
+    link_auth_identity(ctx, { sessionIdentity: next, memberIdentity: student } as never);
+    mutableCtx.sender = next;
+    expect(my_member(ctx)[0]?.identity).toBe(student);
+    expect(subjects(ctx)).toHaveLength(1);
+    expect(() => assert_active_member(ctx, {})).not.toThrow();
+    update_profile(ctx, { displayName: 'Mismo alumno', photoUrl: undefined });
+    expect(db.member.rows.get('student')?.displayName).toBe('Mismo alumno');
+    expect(db.member.rows.size).toBe(1);
+    expect(() => link_auth_identity(ctx, { sessionIdentity: identity('other-login'), memberIdentity: student } as never)).toThrow(/propietario/);
+    asOwner();
+    unlink_auth_identity(ctx, { sessionIdentity: next } as never);
+    mutableCtx.sender = next;
+    expect(my_member(ctx)).toEqual([]);
+    expect(subjects(ctx)).toEqual([]);
+    expect(() => assert_active_member(ctx, {})).toThrow(/miembro activo/);
+  });
+
+  it('una vinculación no fusiona membresías, no forma cadenas y no concede control del propietario', () => {
+    const { ctx, db, owner, student, asOwner, join } = setup();
+    join(); asOwner();
+    const next = identity('supabase-login');
+    link_auth_identity(ctx, { sessionIdentity: next, memberIdentity: student } as never);
+    expect(() => link_auth_identity(ctx, { sessionIdentity: identity('another'), memberIdentity: next } as never)).toThrow();
+    expect(() => link_auth_identity(ctx, { sessionIdentity: student, memberIdentity: student } as never)).toThrow();
+    expect(() => link_auth_identity(ctx, { sessionIdentity: owner, memberIdentity: student } as never)).toThrow(/propietario/);
+    db.member.insert({ identity: owner, status: 'active' });
+    expect(() => link_auth_identity(ctx, { sessionIdentity: identity('another'), memberIdentity: owner } as never)).toThrow(/propietario/);
+  });
   it('una cuenta verificada sin invitación no se convierte en miembro ni lee contenido', () => {
     const { ctx, db } = setup();
     expect(() => join_group(ctx, { displayName: 'Alumno' })).toThrow(/lista autorizada/);

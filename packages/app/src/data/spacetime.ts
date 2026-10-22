@@ -68,7 +68,7 @@ export class SpacetimeDataSource {
     for (const listener of this.listeners) listener();
   }
 
-  getIdentity = (): string => this.identity;
+  getIdentity = (): string => this.snapshot.me?.id ?? this.identity;
   getConnection = (): DbConnection => {
     if (!this.ready || !this.connection || this.snapshot.connection !== 'ready') {
       throw new Error('Espera a que se restablezca la conexión con el grupo.');
