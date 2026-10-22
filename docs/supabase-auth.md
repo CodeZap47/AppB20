@@ -76,8 +76,12 @@ Configuración necesaria antes de usarlo en producción:
 - Ejecutar `scripts/supabase-b20-account-state.sql` como `postgres`. Crea `public.b20_account_state`,
   ejecutable solo por `service_role`.
 - En **Authentication → Sign In / Providers**, desactivar **Allow new users to sign up**.
-- En **Authentication → Emails → Magic Link**, incluir `{{ .Token }}` en la plantilla para que el
-  correo lleve el código.
+- En **Authentication → Emails → Magic Link**, usar el asunto «Tu código para entrar a B20» y pegar
+  como cuerpo `docs/email/supabase-magic-link.html`, que lleva `{{ .Token }}` con el diseño de la
+  edición Campus. Se regenera desde `apps/api/src/email/accessCode.ts` con
+  `npm run email:templates -w @b20/api`; una prueba falla si el archivo queda desactualizado.
+  La estrella del encabezado se sirve desde `https://b20.mx/email/estrella.png`
+  (`apps/web/public/email/`), así que aparece cuando esa versión de la web esté publicada.
 - Guardar la clave `sb_secret_…` como secreto del Worker de IA. Nunca va en el cliente:
 
   ```sh
