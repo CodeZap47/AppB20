@@ -1543,6 +1543,19 @@ a.button.secondary {
   color: var(--muted);
 }
 
+/* Etiquetas de una nota en su tarjeta: una sola línea, sin el peso de una insignia. */
+.note-card__tags {
+  overflow: hidden;
+  font-size: 0.8rem;
+  color: var(--accent);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.work-card__top > .badges {
+  margin: 0;
+}
+
 .work-card__footer {
   display: flex;
   align-items: center;
