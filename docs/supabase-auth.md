@@ -87,6 +87,40 @@ de prueba ni se crearon cuentas reales durante esta integración.
    reconectar los clientes existentes. Verificar login y permisos antes de retirar el flujo anterior;
    al finalizar la transición, `set_auth_config` puede sustituir el proveedor principal por Supabase.
 
+### Obtener la identidad nueva de cada miembro
+
+SpacetimeDB deriva la identidad del token con `Identity::from_claims(iss, sub)`. Con Supabase,
+`sub` es el **User UID** de la cuenta, así que el propietario puede calcular la identidad sin
+pedírsela a la persona ni confiar en datos que ella pueda editar.
+`scripts/supabase-identity.mjs` replica esa derivación. Se verificó el 22 de octubre de 2026:
+con el `iss` y el `sub` del token de la CLI produce exactamente la identidad que muestra
+`spacetime login show`.
+
+1. La persona crea su cuenta en la web con el correo con el que ya era miembro y lo confirma.
+2. En Supabase, **Authentication → Users**: buscar su correo, comprobar que figura como
+   confirmado y copiar su **User UID**.
+3. Confirmar con la persona, por un canal que ya conozcas, que ese correo es suyo. El nombre
+   visible del miembro no sirve como prueba: lo edita cada quien.
+4. Listar las membresías activas y elegir la suya:
+
+   ```sh
+   spacetime sql -s maincloud app-b20-34245 "SELECT identity, display_name FROM member WHERE status = 'active'"
+   ```
+
+5. Generar el comando y ejecutarlo tras revisarlo:
+
+   ```sh
+   npm run spacetime:supabase-identity -- <user-uid> --member <identidad-del-miembro>
+   ```
+
+El script no llama a Maincloud. Si te equivocas de miembro, `unlink_auth_identity` con la
+identidad de sesión revoca el vínculo.
+
+**Vincular antes de que la persona se una por su cuenta.** Si hay una invitación pendiente con
+su correo, `join_group` crearía una membresía nueva para la identidad de Supabase, y después
+`link_auth_identity` la rechazaría por no poder fusionar membresías. Antes del cambio, revoca
+con `revoke_invitation` las invitaciones de personas que ya son miembros.
+
 La tabla privada `auth_identity_link` conserva la identidad de dominio antigua. Los reducers,
 procedures y vistas resuelven la identidad de miembro de forma consistente para preservar
 autoría, progreso, mensajes privados y claves de IA. Las credenciales del propietario técnico
