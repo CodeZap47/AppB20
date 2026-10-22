@@ -15,6 +15,16 @@ function optionalText(value: string, field: string, max: number) {
   return cleaned;
 }
 
+/** Un archivo listo de este perfil, subido por quien guarda, que es una imagen de hasta 5 MiB. */
+function isOwnProfileImage(ctx: Ctx, fileId: string, kind: 'profile' | 'profile_cover', profileId: bigint): boolean {
+  const file = ctx.db.resourceFile.id.find(fileId);
+  const upload = ctx.db.resourceUpload.id.find(fileId);
+  return !!file && file.targetKind === kind && file.targetId === profileId && file.removedAt === undefined
+    && file.uploadedBy.isEqual(ctx.sender) && !!upload && upload.state === 'ready'
+    && file.size > 0n && file.size <= 5n * 1024n * 1024n
+    && ['image/png', 'image/jpeg', 'image/webp'].includes(file.contentType);
+}
+
 export function saveMemberProfile(ctx: Ctx, input: ProfileInput) {
   activeMember(ctx);
   const current = ctx.db.memberProfile.memberId.find(ctx.sender);
@@ -38,15 +48,8 @@ export function saveMemberProfile(ctx: Ctx, input: ProfileInput) {
     }
     return cleaned;
   }))];
-  if (input.photoFileId !== undefined) {
-    const file = ctx.db.resourceFile.id.find(input.photoFileId);
-    const upload = ctx.db.resourceUpload.id.find(input.photoFileId);
-    if (!current || !file || file.targetKind !== 'profile' || file.targetId !== current.id || file.removedAt !== undefined
-      || !file.uploadedBy.isEqual(ctx.sender) || !upload || upload.state !== 'ready'
-      || file.size === 0n || file.size > 5n * 1024n * 1024n
-      || !['image/png', 'image/jpeg', 'image/webp'].includes(file.contentType)) {
-      throw new SenderError('La foto debe ser una imagen privada activa de este perfil.');
-    }
+  if (input.photoFileId !== undefined && !(current && isOwnProfileImage(ctx, input.photoFileId, 'profile', current.id))) {
+    throw new SenderError('La foto debe ser una imagen privada activa de este perfil.');
   }
   const row = {
     id: current?.id ?? 0n, memberId: ctx.sender,
@@ -63,6 +66,26 @@ export function saveMemberProfile(ctx: Ctx, input: ProfileInput) {
     const result = ctx.db.memberProfile.insert(row);
     log(ctx, 'update', 'member_profile', result.id);
   }
+}
+
+/** Debe coincidir con `PROFILE_COVER_PRESETS` de `@b20/core`. */
+const COVER_PRESETS = ['lavanda', 'oceano', 'atardecer', 'menta', 'durazno', 'aurora', 'bosque', 'cielo', 'rosa', 'grafito'];
+
+/** Portada del perfil propio: un degradado de la lista y, opcionalmente, una imagen subida como `profile_cover`. */
+export function saveProfileCover(ctx: Ctx, input: { expectedVersion: number; preset: string; fileId?: string }) {
+  activeMember(ctx);
+  const profile = ctx.db.memberProfile.memberId.find(ctx.sender);
+  if (!profile) throw new SenderError('Guarda tu presentación antes de elegir una portada.');
+  expectVersion(profile.version, input.expectedVersion);
+  if (!COVER_PRESETS.includes(input.preset)) throw new SenderError('Elige una de las portadas disponibles.');
+  if (input.fileId !== undefined && !isOwnProfileImage(ctx, input.fileId, 'profile_cover', profile.id)) {
+    throw new SenderError('La portada debe ser una imagen privada activa de este perfil.');
+  }
+  const row = { profileId: profile.id, preset: input.preset, fileId: input.fileId, updatedAt: ctx.timestamp };
+  if (ctx.db.memberProfileCover.profileId.find(profile.id)) ctx.db.memberProfileCover.profileId.update(row);
+  else ctx.db.memberProfileCover.insert(row);
+  ctx.db.memberProfile.id.update({ ...profile, version: profile.version + 1, updatedAt: ctx.timestamp });
+  log(ctx, 'update', 'member_profile', profile.id);
 }
 
 const WITHDRAWABLE = ['note', 'question', 'answer', 'guide', 'work', 'evidence'];

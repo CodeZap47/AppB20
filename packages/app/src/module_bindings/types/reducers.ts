@@ -138,6 +138,7 @@ import SaveNotificationPreferencesReducer from "../save_notification_preferences
 import SavePresentationAttemptReducer from "../save_presentation_attempt_reducer";
 import SavePresentationFeedbackReducer from "../save_presentation_feedback_reducer";
 import SavePresentationPracticeReducer from "../save_presentation_practice_reducer";
+import SaveProfileCoverReducer from "../save_profile_cover_reducer";
 import SaveQuestionLinksReducer from "../save_question_links_reducer";
 import SaveSpacedCardReducer from "../save_spaced_card_reducer";
 import SaveSpacedCollectionReducer from "../save_spaced_collection_reducer";
@@ -325,6 +326,7 @@ export type SaveNotificationPreferencesParams = __Infer<typeof SaveNotificationP
 export type SavePresentationAttemptParams = __Infer<typeof SavePresentationAttemptReducer>;
 export type SavePresentationFeedbackParams = __Infer<typeof SavePresentationFeedbackReducer>;
 export type SavePresentationPracticeParams = __Infer<typeof SavePresentationPracticeReducer>;
+export type SaveProfileCoverParams = __Infer<typeof SaveProfileCoverReducer>;
 export type SaveQuestionLinksParams = __Infer<typeof SaveQuestionLinksReducer>;
 export type SaveSpacedCardParams = __Infer<typeof SaveSpacedCardReducer>;
 export type SaveSpacedCollectionParams = __Infer<typeof SaveSpacedCollectionReducer>;

@@ -59,6 +59,9 @@ export default defineConfig(({ mode }) => {
         strategies: 'injectManifest',
         srcDir: 'src',
         filename: 'sw.ts',
+        // El bundle principal ya supera los 2 MiB predeterminados; sin esto el build falla
+        // y la app dejaría de funcionar sin conexión. Dividir el bundle permitiría bajarlo.
+        injectManifest: { maximumFileSizeToCacheInBytes: 4 * 1024 * 1024 },
         includeAssets: ['icons/icon.svg'],
         manifest: {
           name: 'App B20',

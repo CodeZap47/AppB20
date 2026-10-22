@@ -1004,6 +1004,17 @@ export const MemberProfile = __t.object("MemberProfile", {
 });
 export type MemberProfile = __Infer<typeof MemberProfile>;
 
+export const MemberProfileCover = __t.object("MemberProfileCover", {
+  profileId: __t.u64(),
+  preset: __t.string(),
+  fileId: __t.option(__t.string()),
+  updatedAt: __t.timestamp(),
+});
+export type MemberProfileCover = __Infer<typeof MemberProfileCover>;
+
+export const MemberProfileCovers = __t.object("MemberProfileCovers", {});
+export type MemberProfileCovers = __Infer<typeof MemberProfileCovers>;
+
 export const MemberProfiles = __t.object("MemberProfiles", {});
 export type MemberProfiles = __Infer<typeof MemberProfiles>;
 

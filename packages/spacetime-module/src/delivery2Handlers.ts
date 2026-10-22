@@ -4,7 +4,19 @@ import { retentionBlocksRead } from './trashHandlers';
 import { activeMember, attachmentIds, isActive, messageText, readableMessage,
   requireGuide, requireSubject, requireText, type Ctx, type ViewDb } from './moduleContext';
 
-export const extraKinds = ['note', 'guide', 'question', 'answer', 'group_message', 'direct_message', 'channel_message', 'profile'] as const;
+export const extraKinds = ['note', 'guide', 'question', 'answer', 'group_message', 'direct_message', 'channel_message', 'profile', 'profile_cover'] as const;
+/** Archivos de imagen de un perfil: la foto y la portada. Su destino es el id del perfil. */
+export const PROFILE_IMAGE_KINDS: readonly string[] = ['profile', 'profile_cover'];
+
+/** La foto y la portada solo se comparten mientras están vigentes; su dueño siempre las ve. */
+export function profileImageVisible(db: ViewDb, sender: Ctx['sender'], file: { id: string; targetKind: string; targetId: bigint }): boolean {
+  const profile = db.memberProfile.id.find(file.targetId);
+  if (!profile) return false;
+  if (profile.memberId.isEqual(sender)) return true;
+  return file.targetKind === 'profile'
+    ? profile.photoFileId === file.id
+    : db.memberProfileCover.profileId.find(file.targetId)?.fileId === file.id;
+}
 export function withdrawn(db: ViewDb, kind: string, id: bigint) {
   return db.contentStatus.key.find(`${kind}:${id}`)?.withdrawnAt !== undefined;
 }
@@ -34,7 +46,7 @@ export function canReadTarget(db: ViewDb, sender: Ctx['sender'], kind: string, i
     const row = db.answer.id.find(id);
     return !!row && canReadTarget(db, sender, 'question', row.questionId) && statusReadable(db, sender, kind, id);
   }
-  if (kind === 'profile') {
+  if (PROFILE_IMAGE_KINDS.includes(kind)) {
     const row = db.memberProfile.id.find(id);
     return !!row && isActive(db, row.memberId);
   }
@@ -64,7 +76,7 @@ export function extraVersion(ctx: Ctx, kind: string, id: bigint): number {
     const row = ctx.db.note.id.find(id); if (!row) throw new SenderError('La nota no existe.'); return row.version;
   }
   if (kind === 'guide') return requireGuide(ctx, id).version;
-  if (kind === 'profile') {
+  if (PROFILE_IMAGE_KINDS.includes(kind)) {
     const row = ctx.db.memberProfile.id.find(id); if (!row) throw new SenderError('El perfil no existe.'); return row.version;
   }
   const exists = kind === 'question' ? !!ctx.db.question.id.find(id) : kind === 'answer' ? !!ctx.db.answer.id.find(id)
@@ -79,7 +91,7 @@ export function extraWriter(ctx: Ctx, kind: string, id: bigint, actor: Ctx['send
   if (kind === 'note') owner = ctx.db.note.id.find(id)?.author;
   else if (kind === 'question') owner = ctx.db.question.id.find(id)?.author;
   else if (kind === 'answer') owner = ctx.db.answer.id.find(id)?.author;
-  else if (kind === 'profile') owner = ctx.db.memberProfile.id.find(id)?.memberId;
+  else if (PROFILE_IMAGE_KINDS.includes(kind)) owner = ctx.db.memberProfile.id.find(id)?.memberId;
   else if (kind === 'group_message') owner = ctx.db.groupMessage.id.find(id)?.sender;
   else if (kind === 'direct_message') {
     const row = ctx.db.directMessage.id.find(id)!;
@@ -129,10 +141,19 @@ export function bumpExtra(ctx: Ctx, kind: string, id: bigint, actor = ctx.sender
     ctx.db.note.id.update({ ...ctx.db.note.id.find(id)!, version, updatedAt: ctx.timestamp }); captureNote(ctx, id, actor);
   } else if (kind === 'guide') {
     ctx.db.studyGuide.id.update({ ...requireGuide(ctx, id), version, updatedBy: actor, updatedAt: ctx.timestamp }); captureGuide(ctx, id, actor);
-  } else if (kind === 'profile') {
+  } else if (PROFILE_IMAGE_KINDS.includes(kind)) {
     const latest = [...ctx.db.resourceFile.targetId.filter(id)].filter((f) => f.targetKind === kind && f.removedAt === undefined)
       .sort((a, b) => a.createdAt.microsSinceUnixEpoch < b.createdAt.microsSinceUnixEpoch ? 1 : -1)[0];
-    ctx.db.memberProfile.id.update({ ...ctx.db.memberProfile.id.find(id)!, version, photoFileId: latest?.id, updatedAt: ctx.timestamp });
+    const profile = ctx.db.memberProfile.id.find(id)!;
+    if (kind === 'profile') {
+      ctx.db.memberProfile.id.update({ ...profile, version, photoFileId: latest?.id, updatedAt: ctx.timestamp });
+    } else {
+      // La portada nueva queda vigente al terminar la subida, igual que la foto; la foto no cambia.
+      ctx.db.memberProfile.id.update({ ...profile, version, updatedAt: ctx.timestamp });
+      const cover = ctx.db.memberProfileCover.profileId.find(id);
+      const row = { profileId: id, preset: cover?.preset ?? 'lavanda', fileId: latest?.id, updatedAt: ctx.timestamp };
+      if (cover) ctx.db.memberProfileCover.profileId.update(row); else ctx.db.memberProfileCover.insert(row);
+    }
   } else {
     const row = { key: `${kind}:${id}`, targetKind: kind, targetId: id, version };
     if (ctx.db.resourceVersion.key.find(row.key)) ctx.db.resourceVersion.key.update(row); else ctx.db.resourceVersion.insert(row);

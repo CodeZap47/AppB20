@@ -12,6 +12,7 @@ function value<T extends string>(input: string, allowed: readonly T[]): T {
 export function enrichDelivery2Snapshot(connection: Pick<DbConnection, 'db'>, snapshot: Snapshot, identity: string): Snapshot {
   const db = connection.db;
   const versions = new Map([...(db.resourceVersions?.iter() ?? [])].map((row) => [`${row.targetKind}:${row.targetId}`, row.version]));
+  const covers = new Map([...(db.memberProfileCovers?.iter() ?? [])].map((row) => [row.profileId.toString(), { preset: row.preset, fileId: row.fileId }]));
   const statuses = new Map([...(db.contentStatuses?.iter() ?? [])].map((row) => [`${row.kind}:${row.targetId}`, row]));
   const status = (kind: WithdrawableKind, id: string) => {
     const row = statuses.get(`${kind}:${id}`);
@@ -49,7 +50,8 @@ export function enrichDelivery2Snapshot(connection: Pick<DbConnection, 'db'>, sn
       id: r.id.toString(), scope: scope(r.scope), messageId: r.messageId.toString(), reporterId: r.reporter.toHexString(), reason: r.reason,
       evidenceText: r.evidenceText, attachmentIds: [...r.attachmentIds], createdAt: r.createdAt.toDate(), status: value(r.status, ['open', 'resolved']) })),
     memberProfiles: [...(db.memberProfiles?.iter() ?? [])].filter((r) => snapshot.members.some((m) => m.id === r.memberId.toHexString() && m.status === 'active')).map((r) => ({ ...r,
-      id: r.id.toString(), memberId: r.memberId.toHexString(), subjectIds: r.subjectIds.map(String), updatedAt: r.updatedAt.toDate() })),
+      id: r.id.toString(), memberId: r.memberId.toHexString(), subjectIds: r.subjectIds.map(String), updatedAt: r.updatedAt.toDate(),
+      cover: covers.get(r.id.toString()) })),
     noteVersions: [...(db.noteVersions?.iter() ?? [])].filter((r) => visibleNotes.has(r.noteId.toString()) && (r.visibility === 'group' || r.author.toHexString() === identity)).map((r) => ({ ...r,
       id: r.id.toString(), noteId: r.noteId.toString(), subjectId: r.subjectId.toString(), termId: r.termId?.toString(), session: r.session || undefined,
       visibility: value(r.visibility, ['group', 'personal']), source: value(r.source, ['student', 'teacher', 'ai']), authorId: r.author.toHexString(),
@@ -71,7 +73,7 @@ export function enrichDelivery2Snapshot(connection: Pick<DbConnection, 'db'>, sn
     : kind === 'direct_message' ? enriched.directMessages.some((m) => m.id === id && !m.deletedAt)
       : kind === 'group_message' ? enriched.groupMessages.some((m) => m.id === id && !m.deletedAt)
         : kind === 'channel_message' ? enriched.channelMessages.some((m) => m.id === id && !m.deletedAt)
-          : kind === 'profile' ? enriched.memberProfiles.some((p) => p.id === id) : true;
+          : kind === 'profile' || kind === 'profile_cover' ? enriched.memberProfiles.some((p) => p.id === id) : true;
   enriched.resourceFiles = enriched.resourceFiles.filter((f) => current(f.targetKind, f.targetId) || enriched.messageReports.some((r) => r.attachmentIds.includes(f.id)));
   return enriched;
 }

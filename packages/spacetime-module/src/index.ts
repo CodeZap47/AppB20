@@ -20,9 +20,9 @@ import { normalizePresentationConfiguration, normalizePresentationBody, normaliz
   normalizePresentationNextSteps, normalizePresentationQuestion, normalizePresentationAnswer,
   normalizePresentationFeedback, presentationGuidingQuestions } from '../../core/src/presentations';
 import { delivery2Tables, chatChannel, channelMessage, conversationState, memberBlock, messageReport,
-  noteDetail, noteVersion, guideVersion, questionComment, answerUsefulness, questionLink, resourceVersion, memberProfile, contentStatus } from './delivery2Tables';
+  noteDetail, noteVersion, guideVersion, questionComment, answerUsefulness, questionLink, resourceVersion, memberProfile, memberProfileCover, contentStatus } from './delivery2Tables';
 import * as delivery2 from './delivery2Handlers';
-import { saveMemberProfile, withdrawContent } from './communityHandlers';
+import { saveMemberProfile, saveProfileCover, withdrawContent } from './communityHandlers';
 import * as knowledge from './knowledgeHandlers';
 import { configureModuleHelpers } from './moduleContext';
 import { readContributionOrigins } from './contributionOrigins';
@@ -3283,9 +3283,8 @@ function readableResource(tx: Ctx, fileId: string) {
     trash.assertRetentionReadable(tx, file.targetKind, file.targetId);
     if (delivery2.reportFileReadable(tx.db, tx.sender, fileId)) return file;
     if (!delivery2.canReadTarget(tx.db, tx.sender, file.targetKind, file.targetId)) throw new SenderError('No tienes acceso a este archivo.');
-    if (file.targetKind === 'profile') {
-      const profile = tx.db.memberProfile.id.find(file.targetId)!;
-      if (profile.photoFileId !== fileId && !profile.memberId.isEqual(tx.sender)) throw new SenderError('Esta foto ya no está compartida.');
+    if (delivery2.PROFILE_IMAGE_KINDS.includes(file.targetKind) && !delivery2.profileImageVisible(tx.db, tx.sender, file)) {
+      throw new SenderError(file.targetKind === 'profile' ? 'Esta foto ya no está compartida.' : 'Esta portada ya no está compartida.');
     }
     targetVersion(tx, file.targetKind, file.targetId);
     if (file.removedAt !== undefined) {
@@ -3369,8 +3368,8 @@ export const begin_resource_upload = spacetimedb.reducer({
     throw new SenderError('Identificador de subida inválido.');
   }
   if (input.bytes <= 0n || input.bytes > MAX_FILE_BYTES) throw new SenderError('El archivo debe medir entre 1 byte y 50 MB.');
-  if (input.targetKind === 'profile' && (input.bytes > 5n * 1024n * 1024n || !['image/png', 'image/jpeg', 'image/webp'].includes(input.mime))) {
-    throw new SenderError('Usa una foto PNG, JPEG o WebP de hasta 5 MiB.');
+  if (delivery2.PROFILE_IMAGE_KINDS.includes(input.targetKind) && (input.bytes > 5n * 1024n * 1024n || !['image/png', 'image/jpeg', 'image/webp'].includes(input.mime))) {
+    throw new SenderError(input.targetKind === 'profile' ? 'Usa una foto PNG, JPEG o WebP de hasta 5 MiB.' : 'Usa una portada PNG, JPEG o WebP de hasta 5 MiB.');
   }
   if (!/^[a-f0-9]{64}$/.test(input.sha256)) throw new SenderError('Comprobación SHA-256 inválida.');
   const name = requireText(input.name, 'El nombre del archivo', 200);
@@ -3434,13 +3433,13 @@ export const finalize_resource_upload = spacetimedb.reducer({ uploadId: t.string
   }
   const actual = Array.from(hash.digest(), (byte) => byte.toString(16).padStart(2, '0')).join('');
   if (actual !== upload.sha256) throw new SenderError('El archivo no supera la comprobación de integridad.');
-  if (upload.targetKind === 'profile') {
+  if (delivery2.PROFILE_IMAGE_KINDS.includes(upload.targetKind)) {
     const head = ctx.db.resourceChunk.id.find(`${uploadId}:0`)!.bytes;
     const png = head.length >= 8 && [137, 80, 78, 71, 13, 10, 26, 10].every((b, i) => head[i] === b);
     const jpeg = head.length >= 3 && head[0] === 255 && head[1] === 216 && head[2] === 255;
     const webp = head.length >= 12 && [82, 73, 70, 70].every((b, i) => head[i] === b) && [87, 69, 66, 80].every((b, i) => head[i + 8] === b);
     if (!(upload.mime === 'image/png' && png || upload.mime === 'image/jpeg' && jpeg || upload.mime === 'image/webp' && webp)) {
-      throw new SenderError('El contenido de la foto no coincide con su tipo de imagen.');
+      throw new SenderError('El contenido de la imagen no coincide con su tipo.');
     }
   }
   saveTargetBaseline(ctx, upload.targetKind, upload.targetId);
@@ -4221,10 +4220,7 @@ export const resource_files = spacetimedb.view(
   (ctx) => isActive(ctx.db, ctx.sender) ? [...ctx.db.resourceFile.iter()].filter((file) => {
     if (delivery2.reportFileReadable(ctx.db, ctx.sender, file.id)) return true;
     if (!delivery2.canReadTarget(ctx.db, ctx.sender, file.targetKind, file.targetId)) return false;
-    if (file.targetKind === 'profile') {
-      const profile = ctx.db.memberProfile.id.find(file.targetId);
-      return profile?.memberId.isEqual(ctx.sender) || profile?.photoFileId === file.id;
-    }
+    if (delivery2.PROFILE_IMAGE_KINDS.includes(file.targetKind)) return delivery2.profileImageVisible(ctx.db, ctx.sender, file);
     return true;
   }).map(({ storageKey: _key, ...row }) => row) : [],
 );
@@ -4438,10 +4434,7 @@ export const change_history = spacetimedb.view(
     if (r.entity === 'resource_file') {
       const file = ctx.db.resourceFile.id.find(r.entityId);
       if (!file || !delivery2.canReadTarget(ctx.db, ctx.sender, file.targetKind, file.targetId)) return false;
-      if (file.targetKind === 'profile') {
-        const profile = ctx.db.memberProfile.id.find(file.targetId);
-        return profile?.memberId.isEqual(ctx.sender) || profile?.photoFileId === file.id;
-      }
+      if (delivery2.PROFILE_IMAGE_KINDS.includes(file.targetKind)) return delivery2.profileImageVisible(ctx.db, ctx.sender, file);
       return true;
     }
     if (r.entity === 'guide_source' && /^\d+$/.test(r.entityId)) {
@@ -4688,6 +4681,7 @@ export const resolve_message_report = spacetimedb.reducer({ reportId: t.u64() },
 export const save_member_profile = spacetimedb.reducer({ expectedVersion: t.u32(), preferredName: t.string(), bio: t.string(), interests: t.array(t.string()),
   learningGoals: t.string(), skills: t.array(t.string()), helpTopics: t.array(t.string()), portfolioLinks: t.array(t.string()),
   subjectIds: t.array(t.u64()), photoFileId: t.string().optional() }, saveMemberProfile);
+export const save_profile_cover = spacetimedb.reducer({ expectedVersion: t.u32(), preset: t.string(), fileId: t.string().optional() }, saveProfileCover);
 export const withdraw_content = spacetimedb.reducer({ kind: t.string(), targetId: t.u64(), withdrawn: t.bool(), expectedVersion: t.u32(), reason: t.string() }, withdrawContent);
 export const save_note_v2 = spacetimedb.reducer({ noteId: t.u64().optional(), expectedVersion: t.u32().optional(), subjectId: t.u64(), termId: t.u64().optional(),
   session: t.string(), topic: t.string(), title: t.string(), body: t.string(), tags: t.array(t.string()), visibility: t.string(), source: t.string(),
@@ -4715,6 +4709,11 @@ export const my_message_reports = spacetimedb.view({ name: 'my_message_reports',
   (ctx) => isActive(ctx.db, ctx.sender) ? [...ctx.db.messageReport.iter()].filter((r) => r.reporter.isEqual(ctx.sender) || ctx.db.member.identity.find(ctx.sender)?.isCreator) : []);
 export const member_profiles = spacetimedb.view({ name: 'member_profiles', public: true }, t.array(memberProfile.rowType),
   (ctx) => isActive(ctx.db, ctx.sender) ? [...ctx.db.memberProfile.iter()].filter((r) => isActive(ctx.db, r.memberId)) : []);
+export const member_profile_covers = spacetimedb.view({ name: 'member_profile_covers', public: true }, t.array(memberProfileCover.rowType),
+  (ctx) => isActive(ctx.db, ctx.sender) ? [...ctx.db.memberProfileCover.iter()].filter((r) => {
+    const profile = ctx.db.memberProfile.id.find(r.profileId);
+    return !!profile && isActive(ctx.db, profile.memberId);
+  }) : []);
 export const note_details = spacetimedb.view({ name: 'note_details', public: true }, t.array(noteDetail.rowType),
   (ctx) => [...ctx.db.noteDetail.iter()].filter((r) => delivery2.canReadTarget(ctx.db, ctx.sender, 'note', r.noteId))
     .map((r) => ctx.db.note.id.find(r.noteId)?.author.isEqual(ctx.sender) ? r : { ...r, publishedFromId: undefined, publishedFromVersion: undefined }));
@@ -4850,14 +4849,6 @@ export const opportunity_revisions = spacetimedb.view({ name: 'opportunity_revis
 export const opportunity_interests = spacetimedb.view({ name: 'opportunity_interests', public: true }, t.array(opportunityInterest.rowType), ctx => [...ctx.db.opportunityInterest.iter()].filter(row => community4.interestReadable(ctx.db, ctx.sender, row)));
 export const opportunity_feedback = spacetimedb.view({ name: 'opportunity_feedback', public: true }, t.array(opportunityFeedback.rowType), ctx => [...ctx.db.opportunityFeedback.iter()].filter(row => community4.opportunityReadable(ctx.db, ctx.sender, row.opportunityId)));
 
-// Ayuda: migración aditiva para versiones, historia propia e intenciones idempotentes.
-export const help_mutate = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => helpVersioning.helpResponse(() => ctx.withTx(tx => helpVersioning.mutateHelp(tx, payload))));
-export const help_read_history = spacetimedb.procedure({ postId: t.u64() }, t.string(), (ctx, { postId }) => helpVersioning.helpResponse(() => ctx.withTx(tx => helpVersioning.readHelpHistory(tx, postId))));
-export const help_post_versions = spacetimedb.view({ name: 'help_post_versions', public: true }, t.array(helpVersion.rowType), ctx => helpVersioning.visibleHelpVersions(ctx.db, ctx.sender));
-
-export const teaching_save_v2 = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => teachingVersions.teachingResponse(() => ctx.withTx(tx => teachingVersions.saveTeachingVersion(tx, payload))));
-export const teaching_read_history = spacetimedb.procedure({ practiceId: t.u64() }, t.string(), (ctx, { practiceId }) => teachingVersions.teachingResponse(() => ctx.withTx(tx => teachingVersions.readTeachingHistory(tx, practiceId))));
-export const my_teaching_versions = spacetimedb.view({ name: 'my_teaching_versions', public: true }, t.array(teachingHead.rowType), (ctx) => teachingVersions.myTeachingVersions(ctx.db, ctx.sender));
 // Feed de la primera vista: reacciones al contenido del grupo y publicaciones con comentarios.
 export const toggle_feed_reaction = spacetimedb.reducer({ targetKind: t.string(), targetId: t.u64(), emoji: t.string() }, feed.toggleFeedReaction);
 export const create_feed_post = spacetimedb.reducer({ text: t.string(), subjectId: t.u64().optional(), requestId: t.string() }, feed.createFeedPost);
@@ -4890,3 +4881,11 @@ export const my_agent_style_snapshots = spacetimedb.view({ name: 'my_agent_style
 export const my_agent_sessions = spacetimedb.view({ name: 'my_agent_sessions', public: true }, t.array(agentSession.rowType), ctx => isActive(ctx.db, ctx.sender) ? [...ctx.db.agentSession.owner.filter(ctx.sender)] : []);
 export const my_agent_suggestions = spacetimedb.view({ name: 'my_agent_suggestions', public: true }, t.array(agentSuggestion.rowType), ctx => isActive(ctx.db, ctx.sender) ? [...ctx.db.agentSuggestion.owner.filter(ctx.sender)] : []);
 export const my_agent_originality_checks = spacetimedb.view({ name: 'my_agent_originality_checks', public: true }, t.array(agentOriginalityCheck.rowType), ctx => isActive(ctx.db, ctx.sender) ? [...ctx.db.agentOriginalityCheck.owner.filter(ctx.sender)] : []);
+// Ayuda: migración aditiva para versiones, historia propia e intenciones idempotentes.
+export const help_mutate = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => helpVersioning.helpResponse(() => ctx.withTx(tx => helpVersioning.mutateHelp(tx, payload))));
+export const help_read_history = spacetimedb.procedure({ postId: t.u64() }, t.string(), (ctx, { postId }) => helpVersioning.helpResponse(() => ctx.withTx(tx => helpVersioning.readHelpHistory(tx, postId))));
+export const help_post_versions = spacetimedb.view({ name: 'help_post_versions', public: true }, t.array(helpVersion.rowType), ctx => helpVersioning.visibleHelpVersions(ctx.db, ctx.sender));
+
+export const teaching_save_v2 = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => teachingVersions.teachingResponse(() => ctx.withTx(tx => teachingVersions.saveTeachingVersion(tx, payload))));
+export const teaching_read_history = spacetimedb.procedure({ practiceId: t.u64() }, t.string(), (ctx, { practiceId }) => teachingVersions.teachingResponse(() => ctx.withTx(tx => teachingVersions.readTeachingHistory(tx, practiceId))));
+export const my_teaching_versions = spacetimedb.view({ name: 'my_teaching_versions', public: true }, t.array(teachingHead.rowType), (ctx) => teachingVersions.myTeachingVersions(ctx.db, ctx.sender));

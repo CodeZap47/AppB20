@@ -69,7 +69,7 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
     const db = getConnection().db;
     const target = id(targetId);
     if (kind === 'evidence') return [...db.evidenceDetails.iter()].find((row) => row.evidenceId === target)?.version ?? 1;
-    if (kind === 'note' || kind === 'guide' || kind === 'profile') {
+    if (kind === 'note' || kind === 'guide' || kind === 'profile' || kind === 'profile_cover') {
       const row = kind === 'note' ? [...db.notes.iter()].find((r) => r.id === target)
         : kind === 'guide' ? [...db.studyGuides.iter()].find((r) => r.id === target) : [...db.memberProfiles.iter()].find((r) => r.id === target);
       if (!row) throw new Error('Actualiza la página para comprobar la versión del recurso.');
@@ -138,6 +138,7 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
       if (!row) throw new Error('Se guardó el perfil. Reconecta para consultar su versión.');
       return row.id.toString();
     }),
+    saveProfileCover: (input) => getConnection().reducers.saveProfileCover(input),
     publishNoteVersion: (noteId, expectedVersion) => serial(async () => {
       const c = getConnection(); await c.reducers.publishNoteVersion({ noteId: id(noteId), expectedVersion });
       const result = [...c.db.noteDetails.iter()].find((d) => d.publishedFromId === id(noteId) && d.publishedFromVersion === expectedVersion);
