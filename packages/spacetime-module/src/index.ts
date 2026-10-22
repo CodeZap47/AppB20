@@ -895,17 +895,28 @@ function requirePeriod(period: number): number {
   }
   return period;
 }
+const SPACETIMEAUTH_ISSUER = 'https://auth.spacetimedb.com/oidc';
+/** Proyecto alojado de Supabase Auth: `https://<ref-de-20-caracteres>.supabase.co/auth/v1`. */
+const SUPABASE_ISSUER = /^https:\/\/[a-z0-9]{20}\.supabase\.co\/auth\/v1$/;
+
+const isSupabaseIssuer = (issuer: string) => SUPABASE_ISSUER.test(issuer);
+const isAllowedIssuer = (issuer: string) => issuer === SPACETIMEAUTH_ISSUER || isSupabaseIssuer(issuer);
+
 /** SpacetimeDB comprueba la firma; el módulo restringe además emisor y clientes de B20. */
 function trustedSession(ctx: Ctx) {
   const jwt = ctx.senderAuth.jwt;
-  if (!jwt) throw new SenderError('Inicia sesión con SpacetimeAuth para acceder al grupo.');
+  if (!jwt) throw new SenderError('Inicia sesión para acceder al grupo.');
   const config = ctx.db.authConfig.id.find(0);
   if (!config || !config.audiences.length) {
-    throw new SenderError('El acceso con SpacetimeAuth todavía no está configurado.');
+    throw new SenderError('El acceso con inicio de sesión todavía no está configurado.');
   }
   if (jwt.issuer !== config.issuer) throw new SenderError('Emisor de sesión no permitido.');
   if (!jwt.audience.some((aud) => config.audiences.includes(aud))) {
     throw new SenderError('Sesión emitida para otra aplicación.');
+  }
+  // Supabase emite tokens a usuarios anónimos con la misma audiencia `authenticated`.
+  if (isSupabaseIssuer(jwt.issuer) && jwt.fullPayload.is_anonymous !== false) {
+    throw new SenderError('Las sesiones anónimas no pueden acceder al grupo.');
   }
   return jwt;
 }
@@ -950,7 +961,11 @@ function log(ctx: Ctx, action: string, entity: string, entityId: string | bigint
   });
 }
 
-/** Correo verificado del ID token OIDC de SpacetimeAuth, nunca del formulario del cliente. */
+/**
+ * Correo verificado del token, nunca del formulario del cliente. En Supabase, `email_verified`
+ * llega de primer nivel solo mediante el Custom Access Token Hook; `user_metadata` lo puede
+ * editar el propio usuario, así que no se consulta.
+ */
 function verifiedEmail(ctx: Ctx): string {
   const jwt = trustedSession(ctx);
   const { email, email_verified: emailVerified } = jwt.fullPayload;
@@ -991,14 +1006,14 @@ export const set_auth_config = spacetimedb.reducer(
   (ctx, { issuer, audiences }) => {
     requireCreator(ctx);
     const normalizedIssuer = issuer.trim();
-    // El módulo usa SpacetimeAuth; no permite configurar accidentalmente Google directo.
-    if (normalizedIssuer !== 'https://auth.spacetimedb.com/oidc') {
-      throw new SenderError('Usa el emisor de SpacetimeAuth: https://auth.spacetimedb.com/oidc');
+    // Solo SpacetimeAuth o un proyecto de Supabase; no permite configurar accidentalmente Google directo.
+    if (!isAllowedIssuer(normalizedIssuer)) {
+      throw new SenderError(`Usa el emisor de SpacetimeAuth (${SPACETIMEAUTH_ISSUER}) o el de Supabase (https://<ref>.supabase.co/auth/v1).`);
     }
     const normalizedAudiences = [...new Set(audiences.map((value) => value.trim()))];
     if (!normalizedAudiences.length || normalizedAudiences.length > 10 ||
         normalizedAudiences.some((value) => !value || /\s/.test(value) || value.length > 200)) {
-      throw new SenderError('Configura de 1 a 10 client IDs válidos de SpacetimeAuth.');
+      throw new SenderError('Configura de 1 a 10 audiencias válidas (client IDs o `authenticated` en Supabase).');
     }
     // En una actualización init no vuelve a correr. Solo la identidad fijada por el deployer
     // puede completar esta fila; una fila existente nunca se sustituye por el entorno.

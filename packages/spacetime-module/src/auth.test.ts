@@ -250,3 +250,69 @@ describe('SpacetimeAuth y acceso por invitación en módulo', () => {
     expect(db.authConfig.rows.get('0')?.audiences).toEqual(['web-client', 'android-client']);
   });
 });
+
+describe('Supabase Auth como emisor alternativo', () => {
+  const supabaseIssuer = 'https://abcdefghijklmnopqrst.supabase.co/auth/v1';
+  const supabasePayload = () => ({ email: 'Alumno@Example.com', email_verified: true, is_anonymous: false, role: 'authenticated' });
+
+  function setupSupabase() {
+    const base = setup();
+    base.asOwner();
+    set_auth_config(base.ctx, { issuer: supabaseIssuer, audiences: ['authenticated'] });
+    base.asStudent();
+    Object.assign(base.mutableCtx.senderAuth.jwt!, {
+      issuer: supabaseIssuer, audience: ['authenticated'], fullPayload: supabasePayload(),
+    });
+    return base;
+  }
+
+  it('el owner configura un proyecto de Supabase y una cuenta invitada se une', () => {
+    const { ctx, db, join } = setupSupabase();
+    expect(db.authConfig.rows.get('0')).toEqual({ id: 0, issuer: supabaseIssuer, audiences: ['authenticated'] });
+    join();
+    expect(db.member.rows.size).toBe(1);
+    expect(() => assert_active_member(ctx, {})).not.toThrow();
+  });
+
+  it.each([
+    'https://abcdefghijklmnopqrst.supabase.co',
+    'https://abcdefghijklmnopqrst.supabase.co/auth/v1/',
+    'http://abcdefghijklmnopqrst.supabase.co/auth/v1',
+    'https://corto.supabase.co/auth/v1',
+    'https://abcdefghijklmnopqrst.supabase.co.evil.com/auth/v1',
+    'https://evil.com/abcdefghijklmnopqrst.supabase.co/auth/v1',
+  ])('rechaza configurar un emisor que no es de un proyecto de Supabase: %s', (bad) => {
+    const { ctx, asOwner } = setup();
+    asOwner();
+    expect(() => set_auth_config(ctx, { issuer: bad, audiences: ['authenticated'] })).toThrow(/emisor/);
+  });
+
+  it('con Supabase configurado rechaza tokens de SpacetimeAuth y de otro proyecto', () => {
+    const { ctx, mutableCtx, invite } = setupSupabase();
+    invite();
+    mutableCtx.senderAuth.jwt!.issuer = issuer;
+    expect(() => join_group(ctx, { displayName: 'Alumno' })).toThrow(/Emisor/);
+    mutableCtx.senderAuth.jwt!.issuer = 'https://zyxwvutsrqponmlkjihg.supabase.co/auth/v1';
+    expect(() => join_group(ctx, { displayName: 'Alumno' })).toThrow(/Emisor/);
+  });
+
+  it.each([
+    ['sesión anónima', { is_anonymous: true }],
+    ['token sin is_anonymous', { is_anonymous: undefined }],
+    ['correo sin verificar', { email_verified: false }],
+    ['email_verified solo en user_metadata', { email_verified: undefined, user_metadata: { email_verified: true } }],
+  ])('rechaza %s de Supabase aunque exista la invitación', (_reason, overrides) => {
+    const { ctx, mutableCtx, db, invite } = setupSupabase();
+    invite();
+    mutableCtx.senderAuth.jwt!.fullPayload = { ...supabasePayload(), ...overrides };
+    expect(() => join_group(ctx, { displayName: 'Alumno' })).toThrow();
+    expect(db.member.rows.size).toBe(0);
+  });
+
+  it('los tokens de SpacetimeAuth no necesitan el claim is_anonymous', () => {
+    const { ctx, db, join } = setup();
+    join();
+    expect(db.member.rows.size).toBe(1);
+    expect(() => assert_active_member(ctx, {})).not.toThrow();
+  });
+});

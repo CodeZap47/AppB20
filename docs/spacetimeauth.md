@@ -247,6 +247,53 @@ un perfil de configuración y no sustituye este paso. `--env-only` no se combina
 Solo la identidad fijada por quien publica puede completar la fila faltante; nunca se concede
 control al primer visitante.
 
+### Emisor alternativo: Supabase Auth
+
+El módulo acepta como emisor SpacetimeAuth o un proyecto alojado de Supabase,
+`https://<ref>.supabase.co/auth/v1`, donde `<ref>` tiene 20 caracteres. Rechaza dominios
+propios, otras rutas y cualquier otro proveedor. Solo hay un emisor activo a la vez: al
+cambiarlo, los tokens del anterior dejan de valer.
+
+Requisitos en Supabase antes de configurarlo:
+
+1. **Claves de firma asimétricas** (RS256 o ES256) en *Authentication → JWT Keys*. SpacetimeDB
+   comprueba la firma con las claves públicas del emisor; el secreto HS256 heredado no sirve.
+2. **Custom Access Token Hook** que añada `email_verified` de primer nivel. `user_metadata`
+   puede editarlo el propio usuario, así que el módulo no lo consulta:
+
+   ```sql
+   create or replace function public.b20_access_token_hook(event jsonb)
+   returns jsonb language plpgsql stable as $$
+   declare
+     claims jsonb := event->'claims';
+     confirmed boolean;
+   begin
+     select email_confirmed_at is not null into confirmed
+       from auth.users where id = (event->>'user_id')::uuid;
+     claims := jsonb_set(claims, '{email_verified}', to_jsonb(coalesce(confirmed, false)));
+     return jsonb_build_object('claims', claims);
+   end; $$;
+   grant execute on function public.b20_access_token_hook to supabase_auth_admin;
+   revoke execute on function public.b20_access_token_hook from authenticated, anon, public;
+   ```
+
+   Actívalo en *Authentication → Hooks*.
+3. Las sesiones anónimas se rechazan: el token debe traer `is_anonymous: false`.
+
+La audiencia de los tokens de Supabase es `authenticated`:
+
+```sh
+spacetime call -s maincloud app-b20-34245 set_auth_config \
+  '"https://<ref>.supabase.co/auth/v1"' '["authenticated"]'
+```
+
+**Las identidades cambian.** SpacetimeDB deriva la identidad de `iss` + `sub`, así que una
+persona que entraba con SpacetimeAuth tendrá otra identidad con Supabase. Las filas de
+`member` y su autoría siguen ligadas a la identidad anterior. El 22 de octubre de 2026 la base
+tenía 4 miembros y 2 invitaciones; antes de cambiar el emisor en Maincloud hay que decidir
+cómo se migran. La web y la API (`OIDC_ISSUER`, `OIDC_AUDIENCE`) también deben apuntar a
+Supabase.
+
 ## 5. Comprobaciones de la fase temporal
 
 - El acceso humano por enlace al correo y la visualización de la app con datos de prueba se
