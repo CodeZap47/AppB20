@@ -26,7 +26,8 @@ export function FeedView({ items, snapshot, isPending, now, highlightPostId }: P
       <h2 className="label">{group.label}</h2>
       <div className="feed">
         {group.items.map((item) => {
-          const post = item.target.kind === 'post' ? feedPosts.find((p) => p.id === item.target.id) : undefined;
+          const target = item.target;
+          const post = target?.kind === 'post' ? feedPosts.find((p) => p.id === target.id) : undefined;
           return (
             <FeedCard
               key={item.key}
@@ -36,7 +37,7 @@ export function FeedView({ items, snapshot, isPending, now, highlightPostId }: P
               me={me}
               isNew={isPending(item)}
               now={now}
-              reactions={feedReactions.filter((r) => r.targetKind === item.target.kind && r.targetId === item.target.id)}
+              reactions={target ? feedReactions.filter((r) => r.targetKind === target.kind && r.targetId === target.id) : []}
               post={post}
               comments={post ? feedComments.filter((c) => c.postId === post.id) : []}
               highlighted={Boolean(post && post.id === highlightPostId)}

@@ -35,7 +35,9 @@ export function FeedCard({ item, members, subjects, me, isNew, now, reactions, p
   const subject = subjects.find((s) => s.id === item.subjectId);
   const mine = item.actorId === me?.id;
   const when = relativeTime(item.at, now) ?? formatClock(item.at);
-  const classes = ['feed-card', 'panel', isNew && 'feed-card--pending', highlighted && 'feed-card--highlighted'].filter(Boolean).join(' ');
+  const ranking = item.kind === 'ranking';
+  const target = item.target;
+  const classes = ['feed-card', 'panel', isNew && 'feed-card--pending', highlighted && 'feed-card--highlighted', ranking && 'feed-card--ranking'].filter(Boolean).join(' ');
 
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -47,11 +49,14 @@ export function FeedCard({ item, members, subjects, me, isNew, now, reactions, p
   return (
     <article className={classes} id={post ? `publicacion-${post.id}` : undefined} aria-label={`${memberName(members, item.actorId)} ${item.text}`}>
       <header className="feed-card__head">
-        <Avatar member={members.find((m) => m.id === item.actorId)} size={40} />
+        <span className="feed-card__avatar">
+          <Avatar member={members.find((m) => m.id === item.actorId)} size={40} />
+          {ranking && <span className="feed-card__trophy" aria-hidden="true">🏆</span>}
+        </span>
         <div className="feed-card__who">
           <span>
             <strong>{mine ? 'Tú' : memberName(members, item.actorId)}</strong>{' '}
-            <span className="feed-card__action">{mine && post ? 'publicaste en el grupo' : item.text}</span>
+            <span className="feed-card__action">{mine && item.selfText ? item.selfText : item.text}</span>
           </span>
           <span className="feed-card__meta">
             <time dateTime={item.at.toISOString()}>{when}</time>
@@ -78,13 +83,15 @@ export function FeedCard({ item, members, subjects, me, isNew, now, reactions, p
       )}
 
       <footer className="feed-card__foot">
-        <ReactionBar
-          reactions={reactions}
-          members={members}
-          meId={me?.id}
-          disabled={pending}
-          onReact={(emoji) => void run(() => source.toggleFeedReaction({ targetKind: item.target.kind, targetId: item.target.id, emoji }))}
-        />
+        {target && (
+          <ReactionBar
+            reactions={reactions}
+            members={members}
+            meId={me?.id}
+            disabled={pending}
+            onReact={(emoji) => void run(() => source.toggleFeedReaction({ targetKind: target.kind, targetId: target.id, emoji }))}
+          />
+        )}
         <div className="feed-card__tools">
           {post && mine && !editing && (
             <button type="button" className="icon-button" aria-label="Editar publicación" onClick={() => { setDraft(post.text); setEditing(true); }}>
@@ -104,7 +111,7 @@ export function FeedCard({ item, members, subjects, me, isNew, now, reactions, p
           )}
           {!post && (
             <Link to={item.link} className="feed-card__open">
-              Abrir <Icon name="forward" size={14} />
+              {ranking ? 'Ver ranking' : 'Abrir'} <Icon name="forward" size={14} />
             </Link>
           )}
         </div>

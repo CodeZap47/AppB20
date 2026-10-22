@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createDemoState, DemoDataSource } from '../data/demo';
-import { buildLeaderboard, contributionEntries, leaderboardPeriods } from './contributions';
+import { buildLeaderboard, contributionEntries, leaderboardPeriods, leaderChanges } from './contributions';
 
 const now = new Date(2026, 9, 9, 12);
 const snapshot = (viewer = 'demo-1') =>
@@ -146,5 +146,39 @@ describe('contribuciones del grupo', () => {
     expect(leaderboardPeriods([], now).map((p) => p.id)).toEqual(['mes', 'todo']);
     const withCalendar = leaderboardPeriods(snapshot().calendar, now);
     expect(withCalendar.map((p) => p.id)).toEqual(['parcial', 'cuatrimestre', 'todo']);
+  });
+});
+
+describe('cambios en el #1 del ranking', () => {
+  const addNotes = (data: ReturnType<typeof snapshot>, authorId: string, count: number, at: Date) => {
+    const base = data.notes.find((n) => n.visibility === 'group')!;
+    for (let i = 0; i < count; i++) {
+      data.notes.push({ ...base, id: `rk-${authorId}-${i}`, authorId, title: `Nota ${authorId} ${i}`, body: `Contenido distinto ${authorId} ${i}`, createdAt: new Date(at.getTime() + i * 1000), updatedAt: at });
+    }
+  };
+
+  it('quien lidera ahora aparece entre los cambios, en orden cronológico', () => {
+    const data = snapshot();
+    const changes = leaderChanges(data, now);
+    const times = changes.map((c) => c.at.getTime());
+    expect(times).toEqual([...times].sort((a, b) => a - b));
+    const leaders = buildLeaderboard(data, leaderboardPeriods(data.calendar, now)[0]!.window).filter((s) => s.rank === 1);
+    for (const leader of leaders) expect(changes.some((c) => c.memberId === leader.memberId)).toBe(true);
+  });
+
+  it('detecta un adelantamiento y luego un empate', () => {
+    const data = snapshot();
+    const lead = leaderChanges(data, now).at(-1);
+    const top = lead?.points ?? 0;
+    // Cada nota vale lo mismo para todos: demo-8 adelanta y luego demo-7 la alcanza.
+    addNotes(data, 'demo-8', 40, new Date(now.getTime() - 3_600_000));
+    const changes = leaderChanges(data, now);
+    const last = changes.at(-1)!;
+    expect(last.memberId).toBe('demo-8');
+    expect(last.points).toBeGreaterThan(top);
+    addNotes(data, 'demo-7', 40, new Date(now.getTime() - 1_800_000));
+    const tie = leaderChanges(data, now).at(-1)!;
+    expect(tie.memberId).toBe('demo-7');
+    expect(tie.tiedWith).toEqual(['demo-8']);
   });
 });

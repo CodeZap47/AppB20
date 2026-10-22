@@ -323,3 +323,40 @@ export function standingSummary(standing: MemberStanding, max = 2): string {
     .map((row) => countLabel(row.kind, row.counted))
     .join(' · ');
 }
+
+export interface LeaderChange {
+  memberId: Id;
+  /** Momento del aporte con el que llegó al #1. */
+  at: Date;
+  /** Con quién comparte el #1 en ese momento; vacío si lo tiene sola. */
+  tiedWith: Id[];
+  points: number;
+  periodLabel: string;
+}
+
+/**
+ * Cada vez que alguien entra al #1 del periodo vigente (el que abre el leaderboard), sola o
+ * empatada. Recorre los aportes con puntos en orden y recalcula los totales tras cada uno.
+ */
+export function leaderChanges(data: Snapshot, now = new Date()): LeaderChange[] {
+  const period = leaderboardPeriods(data.calendar, now)[0]!;
+  const active = new Set(data.members.filter((m) => m.status === 'active').map((m) => m.id));
+  const scored = scoreEntries(contributionEntries(data), period.window)
+    .filter((event) => event.points > 0 && active.has(event.memberId))
+    .reverse();
+  const totals = new Map<Id, number>();
+  let leaders = new Set<Id>();
+  const changes: LeaderChange[] = [];
+  for (const event of scored) {
+    totals.set(event.memberId, (totals.get(event.memberId) ?? 0) + event.points);
+    const top = Math.max(...totals.values());
+    const next = new Set([...totals].filter(([, points]) => points === top).map(([id]) => id));
+    for (const id of next) {
+      if (!leaders.has(id)) {
+        changes.push({ memberId: id, at: event.at, tiedWith: [...next].filter((other) => other !== id), points: top, periodLabel: period.label });
+      }
+    }
+    leaders = next;
+  }
+  return changes;
+}

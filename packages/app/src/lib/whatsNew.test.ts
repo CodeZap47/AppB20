@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createDemoState, DemoDataSource } from '../data/demo';
-import { birthdaysToday, buildNews, summarizeNews, unreadMessages, upcomingDue } from './whatsNew';
+import { birthdaysToday, buildNews, ownFeedNews, summarizeNews, unreadMessages, upcomingDue } from './whatsNew';
 
 describe('buildNews', () => {
   it('no incluye lo propio ni notas personales ajenas', () => {
@@ -64,6 +64,26 @@ describe('buildNews', () => {
   });
 });
 
+describe('notas de clase y lo propio en el feed', () => {
+  it('tus notas compartidas salen en el feed propio, nunca en buildNews ni las personales', () => {
+    const data = new DemoDataSource(createDemoState(), 'demo-2');
+    const snapshot = data.getSnapshot();
+    const shared = snapshot.notes.filter((n) => n.authorId === 'demo-2' && n.visibility === 'group' && !n.withdrawnAt);
+    const personal = snapshot.notes.filter((n) => n.authorId === 'demo-2' && n.visibility !== 'group');
+    const own = ownFeedNews(snapshot).filter((n) => n.kind === 'nota');
+    expect(own.map((n) => n.target?.id).sort()).toEqual(shared.map((n) => n.id).sort());
+    expect(own.every((n) => n.selfText?.includes('la nota de clase'))).toBe(true);
+    expect(own.some((n) => personal.some((p) => p.id === n.target?.id))).toBe(false);
+    expect(buildNews(snapshot).some((n) => n.kind === 'nota' && n.actorId === 'demo-2')).toBe(false);
+  });
+
+  it('el #1 del ranking es un aviso sin reacciones que enlaza al leaderboard', () => {
+    const news = buildNews(new DemoDataSource(createDemoState(), 'demo-1').getSnapshot());
+    const ranking = news.filter((n) => n.kind === 'ranking');
+    expect(ranking.every((n) => !n.target && n.link === '/m/leaderboard' && /#1 del ranking/.test(n.text))).toBe(true);
+  });
+});
+
 describe('resumen y paneles de «¿Qué me perdí?»', () => {
   const item = (kind: Parameters<typeof summarizeNews>[0][number]['kind']) => ({
     key: kind + Math.random(),
@@ -78,7 +98,7 @@ describe('resumen y paneles de «¿Qué me perdí?»', () => {
 
   it('resume en una frase con singular y plural', () => {
     expect(summarizeNews([item('nota'), item('nota'), item('fecha'), item('respuesta')])).toBe(
-      '1 cambio de fecha, 2 apuntes y 1 respuesta',
+      '1 cambio de fecha, 2 notas de clase y 1 respuesta',
     );
     expect(summarizeNews([])).toBe('');
   });

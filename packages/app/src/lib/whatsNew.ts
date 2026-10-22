@@ -1,7 +1,8 @@
 import { celebrationDate, type FeedTargetKind } from '@b20/core';
-import type { Assignment, Birthday, FeedPost, Id, Snapshot } from '../data/types';
-import { formatDate, parseDay } from './format';
+import type { Assignment, Birthday, FeedPost, Id, Note, Snapshot } from '../data/types';
+import { formatDate, memberName, parseDay } from './format';
 import { unreadMessages as unreadChatMessages } from './chat';
+import { leaderChanges } from './contributions';
 import { previewText } from './messages';
 
 export type NewsKind =
@@ -18,7 +19,8 @@ export type NewsKind =
   | 'votacion'
   | 'ayuda'
   | 'repaso'
-  | 'publicacion';
+  | 'publicacion'
+  | 'ranking';
 
 export interface NewsItem {
   key: string;
@@ -28,17 +30,22 @@ export interface NewsItem {
   text: string;
   link: string;
   at: Date;
-  /** Contenido al que apunta el aviso; ahí se guardan las reacciones del feed. */
-  target: { kind: FeedTargetKind; id: Id };
+  /**
+   * Contenido al que apunta el aviso; ahí se guardan las reacciones del feed. Los avisos
+   * derivados (como el #1 del ranking) no tienen y no admiten reacciones.
+   */
+  target?: { kind: FeedTargetKind; id: Id };
   /** Extracto del contenido para la vista Feed; la Clásica no lo muestra. */
   preview?: string;
+  /** El mismo aviso en segunda persona, para cuando quien lo ve es quien lo hizo. */
+  selfText?: string;
 }
 
 export const NEWS_LABEL: Record<NewsKind, string> = {
   tarea: 'Tareas y actividades',
   fecha: 'Cambios de fecha',
   trabajo: 'Trabajos subidos',
-  nota: 'Apuntes',
+  nota: 'Notas de clase',
   actividad: 'Actividades',
   evidencia: 'Evidencias',
   pregunta: 'Preguntas',
@@ -49,6 +56,7 @@ export const NEWS_LABEL: Record<NewsKind, string> = {
   ayuda: 'Ayuda entre compañeros',
   repaso: 'Colecciones de repaso',
   publicacion: 'Publicaciones',
+  ranking: 'Ranking',
 };
 
 /**
@@ -108,20 +116,7 @@ export function buildNews(snapshot: Snapshot, now = new Date()): NewsItem[] {
         preview: excerpt(w.description),
       };
     }),
-    ...snapshot.notes
-      .filter((n) => n.visibility === 'group' && !n.withdrawnAt)
-      .map((n) => ({
-        key: `n${n.id}`,
-        kind: 'nota' as const,
-        subjectId: n.subjectId,
-        actorId: n.authorId,
-        text:
-          n.version > 1 ? `actualizó el apunte «${n.title}»` : `compartió el apunte «${n.title}»`,
-        link: `/m/notas/${n.id}`,
-        at: n.updatedAt,
-        target: { kind: 'note' as const, id: n.id },
-        preview: excerpt(n.body),
-      })),
+    ...sharedNotes(snapshot).map(noteNews),
     ...snapshot.activities.map((a) => ({
       key: `a${a.id}`,
       kind: 'actividad' as const,
@@ -228,6 +223,7 @@ export function buildNews(snapshot: Snapshot, now = new Date()): NewsItem[] {
         target: { kind: 'spaced' as const, id: collection.id },
       })),
     ...snapshot.feedPosts.map(postNews),
+    ...rankingNews(snapshot, now),
   ];
 
   return [...new Map(items.filter((i) => i.actorId && i.actorId !== meId).map((i) => [i.key, i])).values()]
@@ -249,10 +245,58 @@ function postNews(post: FeedPost): NewsItem {
   };
 }
 
-/** Tus publicaciones: `buildNews` omite lo propio, pero en el feed sí deben verse. */
-export function ownPostNews(snapshot: Snapshot): NewsItem[] {
+const sharedNotes = (snapshot: Snapshot) => snapshot.notes.filter((n) => n.visibility === 'group' && !n.withdrawnAt);
+
+/** Una nota de clase compartida con el grupo; las personales nunca son novedad. */
+function noteNews(note: Note): NewsItem {
+  const verb = note.version > 1 ? ['actualizó', 'actualizaste'] : ['compartió', 'compartiste'];
+  return {
+    key: `n${note.id}`,
+    kind: 'nota',
+    subjectId: note.subjectId,
+    actorId: note.authorId,
+    text: `${verb[0]} la nota de clase «${note.title}»`,
+    selfText: `${verb[1]} la nota de clase «${note.title}»`,
+    link: `/m/notas/${note.id}`,
+    at: note.updatedAt,
+    target: { kind: 'note', id: note.id },
+    preview: excerpt([note.topic, note.body].filter(Boolean).join(' · ')),
+  };
+}
+
+/** Quién llegó al #1 del ranking del periodo vigente, sin reacciones: es un aviso derivado. */
+function rankingNews(snapshot: Snapshot, now: Date): NewsItem[] {
   const meId = snapshot.me?.id;
-  return snapshot.feedPosts.filter((post) => post.authorId === meId).map(postNews);
+  const names = (ids: Id[]) => listFormat.format(ids.map((id) => (id === meId ? 'contigo' : memberName(snapshot.members, id))));
+  return leaderChanges(snapshot, now).map((change) => ({
+    key: `rk${change.memberId}-${change.at.getTime()}`,
+    kind: 'ranking',
+    subjectId: undefined,
+    actorId: change.memberId,
+    text: change.tiedWith.length
+      ? `empató el #1 del ranking con ${names(change.tiedWith)} · ${change.periodLabel}`
+      : `llegó al #1 del ranking · ${change.periodLabel}`,
+    selfText: change.tiedWith.length
+      ? `empataste el #1 del ranking con ${names(change.tiedWith)} · ${change.periodLabel}`
+      : `llegaste al #1 del ranking · ${change.periodLabel}`,
+    link: '/m/leaderboard',
+    at: change.at,
+    preview: `${change.points} ${change.points === 1 ? 'punto' : 'puntos'} en ese momento`,
+  }));
+}
+
+/**
+ * Lo tuyo que sí se ve en el feed aunque `buildNews` lo omita: tus publicaciones, tus notas de
+ * clase compartidas y tus llegadas al #1 del ranking.
+ */
+export function ownFeedNews(snapshot: Snapshot, now = new Date()): NewsItem[] {
+  const meId = snapshot.me?.id;
+  if (!meId || snapshot.me?.status !== 'active') return [];
+  return [
+    ...snapshot.feedPosts.filter((post) => post.authorId === meId).map((post) => ({ ...postNews(post), selfText: 'publicaste en el grupo' })),
+    ...sharedNotes(snapshot).filter((note) => note.authorId === meId).map(noteNews),
+    ...rankingNews(snapshot, now).filter((item) => item.actorId === meId),
+  ];
 }
 
 const PREVIEW_LENGTH = 280;
@@ -286,7 +330,7 @@ const NOUNS: Record<NewsKind, [string, string]> = {
   tarea: ['tarea nueva o editada', 'tareas nuevas o editadas'],
   fecha: ['cambio de fecha', 'cambios de fecha'],
   trabajo: ['trabajo subido', 'trabajos subidos'],
-  nota: ['apunte', 'apuntes'],
+  nota: ['nota de clase', 'notas de clase'],
   actividad: ['actividad de clase', 'actividades de clase'],
   evidencia: ['evidencia', 'evidencias'],
   pregunta: ['pregunta', 'preguntas'],
@@ -297,6 +341,7 @@ const NOUNS: Record<NewsKind, [string, string]> = {
   ayuda: ['publicación de ayuda', 'publicaciones de ayuda'],
   repaso: ['colección de repaso', 'colecciones de repaso'],
   publicacion: ['publicación', 'publicaciones'],
+  ranking: ['cambio en el #1 del ranking', 'cambios en el #1 del ranking'],
 };
 
 const listFormat = new Intl.ListFormat('es-MX', { style: 'long', type: 'conjunction' });

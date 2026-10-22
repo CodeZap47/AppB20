@@ -73,4 +73,18 @@ describe('primera vista: Feed y Clásica', () => {
     await act(async () => input.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
     expect(source.getSnapshot().feedComments.some((c) => c.postId === post!.id && c.text === '¿A las 9?')).toBe(true);
   });
+
+  it('muestra tus notas de clase compartidas y el #1 del ranking sin reacciones', async () => {
+    await show('/m/inicio?ver=todo');
+    const note = source.getSnapshot().notes.find((n) => n.authorId === 'demo-1' && n.visibility === 'group' && !n.withdrawnAt);
+    if (note) expect(container.textContent).toContain(`compartiste la nota de clase «${note.title}»`);
+    const chip = [...container.querySelectorAll('button.chip')].find((b) => b.textContent?.startsWith('Ranking'));
+    expect(chip).toBeTruthy();
+    await act(async () => (chip as HTMLButtonElement).click());
+    const cards = [...container.querySelectorAll('.feed-card--ranking')];
+    expect(cards.length).toBeGreaterThan(0);
+    expect(cards.every((card) => !card.querySelector('[aria-label="Reaccionar"]'))).toBe(true);
+    await click('Clásica');
+    expect(container.querySelectorAll('.news-item').length).toBeGreaterThan(0);
+  });
 });

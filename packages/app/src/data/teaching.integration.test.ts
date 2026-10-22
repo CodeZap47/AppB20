@@ -153,7 +153,7 @@ describe('Aprende enseñando junto con los demás módulos', () => {
         .toBe(priorPoints + CONTRIBUTION_RULES.apunte.points);
       const newNews = publicAfter.news.filter((item) => !before.news.some((old) => old.key === item.key));
       expect(newNews).toEqual([expect.objectContaining({
-        kind: 'nota', actorId: OWNER, link: `/m/notas/${noteId}`, text: `compartió el apunte «${topic}»`,
+        kind: 'nota', actorId: OWNER, link: `/m/notas/${noteId}`, text: `compartió la nota de clase «${topic}»`,
       })]);
       for (const secret of [INITIAL.concept, INITIAL.example, INITIAL.limits, REFLECTION, TOPICS, ANSWER,
         'Pregunta privada sobre el ejemplo', 'Contenido original personal que no debe copiarse',
@@ -178,7 +178,7 @@ describe('Aprende enseñando junto con los demás módulos', () => {
       expect(afterNoteEdit.profileNotes.filter((item) => item.id === noteId)).toHaveLength(1);
       expect(afterNoteEdit.contributions).toEqual(publicAfter.contributions);
       expect(afterNoteEdit.news.filter((item) => item.link === `/m/notas/${noteId}`))
-        .toEqual([expect.objectContaining({ text: `actualizó el apunte «${topic}»` })]);
+        .toEqual([expect.objectContaining({ text: `actualizó la nota de clase «${topic}»` })]);
       expectPrivateNoteHidden(data, personalNoteId);
     },
   );

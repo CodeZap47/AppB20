@@ -14,7 +14,7 @@ import {
   birthdaysToday,
   buildNews,
   NEWS_LABEL,
-  ownPostNews,
+  ownFeedNews,
   summarizeNews,
   unreadMessages,
   upcomingDue,
@@ -58,7 +58,7 @@ export function WhatsNewPage() {
   const { me, members, subjects, lastSeenAt, assignments, birthdays } = snapshot;
   const [params, setParams] = useSearchParams();
   const news = useMemo(() => buildNews(snapshot), [snapshot]);
-  const mine = useMemo(() => ownPostNews(snapshot), [snapshot]);
+  const mine = useMemo(() => ownFeedNews(snapshot), [snapshot]);
   const now = new Date();
 
   const highlightPostId = params.get('publicacion') ?? undefined;

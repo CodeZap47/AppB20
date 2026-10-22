@@ -33,6 +33,13 @@ publicación resaltada (`?vista=feed&publicacion=<id>`).
   no sobre el aviso, así que se conserva aunque el contenido se edite.
 - **Comentarios:** solo en las publicaciones del feed (máximo 500 caracteres). Se ven los
   dos últimos y el resto con «Ver los N comentarios».
+- **Notas de clase:** todas las notas compartidas con el grupo, también las tuyas
+  («Compartiste la nota de clase…»), con su tema y un extracto. Las personales nunca salen.
+- **#1 del ranking:** cada vez que alguien llega al #1 del periodo vigente (el que abre el
+  leaderboard: parcial en curso o últimos 30 días), sola o empatada, aparece una tarjeta 🏆
+  con los puntos de ese momento y el botón «Ver ranking». Se calcula en el cliente a partir de
+  los aportes, igual que el leaderboard, así que no admite reacciones. Los avisos de otras
+  personas también salen en la vista Clásica y en el resumen; los tuyos solo en el Feed.
 
 ## Permisos
 

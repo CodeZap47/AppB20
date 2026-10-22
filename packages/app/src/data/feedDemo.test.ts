@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildNews, ownPostNews } from '../lib/whatsNew';
+import { buildNews, ownFeedNews } from '../lib/whatsNew';
 import { createDemoState, DemoDataSource } from './demo';
 
 describe('feed en modo demo', () => {
@@ -28,10 +28,10 @@ describe('feed en modo demo', () => {
     source.createFeedPost({ text: 'Hola grupo', requestId: 'r1' });
     const posts = source.getSnapshot().feedPosts.filter((p) => p.authorId === 'demo-5');
     expect(posts).toHaveLength(1);
-    expect(ownPostNews(source.getSnapshot()).map((n) => n.preview)).toEqual(['Hola grupo']);
-    expect(buildNews(source.getSnapshot()).some((n) => n.target.id === posts[0]!.id)).toBe(false);
+    expect(ownFeedNews(source.getSnapshot()).filter((n) => n.kind === 'publicacion').map((n) => n.preview)).toEqual(['Hola grupo']);
+    expect(buildNews(source.getSnapshot()).some((n) => n.target?.id === posts[0]!.id)).toBe(false);
     source.setViewer('demo-3');
-    const item = buildNews(source.getSnapshot()).find((n) => n.target.id === posts[0]!.id);
+    const item = buildNews(source.getSnapshot()).find((n) => n.target?.id === posts[0]!.id);
     expect(item).toMatchObject({ kind: 'publicacion', actorId: 'demo-5', preview: 'Hola grupo' });
   });
 

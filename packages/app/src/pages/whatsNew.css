@@ -452,3 +452,33 @@
     display: none;
   }
 }
+
+/* #1 del ranking: aviso derivado, sin reacciones, con trofeo sobre el avatar. */
+.feed-card__avatar {
+  position: relative;
+  flex: none;
+}
+
+.feed-card__trophy {
+  position: absolute;
+  right: -0.35rem;
+  bottom: -0.3rem;
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.feed-card--ranking {
+  border-color: color-mix(in srgb, #e0a800 45%, var(--border));
+  background: linear-gradient(135deg, color-mix(in srgb, #f6c445 12%, var(--surface)), var(--surface) 60%);
+}
+
+.news-kind--ranking {
+  color: #8a6100;
+  border-color: currentColor;
+}
+
+@media (prefers-color-scheme: dark) {
+  .news-kind--ranking {
+    color: #ffd166;
+  }
+}
