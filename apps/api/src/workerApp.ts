@@ -10,6 +10,8 @@ import { createAiDatabase, type AiDatabase, type AiWorkerEnv } from './ai/databa
 import { aiWorkerRoutes, aiPublicError } from './ai/routes.ts';
 import { guideAiRoutes } from './ai/guideRoutes.ts';
 import { examRoutes } from './ai/examRoutes.ts';
+import { agentAiRoutes } from './ai/agentRoutes.ts';
+import type { AgentProvider } from './ai/agentProvider.ts';
 import type { GuideProvider } from './ai/guideProvider.ts';
 import type { AiProvider } from './ai/provider.ts';
 
@@ -20,6 +22,7 @@ interface WorkerOptions {
   aiDatabase?: (env: AiWorkerEnv) => AiDatabase;
   aiProvider?: AiProvider;
   guideProvider?: GuideProvider;
+  agentProvider?: AgentProvider;
 }
 const kinds = new Set(['assignment', 'activity', 'work', 'evidence']);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -77,6 +80,7 @@ export function createWorkerApp(options: WorkerOptions = {}) {
   });
   app.route('/ai/study-guides', guideAiRoutes({ provider: options.guideProvider }));
   app.route('/ai/exams', examRoutes());
+  app.route('/ai/agent', agentAiRoutes({ provider: options.agentProvider }));
   app.route('/ai', aiWorkerRoutes({ provider: options.aiProvider }));
   app.use('/files/*', async (c, next) => {
     if (!c.env.FILES) return c.json({ error: 'La compatibilidad con archivos anteriores no está configurada en este servicio.' }, 503);

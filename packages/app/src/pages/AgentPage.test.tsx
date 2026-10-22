@@ -89,3 +89,20 @@ describe('originalidad contra lo publicado', () => {
     expect(agentOriginality(half, withWork(essay, ['demo-2']), undefined, { warn: 10, block: 40 })[0]?.level).toBe('block');
   });
 });
+
+describe('agente con Gemini por pasos (AG-4)', () => {
+  it('muestra la vista previa con las premisas y no envía nada si el paso está apagado', async () => {
+    const theirs = source.getSnapshot().works.find((w) => !w.authorIds.includes('demo-1'))!;
+    await show(`/m/agente?tarea=${theirs.assignmentId}`); await activate();
+    await click('Entrenar estilo'); await click('Entrenar a Alumno_DP1_BOT');
+    await click('Ayudar con una tarea'); await click('Empezar con Alumno_DP1_BOT');
+    await click('Entender y planear (apagado)');
+    const preview = container.querySelector('[aria-label="Vista previa del envío"]')!;
+    expect(preview.textContent).toContain('tokens estimados'); expect(preview.textContent).toContain('Soy Alumno_DP1_BOT, el agente personal de Alumno.');
+    expect(preview.textContent).toContain('no se envía nada'); expect(button('Enviar a Gemini')).toBeUndefined();
+    await click('Revisar mi borrador'); await type(container.querySelector('textarea')!, 'Mi borrador propio sobre el tema.'); await click('Guardar borrador');
+    await click('Revisión del borrador (apagado)');
+    expect(container.querySelector('[aria-label="Vista previa del envío"]')?.textContent).toContain('Tu borrador (33 caracteres)');
+    await click('Explicación del parecido (apagado)'); expect(container.querySelector('[role="alert"]')?.textContent).toContain('Compara tu borrador actual');
+  });
+});

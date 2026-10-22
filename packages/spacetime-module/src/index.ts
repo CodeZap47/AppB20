@@ -45,6 +45,7 @@ import { teachingVersionTables, teachingHead } from './teachingVersioning';
 import * as teachingVersions from './teachingVersioning';
 import { helpVersionTables, helpVersion } from './helpVersioning';
 import { agentTables, agentProfile, agentStyleSource, agentStyleSnapshot, agentSession, agentSuggestion, agentOriginalityCheck, agentExpiry } from './agentTables';
+import { agentAiDispatch } from './agentAiHandlers';
 import * as agent from './agentHandlers';
 import * as helpVersioning from './helpVersioning';
 import { guideAiTables } from './guideAiTables';
@@ -4879,6 +4880,9 @@ export const propose_agent_suggestions = spacetimedb.reducer({ sessionId: t.u64(
 export const resolve_agent_suggestion = spacetimedb.reducer({ suggestionId: t.u64(), accept: t.bool() }, agent.resolveAgentSuggestion);
 export const check_agent_originality = spacetimedb.reducer({ sessionId: t.u64(), draftVersion: t.u32() }, agent.checkAgentOriginality);
 export const acknowledge_agent_match = spacetimedb.reducer({ checkId: t.u64(), refKey: t.string() }, agent.acknowledgeAgentMatch);
+/** Gemini del agente (AG-4): procedimiento privado, como el resto de la IA. */
+export const agent_ai = spacetimedb.procedure({ payload: t.string() }, t.string(),
+  (ctx, { payload }) => ctx.withTx((tx) => ai.aiResponse(tx, payload, agentAiDispatch)));
 export const expire_agent_session = spacetimedb.reducer({ onSchedule: agentExpiry }, { event: agentExpiry.rowType }, (ctx, { event }) => agent.expireAgentSession(ctx, event));
 export const my_agent_profile = spacetimedb.view({ name: 'my_agent_profile', public: true }, t.array(agentProfile.rowType), ctx => [...ctx.db.agentProfile.iter()].filter(row => agent.agentReadable(ctx.db, ctx.sender, row.owner)));
 export const my_agent_sources = spacetimedb.view({ name: 'my_agent_sources', public: true }, t.array(agentStyleSource.rowType), ctx => isActive(ctx.db, ctx.sender) ? [...ctx.db.agentStyleSource.owner.filter(ctx.sender)] : []);

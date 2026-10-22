@@ -223,6 +223,7 @@ import WithdrawOpportunityReducer from "./withdraw_opportunity_reducer";
 
 // Import all procedure arg schemas
 import * as AddStickerNativeProcedure from "./add_sticker_native_procedure";
+import * as AgentAiProcedure from "./agent_ai_procedure";
 import * as AiAuthorizeGenerationProcedure from "./ai_authorize_generation_procedure";
 import * as AiAuthorizeKeyProcedure from "./ai_authorize_key_procedure";
 import * as AiClaimGenerationProcedure from "./ai_claim_generation_procedure";
@@ -1341,6 +1342,7 @@ const reducersSchema = __reducers(
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
 const proceduresSchema = __procedures(
   __procedureSchema("add_sticker_native", AddStickerNativeProcedure.params, AddStickerNativeProcedure.returnType),
+  __procedureSchema("agent_ai", AgentAiProcedure.params, AgentAiProcedure.returnType),
   __procedureSchema("ai_authorize_generation", AiAuthorizeGenerationProcedure.params, AiAuthorizeGenerationProcedure.returnType),
   __procedureSchema("ai_authorize_key", AiAuthorizeKeyProcedure.params, AiAuthorizeKeyProcedure.returnType),
   __procedureSchema("ai_claim_generation", AiClaimGenerationProcedure.params, AiClaimGenerationProcedure.returnType),

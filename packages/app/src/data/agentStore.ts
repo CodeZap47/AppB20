@@ -1,7 +1,7 @@
-import { AGENT_LIMITS, AGENT_PREMISES_VERSION, applyAgentSuggestion, cleanAgentDraft, cleanAgentSources, cleanAgentStage, cleanAgentSuggestions, describeStyle, proseSentences, styleFeatures, type AgentSourceKind } from '@b20/core';
+import { AGENT_AI_STEPS, AGENT_LIMITS, AGENT_PREMISES_VERSION, agentAiSystemInstruction, agentName, agentOwnerName, buildAgentAiPayload, estimateAgentAiTokens, applyAgentSuggestion, cleanAgentDraft, cleanAgentSources, cleanAgentStage, cleanAgentSuggestions, describeStyle, proseSentences, styleFeatures, type AgentAiStep, type AgentSourceKind } from '@b20/core';
 import { agentOriginality } from './agentDemo';
 import type { Id, Member, Snapshot } from './types';
-import { emptyAgent, type AgentActions, type AgentSnapshot } from './agentTypes';
+import { emptyAgent, type AgentActions, type AgentAiActions, type AgentAiPreview, type AgentSnapshot } from './agentTypes';
 
 /** Simulación en memoria con las mismas reglas que `agentHandlers.ts` del módulo. */
 interface Context { state(): object; active(): Member; current(): Snapshot; id(): string; now(): Date; emit(): void }
@@ -10,7 +10,7 @@ const stores = new WeakMap<object, Map<Id, Owned>>();
 const DAY_MS = 86_400_000;
 const version = (actual: number, expected: number) => { if (actual !== expected) throw new Error('El contenido cambió. Actualiza antes de guardar.'); };
 
-export class DemoAgentStore implements AgentActions {
+export class DemoAgentStore implements AgentActions, AgentAiActions {
   constructor(private ctx: Context) {}
   private get all() { let map = stores.get(this.ctx.state()); if (!map) { map = new Map(); stores.set(this.ctx.state(), map); } return map; }
   private mine(memberId = this.ctx.active().id) { let data = this.all.get(memberId); if (!data) { data = emptyAgent(); this.all.set(memberId, data); } return data; }
@@ -90,6 +90,20 @@ export class DemoAgentStore implements AgentActions {
     if (!check.matches.some((m) => m.refKey === input.refKey)) throw new Error('Esa coincidencia no está en la comparación.');
     if (!check.acknowledged.includes(input.refKey)) check.acknowledged.push(input.refKey); this.ctx.emit();
   }
+  /** En la demostración Gemini queda apagado; la vista previa sí muestra lo que se enviaría. */
+  getAgentAiStatus() { return Promise.resolve(AGENT_AI_STEPS.map((step) => ({ step, enabled: false }))); }
+  async previewAgentAi(input: { step: AgentAiStep; sessionId?: Id }): Promise<AgentAiPreview> {
+    const data = this.profiled(); const base = this.ctx.current(); const me = this.ctx.active(); const style = data.agentStyleSnapshots.at(-1);
+    const session = input.sessionId ? this.session(input.sessionId).row : undefined; const assignment = base.assignments.find((a) => a.id === session?.assignmentId);
+    const check = data.agentOriginalityChecks.filter((c) => c.sessionId === session?.id).at(-1);
+    if (input.step === 'originality' && check?.draftVersion !== session?.draftVersion) throw new Error('Compara tu borrador actual antes de pedir la explicación.');
+    const payload = buildAgentAiPayload(input.step, { owner: agentOwnerName(me.displayName), bot: agentName(me, base.members.filter((m) => m.status === 'active')),
+      style: style && { features: style.features, examples: style.examples }, assignment: assignment && { title: assignment.title, instructions: assignment.instructions },
+      draft: session?.draft, matches: check?.matches.filter((m) => !check.acknowledged.includes(m.refKey)) });
+    return { step: input.step, payload, systemInstruction: agentAiSystemInstruction(payload), estimatedTokens: estimateAgentAiTokens(payload) };
+  }
+  runAgentAiStep(): Promise<never> { return Promise.reject(new Error('En la demostración Gemini está apagado: no se envía nada ni se usa tu clave.')); }
+  listAgentAiRuns() { return Promise.resolve([]); }
   /** Contenido purgado: deja de ser fuente y desaparece de las comparaciones. */
   purgeSource(kind: string, id: Id) {
     const refKey = `${kind}:${id}`;

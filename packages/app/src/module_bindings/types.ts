@@ -63,6 +63,29 @@ export type ActivityLink = __Infer<typeof ActivityLink>;
 export const ActivityLinks = __t.object("ActivityLinks", {});
 export type ActivityLinks = __Infer<typeof ActivityLinks>;
 
+export const AgentAiRun = __t.object("AgentAiRun", {
+  id: __t.string(),
+  owner: __t.identity(),
+  step: __t.string(),
+  sessionId: __t.option(__t.u64()),
+  draftVersion: __t.u32(),
+  styleVersion: __t.u32(),
+  model: __t.string(),
+  keyId: __t.string(),
+  acknowledgeUnknown: __t.bool(),
+  payload: __t.string(),
+  refs: __t.array(__t.string()),
+  estimatedTokens: __t.u32(),
+  state: __t.string(),
+  result: __t.string(),
+  error: __t.string(),
+  applied: __t.bool(),
+  createdAt: __t.timestamp(),
+  startedAt: __t.option(__t.timestamp()),
+  finishedAt: __t.option(__t.timestamp()),
+});
+export type AgentAiRun = __Infer<typeof AgentAiRun>;
+
 export const AgentExpiry = __t.object("AgentExpiry", {
   id: __t.u64(),
   scheduledAt: __t.scheduleAt(),

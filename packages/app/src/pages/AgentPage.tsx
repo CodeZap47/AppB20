@@ -6,6 +6,7 @@ import { agentStyleCandidates, simulateHelp, simulateReview, type AgentStyleCand
 import type { AgentOriginalityMatch, AgentSessionRow, AgentStyleSnapshotRow } from '../data/agentTypes';
 import { Avatar } from '../components/Avatar';
 import { agentNameFor } from '../components/AgentHelpLink';
+import { AgentGeminiPanel } from '../components/AgentGeminiPanel';
 import { useAction } from '../components/useAction';
 import '../components/ai.css';
 import './agent.css';
@@ -40,8 +41,8 @@ function AgentWorkspace() {
 
   return <>
     <header className="page-header agent-header"><Avatar member={data.me} size={48} /><div><p className="eyebrow">Mi agente · 7.13</p><h1>{bot}</h1><p>Te ayuda a hacer la tarea con tu propia voz. Escribe contigo, no en tu lugar.</p></div>
-      <div className="badges"><span className={`badge ${state === 'Listo' ? 'badge--resolved' : 'badge--open'}`}>{state}</span><span className="badge badge--ai">Sin Gemini todavía</span></div></header>
-    <p className="ai-notice">Tu perfil, tus borradores y las comparaciones se guardan solo para ti. La ayuda por etapas y las sugerencias todavía se calculan sin Gemini y no usan tu clave.</p>
+      <div className="badges"><span className={`badge ${state === 'Listo' ? 'badge--resolved' : 'badge--open'}`}>{state}</span><span className="badge badge--ai">Gemini por pasos</span></div></header>
+    <p className="ai-notice">Tu perfil, tus borradores y las comparaciones se guardan solo para ti. Sin Gemini, la ayuda se calcula en la app sin usar tu clave. Con Gemini, cada paso se habilita aparte y siempre ves qué se enviaría antes de confirmar.</p>
 
     <section className="panel agent-premises" id="premisas" aria-labelledby="premisas-titulo"><h2 id="premisas-titulo">Premisas de {bot}</h2><p className="muted">Texto literal, versión {premises.version}. Es el mismo que recibirá Gemini como instrucción.</p>
       <div className="agent-premises__cols"><div><h3>Lo que hace {bot}</h3><ol>{premises.does.map((p) => <li key={p.number} value={p.number}>{p.text}</li>)}</ol></div>
@@ -65,6 +66,8 @@ function AgentWorkspace() {
           <ul className="cards agent-traits"><li className="card"><strong>Tono</strong><span>{style.features.tone}</span></li><li className="card"><strong>Largo de frase</strong><span>Unas {style.features.sentenceLength} palabras</span></li><li className="card"><strong>Estructura</strong><span>{style.features.structure}</span></li><li className="card"><strong>Nivel técnico</strong><span>{style.features.technical}</span></li></ul>
           {!!style.features.vocabulary.length && <><h3>Vocabulario frecuente</h3><div className="chips chips--small">{style.features.vocabulary.map((w) => <span key={w} className="chip">{w}</span>)}</div></>}
           {!!style.examples.length && <><h3>Así escribes</h3>{style.examples.map((e, i) => <blockquote key={i}>{e}</blockquote>)}</>}
+          {style.features.ai && <><h3>Resumen de {bot} con Gemini</h3><p>{style.features.ai.summary}</p>{!!style.features.ai.traits.length && <ul>{style.features.ai.traits.map((t, i) => <li key={i}>{t}</li>)}</ul>}</>}
+          {!outdated && <AgentGeminiPanel bot={bot} steps={['style']} version={style.version} />}
         </>}</section>}
 
       {tab === 'help' && <AgentHelp bot={bot} style={outdated ? undefined : style} />}
@@ -108,7 +111,7 @@ function AgentSessionView({ bot, session, style }: { bot: string; session: Agent
 
   return <>
     <div className="chips" role="tablist" aria-label="Etapas">{STAGES.map(([id, label]) => <button key={id} type="button" role="tab" className="chip" aria-selected={session.stage === id} aria-pressed={session.stage === id} disabled={action.pending} onClick={() => void save(id, session.draft)}>{label}</button>)}</div>
-    {session.stage !== 'review' ? <div className="agent-output"><p className="badges"><span className="badge badge--personal">Borrador privado</span><span className="badge badge--ai">Generado con {bot}</span></p><ul>{simulateHelp(session.stage, assignment, style?.features).map((line, i) => <li key={i}>{line}</li>)}</ul><p className="muted">Fuente: consigna «{assignment.title}», versión {assignment.version}.</p></div> : <>
+    {session.stage !== 'review' ? <div className="agent-output"><p className="badges"><span className="badge badge--personal">Borrador privado</span><span className="badge badge--ai">Generado con {bot}</span></p><ul>{simulateHelp(session.stage, assignment, style?.features).map((line, i) => <li key={i}>{line}</li>)}</ul><p className="muted">Fuente: consigna «{assignment.title}», versión {assignment.version}.</p><AgentGeminiPanel bot={bot} steps={['plan']} sessionId={session.id} version={session.draftVersion} /></div> : <>
       <label className="field"><span>Mi borrador</span><textarea rows={10} value={draft} maxLength={AGENT_LIMITS.draftChars} onChange={(e) => setDraft(e.target.value)} placeholder={`Escribe aquí tu respuesta. ${bot} la revisa, no la escribe por ti.`} /></label>
       <p className="muted">Versión {session.draftVersion} guardada {session.updatedAt.toLocaleString('es-MX')}{dirty ? ' · tienes cambios sin guardar' : ''}</p>
       <div className="agent-actions"><button type="button" disabled={!dirty || action.pending} onClick={() => void save('review', draft)}>Guardar borrador</button>
@@ -126,6 +129,7 @@ function AgentSessionView({ bot, session, style }: { bot: string; session: Agent
             {m.pairs.length ? m.pairs.map((pair, i) => <div key={i} className="agent-compare"><blockquote><span className="label">Tu texto</span>{pair.mine}</blockquote><blockquote><span className="label">Texto publicado · coincide el {Math.round(pair.ratio * 100)}% de tu oración</span>{pair.theirs}</blockquote></div>) : <p className="muted">El parecido está repartido en frases cortas; revisa el texto completo.</p>}
             <ExcludedNote excluded={m.excluded} />
             {check.acknowledged.includes(m.refKey) ? <span className="muted">Marcaste que reescribirás esta parte.</span> : <button type="button" className="secondary" disabled={action.pending} onClick={() => void action.run(() => source.acknowledgeAgentMatch({ checkId: check.id, refKey: m.refKey }))}>Reescribiré esta parte</button>}</li>)}</ul></>}</>}
+      {!dirty && !!session.draft.trim() && <AgentGeminiPanel bot={bot} steps={['review', 'originality']} sessionId={session.id} version={session.draftVersion} />}
     </>}
   </>;
 }

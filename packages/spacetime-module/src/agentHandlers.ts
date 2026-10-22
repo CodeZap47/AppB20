@@ -4,6 +4,7 @@ import { AGENT_LIMITS, AGENT_PREMISES_VERSION, applyAgentSuggestion, cleanAgentD
 import { compareWithPublished, describeStyle, proseSentences, styleFeatures } from '../../core/src/agentStyle';
 import { activeMember, expectVersion, isActive, requireText, targetVersion, type Ctx, type ViewDb } from './moduleContext';
 import { withdrawn } from './delivery2Handlers';
+import { purgeAgentAiRuns } from './agentAiHandlers';
 
 /** Agente personal (7.13, AG-3): estilo, sesiones, sugerencias y originalidad, siempre del dueño. */
 type Person = Ctx['sender'];
@@ -149,6 +150,7 @@ function deleteSession(db: Ctx['db'], sessionId: bigint) {
   for (const row of [...db.agentSuggestion.sessionId.filter(sessionId)]) db.agentSuggestion.id.delete(row.id);
   for (const row of [...db.agentOriginalityCheck.sessionId.filter(sessionId)]) db.agentOriginalityCheck.id.delete(row.id);
   for (const row of [...db.agentExpiry.sessionId.filter(sessionId)]) db.agentExpiry.id.delete(row.id);
+  purgeAgentAiRuns(db, { sessionId });
   db.agentSession.id.delete(sessionId);
 }
 
@@ -160,6 +162,7 @@ export function purgeAgentOwner(db: Ctx['db'], owner: Person) {
   for (const row of [...db.agentSession.owner.filter(owner)]) deleteSession(db, row.id);
   for (const row of [...db.agentStyleSource.owner.filter(owner)]) db.agentStyleSource.key.delete(row.key);
   for (const row of [...db.agentStyleSnapshot.owner.filter(owner)]) db.agentStyleSnapshot.id.delete(row.id);
+  purgeAgentAiRuns(db, { owner });
   db.agentProfile.owner.delete(owner);
 }
 export function disableAgent(ctx: Ctx) { activeMember(ctx); purgeAgentOwner(ctx.db, ctx.sender); }
@@ -169,6 +172,7 @@ export function purgeAgentSource(db: Ctx['db'], kind: string, id: bigint) {
   if (!['work', 'evidence', 'note'].includes(kind) || !db.agentStyleSource) return;
   for (const row of [...db.agentStyleSource.iter()]) if (row.kind === kind && row.refId === id) db.agentStyleSource.key.delete(row.key);
   const refKey = `${kind}:${id}`;
+  purgeAgentAiRuns(db, { refKey });
   for (const row of [...db.agentOriginalityCheck.iter()]) {
     const matches = JSON.parse(row.matches) as { refKey: string }[];
     if (matches.some((m) => m.refKey === refKey)) db.agentOriginalityCheck.id.update({ ...row, matches: JSON.stringify(matches.filter((m) => m.refKey !== refKey)), acknowledged: row.acknowledged.filter((key) => key !== refKey) });

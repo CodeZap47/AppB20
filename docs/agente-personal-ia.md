@@ -1,6 +1,6 @@
 # Agente personal de escritura (NOMBRE_BOT): alcance y plan
 
-Estado: **AG-1, AG-2 y AG-3 implementados localmente (interfaz, lógica en `@b20/core` y datos en SpacetimeDB; sin publicar en Maincloud)**; AG-4 y AG-5 pendientes. Fecha de planeación: 21 de octubre de 2026.
+Estado: **AG-1 a AG-4 implementados localmente (interfaz, lógica en `@b20/core`, datos en SpacetimeDB y pasos con Gemini apagados por omisión; sin publicar en Maincloud ni en el Worker)**; AG-5 pendiente. Fecha de planeación: 21 de octubre de 2026.
 Se propone como función adicional **7.13** de la [definición del proyecto](definicion-del-proyecto.md)
 y aplica sin excepciones las reglas de BYOK, consentimiento, costos y revisión de la sección 4
 y de [Gemini con clave personal](gemini-byok.md).
@@ -191,24 +191,49 @@ publicar el módulo en Maincloud con `--delete-data=never`; las tablas son aditi
 
 ### AG-4. Sincronización gradual con Gemini BYOK
 
-Reutiliza claves cifradas, presupuesto, reservas e idempotencia de `apps/api/src/ai/`.
-Nuevas rutas en `agentRoutes.ts` y proveedor en `agentProvider.ts`, siempre con salida JSON
-estructurada y `AGENT_PREMISES` como instrucción de sistema.
+**Implementado localmente el 21 de octubre de 2026.** Ningún paso está activo: `AGENT_AI_STEPS`
+está vacío en `wrangler.jsonc` y `wrangler.ai.jsonc`. Falta la prueba real con una clave personal,
+que hace su titular paso por paso, y publicar el módulo y el Worker.
 
-1. **AG-4a Perfil de estilo:** Gemini resume el estilo a partir de fragmentos propios y las
-   métricas de AG-2. No hay *fine-tuning*: el «entrenamiento» es un perfil versionado más
-   ejemplos breves elegidos (pocos *shots*) guardados en `agent_style_snapshot`.
-2. **AG-4b Entender y planear:** explicación de consigna, enfoque y esquema con citas a la
-   consigna y a las notas seleccionadas.
-3. **AG-4c Revisión del borrador:** sugerencias puntuales sobre el texto que escribió la
-   persona, con el estilo del perfil; se limita la proporción de texto nuevo por sugerencia.
-4. **AG-4d Originalidad asistida:** sobre la comparación determinista de AG-2, Gemini explica
-   *por qué* dos fragmentos coinciden (misma fuente, misma estructura) y pregunta qué idea
-   propia podría desarrollar la persona. No devuelve una versión parafraseada.
+Reutiliza las claves cifradas, el consentimiento, el presupuesto diario y por hora, las reservas
+y la idempotencia de Gemini BYOK. El flujo es el mismo que el de Guías:
 
-Cada paso entra apagado tras su propio flag (`AGENT_AI_STEP`), con pruebas en Miniflare con
-el proveedor interceptado, y se habilita uno a la vez después de validarlo con una clave
-personal real por acción expresa de su titular.
+1. **Vista previa** (`POST /ai/agent/preview`): SpacetimeDB arma el payload con datos del dueño y
+   devuelve exactamente lo que se enviaría, la instrucción de sistema y los tokens estimados. No
+   guarda, no reserva y no llama a Gemini; funciona aunque el paso esté apagado, también en la demo.
+2. **Autorizar** (`POST /ai/agent/step`, acción `authorize`): exige confirmación expresa,
+   consentimiento BYOK vigente, clave, premisas aceptadas y un solo envío a la vez. Guarda el
+   payload en `agent_ai_run`. Si el material cambió desde la vista previa (`expectedTokens`), se
+   rechaza.
+3. **Reclamar** (solo el servicio de IA): vuelve a comprobar membresía, clave, versión del estilo
+   y del borrador; reserva presupuesto y entrega la clave cifrada.
+4. **Terminar** (solo el servicio): `validateAgentAiResult` revisa la respuesta contra el payload
+   enviado y la descarta completa si incumple una premisa. Un envío sin respuesta en 90 s queda
+   incierto y nunca se reenvía solo; el siguiente exige aceptar el posible consumo adicional.
+
+La instrucción de sistema es `agentAiSystemInstruction`: las trece premisas literales con
+`NOMBRE` y `NOMBRE_BOT` sustituidos, más las reglas del paso. El Worker no la reescribe.
+
+| Paso | Envía | Resultado y validación | Se aplica |
+| --- | --- | --- | --- |
+| `style` (AG-4a) | Métricas de AG-2 y hasta 12 ejemplos propios. | Resumen y rasgos. Se rechaza si copia los ejemplos en vez de describirlos. | Se añade como `ai` al perfil de estilo vigente. |
+| `plan` (AG-4b) | Lo anterior y la consigna. | Explicación, enfoque, esquema y preguntas en puntos breves. | Solo se muestra; no toca el borrador. |
+| `review` (AG-4c) | Lo anterior y el borrador. | Sugerencias cuyo `original` existe en el borrador; ninguna agrega más de 160 caracteres o la mitad de lo que reemplaza. | Como sugerencias «generado con NOMBRE_BOT» que se aceptan o rechazan una por una. |
+| `originality` (AG-4d) | Lo anterior y las coincidencias no marcadas de la última comparación del borrador actual. | Por qué se parecen y una pregunta. Se rechaza lo que repita el fragmento propio (paráfrasis encubierta, premisa 10). | Solo se muestra. |
+
+Si el borrador o el perfil cambian mientras Gemini responde, el resultado se conserva para leerlo,
+pero no se aplica.
+
+- **Código:** `packages/core/src/agentAi.ts`; `packages/spacetime-module/src/agentAiHandlers.ts`
+  (procedimiento `agent_ai`, tabla privada `agent_ai_run`); `apps/api/src/ai/agentRoutes.ts` y
+  `agentProvider.ts`; cliente `agentAiClient.ts` y panel `AgentGeminiPanel.tsx`.
+- **Retención:** los envíos se borran con su sesión, al desactivar el agente o dar de baja al
+  miembro y al purgar una fuente que contienen (`refs`). Se conservan los 30 más recientes.
+- **Pruebas:** `agentAi.test.ts` en core y en el módulo, `agentRoutes.test.ts` con el proveedor
+  simulado y la vista previa en `AgentPage.test.tsx`. Pendiente: ampliar
+  `scripts/smoke-spacetime-agent.mjs` con un servidor persistente (requiere Node 22).
+- **Activar un paso:** añadirlo a `AGENT_AI_STEPS` (por ejemplo `style`), desplegar el Worker y
+  probarlo con una clave personal real por acción expresa de su titular antes de sumar el siguiente.
 
 ### AG-5. Plug-in para subir tareas — **PENDIENTE**
 

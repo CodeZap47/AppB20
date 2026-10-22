@@ -6,7 +6,7 @@ export interface GuideProviderInput { apiKey: string; model: string; preparation
 export interface GuideProvider { generate(input: GuideProviderInput): Promise<AiProviderResponse> }
 const OUTPUT_BYTES = 256 * 1024;
 /** Bound the SDK's transport before it parses an untrusted provider response. */
-async function boundedFetch(url: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+export async function boundedFetch(url: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const response = await fetch(url, { ...init, redirect: 'manual' });
   if (response.status >= 300 && response.status < 400) { await response.body?.cancel(); throw new AiProviderError('unknown', true, 'No se pudo confirmar el envío. Consulta su estado antes de reintentar.'); }
   const reader = response.body?.getReader(); if (!reader) return response;

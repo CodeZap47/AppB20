@@ -12,6 +12,7 @@ import { Identity, Timestamp } from 'spacetimedb';
 import type { DbConnection } from '../module_bindings';
 import type { ResourceTargetKind } from './types';
 import type { GuideAiActions } from './guideAiTypes';
+import type { AgentAiActions } from './agentTypes';
 import type { ExamActions } from './examTypes';
 import type { ResourceTransport } from './resourceTransport';
 import { StickerTransport } from './stickerTransport';
@@ -39,7 +40,7 @@ const teachingUpdate = (input: SaveTeachingPracticeInput) => ({
 });
 
 /** Los reducers confirman los permisos en el servidor; nunca se modifica la caché de forma optimista. */
-export function createSpacetimeActions(getConnection: () => DbConnection, identity: () => string, files?: ResourceTransport): Omit<Actions, keyof GuideAiActions | keyof ExamActions> {
+export function createSpacetimeActions(getConnection: () => DbConnection, identity: () => string, files?: ResourceTransport): Omit<Actions, keyof GuideAiActions | keyof ExamActions | keyof AgentAiActions> {
   const stickers = new StickerTransport(getConnection, identity);
   let queue = Promise.resolve();
   function serial<T>(task: () => Promise<T>): Promise<T> {

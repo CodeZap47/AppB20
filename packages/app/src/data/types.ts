@@ -27,7 +27,7 @@ import type { PresentationActions, PresentationsSnapshot } from './presentationT
 import type { PracticeActions, PracticeSnapshot } from './practiceTypes';
 import type { Community4Actions, Community4Snapshot } from './community4Types';
 import type { FeedActions, FeedSnapshot } from './feedTypes';
-import type { AgentActions, AgentSnapshot } from './agentTypes';
+import type { AgentActions, AgentAiActions, AgentSnapshot } from './agentTypes';
 export type * from './practiceTypes';
 export type * from './community4Types';
 export type * from './feedTypes';
@@ -832,7 +832,7 @@ export interface PublishWorkInput {
 export type MaybePromise<T> = T | Promise<T>;
 
 /** Acciones: corresponden uno a uno con los reducers del módulo. */
-export interface Actions extends Delivery2Actions, StudyRoomActions, NotificationActions, TrashActions, PresentationActions, PracticeActions, Community4Actions, FeedActions, GuideAiActions, ExamActions, AgentActions {
+export interface Actions extends Delivery2Actions, StudyRoomActions, NotificationActions, TrashActions, PresentationActions, PracticeActions, Community4Actions, FeedActions, GuideAiActions, ExamActions, AgentActions, AgentAiActions {
   replaceSpacedCardSource(cardId: Id, expectedVersion: number, sourceKind: SpacedSourceKind, sourceId: Id): MaybePromise<void>;
   saveSpacedCollection(input: SpacedCollectionInput): MaybePromise<Id>;
   publishSpacedCollection(collectionId: Id, expectedVersion: number): MaybePromise<void>;
