@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath } from 'node:url';
 import { VitePWA } from 'vite-plugin-pwa';
-import { parsePagesOrigin } from './src/canonicalOrigin.ts';
+import { parsePagesOrigin, parseWebOrigin } from './src/canonicalOrigin.ts';
 
 // `--mode capacitor` genera la misma app para el APK Android, sin service worker de PWA:
 // en el APK se conserva la bandeja; el push nativo sigue pendiente.
@@ -19,8 +19,11 @@ export default defineConfig(({ mode }) => {
         throw new Error(`Falta ${key}. Configura las variables del build de Pages o copia .env.pages.example a .env.pages.`);
       }
     }
-    if (!parsePagesOrigin(env.VITE_WEB_ORIGIN)) {
-      throw new Error('VITE_WEB_ORIGIN debe ser el origen estable https://<proyecto>.pages.dev, sin ruta, parámetros ni credenciales.');
+    if (!parseWebOrigin(env.VITE_WEB_ORIGIN)) {
+      throw new Error('VITE_WEB_ORIGIN debe ser un origen HTTPS estable, como https://b20.mx, sin ruta, parámetros ni credenciales.');
+    }
+    if (env.VITE_PAGES_ORIGIN?.trim() ? !parsePagesOrigin(env.VITE_PAGES_ORIGIN) : !parsePagesOrigin(env.VITE_WEB_ORIGIN)) {
+      throw new Error('VITE_PAGES_ORIGIN debe ser https://<proyecto>.pages.dev cuando VITE_WEB_ORIGIN es un dominio propio.');
     }
     // Evita publicar accidentalmente una web que dependa de la computadora del desarrollador.
     const urls = [

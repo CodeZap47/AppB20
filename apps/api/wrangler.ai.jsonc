@@ -14,7 +14,7 @@
     "head_sampling_rate": 1
   },
   "vars": {
-    "CORS_ORIGINS": "https://app-b20.pages.dev,http://localhost:5173,capacitor://localhost,https://localhost",
+    "CORS_ORIGINS": "https://b20.mx,https://app-b20.pages.dev,http://localhost:5173,capacitor://localhost,https://localhost",
     "OIDC_ISSUER": "https://auth.spacetimedb.com/oidc",
     "OIDC_AUDIENCE": "client_034jL0AHYYQ1bps8SupHU0",
     "OIDC_JWKS_URI": "https://auth.spacetimedb.com/oidc/jwks",
@@ -26,10 +26,10 @@
     "AGENT_AI_STEPS": "style",
     "NOTIFICATIONS_ENABLED": "true",
     "VAPID_PUBLIC_KEY": "BDcU2DLr4bYXsOFyDIR5GJIPFDP8lg0UTdSUg4T7HhSvrO0fIK_YEuXE1cxySQIjYANBXvGBxmL-r6t4bN6nBBo",
-    "VAPID_SUBJECT": "https://app-b20.pages.dev",
+    "VAPID_SUBJECT": "https://b20.mx",
     "INVITATION_EMAILS_ENABLED": "false",
     "INVITATION_EMAIL_FROM": "",
-    "APP_URL": "https://app-b20.pages.dev"
+    "APP_URL": "https://b20.mx"
   },
   "send_email": [
     {

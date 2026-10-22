@@ -29,7 +29,7 @@ las entregas, calificaciones y asistencia oficiales siguen en los sistemas de la
 El proyecto tiene una interfaz compartida, autenticación con SpacetimeAuth y una implementación
 de datos y archivos privados en SpacetimeDB. Las comprobaciones automatizadas incluyen tipos,
 pruebas, compilaciones y transferencia de archivos contra un servidor local persistente.
-La [web publicada](https://app-b20.pages.dev/) reúne la cuarta entrega, Exámenes EX-2,
+La [web publicada](https://b20.mx/) reúne la cuarta entrega, Exámenes EX-2,
 Guías y la navegación y mensajería de Untitled UI. La [sincronización del 21 de octubre
 de 2026](docs/sincronizacion-2026-10-21.md) registra la versión, las pruebas y la conservación
 de los datos. Los recorridos de aceptación con compañeros siguen pendientes.

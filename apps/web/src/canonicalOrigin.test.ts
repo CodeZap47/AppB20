@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalPagesUrl, parsePagesOrigin } from './canonicalOrigin';
+import { canonicalPagesUrl, parsePagesOrigin, parseWebOrigin } from './canonicalOrigin';
 
 const canonical = 'https://app-b20.pages.dev';
 const alias = 'https://af0dd1ec.app-b20.pages.dev';
@@ -49,5 +49,33 @@ describe('origen estable de Pages', () => {
     '/#/m/notas?code=secret&state=private', '/#%61ccess_token=secret', '/?CODE=secret',
   ])('reinicia en el origen estable sin transferir la respuesta OAuth: %s', (path) => {
     expect(canonicalPagesUrl(`${alias}${path}`, canonical)).toBe(`${canonical}/?auth_restart=1`);
+  });
+});
+
+describe('dominio propio sobre Pages', () => {
+  const custom = 'https://b20.mx';
+  const pages = 'https://app-b20.pages.dev';
+  it('lleva el subdominio de Pages y sus aliases al dominio propio', () => {
+    for (const origin of [pages, alias]) {
+      expect(canonicalPagesUrl(`${origin}/?demo#/m/tareas/27`, custom, pages)).toBe(`${custom}/?demo#/m/tareas/27`);
+    }
+  });
+  it('reinicia el acceso sin transferir la respuesta OAuth', () => {
+    expect(canonicalPagesUrl(`${pages}/auth/callback?code=secret`, custom, pages)).toBe(`${custom}/?auth_restart=1`);
+  });
+  it.each([
+    `${custom}/auth/callback?code=abc`, 'https://www.b20.mx/', 'https://other.pages.dev/',
+    'https://two.levels.app-b20.pages.dev/', 'http://app-b20.pages.dev/', 'http://localhost:5173/',
+  ])('no redirige el dominio propio ni hosts ajenos: %s', (href) => {
+    expect(canonicalPagesUrl(href, custom, pages)).toBeUndefined();
+  });
+  it.each(['https://b20.mx/ruta', 'http://b20.mx', 'https://localhost', 'https://b20.mx:8443'])(
+    'descarta un dominio propio que no sea un origen exacto: %s', (value) => {
+      expect(parseWebOrigin(value)).toBeUndefined();
+      expect(canonicalPagesUrl(`${pages}/`, value, pages)).toBeUndefined();
+    });
+  it('exige un origen de Pages válido junto al dominio propio', () => {
+    expect(canonicalPagesUrl(`${pages}/`, custom, '')).toBeUndefined();
+    expect(canonicalPagesUrl(`${pages}/`, custom, 'https://b20.mx')).toBeUndefined();
   });
 });

@@ -7,7 +7,7 @@
   "workers_dev": true,
   "observability": { "enabled": true, "head_sampling_rate": 1 },
   "vars": {
-    "CORS_ORIGINS": "https://app-b20.pages.dev,http://localhost:5173,capacitor://localhost,https://localhost",
+    "CORS_ORIGINS": "https://b20.mx,https://app-b20.pages.dev,http://localhost:5173,capacitor://localhost,https://localhost",
     "OIDC_ISSUER": "https://auth.spacetimedb.com/oidc",
     "OIDC_AUDIENCE": "client_034jL0AHYYQ1bps8SupHU0",
     "OIDC_JWKS_URI": "https://auth.spacetimedb.com/oidc/jwks",

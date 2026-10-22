@@ -1,19 +1,29 @@
 const pagesProjectHost = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.pages\.dev$/;
+const publicHost = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 const pagesAlias = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const oauthParameters = new Set([
   'code', 'state', 'session_state', 'access_token', 'id_token', 'refresh_token',
   'error', 'error_description', 'error_uri', 'iss',
 ]);
 
-/** Únicamente admite el origen estable de un proyecto Pages, nunca una URL de retorno arbitraria. */
-export function parsePagesOrigin(value: string | undefined): URL | undefined {
+function parseExactOrigin(value: string | undefined, host: RegExp): URL | undefined {
   if (!value?.trim()) return undefined;
   try {
     const url = new URL(value.trim());
-    if (url.protocol !== 'https:' || !pagesProjectHost.test(url.hostname) || url.port ||
+    if (url.protocol !== 'https:' || !host.test(url.hostname) || url.port ||
         url.username || url.password || url.pathname !== '/' || url.search || url.hash) return undefined;
     return url;
   } catch { return undefined; }
+}
+
+/** Únicamente admite el origen estable de un proyecto Pages, nunca una URL de retorno arbitraria. */
+export function parsePagesOrigin(value: string | undefined): URL | undefined {
+  return parseExactOrigin(value, pagesProjectHost);
+}
+
+/** Origen público de la web: el de Pages o un dominio propio como https://b20.mx. */
+export function parseWebOrigin(value: string | undefined): URL | undefined {
+  return parseExactOrigin(value, publicHost);
 }
 
 export function containsOAuthResponse(url: URL): boolean {
@@ -27,18 +37,26 @@ export function containsOAuthResponse(url: URL): boolean {
 }
 
 /**
- * Los aliases de compilaciones inician el acceso en el dominio estable, donde vive el estado PKCE.
+ * Los aliases de compilaciones, y el subdominio de Pages cuando hay dominio propio, inician el
+ * acceso en el dominio estable, donde vive el estado PKCE.
  * No se transfieren respuestas OAuth de otro origen: se reinicia el acceso sin sus datos.
+ * Sin `configuredPagesOrigin`, el origen estable es el propio subdominio de Pages.
  */
-export function canonicalPagesUrl(currentHref: string, configuredOrigin: string | undefined): string | undefined {
-  const canonical = parsePagesOrigin(configuredOrigin);
-  if (!canonical) return undefined;
+export function canonicalPagesUrl(
+  currentHref: string, configuredOrigin: string | undefined, configuredPagesOrigin?: string,
+): string | undefined {
+  const canonical = parseWebOrigin(configuredOrigin);
+  const pages = configuredPagesOrigin === undefined ? parsePagesOrigin(configuredOrigin) : parsePagesOrigin(configuredPagesOrigin);
+  if (!canonical || !pages) return undefined;
   let current: URL;
   try { current = new URL(currentHref); } catch { return undefined; }
   if (current.protocol !== 'https:' || current.port || current.username || current.password ||
-      current.origin === canonical.origin || !current.hostname.endsWith(`.${canonical.hostname}`)) return undefined;
-  const alias = current.hostname.slice(0, -(canonical.hostname.length + 1));
-  if (!pagesAlias.test(alias)) return undefined;
+      current.origin === canonical.origin) return undefined;
+  if (current.hostname !== pages.hostname) {
+    if (!current.hostname.endsWith(`.${pages.hostname}`)) return undefined;
+    const alias = current.hostname.slice(0, -(pages.hostname.length + 1));
+    if (!pagesAlias.test(alias)) return undefined;
+  }
   if (containsOAuthResponse(current)) {
     canonical.searchParams.set('auth_restart', '1');
     return canonical.href;

@@ -6,7 +6,7 @@ import { canonicalPagesUrl, containsOAuthResponse } from './canonicalOrigin';
 
 const platform: Platform = import.meta.env.MODE === 'capacitor' ? 'android' : 'web';
 const canonicalUrl = import.meta.env.MODE === 'pages'
-  ? canonicalPagesUrl(window.location.href, import.meta.env.VITE_WEB_ORIGIN)
+  ? canonicalPagesUrl(window.location.href, import.meta.env.VITE_WEB_ORIGIN, import.meta.env.VITE_PAGES_ORIGIN)
   : undefined;
 
 if (canonicalUrl) {

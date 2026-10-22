@@ -3,6 +3,7 @@
 interface ImportMetaEnv {
   readonly VITE_DATA_MODE?: 'demo' | 'spacetime';
   readonly VITE_WEB_ORIGIN?: string;
+  readonly VITE_PAGES_ORIGIN?: string;
   readonly VITE_SPACETIME_URI?: string;
   readonly VITE_SPACETIME_DB?: string;
   readonly VITE_API_URL?: string;
