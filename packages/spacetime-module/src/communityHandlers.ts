@@ -1,3 +1,4 @@
+import { memberIdentityFor } from './authIdentity';
 import { SenderError } from 'spacetimedb/server';
 import { activeMember, bumpMaterial, expectVersion, log, requireSubject, saveTargetBaseline, targetVersion, type Ctx } from './moduleContext';
 import { canReadTarget, contentOwner } from './delivery2Handlers';
@@ -20,14 +21,14 @@ function isOwnProfileImage(ctx: Ctx, fileId: string, kind: 'profile' | 'profile_
   const file = ctx.db.resourceFile.id.find(fileId);
   const upload = ctx.db.resourceUpload.id.find(fileId);
   return !!file && file.targetKind === kind && file.targetId === profileId && file.removedAt === undefined
-    && file.uploadedBy.isEqual(ctx.sender) && !!upload && upload.state === 'ready'
+    && file.uploadedBy.isEqual(memberIdentityFor(ctx)) && !!upload && upload.state === 'ready'
     && file.size > 0n && file.size <= 5n * 1024n * 1024n
     && ['image/png', 'image/jpeg', 'image/webp'].includes(file.contentType);
 }
 
 export function saveMemberProfile(ctx: Ctx, input: ProfileInput) {
   activeMember(ctx);
-  const current = ctx.db.memberProfile.memberId.find(ctx.sender);
+  const current = ctx.db.memberProfile.memberId.find(memberIdentityFor(ctx));
   expectVersion(current?.version ?? 0, input.expectedVersion);
   const list = (values: string[], label: string) => {
     const cleaned = [...new Set(values.map((value) => optionalText(value, label, 100)).filter(Boolean))];
@@ -52,7 +53,7 @@ export function saveMemberProfile(ctx: Ctx, input: ProfileInput) {
     throw new SenderError('La foto debe ser una imagen privada activa de este perfil.');
   }
   const row = {
-    id: current?.id ?? 0n, memberId: ctx.sender,
+    id: current?.id ?? 0n, memberId: memberIdentityFor(ctx),
     preferredName: optionalText(input.preferredName, 'El nombre preferido', 80),
     bio: optionalText(input.bio, 'La presentación', 1000),
     interests: list(input.interests, 'Intereses'), learningGoals: optionalText(input.learningGoals, 'Los objetivos de aprendizaje', 1000),
@@ -74,7 +75,7 @@ const COVER_PRESETS = ['lavanda', 'oceano', 'atardecer', 'menta', 'durazno', 'au
 /** Portada del perfil propio: un degradado de la lista y, opcionalmente, una imagen subida como `profile_cover`. */
 export function saveProfileCover(ctx: Ctx, input: { expectedVersion: number; preset: string; fileId?: string }) {
   activeMember(ctx);
-  const profile = ctx.db.memberProfile.memberId.find(ctx.sender);
+  const profile = ctx.db.memberProfile.memberId.find(memberIdentityFor(ctx));
   if (!profile) throw new SenderError('Guarda tu presentación antes de elegir una portada.');
   expectVersion(profile.version, input.expectedVersion);
   if (!COVER_PRESETS.includes(input.preset)) throw new SenderError('Elige una de las portadas disponibles.');
@@ -97,9 +98,9 @@ export function withdrawContent(ctx: Ctx, input: { kind: string; targetId: bigin
   const authors = input.kind === 'work'
     ? [...ctx.db.workAuthor.workId.filter(input.targetId)].map((row) => row.author)
     : [owner];
-  const own = authors.some((author) => author.isEqual(ctx.sender));
+  const own = authors.some((author) => author.isEqual(memberIdentityFor(ctx)));
   if (!input.withdrawn) assertRetentionReadable(ctx, input.kind, input.targetId);
-  if (!own && !canReadTarget(ctx.db, ctx.sender, input.kind, input.targetId)) throw new SenderError('El contenido no está disponible.');
+  if (!own && !canReadTarget(ctx.db, memberIdentityFor(ctx), input.kind, input.targetId)) throw new SenderError('El contenido no está disponible.');
   if (!own && !member.isCreator) throw new SenderError('Solo su autor o un administrador pueden retirar este contenido.');
   // La membresía de administración no concede acceso a apuntes personales ajenos.
   if (input.kind === 'note' && ctx.db.note.id.find(input.targetId)?.visibility === 'personal' && !own) {
@@ -118,11 +119,11 @@ export function withdrawContent(ctx: Ctx, input: { kind: string; targetId: bigin
     if (!moderation && !own) throw new SenderError('Solo sus autores pueden restaurar este aporte.');
   }
   saveTargetBaseline(ctx, input.kind, input.targetId);
-  const actorRole = !own ? 'moderator' : owner.isEqual(ctx.sender) ? 'author' : 'coauthor';
+  const actorRole = !own ? 'moderator' : owner.isEqual(memberIdentityFor(ctx)) ? 'author' : 'coauthor';
   if (!input.withdrawn) restoreRetention(ctx, input.kind, input.targetId, actorRole);
   const row = { key, kind: input.kind, targetId: input.targetId,
     withdrawnAt: input.withdrawn ? ctx.timestamp : undefined,
-    withdrawnBy: input.withdrawn ? ctx.sender : undefined,
+    withdrawnBy: input.withdrawn ? memberIdentityFor(ctx) : undefined,
     reason: input.withdrawn ? reason : '' };
   if (previous) ctx.db.contentStatus.key.update(row); else ctx.db.contentStatus.insert(row);
   if (input.withdrawn) scheduleRetention(ctx, input.kind, input.targetId, actorRole);

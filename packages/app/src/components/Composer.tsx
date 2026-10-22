@@ -87,6 +87,7 @@ export function Composer({
   mentionMemberIds,
   disabled = false,
   retryingAttachments = false,
+  onTyping,
 }: {
   placeholder: string;
   /** Resuelve `true` si se envió; si no, el texto se queda en el campo. */
@@ -102,6 +103,7 @@ export function Composer({
   mentionMemberIds?: Id[];
   disabled?: boolean;
   retryingAttachments?: boolean;
+  onTyping?: (typing: boolean) => void;
 }) {
   const data = useSnapshot();
   const navigate = useNavigate();
@@ -141,6 +143,7 @@ export function Composer({
   }, [editing?.id, mode?.kind, mode?.message.id]);
 
   const update = (value: string) => {
+    onTyping?.(Boolean(value.trim()) && !disabled);
     setText(value);
     setDismissed(false);
     setActive(0);
@@ -423,6 +426,7 @@ export function Composer({
           placeholder={placeholder}
           value={text}
           onChange={(e) => update(e.target.value)}
+          onBlur={() => onTyping?.(false)}
           onKeyDown={onKeyDown}
           maxLength={maxLength}
           disabled={disabled || sending || retryingAttachments}

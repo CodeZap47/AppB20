@@ -1,3 +1,4 @@
+import { memberIdentityFor } from './authIdentity';
 import { SenderError } from 'spacetimedb/server';
 import { ScheduleAt, Timestamp } from 'spacetimedb';
 import { retentionDeadline, retentionExpired } from '../../core/src/retention';
@@ -77,7 +78,7 @@ function otherServiceIdentity(ctx: Ctx, identity: Ctx['sender']) {
 }
 export function setMaintenanceService(ctx: Ctx, input: { identity: Ctx['sender'] }) {
   activeMember(ctx);
-  if (!ctx.db.appConfig.id.find(0)?.owner.isEqual(ctx.sender)) throw new SenderError('Solo el propietario configura el mantenimiento.');
+  if (!ctx.db.appConfig.id.find(0)?.owner.isEqual(memberIdentityFor(ctx))) throw new SenderError('Solo el propietario configura el mantenimiento.');
   if (ctx.db.member.identity.find(input.identity)) throw new SenderError('Usa una identidad dedicada de mantenimiento, separada de los integrantes.');
   if (otherServiceIdentity(ctx, input.identity)) {
     throw new SenderError('La identidad de mantenimiento debe ser diferente de los otros servicios.');
@@ -86,12 +87,12 @@ export function setMaintenanceService(ctx: Ctx, input: { identity: Ctx['sender']
   if (ctx.db.maintenanceService.id.find(0)) ctx.db.maintenanceService.id.update(row); else ctx.db.maintenanceService.insert(row);
 }
 export function isMaintenanceService(ctx: Ctx) {
-  if (ctx.sender.isEqual(ctx.identity)) return true;
-  if (ctx.db.member.identity.find(ctx.sender) || otherServiceIdentity(ctx, ctx.sender)) return false;
+  if (memberIdentityFor(ctx).isEqual(ctx.identity)) return true;
+  if (ctx.db.member.identity.find(memberIdentityFor(ctx)) || otherServiceIdentity(ctx, memberIdentityFor(ctx))) return false;
   const configured = ctx.db.maintenanceService.id.find(0)?.identity;
   const env = ctx.env.B20_MAINTENANCE_IDENTITY?.trim().replace(/^0x/i, '').toLowerCase();
-  return configured?.isEqual(ctx.sender) === true
-    || !!env && env === ctx.sender.toHexString().replace(/^0x/i, '').toLowerCase();
+  return configured?.isEqual(memberIdentityFor(ctx)) === true
+    || !!env && env === memberIdentityFor(ctx).toHexString().replace(/^0x/i, '').toLowerCase();
 }
 export function assertMaintenance(ctx: Ctx) {
   if (!isMaintenanceService(ctx)) {
@@ -248,7 +249,7 @@ export function purgeDue(ctx: Ctx, input: { batchSize: number }) {
   return { processed, remaining: pendingDue + legacyRemaining };
 }
 export function expireContent(ctx: Ctx, input: { key: string; generation: number }) {
-  if (!ctx.sender.isEqual(ctx.identity)) throw new SenderError('Solo el programador interno puede vencer el contenido.');
+  if (!memberIdentityFor(ctx).isEqual(ctx.identity)) throw new SenderError('Solo el programador interno puede vencer el contenido.');
   const row = ctx.db.contentRetention.key.find(input.key);
   if (row?.generation === input.generation) purgeOne(ctx, row);
 }

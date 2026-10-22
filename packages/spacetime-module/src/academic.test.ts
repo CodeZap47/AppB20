@@ -512,11 +512,11 @@ describe('Archivos: autorización, atestación del servicio e historial', () => 
     expect(my_progress(ctx)).toEqual([]);
     expect(work_revisions(ctx)).toEqual([]);
     expect(resource_files(ctx)).toEqual([]);
-    expect(() => set_progress(ctx, { targetKind: 'assignment', targetId: 20n, status: 'done' })).toThrow('SpacetimeAuth');
-    expect(() => save_work_version(ctx, workInput)).toThrow('SpacetimeAuth');
-    expect(() => get_file_download_access(proc, { fileId: 'legacy:8' })).toThrow('SpacetimeAuth');
+    expect(() => set_progress(ctx, { targetKind: 'assignment', targetId: 20n, status: 'done' })).toThrow('Inicia sesión');
+    expect(() => save_work_version(ctx, workInput)).toThrow('Inicia sesión');
+    expect(() => get_file_download_access(proc, { fileId: 'legacy:8' })).toThrow('Inicia sesión');
     as(person('f'));
-    expect(() => on_connect(ctx, {})).toThrow('SpacetimeAuth');
+    expect(() => on_connect(ctx, {})).toThrow('Inicia sesión');
   });
 });
 

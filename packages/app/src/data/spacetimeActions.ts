@@ -109,6 +109,8 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
   };
 
   return {
+    setTyping: (scope, conversationId, typing) => getConnection().reducers.setTyping({ scope, conversationId, typing }),
+    completeOnboarding: () => getConnection().reducers.completeOnboarding({}),
     ...createPracticeActions(getConnection, identity),
     ...createCommunity4Actions(getConnection),
     ...createFeedActions(getConnection),

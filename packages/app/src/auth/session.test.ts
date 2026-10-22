@@ -83,6 +83,6 @@ describe('estado de sesión OIDC', () => {
     store.signOut();
     await Promise.resolve();
     expect(store.token).toBeUndefined();
-    expect(store.getSnapshot()).toMatchObject({ status: 'signedOut', error: expect.stringContaining('SpacetimeAuth') });
+    expect(store.getSnapshot()).toMatchObject({ status: 'signedOut', error: expect.stringContaining('proveedor') });
   });
 });

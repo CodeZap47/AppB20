@@ -1,3 +1,4 @@
+import { memberIdentityFor } from './authIdentity';
 import { Identity, Timestamp } from 'spacetimedb';
 import { SenderError } from 'spacetimedb/server';
 import { activeMember, isActive, type Ctx, type ViewDb } from './moduleContext';
@@ -22,38 +23,38 @@ function exclusiveNotificationIdentity(ctx: Ctx, identity: Identity): boolean {
     && environmentIdentity(ctx.env.B20_MAINTENANCE_IDENTITY) !== hex(identity);
 }
 export function isNotificationService(ctx: Ctx): boolean {
-  return ctx.db.notificationServiceConfig.id.find(0)?.identity.isEqual(ctx.sender) === true && exclusiveNotificationIdentity(ctx, ctx.sender);
+  return ctx.db.notificationServiceConfig.id.find(0)?.identity.isEqual(memberIdentityFor(ctx)) === true && exclusiveNotificationIdentity(ctx, memberIdentityFor(ctx));
 }
 function service(ctx: Ctx) { if (!isNotificationService(ctx) || !ctx.db.notificationServiceConfig.id.find(0)?.enabled) throw new SenderError('El servicio de notificaciones no está habilitado.'); }
 export function preferencesFor(db: ViewDb, memberId: Identity) { return db.notificationPreference.memberId.find(memberId) ?? { ...DEFAULT_NOTIFICATION_PREFERENCES, enabledKinds: [...DEFAULT_NOTIFICATION_PREFERENCES.enabledKinds], version: 0 }; }
 export function setNotificationService(ctx: Ctx, input: { identity: Identity; enabled: boolean }) {
-  if (!ctx.db.appConfig.id.find(0)?.owner.isEqual(ctx.sender) || !exclusiveNotificationIdentity(ctx, input.identity)) throw new SenderError('Configura una identidad técnica exclusiva para las notificaciones.');
+  if (!ctx.db.appConfig.id.find(0)?.owner.isEqual(memberIdentityFor(ctx)) || !exclusiveNotificationIdentity(ctx, input.identity)) throw new SenderError('Configura una identidad técnica exclusiva para las notificaciones.');
   const row = { id: 0, ...input }; if (ctx.db.notificationServiceConfig.id.find(0)) ctx.db.notificationServiceConfig.id.update(row); else ctx.db.notificationServiceConfig.insert(row);
 }
 export function saveNotificationPreferences(ctx: Ctx, input: NotificationPreferencesInput) {
   activeMember(ctx); let fields: NotificationPreferencesInput;
   try { fields = notificationPreferences(input); } catch (error) { throw new SenderError((error as Error).message); }
-  const previous = ctx.db.notificationPreference.memberId.find(ctx.sender);
+  const previous = ctx.db.notificationPreference.memberId.find(memberIdentityFor(ctx));
   if ((input.expectedVersion ?? 0) !== (previous?.version ?? 0)) throw new SenderError('Las preferencias cambiaron. Actualiza antes de guardar.');
   const { expectedVersion: _expected, ...preferences } = fields;
-  const row = { memberId: ctx.sender, ...preferences, version: (previous?.version ?? 0) + 1, updatedAt: ctx.timestamp };
+  const row = { memberId: memberIdentityFor(ctx), ...preferences, version: (previous?.version ?? 0) + 1, updatedAt: ctx.timestamp };
   if (previous) ctx.db.notificationPreference.memberId.update(row); else ctx.db.notificationPreference.insert(row);
-  if (previous?.timeZone !== row.timeZone) ctx.db.notificationReminderCursor.memberId.delete(ctx.sender);
+  if (previous?.timeZone !== row.timeZone) ctx.db.notificationReminderCursor.memberId.delete(memberIdentityFor(ctx));
 }
 export function registerPushInstallation(ctx: Ctx, input: { id: string; label: string; endpoint: string; p256dh: string; auth: string }) {
   activeMember(ctx);
   if (!UUID.test(input.id) || !validPushKeys(input.p256dh, input.auth)) throw new SenderError('Suscripción push inválida.');
   try { validatePushEndpointText(input.endpoint); } catch (error) { throw new SenderError((error as Error).message); }
   const previous = ctx.db.pushInstallation.id.find(input.id);
-  if (previous && !previous.memberId.isEqual(ctx.sender)) throw new SenderError('La instalación no está disponible.');
-  if (!previous?.enabled && [...ctx.db.pushInstallation.memberId.filter(ctx.sender)].filter((row) => row.enabled).length >= 5) throw new SenderError('El máximo es de cinco instalaciones activas por cuenta.');
-  if ([...ctx.db.pushInstallation.iter()].some((row) => row.endpoint === input.endpoint && !row.memberId.isEqual(ctx.sender) && row.enabled)) throw new SenderError('Elimina la suscripción anterior de esta instalación antes de cambiar de cuenta.');
-  const row = { ...input, label: text(input.label, 80), memberId: ctx.sender, enabled: true, createdAt: previous?.createdAt ?? ctx.timestamp, updatedAt: ctx.timestamp };
+  if (previous && !previous.memberId.isEqual(memberIdentityFor(ctx))) throw new SenderError('La instalación no está disponible.');
+  if (!previous?.enabled && [...ctx.db.pushInstallation.memberId.filter(memberIdentityFor(ctx))].filter((row) => row.enabled).length >= 5) throw new SenderError('El máximo es de cinco instalaciones activas por cuenta.');
+  if ([...ctx.db.pushInstallation.iter()].some((row) => row.endpoint === input.endpoint && !row.memberId.isEqual(memberIdentityFor(ctx)) && row.enabled)) throw new SenderError('Elimina la suscripción anterior de esta instalación antes de cambiar de cuenta.');
+  const row = { ...input, label: text(input.label, 80), memberId: memberIdentityFor(ctx), enabled: true, createdAt: previous?.createdAt ?? ctx.timestamp, updatedAt: ctx.timestamp };
   if (previous) ctx.db.pushInstallation.id.update(row); else ctx.db.pushInstallation.insert(row);
 }
 export function removePushInstallation(ctx: Ctx, installationId: string) {
   activeMember(ctx); const row = ctx.db.pushInstallation.id.find(installationId);
-  if (!row || !row.memberId.isEqual(ctx.sender)) throw new SenderError('La instalación no está disponible.');
+  if (!row || !row.memberId.isEqual(memberIdentityFor(ctx))) throw new SenderError('La instalación no está disponible.');
   ctx.db.pushInstallation.id.update({ ...row, enabled: false, endpoint: '', p256dh: '', auth: '', updatedAt: ctx.timestamp });
 }
 function birthdayReadable(db: ViewDb, sender: Identity, id: string) {
@@ -91,8 +92,8 @@ function eligible(db: ViewDb, row: InboxRow): boolean {
 }
 export function markNotificationRead(ctx: Ctx, notificationId?: bigint) {
   activeMember(ctx);
-  const rows = notificationId === undefined ? [...ctx.db.notification.memberId.filter(ctx.sender)] : [ctx.db.notification.id.find(notificationId)];
-  if (notificationId !== undefined && (!rows[0] || !rows[0].memberId.isEqual(ctx.sender))) throw new SenderError('La notificación no está disponible.');
+  const rows = notificationId === undefined ? [...ctx.db.notification.memberId.filter(memberIdentityFor(ctx))] : [ctx.db.notification.id.find(notificationId)];
+  if (notificationId !== undefined && (!rows[0] || !rows[0].memberId.isEqual(memberIdentityFor(ctx)))) throw new SenderError('La notificación no está disponible.');
   for (const row of rows) if (row && !row.readAt) ctx.db.notification.id.update({ ...row, readAt: ctx.timestamp });
 }
 export interface NotificationEventInput {
@@ -135,11 +136,11 @@ export function emitMessageNotifications(ctx: Ctx, scope: 'group' | 'direct' | '
   } else if (mentioned.length) emitNotificationEvent(ctx, { ...base, eventKey: `mention:${scope}:${messageId}`, kind: 'mention', recipientIds: mentioned });
 }
 export function suppressConversationNotifications(ctx: Ctx, scope: string, conversationId: string) {
-  for (const row of ctx.db.notification.memberId.filter(ctx.sender)) if (row.conversationScope === scope && row.conversationId === conversationId && !eligible(ctx.db, row) && !row.readAt) ctx.db.notification.id.update({ ...row, readAt: ctx.timestamp });
+  for (const row of ctx.db.notification.memberId.filter(memberIdentityFor(ctx))) if (row.conversationScope === scope && row.conversationId === conversationId && !eligible(ctx.db, row) && !row.readAt) ctx.db.notification.id.update({ ...row, readAt: ctx.timestamp });
 }
 export function requestNotificationTest(ctx: Ctx) {
-  activeMember(ctx); const key = `test:${hex(ctx.sender)}:${ctx.timestamp.microsSinceUnixEpoch / 60_000_000n}`;
-  materialize(ctx, { key, kind: 'test', route: '/m/avisos', sourceKind: 'test', sourceId: hex(ctx.sender), actor: undefined, conversationScope: '', conversationId: '', messageId: undefined }, ctx.sender);
+  activeMember(ctx); const key = `test:${hex(memberIdentityFor(ctx))}:${ctx.timestamp.microsSinceUnixEpoch / 60_000_000n}`;
+  materialize(ctx, { key, kind: 'test', route: '/m/avisos', sourceKind: 'test', sourceId: hex(memberIdentityFor(ctx)), actor: undefined, conversationScope: '', conversationId: '', messageId: undefined }, memberIdentityFor(ctx));
 }
 export function sweepNotifications(ctx: Ctx, limit = 100) {
   service(ctx); let budget = Math.max(1, Math.min(100, limit)); let count = 0;

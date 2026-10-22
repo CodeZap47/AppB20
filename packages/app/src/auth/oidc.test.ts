@@ -8,7 +8,7 @@ describe('configuración de SpacetimeAuth', () => {
     const settings = buildOidcSettings(web);
     expect(settings).toMatchObject({ authority: 'https://auth.spacetimedb.com/oidc', client_id: 'client_b20',
       redirect_uri: 'https://b20.example/auth/callback', post_logout_redirect_uri: 'https://b20.example/auth/logout',
-      response_type: 'code', automaticSilentRenew: false, scope: 'openid profile email' });
+      response_type: 'code', automaticSilentRenew: false, scope: 'openid profile email offline_access' });
     expect(settings.disablePKCE).not.toBe(true);
     expect(settings.client_secret).toBeUndefined();
   });

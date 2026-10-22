@@ -14,6 +14,8 @@ import { matches } from '../lib/search';
 import { chatTarget, mentionedMembers, unreadMessages } from '../lib/chat';
 import { ConversationMute, MessageReportsPanel, ReportMessageForm } from '../components/ChatControls';
 import '../chat.css';
+import { TypingIndicator } from '../components/TypingIndicator';
+import { useTyping } from '../lib/useTyping';
 
 const GROUP_NAME = 'Canal del salón';
 
@@ -319,6 +321,7 @@ function ThreadNotice({ title, children }: { title: string; children: ReactNode 
  */
 function useThread(scope: MessageScope, conversationId: string, sendNew: (text: string, replyToId?: string) => string | Promise<string>) {
   const source = useDataSource();
+  const onTyping = useTyping(scope, conversationId);
   const { me, members, conversationStates } = useSnapshot();
   const { error, run } = useAction();
   const readAction = useAction();
@@ -361,6 +364,7 @@ function useThread(scope: MessageScope, conversationId: string, sendNew: (text: 
   };
 
   const onSend = async (text: string, files: File[] = []) => {
+    onTyping(false);
     const ok =
       (await run(async () => {
         if (mode?.kind === 'edit') await source.editMessage(scope, mode.message.id, text);
@@ -394,11 +398,12 @@ function useThread(scope: MessageScope, conversationId: string, sendNew: (text: 
   };
 
   const extras = <>
+    <TypingIndicator scope={scope} conversationId={conversationId} />
     {progress && <p className="chat-transfer" role="status">Subiendo {progress.name}: {Math.round(progress.done / progress.total * 100)} % <ChatButton type="button" variant="tertiary" className="link-button" onClick={() => controller.current?.abort()}>Cancelar subida</ChatButton></p>}
     {retryingAttachments && <p className="chat-transfer" role="status">El mensaje ya se envió. Pulsa «Reintentar adjuntos» para continuar la misma subida sin duplicarlo.</p>}
     {report && <ReportMessageForm scope={scope} message={report} onClose={() => setReport(null)} />}
   </>;
-  return { error: error ?? readAction.error, handlers, mode, onSend, onReadThrough, retryingAttachments, extras, cancel: () => setMode(undefined) };
+  return { error: error ?? readAction.error, handlers, mode, onSend, onTyping, onReadThrough, retryingAttachments, extras, cancel: () => setMode(undefined) };
 }
 
 export function ChannelThread() {
@@ -422,7 +427,7 @@ export function ChannelThread() {
     {error && <p className="error" role="alert">{error}</p>}
     {thread.extras}
     {channel.archivedAt && <p className="chat-transfer">Canal archivado. Puedes consultar el historial y descargar sus adjuntos.</p>}
-    <Composer key={`${me?.id}:canal:${channel.id}`} draftKey={`${me?.id}:canal:${channel.id}`} placeholder={`Escribe en ${channel.name}`} error={thread.error} onSend={thread.onSend} mode={thread.mode} onCancelMode={thread.cancel}
+    <Composer key={`${me?.id}:canal:${channel.id}`} draftKey={`${me?.id}:canal:${channel.id}`} placeholder={`Escribe en ${channel.name}`} error={thread.error} onSend={thread.onSend} onTyping={thread.onTyping} mode={thread.mode} onCancelMode={thread.cancel}
       attachments retryingAttachments={thread.retryingAttachments} disabled={Boolean(channel.archivedAt)} mentionMemberIds={members.filter((member) => member.status === 'active').map((member) => member.id)} />
   </>;
 }
@@ -461,7 +466,7 @@ export function GroupThread() {
         draftKey={`${me?.id}:grupo`}
         placeholder="Escribe al grupo"
         error={thread.error}
-        onSend={thread.onSend}
+        onSend={thread.onSend} onTyping={thread.onTyping}
         mode={thread.mode}
         onCancelMode={thread.cancel}
         attachments
@@ -551,7 +556,7 @@ export function DirectThread() {
         draftKey={draftKey}
         placeholder={`Escribe a ${name}`}
         error={thread.error}
-        onSend={thread.onSend}
+        onSend={thread.onSend} onTyping={thread.onTyping}
         mode={thread.mode}
         onCancelMode={thread.cancel}
         attachments

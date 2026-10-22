@@ -12,6 +12,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "build:variants": "node scripts/build-variants.mjs",
     "dev": "npm run dev -w @b20/web",
     "dev:api": "npm run dev -w @b20/api",
     "prebuild": "node scripts/check-node.mjs",
@@ -26,6 +27,8 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "test:spacetime:files": "node scripts/smoke-spacetime-files.mjs",
+    "test:spacetime:engagement": "node scripts/smoke-spacetime-engagement.mjs",
+    "test:spacetime:auth": "node scripts/smoke-spacetime-auth.mjs",
     "test:spacetime:delivery2": "node scripts/smoke-spacetime-delivery2.mjs",
     "test:spacetime:rooms": "node scripts/smoke-spacetime-rooms.mjs",
     "test:spacetime:notifications": "node scripts/smoke-spacetime-notifications.mjs",

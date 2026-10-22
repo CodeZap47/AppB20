@@ -1,3 +1,4 @@
+import { memberIdentityFor } from './authIdentity';
 import { t, table, SenderError } from 'spacetimedb/server';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { cleanHelpPost, helpText, HELP_LIMITS, type HelpPostFields } from '../../core/src/help';
@@ -45,7 +46,7 @@ function capture(ctx: Ctx, post: Post, next: number) {
 }
 function closePending(ctx: Ctx, postId: bigint, reason: string) {
   for (const contact of ctx.db.helpContactRequest.postId.filter(postId)) if (contact.status === 'pending') {
-    ctx.db.helpContactRequest.id.update({ ...contact, status: 'closed', closeReason: reason, closedBy: ctx.sender, updatedAt: ctx.timestamp });
+    ctx.db.helpContactRequest.id.update({ ...contact, status: 'closed', closeReason: reason, closedBy: memberIdentityFor(ctx), updatedAt: ctx.timestamp });
   }
 }
 /** Una intención conserva su resultado; nunca vuelve a aplicar una edición tras perder su confirmación. */
@@ -57,7 +58,7 @@ export function mutateHelp(ctx: Ctx, payload: string): string {
   catch (error) { if (error instanceof SenderError) throw error; return fail('Envío no válido.'); }
   const requestId = field(input.requestId, 'El identificador de envío', 128);
   if (!['save', 'status', 'withdraw'].includes(String(input.action))) fail('La acción no es válida.');
-  const key = `${ctx.sender.toHexString()}:${requestId}`; const digest = hash(payload);
+  const key = `${memberIdentityFor(ctx).toHexString()}:${requestId}`; const digest = hash(payload);
   const prior = ctx.db.helpIntent.key.find(key);
   if (prior) { if (prior.digest !== digest) fail('Este envío ya se utilizó para otro cambio.'); return JSON.stringify({ id: prior.postId.toString(), version: prior.version }); }
   const postId = input.id === undefined ? undefined : id(input.id);
@@ -65,7 +66,7 @@ export function mutateHelp(ctx: Ctx, payload: string): string {
   if (postId !== undefined && !post) fail('La publicación no está disponible.');
   if (post) {
     if (post.status === 'withdrawn') fail('La publicación fue retirada.');
-    if (!post.author.isEqual(ctx.sender) && (input.action !== 'withdraw' || !me.isCreator)) fail('Solo su autor puede cambiar esta publicación.');
+    if (!post.author.isEqual(memberIdentityFor(ctx)) && (input.action !== 'withdraw' || !me.isCreator)) fail('Solo su autor puede cambiar esta publicación.');
     version(ctx, post, input.expectedVersion);
   }
   if (!post && input.action !== 'save') fail('La publicación no está disponible.');
@@ -82,7 +83,7 @@ export function mutateHelp(ctx: Ctx, payload: string): string {
     const subjectId = id(clean.subjectId); requireSubject(ctx, subjectId);
     if (post && post.kind !== clean.kind) fail('El tipo de una publicación no cambia.');
     post = post ? { ...post, ...clean, subjectId, updatedAt: ctx.timestamp } : {
-      id: 0n, ...clean, subjectId, status: 'open', author: ctx.sender, createdAt: ctx.timestamp, updatedAt: ctx.timestamp,
+      id: 0n, ...clean, subjectId, status: 'open', author: memberIdentityFor(ctx), createdAt: ctx.timestamp, updatedAt: ctx.timestamp,
       withdrawnBy: undefined, withdrawalReason: undefined,
     };
     if (postId === undefined) post = ctx.db.helpPost.insert(post); else ctx.db.helpPost.id.update(post);
@@ -91,18 +92,18 @@ export function mutateHelp(ctx: Ctx, payload: string): string {
     post = { ...post!, status: input.status, updatedAt: ctx.timestamp }; ctx.db.helpPost.id.update(post);
     if (post.status === 'closed') closePending(ctx, post.id, 'post_closed');
   } else {
-    const reason = field(input.reason, 'El motivo', HELP_LIMITS.reason, post!.author.isEqual(ctx.sender));
-    post = { ...post!, status: 'withdrawn', withdrawnBy: ctx.sender, withdrawalReason: reason || undefined, updatedAt: ctx.timestamp };
+    const reason = field(input.reason, 'El motivo', HELP_LIMITS.reason, post!.author.isEqual(memberIdentityFor(ctx)));
+    post = { ...post!, status: 'withdrawn', withdrawnBy: memberIdentityFor(ctx), withdrawalReason: reason || undefined, updatedAt: ctx.timestamp };
     ctx.db.helpPost.id.update(post); closePending(ctx, post.id, 'post_withdrawn');
   }
   capture(ctx, post!, previous + 1);
-  ctx.db.helpIntent.insert({ key, actor: ctx.sender, digest, postId: post!.id, version: previous + 1 });
+  ctx.db.helpIntent.insert({ key, actor: memberIdentityFor(ctx), digest, postId: post!.id, version: previous + 1 });
   log(ctx, input.action === 'withdraw' ? 'withdraw' : postId === undefined ? 'create' : 'update', 'help_post', post!.id);
   return JSON.stringify({ id: post!.id.toString(), version: previous + 1 });
 }
 export function readHelpHistory(ctx: Ctx, postId: bigint): string {
   activeMember(ctx); const post = ctx.db.helpPost.id.find(postId);
-  if (!post || !post.author.isEqual(ctx.sender)) fail('Solo el autor consulta las versiones de su publicación.');
+  if (!post || !post.author.isEqual(memberIdentityFor(ctx))) fail('Solo el autor consulta las versiones de su publicación.');
   const rows = [...ctx.db.helpRevision.postId.filter(postId)].sort((a, b) => b.version - a.version).slice(0, 30);
   return JSON.stringify(rows.map(row => ({ version: row.version, status: row.status, fields: JSON.parse(row.fields), at: Number(row.at.microsSinceUnixEpoch / 1000n) })));
 }

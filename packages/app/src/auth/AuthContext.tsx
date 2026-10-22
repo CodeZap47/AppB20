@@ -1,24 +1,27 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { UserManager, WebStorageStateStore } from 'oidc-client-ts';
 import { AuthProvider as OidcProvider, useAuth as useOidc } from 'react-oidc-context';
 import { config } from '../config';
 import type { Platform } from '../platform';
 import { buildOidcSettings, matchesCallback, signinReturnTo } from './oidc';
-import { AndroidAuthNavigator, androidSilentNavigator, attachAndroidCallbacks, ChromeSessionStateStore,
+import { AndroidAuthNavigator, androidSilentNavigator, attachAndroidCallbacks, ChromeSessionStateStore, ChromeRememberedUserStore,
   createChromeNavigator, getChromeAuth } from './platformAuth';
 import { SessionStore, type SessionState } from './session';
 import { AuthFrame } from './AuthFrame';
-
-interface AuthValue {
-  store: SessionStore;
-  signIn: () => void;
-  busy: boolean;
-}
-const AuthContext = createContext<AuthValue | null>(null);
+import { RememberedUserStore } from './persistence';
+import { AuthContext, type SignInOptions } from './accessContext';
+import { SupabaseAuthProvider } from './SupabaseAuthProvider';
 
 /** OIDC Authorization Code + PKCE. Cada presentación usa el navegador apropiado a su plataforma. */
 export function AuthProvider({ clientId, platform = 'web', children }: {
   clientId: string; platform?: Platform; children: ReactNode;
+}) {
+  if (config.authProvider === 'supabase') return <SupabaseAuthProvider platform={platform}>{children}</SupabaseAuthProvider>;
+  return <SpacetimeAuthProvider clientId={clientId} platform={platform}>{children}</SpacetimeAuthProvider>;
+}
+
+function SpacetimeAuthProvider({ clientId, platform, children }: {
+  clientId: string; platform: Platform; children: ReactNode;
 }) {
   const setup = useMemo(() => {
     try {
@@ -37,18 +40,18 @@ export function AuthProvider({ clientId, platform = 'web', children }: {
         const navigator = new AndroidAuthNavigator();
         // El estado PKCE debe sobrevivir a que Android cierre el proceso durante el login.
         settings.stateStore = new WebStorageStateStore({ store: localStorage, prefix: 'b20.oidc.state.' });
-        settings.userStore = new WebStorageStateStore({ store: sessionStorage, prefix: 'b20.oidc.user.' });
+        settings.userStore = new RememberedUserStore();
         return { manager: new UserManager(settings, undefined, navigator, androidSilentNavigator), navigator };
       }
       if (chrome) {
         settings.stateStore = new ChromeSessionStateStore(chrome.storage.session, 'b20.oidc.state.');
-        settings.userStore = new ChromeSessionStateStore(chrome.storage.session, 'b20.oidc.user.');
+        settings.userStore = new ChromeRememberedUserStore(chrome.storage.session, chrome.storage.local);
         return { manager: new UserManager(settings, undefined, createChromeNavigator(chrome, true), createChromeNavigator(chrome, false)) };
       }
       // El enlace del correo puede devolver el login en otra pestaña del mismo navegador.
-      // Solo el estado temporal PKCE se comparte; la sesión de usuario sigue aislada por pestaña.
+      // La sesión recordada sobrevive al cierre del navegador; PKCE sigue siendo de un solo uso.
       settings.stateStore = new WebStorageStateStore({ store: localStorage, prefix: 'b20.oidc.state.' });
-      settings.userStore = new WebStorageStateStore({ store: sessionStorage, prefix: 'b20.oidc.user.' });
+      settings.userStore = new RememberedUserStore();
       return { manager: new UserManager(settings) };
     } catch (error) {
       return { error: error instanceof Error ? error.message : 'No se pudo preparar SpacetimeAuth.' };
@@ -125,6 +128,12 @@ function SessionBridge({ manager, navigator, platform, children }: {
       }
     } else if (auth.isLoading) {
       store.loading();
+    } else if (auth.user?.expired && auth.user.refresh_token) {
+      store.loading();
+      manager.stopSilentRenew();
+      void manager.signinSilent().catch(() => store.renewalFailed()).finally(() => {
+        if (!manuallySignedOut.current) manager.startSilentRenew();
+      });
     } else {
       store.signedOut(auth.error || callbackError ? 'No se pudo completar el acceso con SpacetimeAuth. Comprueba tu conexión y vuelve a intentarlo.' : undefined);
     }
@@ -157,14 +166,29 @@ function SessionBridge({ manager, navigator, platform, children }: {
     return () => { active = false; remove?.(); };
   }, [manager, navigator]);
 
-  const signIn = () => {
+  useEffect(() => {
+    if (platform !== 'web') return;
+    const sync = (event: StorageEvent) => {
+      if (event.key !== null && !event.key.startsWith('b20.oidc.user.')) return;
+      void manager.getUser(true).then((user) => {
+        if (!user) { store.signedOut(); return manager.removeUser(); }
+        if (!user.expired && user.id_token) store.receiveToken(user.id_token);
+        else store.renewalFailed();
+      }).catch(() => store.renewalFailed());
+    };
+    window.addEventListener('storage', sync);
+    return () => window.removeEventListener('storage', sync);
+  }, [manager, store, platform]);
+
+  const signIn = (options?: SignInOptions) => {
     manuallySignedOut.current = false;
     manager.startSilentRenew();
     setCallbackError(false);
     if (platform === 'web') {
-      void auth.signinRedirect({ state: { returnTo: `${window.location.pathname}${window.location.search}${window.location.hash}` } });
+      void auth.signinRedirect({ state: { returnTo: `${window.location.pathname}${window.location.search}${window.location.hash}` },
+        ...(options?.loginHint ? { login_hint: options.loginHint } : {}) }).catch(() => store.signedOut('No se pudo abrir el acceso. Vuelve a intentarlo.'));
     } else {
-      void auth.signinPopup();
+      void auth.signinPopup(options?.loginHint ? { login_hint: options.loginHint } : undefined).catch(() => store.signedOut('El acceso se canceló. Vuelve a intentarlo.'));
     }
   };
   return <AuthContext value={{ store, signIn, busy: auth.isLoading || !!auth.activeNavigator || signingOut }}>{children}</AuthContext>;
@@ -180,19 +204,23 @@ export function useSession(): SessionState | null {
 }
 export function useSessionStore(): SessionStore | null { return useContext(AuthContext)?.store ?? null; }
 
-export function SpacetimeAuthButton({ className, label = 'Continuar con SpacetimeAuth' }: {
+export function SpacetimeAuthButton({ className, label = 'Continuar con SpacetimeAuth', loginHint, social = false, disabled = false }: {
   className?: string;
   label?: string;
+  loginHint?: string;
+  social?: boolean;
+  disabled?: boolean;
 } = {}) {
   const auth = useContext(AuthContext);
   if (!auth) return null;
-  return <button type="button" className={className} disabled={auth.busy} aria-busy={auth.busy} onClick={auth.signIn}>
+  return <button type="button" className={className} disabled={auth.busy || disabled} aria-busy={auth.busy} onClick={() => auth.signIn(loginHint ? { loginHint } : undefined)}>
     {auth.busy ? <span className="auth-spinner" aria-hidden="true" /> : (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true" focusable="false">
         <rect x="3" y="5" width="18" height="14" rx="3" />
         <path d="m4 7 8 6 8-6" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     )}
+    {social && <span className="auth-social-mark" aria-hidden="true">G</span>}
     <span>{auth.busy ? 'Preparando acceso…' : label}</span>
   </button>;
 }

@@ -260,6 +260,7 @@ export class DemoDataSource implements DataSource {
   #snapshot: Snapshot | undefined;
   #now: () => Date;
   #disposed = false;
+  #onboardingCompleted = true;
   #objectUrls = new Set<string>();
   #academic: DemoAcademicStore;
   #presentations: DemoPresentationStore;
@@ -460,6 +461,9 @@ export class DemoDataSource implements DataSource {
     this.#snapshot = undefined;
   }
 
+  completeOnboarding() { this.#activeMember(); this.#onboardingCompleted = true; this.#emit(); }
+  setTyping(scope: MessageScope, conversationId: Id, typing: boolean) { this.#chat.setTyping(scope, conversationId, typing); }
+
   #assertAlive(): void {
     if (this.#disposed) throw new Error('La sesión de prueba ya terminó.');
   }
@@ -558,6 +562,7 @@ export class DemoDataSource implements DataSource {
       ...emptyFeed(),
       ...emptyStudyRooms(),
       ...emptyDelivery2(),
+      onboardingCompleted: this.#onboardingCompleted,
       ...this.#presentations.snapshot(me.id),
       connection: 'ready',
       me,

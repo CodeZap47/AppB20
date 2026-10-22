@@ -36,6 +36,22 @@ function setup(isActiveMember = vi.fn(async () => true)) {
 }
 
 describe('SpacetimeAuth en API', () => {
+  it('valida el token ES256 de Supabase y exige el claim verificado del hook', async () => {
+    const pair = await generateKeyPair('ES256');
+    const publicKey = await exportJWK(pair.publicKey);
+    const supabaseIssuer = 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1';
+    const isActiveMember = vi.fn(async () => true);
+    const app = new Hono<{ Variables: AuthVariables }>();
+    app.use('*', createRequireAuth({ issuer: supabaseIssuer, audiences: ['authenticated'],
+      jwks: createLocalJWKSet({ keys: [{ ...publicKey, kid: 'supabase', alg: 'ES256' }] }), isActiveMember }));
+    app.get('/', (c) => c.json(c.get('user')));
+    const signed = (verified: boolean | undefined) => new SignJWT({ email: 'alumno@example.com', email_verified: verified,
+      user_metadata: { email_verified: true } }).setProtectedHeader({ alg: 'ES256', kid: 'supabase' })
+      .setSubject('supabase-user').setIssuer(supabaseIssuer).setAudience('authenticated').setIssuedAt().setExpirationTime('5m').sign(pair.privateKey);
+    expect((await app.request('/', { headers: { Authorization: `Bearer ${await signed(true)}` } })).status).toBe(200);
+    expect((await app.request('/', { headers: { Authorization: `Bearer ${await signed(undefined)}` } })).status).toBe(401);
+    expect(isActiveMember).toHaveBeenCalledTimes(1);
+  });
   it('valida una firma real, normaliza correo y consulta membresía con el mismo ID token', async () => {
     const { app, isActiveMember } = setup();
     const idToken = await token();

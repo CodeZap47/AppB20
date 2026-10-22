@@ -334,6 +334,13 @@ export const AuthConfig = __t.object("AuthConfig", {
 });
 export type AuthConfig = __Infer<typeof AuthConfig>;
 
+export const AuthIdentityLink = __t.object("AuthIdentityLink", {
+  sessionIdentity: __t.identity(),
+  memberIdentity: __t.identity(),
+  createdAt: __t.timestamp(),
+});
+export type AuthIdentityLink = __Infer<typeof AuthIdentityLink>;
+
 export const Birthday = __t.object("Birthday", {
   identity: __t.identity(),
   day: __t.u8(),
@@ -451,6 +458,15 @@ export const ChatCommand = __t.object("ChatCommand", {
   createdAt: __t.timestamp(),
 });
 export type ChatCommand = __Infer<typeof ChatCommand>;
+
+export const ChatTyping = __t.object("ChatTyping", {
+  key: __t.string(),
+  memberId: __t.identity(),
+  scope: __t.string(),
+  conversationId: __t.string(),
+  expiresAt: __t.timestamp(),
+});
+export type ChatTyping = __Infer<typeof ChatTyping>;
 
 export const CodeReview = __t.object("CodeReview", {
   id: __t.u64(),
@@ -1003,6 +1019,13 @@ export const MemberBlock = __t.object("MemberBlock", {
 });
 export type MemberBlock = __Infer<typeof MemberBlock>;
 
+export const MemberOnboarding = __t.object("MemberOnboarding", {
+  memberId: __t.identity(),
+  version: __t.u32(),
+  completedAt: __t.timestamp(),
+});
+export type MemberOnboarding = __Infer<typeof MemberOnboarding>;
+
 export const MemberProfile = __t.object("MemberProfile", {
   id: __t.u64(),
   memberId: __t.identity(),
@@ -1111,6 +1134,9 @@ export type MyAgentStyleSnapshots = __Infer<typeof MyAgentStyleSnapshots>;
 export const MyAgentSuggestions = __t.object("MyAgentSuggestions", {});
 export type MyAgentSuggestions = __Infer<typeof MyAgentSuggestions>;
 
+export const MyAuthIdentity = __t.object("MyAuthIdentity", {});
+export type MyAuthIdentity = __Infer<typeof MyAuthIdentity>;
+
 export const MyBlockedMembers = __t.object("MyBlockedMembers", {});
 export type MyBlockedMembers = __Infer<typeof MyBlockedMembers>;
 
@@ -1149,6 +1175,9 @@ export type MyNotificationPreferences = __Infer<typeof MyNotificationPreferences
 
 export const MyNotifications = __t.object("MyNotifications", {});
 export type MyNotifications = __Infer<typeof MyNotifications>;
+
+export const MyOnboarding = __t.object("MyOnboarding", {});
+export type MyOnboarding = __Infer<typeof MyOnboarding>;
 
 export const MyPresentationPersonal = __t.object("MyPresentationPersonal", {});
 export type MyPresentationPersonal = __Infer<typeof MyPresentationPersonal>;
@@ -2132,6 +2161,9 @@ export const TrashEntry = __t.object("TrashEntry", {
   version: __t.u32(),
 });
 export type TrashEntry = __Infer<typeof TrashEntry>;
+
+export const TypingPresence = __t.object("TypingPresence", {});
+export type TypingPresence = __Infer<typeof TypingPresence>;
 
 export const VersionGuideSource = __t.object("VersionGuideSource", {
   kind: __t.string(),

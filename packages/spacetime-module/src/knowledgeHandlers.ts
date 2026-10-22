@@ -1,3 +1,4 @@
+import { memberIdentityFor } from './authIdentity';
 import { SenderError } from 'spacetimedb/server';
 import { activeMember, attachmentIds, expectVersion, log, requireGuide, requireSubject, requireText, restoreAttachments, sourceVersion, type Ctx } from './moduleContext';
 import { bumpExtra, canReadTarget, captureGuide, captureNote, withdrawn } from './delivery2Handlers';
@@ -36,7 +37,7 @@ export function addGuideSourcesV3(ctx: Ctx, input: { guideId: bigint; expectedVe
   for (const ref of refs) {
     if ([...ctx.db.guideSource.guideId.filter(guide.id)].some((row) => row.kind === ref.kind && row.refId === ref.refId)) continue;
     ctx.db.guideSource.insert({ id: 0n, guideId: guide.id, kind: ref.kind, refId: ref.refId, sourceVersion: ref.version,
-      status: 'pending', reason: 'Falta revisarla.', topics: [], addedBy: ctx.sender, addedAt: ctx.timestamp }); changed = true;
+      status: 'pending', reason: 'Falta revisarla.', topics: [], addedBy: memberIdentityFor(ctx), addedAt: ctx.timestamp }); changed = true;
   }
   if (changed) { bumpExtra(ctx, 'guide', guide.id); log(ctx, 'update', 'study_guide', guide.id); }
 }
@@ -68,12 +69,12 @@ export function removeGuideSourceV3(ctx: Ctx, input: { sourceId: bigint; expecte
 }
 export function reviewGuideV3(ctx: Ctx, input: { guideId: bigint; expectedVersion: number; verdict: string; comment: string }) {
   const guide = mutableGuide(ctx, input.guideId, input.expectedVersion);
-  if (guide.updatedBy.isEqual(ctx.sender)) throw new SenderError('Guardaste esta versión; la revisa otro compañero.');
+  if (guide.updatedBy.isEqual(memberIdentityFor(ctx))) throw new SenderError('Guardaste esta versión; la revisa otro compañero.');
   if (!['approved', 'changes'].includes(input.verdict)) throw new SenderError('Resultado de revisión inválido.');
   const comment = input.comment.trim();
   if (!comment || comment.length > 2000) throw new SenderError('Escribe un comentario de revisión de hasta 2000 caracteres.');
-  if ([...ctx.db.guideReview.guideId.filter(guide.id)].some((row) => row.guideVersion === guide.version && row.reviewer.isEqual(ctx.sender))) throw new SenderError('Ya revisaste esta versión. Una revisión no se sobrescribe.');
-  ctx.db.guideReview.insert({ id: 0n, guideId: guide.id, guideVersion: guide.version, reviewer: ctx.sender, verdict: input.verdict, comment, createdAt: ctx.timestamp });
+  if ([...ctx.db.guideReview.guideId.filter(guide.id)].some((row) => row.guideVersion === guide.version && row.reviewer.isEqual(memberIdentityFor(ctx)))) throw new SenderError('Ya revisaste esta versión. Una revisión no se sobrescribe.');
+  ctx.db.guideReview.insert({ id: 0n, guideId: guide.id, guideVersion: guide.version, reviewer: memberIdentityFor(ctx), verdict: input.verdict, comment, createdAt: ctx.timestamp });
   log(ctx, 'review', 'study_guide', guide.id);
 }
 
@@ -98,7 +99,7 @@ function checkNoteFields(ctx: Ctx, input: SaveNoteV2Input) {
   if ([assignmentIds, activityIds, questionIds].some((ids) => ids.length > 50)) throw new SenderError('Selecciona hasta 50 vínculos de cada tipo.');
   if (assignmentIds.some((id) => ctx.db.assignment.id.find(id)?.subjectId !== input.subjectId)
     || activityIds.some((id) => ctx.db.activity.id.find(id)?.subjectId !== input.subjectId)
-    || questionIds.some((id) => ctx.db.question.id.find(id)?.subjectId !== input.subjectId || !canReadTarget(ctx.db, ctx.sender, 'question', id) || withdrawn(ctx.db, 'question', id))) throw new SenderError('Los vínculos deben estar disponibles y pertenecer a esta materia.');
+    || questionIds.some((id) => ctx.db.question.id.find(id)?.subjectId !== input.subjectId || !canReadTarget(ctx.db, memberIdentityFor(ctx), 'question', id) || withdrawn(ctx.db, 'question', id))) throw new SenderError('Los vínculos deben estar disponibles y pertenecer a esta materia.');
   const tags = [...new Set(input.tags.map((tag) => tag.trim().toLowerCase()).filter(Boolean))];
   if (tags.length > 30 || tags.some((tag) => tag.length > 60)) throw new SenderError('Usa hasta 30 etiquetas de 60 caracteres.');
   return {
@@ -110,16 +111,16 @@ function checkNoteFields(ctx: Ctx, input: SaveNoteV2Input) {
 function ownNote(ctx: Ctx, id: bigint) {
   activeMember(ctx);
   const note = ctx.db.note.id.find(id);
-  if (!note || !canReadTarget(ctx.db, ctx.sender, 'note', id) || withdrawn(ctx.db, 'note', id)) throw new SenderError('La nota no existe o no está disponible.');
-  if (!note.author.isEqual(ctx.sender)) throw new SenderError('Solo su autor edita esta nota; los demás pueden proponer cambios en comentarios.');
+  if (!note || !canReadTarget(ctx.db, memberIdentityFor(ctx), 'note', id) || withdrawn(ctx.db, 'note', id)) throw new SenderError('La nota no existe o no está disponible.');
+  if (!note.author.isEqual(memberIdentityFor(ctx))) throw new SenderError('Solo su autor edita esta nota; los demás pueden proponer cambios en comentarios.');
   return note;
 }
 export function saveNoteV2(ctx: Ctx, input: SaveNoteV2Input) {
   activeMember(ctx); const checked = checkNoteFields(ctx, input);
   if (input.noteId === undefined) {
-    const note = ctx.db.note.insert({ id: 0n, ...checked.fields, author: ctx.sender, version: 1, createdAt: ctx.timestamp, updatedAt: ctx.timestamp });
+    const note = ctx.db.note.insert({ id: 0n, ...checked.fields, author: memberIdentityFor(ctx), version: 1, createdAt: ctx.timestamp, updatedAt: ctx.timestamp });
     ctx.db.noteDetail.insert({ noteId: note.id, ...checked.detail, publishedFromId: undefined, publishedFromVersion: undefined });
-    captureNote(ctx, note.id, ctx.sender); log(ctx, 'create', 'note', note.id); return;
+    captureNote(ctx, note.id, memberIdentityFor(ctx)); log(ctx, 'create', 'note', note.id); return;
   }
   const note = ownNote(ctx, input.noteId);
   if (input.expectedVersion === undefined) throw new SenderError('Indica la versión que estás editando.');
@@ -130,7 +131,7 @@ export function saveNoteV2(ctx: Ctx, input: SaveNoteV2Input) {
   const detail = { noteId: note.id, ...checked.detail, publishedFromId: prior?.publishedFromId, publishedFromVersion: prior?.publishedFromVersion };
   if (prior) ctx.db.noteDetail.noteId.update(detail); else ctx.db.noteDetail.insert(detail);
   ctx.db.note.id.update({ ...note, ...checked.fields, version: note.version + 1, updatedAt: ctx.timestamp });
-  captureNote(ctx, note.id, ctx.sender); log(ctx, 'update', 'note', note.id);
+  captureNote(ctx, note.id, memberIdentityFor(ctx)); log(ctx, 'update', 'note', note.id);
 }
 
 /** Publica referencias independientes; nunca abre el borrador ni sus futuras versiones. */
@@ -145,14 +146,14 @@ export function publishNoteVersion(ctx: Ctx, input: { noteId: bigint; expectedVe
   for (const fileId of attachmentIds(ctx, 'note', note.id)) {
     const file = ctx.db.resourceFile.id.find(fileId)!;
     const id = `published-${published.id}-${file.id}`;
-    ctx.db.resourceFile.insert({ ...file, id, targetId: published.id, removedAt: undefined, uploadedBy: ctx.sender, createdAt: ctx.timestamp });
+    ctx.db.resourceFile.insert({ ...file, id, targetId: published.id, removedAt: undefined, uploadedBy: memberIdentityFor(ctx), createdAt: ctx.timestamp });
     copied.set(file.id, id);
   }
   const body = published.body.replace(/\(resource:([a-zA-Z0-9_-]+)\)/g, (original, id: string) => copied.has(id) ? `(resource:${copied.get(id)})` : original);
   if (body !== published.body) ctx.db.note.id.update({ ...published, body });
   ctx.db.noteDetail.insert({ noteId: published.id, termId: detail?.termId, session: detail?.session ?? '', assignmentIds: detail?.assignmentIds ?? [],
     activityIds: detail?.activityIds ?? [], questionIds: detail?.questionIds ?? [], publishedFromId: note.id, publishedFromVersion: note.version });
-  captureNote(ctx, published.id, ctx.sender); log(ctx, 'publicar versión', 'note', published.id);
+  captureNote(ctx, published.id, memberIdentityFor(ctx)); log(ctx, 'publicar versión', 'note', published.id);
 }
 
 export function restoreNoteVersion(ctx: Ctx, input: { noteId: bigint; version: number; expectedVersion: number }) {
@@ -167,7 +168,7 @@ export function restoreNoteVersion(ctx: Ctx, input: { noteId: bigint; version: n
   const detail = { noteId: note.id, ...checked.detail, publishedFromId: prior?.publishedFromId, publishedFromVersion: prior?.publishedFromVersion };
   if (prior) ctx.db.noteDetail.noteId.update(detail); else ctx.db.noteDetail.insert(detail);
   ctx.db.note.id.update({ ...note, ...checked.fields, version: note.version + 1, updatedAt: ctx.timestamp });
-  captureNote(ctx, note.id, ctx.sender, input.version); log(ctx, 'restaurar versión', 'note', note.id);
+  captureNote(ctx, note.id, memberIdentityFor(ctx), input.version); log(ctx, 'restaurar versión', 'note', note.id);
 }
 
 export function restoreGuideVersion(ctx: Ctx, input: { guideId: bigint; version: number; expectedVersion: number }) {
@@ -181,41 +182,41 @@ export function restoreGuideVersion(ctx: Ctx, input: { guideId: bigint; version:
   for (const source of previous.sources) {
     validateGuideSourceClassification(ctx, source.kind, source.refId, guide.subjectId, previous.termId);
     const kind = ({ trabajo: 'work', tarea: 'assignment', actividad: 'activity', nota: 'note', pregunta: 'question' } as Record<string, string>)[source.kind];
-    if (!kind || !canReadTarget(ctx.db, ctx.sender, kind, source.refId) || withdrawn(ctx.db, kind, source.refId)) throw new SenderError('Una fuente de esta versión ya no está disponible.');
+    if (!kind || !canReadTarget(ctx.db, memberIdentityFor(ctx), kind, source.refId) || withdrawn(ctx.db, kind, source.refId)) throw new SenderError('Una fuente de esta versión ya no está disponible.');
   }
   captureGuide(ctx, guide.id); restoreAttachments(ctx, 'guide', guide.id, previous.attachmentIds);
   for (const row of ctx.db.guideSource.guideId.filter(guide.id)) ctx.db.guideSource.id.delete(row.id);
-  for (const source of previous.sources) ctx.db.guideSource.insert({ id: 0n, guideId: guide.id, ...source, addedBy: source.addedBy ?? ctx.sender, addedAt: source.addedAt ?? ctx.timestamp });
+  for (const source of previous.sources) ctx.db.guideSource.insert({ id: 0n, guideId: guide.id, ...source, addedBy: source.addedBy ?? memberIdentityFor(ctx), addedAt: source.addedAt ?? ctx.timestamp });
   ctx.db.studyGuide.id.update({ ...guide, termId: previous.termId, title: previous.title, topics: previous.topics, sections: previous.sections,
-    version: guide.version + 1, updatedBy: ctx.sender, updatedAt: ctx.timestamp });
+    version: guide.version + 1, updatedBy: memberIdentityFor(ctx), updatedAt: ctx.timestamp });
   const provenance = ctx.db.guideAiProvenance.key.find(`${guide.id}:${input.version}`);
   if (provenance) ctx.db.guideAiProvenance.insert({ ...provenance, key: `${guide.id}:${guide.version + 1}`, guideVersion: guide.version + 1 });
-  captureGuide(ctx, guide.id, ctx.sender, input.version); log(ctx, 'restaurar versión', 'guide', guide.id);
+  captureGuide(ctx, guide.id, memberIdentityFor(ctx), input.version); log(ctx, 'restaurar versión', 'guide', guide.id);
 }
 
 export function commentQuestion(ctx: Ctx, input: { questionId: bigint; answerId?: bigint; text: string }) {
   activeMember(ctx);
-  if (!canReadTarget(ctx.db, ctx.sender, 'question', input.questionId) || withdrawn(ctx.db, 'question', input.questionId)) throw new SenderError('La pregunta no está disponible.');
-  if (input.answerId !== undefined && (ctx.db.answer.id.find(input.answerId)?.questionId !== input.questionId || !canReadTarget(ctx.db, ctx.sender, 'answer', input.answerId) || withdrawn(ctx.db, 'answer', input.answerId))) throw new SenderError('La respuesta no pertenece a esta pregunta o no está disponible.');
-  ctx.db.questionComment.insert({ id: 0n, questionId: input.questionId, answerId: input.answerId, author: ctx.sender,
+  if (!canReadTarget(ctx.db, memberIdentityFor(ctx), 'question', input.questionId) || withdrawn(ctx.db, 'question', input.questionId)) throw new SenderError('La pregunta no está disponible.');
+  if (input.answerId !== undefined && (ctx.db.answer.id.find(input.answerId)?.questionId !== input.questionId || !canReadTarget(ctx.db, memberIdentityFor(ctx), 'answer', input.answerId) || withdrawn(ctx.db, 'answer', input.answerId))) throw new SenderError('La respuesta no pertenece a esta pregunta o no está disponible.');
+  ctx.db.questionComment.insert({ id: 0n, questionId: input.questionId, answerId: input.answerId, author: memberIdentityFor(ctx),
     text: requireText(input.text, 'La aclaración', 2000), createdAt: ctx.timestamp });
 }
 export function toggleAnswerUsefulness(ctx: Ctx, input: { answerId: bigint }) {
   activeMember(ctx); const answer = ctx.db.answer.id.find(input.answerId);
-  if (!answer || !canReadTarget(ctx.db, ctx.sender, 'answer', answer.id) || withdrawn(ctx.db, 'answer', answer.id)) throw new SenderError('La respuesta no está disponible.');
-  if (answer.author.isEqual(ctx.sender)) throw new SenderError('No puedes marcar tu propia respuesta como útil.');
-  const key = `${answer.id}:${ctx.sender.toHexString()}`;
+  if (!answer || !canReadTarget(ctx.db, memberIdentityFor(ctx), 'answer', answer.id) || withdrawn(ctx.db, 'answer', answer.id)) throw new SenderError('La respuesta no está disponible.');
+  if (answer.author.isEqual(memberIdentityFor(ctx))) throw new SenderError('No puedes marcar tu propia respuesta como útil.');
+  const key = `${answer.id}:${memberIdentityFor(ctx).toHexString()}`;
   if (ctx.db.answerUsefulness.key.find(key)) ctx.db.answerUsefulness.key.delete(key);
-  else ctx.db.answerUsefulness.insert({ key, answerId: answer.id, memberId: ctx.sender, createdAt: ctx.timestamp });
+  else ctx.db.answerUsefulness.insert({ key, answerId: answer.id, memberId: memberIdentityFor(ctx), createdAt: ctx.timestamp });
 }
 export function saveQuestionLinks(ctx: Ctx, input: { questionId: bigint; noteIds: bigint[]; guideIds: bigint[] }) {
   activeMember(ctx); const question = ctx.db.question.id.find(input.questionId);
-  if (!question || !canReadTarget(ctx.db, ctx.sender, 'question', question.id) || withdrawn(ctx.db, 'question', question.id)) throw new SenderError('La pregunta no está disponible.');
+  if (!question || !canReadTarget(ctx.db, memberIdentityFor(ctx), 'question', question.id) || withdrawn(ctx.db, 'question', question.id)) throw new SenderError('La pregunta no está disponible.');
   const noteIds = [...new Set(input.noteIds)]; const guideIds = [...new Set(input.guideIds)];
   if (noteIds.length + guideIds.length > 50) throw new SenderError('Selecciona hasta 50 materiales relacionados.');
   if (noteIds.some((id) => { const note = ctx.db.note.id.find(id); return !note || note.visibility !== 'group' || note.subjectId !== question.subjectId || withdrawn(ctx.db, 'note', id); })
     || guideIds.some((id) => ctx.db.studyGuide.id.find(id)?.subjectId !== question.subjectId || withdrawn(ctx.db, 'guide', id))) throw new SenderError('Enlaza solo material compartido disponible de esta materia.');
   for (const link of ctx.db.questionLink.questionId.filter(question.id)) ctx.db.questionLink.id.delete(link.id);
-  for (const targetId of noteIds) ctx.db.questionLink.insert({ id: 0n, questionId: question.id, targetKind: 'note', targetId, addedBy: ctx.sender, createdAt: ctx.timestamp });
-  for (const targetId of guideIds) ctx.db.questionLink.insert({ id: 0n, questionId: question.id, targetKind: 'guide', targetId, addedBy: ctx.sender, createdAt: ctx.timestamp });
+  for (const targetId of noteIds) ctx.db.questionLink.insert({ id: 0n, questionId: question.id, targetKind: 'note', targetId, addedBy: memberIdentityFor(ctx), createdAt: ctx.timestamp });
+  for (const targetId of guideIds) ctx.db.questionLink.insert({ id: 0n, questionId: question.id, targetKind: 'guide', targetId, addedBy: memberIdentityFor(ctx), createdAt: ctx.timestamp });
 }
