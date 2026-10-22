@@ -51,9 +51,43 @@ La biblioteca administra refresh tokens, PKCE y eventos de sesión. El almacenam
 «Mantener mi sesión iniciada», elimina copias antiguas y permite cerrar la sesión local
 incluso si falla la red. La renovación reemplaza el token utilizado por la conexión SpacetimeDB.
 
-El login ofrece contraseña, registro, recuperación y acceso por correo. El formulario de código
-funciona si la plantilla de email contiene el OTP. El enlace PKCE debe abrirse en el navegador
-que inició el flujo. La devolución web consume el código y retira parámetros de autenticación.
+### Acceso sin registro abierto
+
+Nadie crea su propia cuenta. **Invitar a alguien en B20 es lo que lo activa**, y el acceso va por pasos:
+
+1. La persona escribe su correo y pulsa **Continuar**. La web pregunta al Worker de IA
+   (`POST /auth/account/state`) en qué estado está esa cuenta:
+   - `password`: ya tiene contraseña; se le pide la contraseña.
+   - `setup`: está activada y aún no la crea. Se le envía un código de 6 dígitos.
+   - `inactive`: no tiene cuenta ni invitación pendiente; se le pide que solicite acceso.
+2. Si la cuenta no existe en Supabase, el Worker consulta al módulo con `auth_activation_check`
+   (solo la identidad técnica de notificaciones puede llamarlo). Si el correo tiene una invitación
+   pendiente, crea la cuenta con la API administrativa de Supabase y responde `setup`.
+3. Tras confirmar el código, la contraseña es **obligatoria**: la app muestra "Crea tu contraseña"
+   hasta guardarla. El código usa `shouldCreateUser: false`, así que nunca crea cuentas.
+4. Si las passkeys están habilitadas, justo después se ofrece añadir una; se puede omitir.
+5. "Olvidé mi contraseña" reutiliza el código y vuelve a pedir una contraseña nueva.
+
+La marca `user_metadata.b20_password` solo decide qué pantalla mostrar; la autorización sigue
+siendo el correo verificado por el hook y la membresía en SpacetimeDB.
+
+Configuración necesaria antes de usarlo en producción:
+
+- Ejecutar `scripts/supabase-b20-account-state.sql` como `postgres`. Crea `public.b20_account_state`,
+  ejecutable solo por `service_role`.
+- En **Authentication → Sign In / Providers**, desactivar **Allow new users to sign up**.
+- En **Authentication → Emails → Magic Link**, incluir `{{ .Token }}` en la plantilla para que el
+  correo lleve el código.
+- Guardar la clave `sb_secret_…` como secreto del Worker de IA. Nunca va en el cliente:
+
+  ```sh
+  npx wrangler secret put SUPABASE_SECRET_KEY --config apps/api/wrangler.ai.jsonc
+  ```
+
+- Publicar el módulo (añade `auth_activation_check`) y desplegar el Worker de IA.
+
+El Worker no limita todavía cuántas consultas de estado recibe; la respuesta revela si un correo
+está activado. Si hiciera falta, añadir una regla de rate limiting de Cloudflare a esa ruta.
 
 Google/GitHub solo aparecen al configurar `VITE_SUPABASE_OAUTH_PROVIDERS`; no están habilitados
 en casdrecords. Las passkeys están preparadas detrás de una bandera y requieren habilitar/configurar
@@ -61,10 +95,10 @@ su RP ID y origins en Supabase. Su UI se ofrece solo en la web con WebAuthn; el 
 la integración nativa correspondiente. No se cambió esa configuración ni se registraron credenciales.
 
 Android conserva `mx.b20.app://auth/callback`; OAuth de extensión usa el retorno exacto
-de `chrome.identity`. Esos retornos deben registrarse antes de usar esos flujos. Email y contraseña
-no requieren un navegador externo; recuperación y confirmación de correo sí necesitan un retorno válido.
+de `chrome.identity`. Esos retornos deben registrarse antes de usar esos flujos. El código,
+la contraseña y su recuperación no requieren un navegador externo ni un retorno registrado.
 
-Antes de abrir el registro a compañeros, comprobar el SMTP del proyecto: el servicio de correo
+Antes de activar a compañeros, comprobar el SMTP del proyecto: el servicio de correo
 predeterminado de Supabase tiene restricciones de destinatarios y de envío. No se enviaron correos
 de prueba ni se crearon cuentas reales durante esta integración.
 
@@ -96,9 +130,11 @@ pedírsela a la persona ni confiar en datos que ella pueda editar.
 con el `iss` y el `sub` del token de la CLI produce exactamente la identidad que muestra
 `spacetime login show`.
 
-1. La persona crea su cuenta en la web con el correo con el que ya era miembro y lo confirma.
-2. En Supabase, **Authentication → Users**: buscar su correo, comprobar que figura como
-   confirmado y copiar su **User UID**.
+1. Activa su cuenta en Supabase antes de que entre. Los miembros actuales no tienen invitación
+   pendiente, así que el Worker no los activa solo: en **Authentication → Users → Add user →
+   Create new user**, usa su correo, una contraseña temporal que no compartas y **Auto Confirm**.
+   No la invites en B20: con una invitación pendiente, `join_group` le crearía otra membresía.
+2. En esa misma lista, copiar su **User UID**.
 3. Confirmar con la persona, por un canal que ya conozcas, que ese correo es suyo. El nombre
    visible del miembro no sirve como prueba: lo edita cada quien.
 4. Listar las membresías activas y elegir la suya:
@@ -120,6 +156,9 @@ identidad de sesión revoca el vínculo.
 su correo, `join_group` crearía una membresía nueva para la identidad de Supabase, y después
 `link_auth_identity` la rechazaría por no poder fusionar membresías. Antes del cambio, revoca
 con `revoke_invitation` las invitaciones de personas que ya son miembros.
+
+Una vez vinculada, la persona escribe su correo en la web; como su cuenta ya tiene la contraseña
+temporal, usa **Olvidé mi contraseña**, confirma el código y crea la suya.
 
 La tabla privada `auth_identity_link` conserva la identidad de dominio antigua. Los reducers,
 procedures y vistas resuelven la identidad de miembro de forma consistente para preservar

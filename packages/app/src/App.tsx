@@ -51,7 +51,7 @@ import type { Platform } from './platform';
 import { ThemeProvider } from './design/Theme';
 import { AssignmentCalendarPage, SubjectsPage } from './pages/AcademicHubPages';
 import { useSupabaseAuth } from './auth/SupabaseAuthProvider';
-import { PasswordRecoveryPage } from './auth/SupabaseSignInForm';
+import { CreatePasswordPage, PasskeySuggestionPage } from './auth/SupabaseSignInForm';
 
 /**
  * Se usa hash routing porque funciona igual en la web, en las páginas empaquetadas de la
@@ -189,7 +189,8 @@ export function App({ platform }: { platform: Platform }) {
 function SignedInGate() {
   const session = useSession();
   const supabase = useSupabaseAuth();
-  if (supabase?.recovery) return <PasswordRecoveryPage />;
+  if (supabase?.pending === 'password') return <CreatePasswordPage />;
+  if (supabase?.pending === 'passkey') return <PasskeySuggestionPage />;
   if (session?.status !== 'signedIn') return <SignInPage />;
   if (config.dataMode === 'demo') {
     return <DemoApp subject={session.profile.subject} key={session.profile.subject} />;

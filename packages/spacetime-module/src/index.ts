@@ -4921,6 +4921,8 @@ export const invitation_emails_finish = spacetimedb.procedure({ payload: t.strin
   const input = notificationPayload(payload);
   invitationEmails.finishInvitationEmail(tx, { email: notificationText(input, 'email'), leaseId: notificationText(input, 'leaseId'), outcome: notificationText(input, 'outcome'), error: input.error === undefined ? undefined : notificationText(input, 'error') }); return '{}';
 }));
+export const auth_activation_check = spacetimedb.procedure({ payload: t.string() }, t.bool(), (ctx, { payload }) => ctx.withTx((tx) =>
+  invitationEmails.invitationPending(tx, notificationText(notificationPayload(payload), 'email'))));
 export const notification_reminder_context = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => {
   const input = notificationPayload(payload); return JSON.stringify(notifications.reminderContext(tx, notificationNumber(input, 'limit', 1, 10, 4)));
 }));

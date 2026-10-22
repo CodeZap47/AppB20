@@ -4,6 +4,7 @@ import { secureHeaders } from 'hono/secure-headers';
 import { createRemoteJWKSet } from 'jose';
 import { createRequireAuth, type AuthOptions, type AuthVariables } from './lib/auth.ts';
 import { checkActiveMembership } from './lib/membership.ts';
+import { accountRoutes } from './auth/accountRoutes.ts';
 import { createFileDatabase, FileApiError, type FileDatabase, type TargetKind } from './files/database.ts';
 import { matchesMetadata, MAX_FILE_BYTES, metadata, objectKey, storeFile } from './files/storage.ts';
 import { createAiDatabase, type AiDatabase, type AiWorkerEnv } from './ai/database.ts';
@@ -67,6 +68,8 @@ export function createWorkerApp(options: WorkerOptions = {}) {
     allowHeaders: ['Authorization', 'Content-Type', 'X-File-Name', 'X-File-Size'],
     exposeHeaders: ['Content-Disposition', 'Content-Length'] })(c, next));
   app.get('/health', (c) => c.json({ ok: true, files: c.env.FILES ? 'r2' : 'unconfigured', ai: c.env.AI_ENABLED === 'true' }));
+  // Pública: el formulario de acceso la consulta antes de que exista una sesión.
+  app.route('/auth/account', accountRoutes());
   app.use('/ai/*', async (c, next) => {
     c.header('Cache-Control', 'private, no-store');
     let auth: AuthOptions;

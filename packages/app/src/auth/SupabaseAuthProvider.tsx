@@ -9,21 +9,30 @@ import { createB20Supabase, supabaseRedirect, supabaseStorage } from './supabase
 import { getChromeAuth } from './platformAuth';
 import { matchesCallback, signinReturnTo } from './oidc';
 
+/** `password`: activada y sin contraseña. `inactive`: sin invitación pendiente en B20. */
+export type AccountState = 'password' | 'setup' | 'inactive';
+/** Pasos obligatorios u ofrecidos después de entrar con el código del correo. */
+export type PendingStep = 'password' | 'passkey' | null;
 interface SupabaseActions {
   busy: boolean;
-  recovery: boolean;
+  pending: PendingStep;
   passkeysAvailable: boolean;
-  password(email: string, password: string, register: boolean): Promise<string | undefined>;
-  emailLink(email: string): Promise<void>;
+  lookup(email: string): Promise<AccountState>;
+  signIn(email: string, password: string): Promise<void>;
+  sendCode(email: string): Promise<void>;
+  /** Tras el código siempre se crea una contraseña: primer acceso u olvido. */
   verifyCode(email: string, token: string): Promise<void>;
-  reset(email: string): Promise<void>;
   updatePassword(password: string): Promise<void>;
+  skipPasskey(): void;
   oauth(provider: 'google' | 'github'): Promise<void>;
   passkey(register?: boolean): Promise<void>;
 }
 const SupabaseContext = createContext<SupabaseActions | null>(null);
 export const useSupabaseAuth = () => useContext(SupabaseContext);
 const RETURN_KEY = 'b20.supabase.returnTo';
+/** Marca que la persona ya creó su contraseña en B20; solo decide qué pantalla mostrar. */
+const PASSWORD_FLAG = 'b20_password';
+const hasPassword = (session: Session) => session.user?.user_metadata?.[PASSWORD_FLAG] === true;
 
 export function SupabaseAuthProvider({ platform, children }: { platform: Platform; children: ReactNode }) {
   const setup = useMemo(() => {
@@ -40,7 +49,7 @@ function SupabaseBridge({ client, platform, children }: {
   client: ReturnType<typeof createB20Supabase>; platform: Platform; children: ReactNode;
 }) {
   const [pending, setPending] = useState(0);
-  const [recovery, setRecovery] = useState(false);
+  const [pendingStep, setPendingStep] = useState<PendingStep>(null);
   const revision = useRef(0);
   const signedOut = useRef(false);
   const store = useMemo(() => new SessionStore({ onSignOut: async () => {
@@ -56,7 +65,7 @@ function SupabaseBridge({ client, platform, children }: {
       await storage.removeItem(key);
       await storage.removeItem(`${key}-code-verifier`);
       store.signedOut();
-      setRecovery(false);
+      setPendingStep(null);
     }
   } }), [client, platform]);
 
@@ -64,13 +73,16 @@ function SupabaseBridge({ client, platform, children }: {
     let active = true;
     const receive = (session: Session | null) => {
       if (!active || signedOut.current) return;
-      if (session) store.receiveToken(session.access_token);
-      else store.signedOut();
+      if (session) {
+        // Quien entró con el código y aún no crea su contraseña vuelve a esa pantalla.
+        if (!hasPassword(session)) setPendingStep('password');
+        store.receiveToken(session.access_token);
+      } else store.signedOut();
     };
     const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
       revision.current++;
-      if (event === 'PASSWORD_RECOVERY') setRecovery(true);
-      if (event === 'SIGNED_OUT') { store.signedOut(); setRecovery(false); return; }
+      if (event === 'PASSWORD_RECOVERY') setPendingStep('password');
+      if (event === 'SIGNED_OUT') { store.signedOut(); setPendingStep(null); return; }
       receive(session);
     });
     const start = revision.current;
@@ -140,36 +152,39 @@ function SupabaseBridge({ client, platform, children }: {
     try { return await action(); } finally { setPending((n) => n - 1); }
   };
   const saveReturn = () => sessionStorage.setItem(RETURN_KEY, signinReturnTo({ returnTo: `${window.location.pathname}${window.location.search}${window.location.hash}` }, window.location.origin));
+  const passkeysAvailable = config.supabasePasskeysEnabled && platform === 'web' && window.isSecureContext && !!navigator.credentials;
   const actions: SupabaseActions = {
-    busy: pending > 0, recovery,
-    passkeysAvailable: config.supabasePasskeysEnabled && platform === 'web' && window.isSecureContext && !!navigator.credentials,
-    password: (email, password, register) => run(async () => {
-      saveReturn();
-      const { data, error } = register
-        ? await client.auth.signUp({ email, password, options: { emailRedirectTo: supabaseRedirect(platform) } })
-        : await client.auth.signInWithPassword({ email, password });
-      if (error) throw new Error(register ? 'No se pudo crear la cuenta. Comprueba los datos e inténtalo de nuevo.' : 'No pudimos entrar. Comprueba tu correo y contraseña, y confirma tu correo si es tu primer acceso.');
-      return !data.session ? 'Revisa tu correo para confirmar tu cuenta antes de entrar.' : undefined;
+    busy: pending > 0, pending: pendingStep, passkeysAvailable,
+    lookup: (email) => run(async () => {
+      if (!config.aiApiUrl) throw new Error('El acceso todavía no está configurado.');
+      const response = await fetch(new URL('/auth/account/state', config.aiApiUrl), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }),
+      }).catch(() => null);
+      const body = await response?.json().catch(() => null) as { state?: AccountState; error?: string } | null;
+      if (!response?.ok || !body?.state) throw new Error(body?.error ?? 'No pudimos comprobar tu cuenta. Inténtalo de nuevo.');
+      return body.state;
     }),
-    emailLink: (email) => run(async () => {
+    signIn: (email, password) => run(async () => {
       saveReturn();
-      const { error } = await client.auth.signInWithOtp({ email, options: { emailRedirectTo: supabaseRedirect(platform) } });
-      if (error) throw new Error('No se pudo enviar el acceso por correo. Inténtalo de nuevo más tarde.');
+      const { error } = await client.auth.signInWithPassword({ email, password });
+      if (error) throw new Error('No pudimos entrar. Comprueba tu contraseña.');
+    }),
+    sendCode: (email) => run(async () => {
+      // Solo cuentas ya activadas: el acceso nunca crea cuentas nuevas en Supabase.
+      const { error } = await client.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
+      if (error) throw new Error('No se pudo enviar el código. Espera un minuto e inténtalo de nuevo.');
     }),
     verifyCode: (email, token) => run(async () => {
       const { error } = await client.auth.verifyOtp({ email, token, type: 'email' });
       if (error) throw new Error('El código no es válido o ya venció. Solicita uno nuevo.');
-    }),
-    reset: (email) => run(async () => {
-      saveReturn();
-      const { error } = await client.auth.resetPasswordForEmail(email, { redirectTo: supabaseRedirect(platform) });
-      if (error) throw new Error('No se pudo enviar el correo de recuperación. Inténtalo más tarde.');
+      setPendingStep('password');
     }),
     updatePassword: (password) => run(async () => {
-      const { error } = await client.auth.updateUser({ password });
+      const { error } = await client.auth.updateUser({ password, data: { [PASSWORD_FLAG]: true } });
       if (error) throw new Error('No se pudo guardar la contraseña. Usa al menos ocho caracteres e inténtalo de nuevo.');
-      setRecovery(false);
+      setPendingStep(passkeysAvailable ? 'passkey' : null);
     }),
+    skipPasskey: () => setPendingStep(null),
     oauth: (provider) => run(async () => {
       if (!config.supabaseOAuthProviders.includes(provider)) throw new Error('Este proveedor aún no está habilitado.');
       saveReturn();
@@ -188,6 +203,7 @@ function SupabaseBridge({ client, platform, children }: {
       if (!config.supabasePasskeysEnabled || platform !== 'web') throw new Error('Usa la web de B20 para administrar tus passkeys.');
       const { error } = register ? await client.auth.registerPasskey() : await client.auth.signInWithPasskey();
       if (error) throw new Error('No se pudo usar la passkey. Comprueba el dispositivo o usa otro método de acceso.');
+      if (register) setPendingStep((step) => step === 'passkey' ? null : step);
     }),
   };
   return <AuthContext value={{ store, signIn: () => {}, busy: pending > 0 }}>
