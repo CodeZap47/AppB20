@@ -2,7 +2,7 @@
 
 /* El feed se lee mejor a un ancho de red social; la columna lateral se queda igual. */
 .detail--feed {
-  grid-template-columns: minmax(0, 40rem) 17rem;
+  grid-template-columns: minmax(0, 46rem) var(--side-column);
   justify-content: center;
 }
 
@@ -20,7 +20,7 @@
 .stories {
   display: flex;
   gap: 0.9rem;
-  margin: 0.75rem 0 1rem;
+  margin: 0;
   padding: 0.25rem 0.1rem 0.5rem;
   overflow-x: auto;
   scrollbar-width: thin;

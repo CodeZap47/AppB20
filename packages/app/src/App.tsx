@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { createHashRouter, RouterProvider } from 'react-router';
+import { createHashRouter, RouterProvider, type RouteObject } from 'react-router';
 import { ErrorPage } from './components/ErrorPage';
 import { Layout } from './components/Layout';
 import { HomePage } from './pages/HomePage';
@@ -54,7 +54,7 @@ import type { Platform } from './platform';
  * extensión (chrome-extension://) y dentro del WebView de Capacitor.
  * Las rutas específicas de cada módulo van antes de la ruta genérica `m/:moduleId`.
  */
-const router = createHashRouter([
+export const routes: RouteObject[] = [
   {
     element: <Layout />,
     // Si el propio armazón falla no queda menú: el aviso ocupa toda la pantalla.
@@ -158,7 +158,9 @@ const router = createHashRouter([
       },
     ],
   },
-]);
+];
+
+const router = createHashRouter(routes);
 
 /** La autenticación es obligatoria en ambos modos; la URL nunca permite omitirla. */
 export function App({ platform }: { platform: Platform }) {

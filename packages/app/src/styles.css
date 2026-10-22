@@ -10,6 +10,10 @@
   --accent: #2f5bea;
   --on-accent: #ffffff;
   --radius: 10px;
+  /* Ancho máximo del contenido y margen lateral: crecen con la pantalla y el contenido se centra. */
+  --content-max: 1440px;
+  --gutter: clamp(1.25rem, 2.5vw, 2.5rem);
+  --side-column: clamp(17rem, 22vw, 22rem);
   color-scheme: light dark;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
@@ -82,9 +86,10 @@ button {
   min-width: 0;
   min-height: 0;
   inline-size: 100%;
-  max-width: 960px;
-  padding: max(1rem, env(safe-area-inset-top)) max(1.25rem, env(safe-area-inset-right))
-    max(2rem, env(safe-area-inset-bottom)) 1.25rem;
+  max-width: var(--content-max);
+  justify-self: center;
+  padding: max(1rem, env(safe-area-inset-top)) max(var(--gutter), env(safe-area-inset-right))
+    max(2rem, env(safe-area-inset-bottom)) var(--gutter);
 }
 
 .muted {
@@ -102,7 +107,7 @@ button {
   list-style: none;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
   gap: 0.75rem;
 }
 
@@ -471,7 +476,6 @@ a.button.secondary {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  max-width: 1280px;
   padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
   container: content / inline-size;
 }
@@ -516,7 +520,7 @@ a.button.secondary {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  grid-template-columns: minmax(240px, 360px) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
   background: var(--surface);
@@ -1262,8 +1266,9 @@ a.button.secondary {
 @media (max-width: 720px) {
   .chips--scroll {
     flex-wrap: nowrap;
-    margin-inline: -1.25rem;
-    padding: 2px 1.25rem;
+    /* Llega al borde de la pantalla: compensa el margen lateral de .content en móvil. */
+    margin-inline: -1rem;
+    padding: 2px 1rem;
     overflow-x: auto;
     scrollbar-width: none;
   }
@@ -1275,6 +1280,26 @@ a.button.secondary {
   padding: 2px 0.75rem;
   overflow-x: auto;
   scrollbar-width: none;
+}
+
+/* Filtros de búsqueda en rejilla: tantas columnas como quepan, una sola en móvil. */
+.filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+  font-size: 0.9rem;
+}
+
+.filters :is(input, select) {
+  inline-size: 100%;
 }
 
 .results {
@@ -1351,7 +1376,7 @@ a.button.secondary {
 /* Página de detalle: contenido a la izquierda y ficha a la derecha. */
 .detail {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 17rem;
+  grid-template-columns: minmax(0, 1fr) var(--side-column);
   align-items: start;
   gap: 1rem;
 }

@@ -149,13 +149,14 @@ export function WhatsNewPage() {
       {error && <p className="error" role="alert">{error}</p>}
       <p className="muted">Las novedades y la lectura de cada chat se marcan por separado. Aquí solo se resume contenido compartido con el grupo.</p>
 
-      {view === 'feed' && (
-        <StoriesBar meId={me?.id} members={members} celebrating={celebrating} messages={messages} due={due} />
-      )}
-
       <div className={view === 'feed' ? 'detail detail--feed' : 'detail'}>
         <div className="detail__main">
-          {view === 'feed' && <FeedComposer me={me} subjects={subjects} />}
+          {view === 'feed' && (
+            <>
+              <StoriesBar meId={me?.id} members={members} celebrating={celebrating} messages={messages} due={due} />
+              <FeedComposer me={me} subjects={subjects} />
+            </>
+          )}
 
           <div className="toolbar">
             <div className="segmented" role="group" aria-label="Qué mostrar">
