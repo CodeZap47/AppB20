@@ -104,6 +104,7 @@ import ReopenTeachingPracticeReducer from "../reopen_teaching_practice_reducer";
 import ReplaceSpacedCardSourceReducer from "../replace_spaced_card_source_reducer";
 import ReportMessageReducer from "../report_message_reducer";
 import RequestNotificationTestReducer from "../request_notification_test_reducer";
+import ResendInvitationEmailReducer from "../resend_invitation_email_reducer";
 import ResolveMessageReportReducer from "../resolve_message_report_reducer";
 import ResolveOpportunityFeedbackReducer from "../resolve_opportunity_feedback_reducer";
 import RespondHelpContactReducer from "../respond_help_contact_reducer";
@@ -282,6 +283,7 @@ export type ReopenTeachingPracticeParams = __Infer<typeof ReopenTeachingPractice
 export type ReplaceSpacedCardSourceParams = __Infer<typeof ReplaceSpacedCardSourceReducer>;
 export type ReportMessageParams = __Infer<typeof ReportMessageReducer>;
 export type RequestNotificationTestParams = __Infer<typeof RequestNotificationTestReducer>;
+export type ResendInvitationEmailParams = __Infer<typeof ResendInvitationEmailReducer>;
 export type ResolveMessageReportParams = __Infer<typeof ResolveMessageReportReducer>;
 export type ResolveOpportunityFeedbackParams = __Infer<typeof ResolveOpportunityFeedbackReducer>;
 export type RespondHelpContactParams = __Infer<typeof RespondHelpContactReducer>;

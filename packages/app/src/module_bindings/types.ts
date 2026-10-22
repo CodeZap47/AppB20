@@ -852,6 +852,22 @@ export const Invitation = __t.object("Invitation", {
 });
 export type Invitation = __Infer<typeof Invitation>;
 
+export const InvitationEmail = __t.object("InvitationEmail", {
+  email: __t.string(),
+  status: __t.string(),
+  attempts: __t.u32(),
+  leaseId: __t.option(__t.string()),
+  leaseUntil: __t.option(__t.timestamp()),
+  nextAttemptAt: __t.timestamp(),
+  requestedAt: __t.timestamp(),
+  sentAt: __t.option(__t.timestamp()),
+  lastError: __t.option(__t.string()),
+});
+export type InvitationEmail = __Infer<typeof InvitationEmail>;
+
+export const InvitationEmailStatuses = __t.object("InvitationEmailStatuses", {});
+export type InvitationEmailStatuses = __Infer<typeof InvitationEmailStatuses>;
+
 export const Invitations = __t.object("Invitations", {});
 export type Invitations = __Infer<typeof Invitations>;
 

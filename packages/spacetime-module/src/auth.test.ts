@@ -53,6 +53,7 @@ function setup() {
     maintenanceService: tableStore('id'),
     member: tableStore('identity'),
     invitation: tableStore('email'),
+    invitationEmail: tableStore('email'),
     subject: tableStore('id', [{ id: 1, name: 'Privado del grupo' }]),
     studyRoom: { iter: () => [] },
     roomMember: { memberId: { filter: () => [] } },

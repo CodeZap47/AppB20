@@ -31,6 +31,8 @@ import * as GetTrashClockProcedure from "../get_trash_clock_procedure";
 import * as GuideAiProcedure from "../guide_ai_procedure";
 import * as HelpMutateProcedure from "../help_mutate_procedure";
 import * as HelpReadHistoryProcedure from "../help_read_history_procedure";
+import * as InvitationEmailsClaimProcedure from "../invitation_emails_claim_procedure";
+import * as InvitationEmailsFinishProcedure from "../invitation_emails_finish_procedure";
 import * as NotificationCommitRemindersProcedure from "../notification_commit_reminders_procedure";
 import * as NotificationReminderContextProcedure from "../notification_reminder_context_procedure";
 import * as NotificationsAuthorizeProcedure from "../notifications_authorize_procedure";
@@ -94,6 +96,10 @@ export type HelpMutateArgs = __Infer<typeof HelpMutateProcedure.params>;
 export type HelpMutateResult = __Infer<typeof HelpMutateProcedure.returnType>;
 export type HelpReadHistoryArgs = __Infer<typeof HelpReadHistoryProcedure.params>;
 export type HelpReadHistoryResult = __Infer<typeof HelpReadHistoryProcedure.returnType>;
+export type InvitationEmailsClaimArgs = __Infer<typeof InvitationEmailsClaimProcedure.params>;
+export type InvitationEmailsClaimResult = __Infer<typeof InvitationEmailsClaimProcedure.returnType>;
+export type InvitationEmailsFinishArgs = __Infer<typeof InvitationEmailsFinishProcedure.params>;
+export type InvitationEmailsFinishResult = __Infer<typeof InvitationEmailsFinishProcedure.returnType>;
 export type NotificationCommitRemindersArgs = __Infer<typeof NotificationCommitRemindersProcedure.params>;
 export type NotificationCommitRemindersResult = __Infer<typeof NotificationCommitRemindersProcedure.returnType>;
 export type NotificationReminderContextArgs = __Infer<typeof NotificationReminderContextProcedure.params>;
@@ -118,3 +124,4 @@ export type TeachingReadHistoryArgs = __Infer<typeof TeachingReadHistoryProcedur
 export type TeachingReadHistoryResult = __Infer<typeof TeachingReadHistoryProcedure.returnType>;
 export type TeachingSaveV2Args = __Infer<typeof TeachingSaveV2Procedure.params>;
 export type TeachingSaveV2Result = __Infer<typeof TeachingSaveV2Procedure.returnType>;
+

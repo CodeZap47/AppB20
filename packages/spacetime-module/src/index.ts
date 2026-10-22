@@ -33,6 +33,8 @@ import { aiTables } from './aiTables';
 import * as ai from './aiHandlers';
 import { notificationTables, notification, notificationPreference } from './notificationTables';
 import * as notifications from './notificationHandlers';
+import { invitationEmailTables, invitationEmail } from './invitationEmailTables';
+import * as invitationEmails from './invitationEmailHandlers';
 import { trashTables } from './trashTables';
 import * as trash from './trashHandlers';
 import { practiceTables, codingChallenge, challengeHint, challengeProgress, challengeSolution, challengeComment, codeReview, codeReviewVersion, codeReviewComment } from './practiceTables';
@@ -802,6 +804,7 @@ const spacetimedb = schema({
   ...teachingVersionTables,
   ...aiTables,
   ...notificationTables,
+  ...invitationEmailTables,
   ...trashTables,
   presentationPractice, presentationAttempt, presentationPersonal, presentationQuestion, presentationFeedback,
   ...examTables,
@@ -972,7 +975,10 @@ export const on_connect = spacetimedb.clientConnected((ctx) => {
   if (isOwner(ctx) || isFileService(ctx) || ai.isAiService(ctx) || notifications.isNotificationService(ctx) || trash.isMaintenanceService(ctx)) return;
   const email = verifiedEmail(ctx);
   // Limpia invitaciones aceptadas antes de que join_group las borrara al unirse.
-  if (ctx.db.member.identity.find(ctx.sender)) ctx.db.invitation.email.delete(email);
+  if (ctx.db.member.identity.find(ctx.sender)) {
+    ctx.db.invitation.email.delete(email);
+    invitationEmails.cancelInvitationEmail(ctx, email);
+  }
 });
 
 /** Los client IDs no son secretos. Una tabla nueva conserva app_config y datos existentes. */
@@ -1022,6 +1028,8 @@ export const invite_member = spacetimedb.reducer(
       // Reinvitar con otro rol lo corrige antes de que la persona se una.
       if (existing.isCreator === isCreator) return;
       ctx.db.invitation.email.update({ ...existing, isCreator });
+      // El correo menciona el rol: el nuevo aviso debe decir el correcto.
+      invitationEmails.queueInvitationEmail(ctx, normalized);
       log(ctx, 'update', 'invitation', normalized);
       return;
     }
@@ -1031,6 +1039,7 @@ export const invite_member = spacetimedb.reducer(
       invitedBy: ctx.sender,
       createdAt: ctx.timestamp,
     });
+    invitationEmails.queueInvitationEmail(ctx, normalized);
     log(ctx, 'invite', 'invitation', normalized);
   },
 );
@@ -1044,12 +1053,14 @@ export const join_group = spacetimedb.reducer(
     if (existing) {
       // Una reinvitación a quien ya es miembro no debe quedar como pendiente.
       ctx.db.invitation.email.delete(email);
+      invitationEmails.cancelInvitationEmail(ctx, email);
       return;
     }
     const invite = ctx.db.invitation.email.find(email);
     if (!invite) throw new SenderError('Tu correo no está en la lista autorizada del grupo.');
     // Al aceptarla deja de estar pendiente: la lista muestra solo a quien falta por unirse.
     ctx.db.invitation.email.delete(email);
+    invitationEmails.cancelInvitationEmail(ctx, email);
     ctx.db.member.insert({
       identity: ctx.sender,
       displayName: requireText(displayName, 'El nombre', 80),
@@ -1068,7 +1079,16 @@ export const revoke_invitation = spacetimedb.reducer({ email: t.string() }, (ctx
   const normalized = email.trim().toLowerCase();
   if (!ctx.db.invitation.email.find(normalized)) return;
   ctx.db.invitation.email.delete(normalized);
+  invitationEmails.cancelInvitationEmail(ctx, normalized);
   log(ctx, 'revoke', 'invitation', normalized);
+});
+
+/** Vuelve a mandar el correo de una invitación pendiente, como máximo cada 10 minutos. */
+export const resend_invitation_email = spacetimedb.reducer({ email: t.string() }, (ctx, { email }) => {
+  requireCreator(ctx);
+  const normalized = email.trim().toLowerCase();
+  invitationEmails.resendInvitationEmail(ctx, normalized);
+  log(ctx, 'resend', 'invitation', normalized);
 });
 
 export const remove_member = spacetimedb.reducer(
@@ -4349,6 +4369,12 @@ export const invitations = spacetimedb.view(
   },
 );
 
+export const invitation_email_statuses = spacetimedb.view(
+  { name: 'invitation_email_statuses', public: true },
+  t.array(invitationEmail.rowType),
+  (ctx) => invitationEmails.invitationEmailStatuses(ctx.db, ctx.sender),
+);
+
 export const members = spacetimedb.view(
   { name: 'members', public: true },
   t.array(member.rowType),
@@ -4800,6 +4826,13 @@ export const notifications_authorize = spacetimedb.procedure({ payload: t.string
 }));
 export const notifications_finish = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => {
   const input = notificationPayload(payload); notifications.finishNotification(tx, { jobId: notificationText(input, 'jobId'), leaseId: notificationText(input, 'leaseId'), outcome: notificationText(input, 'outcome'), retryAfterSeconds: input.retryAfterSeconds === undefined ? undefined : notificationNumber(input, 'retryAfterSeconds', 0, 86400) }); return '{}';
+}));
+export const invitation_emails_claim = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => {
+  const input = notificationPayload(payload); return JSON.stringify(invitationEmails.claimInvitationEmails(tx, { leaseId: notificationText(input, 'leaseId'), limit: notificationNumber(input, 'limit', 1, 25, 10) }));
+}));
+export const invitation_emails_finish = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => {
+  const input = notificationPayload(payload);
+  invitationEmails.finishInvitationEmail(tx, { email: notificationText(input, 'email'), leaseId: notificationText(input, 'leaseId'), outcome: notificationText(input, 'outcome'), error: input.error === undefined ? undefined : notificationText(input, 'error') }); return '{}';
 }));
 export const notification_reminder_context = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => {
   const input = notificationPayload(payload); return JSON.stringify(notifications.reminderContext(tx, notificationNumber(input, 'limit', 1, 10, 4)));

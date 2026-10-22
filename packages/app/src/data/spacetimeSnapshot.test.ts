@@ -16,7 +16,7 @@ const table = (rows: unknown[] = []) => ({ iter: () => rows.values() });
 /** Tables are stubbed at the cache boundary; production rows remain inferred from generated bindings. */
 function connection(overrides: Record<string, unknown[]> = {}): Pick<DbConnection, 'db'> {
   const names = [
-    'myMember', 'members', 'invitations', 'subjects', 'terms', 'calendar', 'assignments',
+    'myMember', 'members', 'invitations', 'invitationEmailStatuses', 'subjects', 'terms', 'calendar', 'assignments',
     'pageRevisions', 'works', 'workAuthors', 'workFiles', 'groupMessages',
     'myDirectConversations', 'myDirectMessages', 'messageReactions', 'stickerPacks',
     'stickers', 'myChatCommands', 'birthdays', 'activities', 'evidences', 'notes',
@@ -150,6 +150,21 @@ describe('snapshot de SpacetimeDB', () => {
       invitations: [{ email: 'privado@example.com', isCreator: false,
         invitedBy: identity(), createdAt: timestamp }] }), ID);
     expect(data.invitations).toEqual([]);
+  });
+
+  it('une a cada invitación el estado de su correo; el envío tomado por el worker cuenta como en curso', () => {
+    const invite = (email: string) => ({ email, isCreator: false, invitedBy: identity(), createdAt: timestamp });
+    const data = readSnapshot(connection({
+      invitations: [invite('enviado@example.com'), invite('tomado@example.com'), invite('sin-correo@example.com')],
+      invitationEmailStatuses: [
+        { email: 'enviado@example.com', status: 'sent', attempts: 1, requestedAt: timestamp, sentAt: timestamp },
+        { email: 'tomado@example.com', status: 'leased', attempts: 0, requestedAt: timestamp },
+      ],
+    }), ID);
+    const byEmail = Object.fromEntries(data.invitations.map((i) => [i.email, i]));
+    expect(byEmail['enviado@example.com']).toMatchObject({ emailStatus: 'sent', emailSentAt: timestamp.toDate() });
+    expect(byEmail['tomado@example.com']?.emailStatus).toBe('pending');
+    expect(byEmail['sin-correo@example.com']?.emailStatus).toBeUndefined();
   });
 
   it('rechaza una versión de enum desconocida y tamaños imposibles', () => {

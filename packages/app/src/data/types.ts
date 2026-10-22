@@ -249,6 +249,10 @@ export interface Invitation {
   isCreator: boolean;
   invitedBy: Id;
   createdAt: Date;
+  /** Correo de invitación: sin valor cuando no se manda (por ejemplo, en la simulación). */
+  emailStatus?: 'pending' | 'sent' | 'failed';
+  emailRequestedAt?: Date;
+  emailSentAt?: Date;
 }
 
 export interface Subject {
@@ -859,8 +863,10 @@ export interface Actions extends Delivery2Actions, StudyRoomActions, Notificatio
   closeHelpContact(requestId: Id): MaybePromise<void>;
   /** Primera entrada: si tu correo está invitado, te vuelves miembro con ese nombre. */
   joinGroup(displayName: string): MaybePromise<void>;
-  /** Solo creadores. Invitar un correo ya invitado no hace nada. */
+  /** Solo creadores. Encola el correo de invitación; repetir con otro rol lo corrige. */
   inviteMember(email: string, isCreator: boolean): MaybePromise<void>;
+  /** Solo creadores: vuelve a mandar el correo, como máximo cada 10 minutos salvo si falló. */
+  resendInvitationEmail(email: string): MaybePromise<void>;
   /** Solo creadores: retira una invitación de alguien que todavía no se une. */
   revokeInvitation(email: string): MaybePromise<void>;
   /** Solo creadores: da de baja a un miembro; su historial se conserva. */

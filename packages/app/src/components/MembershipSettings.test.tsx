@@ -65,3 +65,31 @@ it('quien no es creador no ve el formulario de invitaciones', async () => {
   expect(emailInput()).toBeNull();
   expect(container.textContent).not.toContain('Invitaciones');
 });
+
+it('muestra el estado del correo y permite reenviar solo cuando corresponde', async () => {
+  const resendInvitationEmail = vi.fn().mockResolvedValue(undefined);
+  const me = { id: 'yo', displayName: 'Ana', status: 'active', isCreator: true, joinedAt: new Date() };
+  const base = { invitedBy: 'yo', createdAt: new Date('2026-10-20T12:00:00Z'), isCreator: false };
+  const snapshot = {
+    me, members: [me], subjects: [],
+    invitations: [
+      { ...base, email: 'enviando@ejemplo.mx', emailStatus: 'pending', emailRequestedAt: new Date() },
+      { ...base, email: 'reciente@ejemplo.mx', emailStatus: 'sent', emailRequestedAt: new Date(), emailSentAt: new Date() },
+      { ...base, email: 'viejo@ejemplo.mx', emailStatus: 'sent', emailRequestedAt: new Date('2026-10-20T12:00:00Z'), emailSentAt: new Date('2026-10-20T12:00:00Z') },
+      { ...base, email: 'fallido@ejemplo.mx', emailStatus: 'failed', emailRequestedAt: new Date() },
+    ],
+  };
+  const source = { resendInvitationEmail, getSnapshot: () => snapshot, subscribe: () => () => {} } as unknown as DemoDataSource;
+  await render(source);
+  const resend = (email: string) => [...invitationItem(email)!.querySelectorAll('button')].find((b) => b.textContent === 'Reenviar');
+
+  expect(invitationItem('enviando@ejemplo.mx')?.textContent).toContain('Enviando correo');
+  expect(invitationItem('reciente@ejemplo.mx')?.textContent).toContain('Correo enviado el');
+  expect(invitationItem('fallido@ejemplo.mx')?.textContent).toContain('No se pudo enviar');
+  expect(resend('enviando@ejemplo.mx')).toBeUndefined();
+  expect(resend('reciente@ejemplo.mx')).toBeUndefined();
+  expect(resend('viejo@ejemplo.mx')).toBeDefined();
+
+  await act(async () => resend('fallido@ejemplo.mx')!.click());
+  expect(resendInvitationEmail).toHaveBeenCalledWith('fallido@ejemplo.mx');
+});

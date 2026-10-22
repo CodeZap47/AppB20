@@ -132,6 +132,7 @@ import ReopenTeachingPracticeReducer from "./reopen_teaching_practice_reducer";
 import ReplaceSpacedCardSourceReducer from "./replace_spaced_card_source_reducer";
 import ReportMessageReducer from "./report_message_reducer";
 import RequestNotificationTestReducer from "./request_notification_test_reducer";
+import ResendInvitationEmailReducer from "./resend_invitation_email_reducer";
 import ResolveMessageReportReducer from "./resolve_message_report_reducer";
 import ResolveOpportunityFeedbackReducer from "./resolve_opportunity_feedback_reducer";
 import RespondHelpContactReducer from "./respond_help_contact_reducer";
@@ -238,6 +239,8 @@ import * as GetTrashClockProcedure from "./get_trash_clock_procedure";
 import * as GuideAiProcedure from "./guide_ai_procedure";
 import * as HelpMutateProcedure from "./help_mutate_procedure";
 import * as HelpReadHistoryProcedure from "./help_read_history_procedure";
+import * as InvitationEmailsClaimProcedure from "./invitation_emails_claim_procedure";
+import * as InvitationEmailsFinishProcedure from "./invitation_emails_finish_procedure";
 import * as NotificationCommitRemindersProcedure from "./notification_commit_reminders_procedure";
 import * as NotificationReminderContextProcedure from "./notification_reminder_context_procedure";
 import * as NotificationsAuthorizeProcedure from "./notifications_authorize_procedure";
@@ -285,6 +288,7 @@ import GuideSourcesRow from "./guide_sources_table";
 import GuideVersionsRow from "./guide_versions_table";
 import HelpPostVersionsRow from "./help_post_versions_table";
 import HelpPostsRow from "./help_posts_table";
+import InvitationEmailStatusesRow from "./invitation_email_statuses_table";
 import InvitationsRow from "./invitations_table";
 import MemberProfileCoversRow from "./member_profile_covers_table";
 import MemberProfilesRow from "./member_profiles_table";
@@ -593,6 +597,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, HelpPostsRow),
+  invitationEmailStatuses: __table({
+    name: 'invitation_email_statuses',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, InvitationEmailStatusesRow),
   invitations: __table({
     name: 'invitations',
     indexes: [
@@ -1199,6 +1210,7 @@ const reducersSchema = __reducers(
   __reducerSchema("replace_spaced_card_source", ReplaceSpacedCardSourceReducer),
   __reducerSchema("report_message", ReportMessageReducer),
   __reducerSchema("request_notification_test", RequestNotificationTestReducer),
+  __reducerSchema("resend_invitation_email", ResendInvitationEmailReducer),
   __reducerSchema("resolve_message_report", ResolveMessageReportReducer),
   __reducerSchema("resolve_opportunity_feedback", ResolveOpportunityFeedbackReducer),
   __reducerSchema("respond_help_contact", RespondHelpContactReducer),
@@ -1307,6 +1319,8 @@ const proceduresSchema = __procedures(
   __procedureSchema("guide_ai", GuideAiProcedure.params, GuideAiProcedure.returnType),
   __procedureSchema("help_mutate", HelpMutateProcedure.params, HelpMutateProcedure.returnType),
   __procedureSchema("help_read_history", HelpReadHistoryProcedure.params, HelpReadHistoryProcedure.returnType),
+  __procedureSchema("invitation_emails_claim", InvitationEmailsClaimProcedure.params, InvitationEmailsClaimProcedure.returnType),
+  __procedureSchema("invitation_emails_finish", InvitationEmailsFinishProcedure.params, InvitationEmailsFinishProcedure.returnType),
   __procedureSchema("notification_commit_reminders", NotificationCommitRemindersProcedure.params, NotificationCommitRemindersProcedure.returnType),
   __procedureSchema("notification_reminder_context", NotificationReminderContextProcedure.params, NotificationReminderContextProcedure.returnType),
   __procedureSchema("notifications_authorize", NotificationsAuthorizeProcedure.params, NotificationsAuthorizeProcedure.returnType),
@@ -1377,6 +1391,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "help_post_versions": Omit<typeof tablesSchema.schemaType.tables["helpPostVersions"], "accessorName"> & { readonly accessorName: "help_post_versions" };
     /** @deprecated Use `helpPosts` instead. This alias will be removed in the next major version. */
     readonly "help_posts": Omit<typeof tablesSchema.schemaType.tables["helpPosts"], "accessorName"> & { readonly accessorName: "help_posts" };
+    /** @deprecated Use `invitationEmailStatuses` instead. This alias will be removed in the next major version. */
+    readonly "invitation_email_statuses": Omit<typeof tablesSchema.schemaType.tables["invitationEmailStatuses"], "accessorName"> & { readonly accessorName: "invitation_email_statuses" };
     /** @deprecated Use `memberProfileCovers` instead. This alias will be removed in the next major version. */
     readonly "member_profile_covers": Omit<typeof tablesSchema.schemaType.tables["memberProfileCovers"], "accessorName"> & { readonly accessorName: "member_profile_covers" };
     /** @deprecated Use `memberProfiles` instead. This alias will be removed in the next major version. */
@@ -1546,6 +1562,7 @@ const tableAccessorAliases = {
   "guide_versions": "guideVersions",
   "help_post_versions": "helpPostVersions",
   "help_posts": "helpPosts",
+  "invitation_email_statuses": "invitationEmailStatuses",
   "member_profile_covers": "memberProfileCovers",
   "member_profiles": "memberProfiles",
   "message_reactions": "messageReactions",
@@ -1682,6 +1699,8 @@ export type DbView = __DbViewBase & {
   readonly "help_post_versions": __DbViewBase["helpPostVersions"];
   /** @deprecated Use `helpPosts` instead. This alias will be removed in the next major version. */
   readonly "help_posts": __DbViewBase["helpPosts"];
+  /** @deprecated Use `invitationEmailStatuses` instead. This alias will be removed in the next major version. */
+  readonly "invitation_email_statuses": __DbViewBase["invitationEmailStatuses"];
   /** @deprecated Use `memberProfileCovers` instead. This alias will be removed in the next major version. */
   readonly "member_profile_covers": __DbViewBase["memberProfileCovers"];
   /** @deprecated Use `memberProfiles` instead. This alias will be removed in the next major version. */
@@ -1864,6 +1883,8 @@ export type Tables = __TablesBase & {
   readonly "help_post_versions": __TablesBase["helpPostVersions"];
   /** @deprecated Use `helpPosts` instead. This alias will be removed in the next major version. */
   readonly "help_posts": __TablesBase["helpPosts"];
+  /** @deprecated Use `invitationEmailStatuses` instead. This alias will be removed in the next major version. */
+  readonly "invitation_email_statuses": __TablesBase["invitationEmailStatuses"];
   /** @deprecated Use `memberProfileCovers` instead. This alias will be removed in the next major version. */
   readonly "member_profile_covers": __TablesBase["memberProfileCovers"];
   /** @deprecated Use `memberProfiles` instead. This alias will be removed in the next major version. */

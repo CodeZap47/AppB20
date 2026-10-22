@@ -5,6 +5,9 @@ import { formatMediumDate } from '../lib/format';
 import { Avatar } from './Avatar';
 import { useAction } from './useAction';
 import { DemoDataSource } from '../data/demo';
+import type { Invitation } from '../data/types';
+
+const RESEND_INTERVAL_MS = 10 * 60_000;
 
 /** Altas, bajas, invitaciones y plan de estudios. Solo lo ven los creadores de la app. */
 export function MembershipSettings() {
@@ -64,7 +67,7 @@ function InvitationsSection() {
       <p className="muted">
         {simulated
           ? 'Este formulario modifica datos de prueba: no envía invitaciones ni controla quién puede iniciar sesión.'
-          : 'Solo entran los correos de esta lista, verificados por SpacetimeAuth.'}
+          : 'Le mandamos un correo con el enlace a la app. Solo entran los correos de esta lista, verificados por SpacetimeAuth.'}
       </p>
       <form className="form" onSubmit={submit}>
         <label className="field">
@@ -104,18 +107,32 @@ function InvitationsSection() {
               <span className="settings-person">
                 <span className="settings-person__name">{i.email}</span>
                 {i.isCreator && <span className="badge badge--admin">Administración</span>}
-                <span className="field__hint">Invitado el {formatMediumDate(i.createdAt)}</span>
+                <span className="field__hint">
+                  Invitado el {formatMediumDate(i.createdAt)}
+                  {emailStatusText(i) && ` · ${emailStatusText(i)}`}
+                </span>
               </span>
-              <button
-                type="button"
-                className="link-button"
-                onClick={() =>
-                  window.confirm(`¿Retirar la invitación de ${i.email}? Ya no podrá unirse con ese correo.`) &&
-                  run(() => source.revokeInvitation(i.email))
-                }
-              >
-                Retirar
-              </button>
+              <span className="row">
+                {canResend(i) && (
+                  <button
+                    type="button"
+                    className="link-button"
+                    onClick={() => run(() => source.resendInvitationEmail(i.email))}
+                  >
+                    Reenviar
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() =>
+                    window.confirm(`¿Retirar la invitación de ${i.email}? Ya no podrá unirse con ese correo.`) &&
+                    run(() => source.revokeInvitation(i.email))
+                  }
+                >
+                  Retirar
+                </button>
+              </span>
             </li>
           ))}
         </ul>
@@ -124,6 +141,22 @@ function InvitationsSection() {
       )}
     </section>
   );
+}
+
+function emailStatusText(invitation: Invitation): string | undefined {
+  switch (invitation.emailStatus) {
+    case 'pending': return 'Enviando correo…';
+    case 'sent': return invitation.emailSentAt ? `Correo enviado el ${formatMediumDate(invitation.emailSentAt)}` : 'Correo enviado';
+    case 'failed': return 'No se pudo enviar el correo';
+    default: return undefined;
+  }
+}
+
+/** Igual que el servidor: un envío fallido se reintenta ya; uno exitoso, tras 10 minutos. */
+function canResend(invitation: Invitation): boolean {
+  if (invitation.emailStatus === 'failed') return true;
+  return invitation.emailStatus === 'sent' && !!invitation.emailRequestedAt
+    && Date.now() - invitation.emailRequestedAt.getTime() >= RESEND_INTERVAL_MS;
 }
 
 function MembersSection() {

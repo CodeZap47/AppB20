@@ -905,6 +905,13 @@ export class DemoDataSource implements DataSource {
     this.#emit();
   }
 
+  resendInvitationEmail(email: string) {
+    this.#requireCreator();
+    // La simulación no manda correos: solo confirma que la invitación existe.
+    const normalized = email.trim().toLowerCase();
+    if (!this.#state.invitations.some((i) => i.email === normalized)) throw new Error('Esa invitación ya no existe.');
+  }
+
   revokeInvitation(email: string) {
     this.#requireCreator();
     const normalized = email.trim().toLowerCase();

@@ -27,7 +27,7 @@ export const PUBLIC_VIEWS = [
   ...PRESENTATION_VIEWS,
   'chat_channels', 'channel_messages', 'my_conversation_states', 'my_blocked_members', 'my_message_reports', 'member_profiles', 'member_profile_covers',
   'note_details', 'note_versions', 'guide_versions', 'question_comments', 'answer_usefulness', 'question_links', 'resource_versions', 'content_statuses', 'contribution_origins',
-  'my_member', 'members', 'invitations', 'subjects', 'terms', 'calendar',
+  'my_member', 'members', 'invitations', 'invitation_email_statuses', 'subjects', 'terms', 'calendar',
   'assignments', 'page_revisions', 'works', 'work_authors', 'work_files',
   'assignment_details', 'my_progress', 'work_details', 'work_revisions', 'work_reviews',
   'academic_comments', 'resource_files', 'activity_links', 'page_snapshots', 'evidence_details',
@@ -101,6 +101,7 @@ export function readSnapshot(connection: Pick<DbConnection, 'db'>, identity: str
   // Al darse de baja, ninguna copia local de filas anteriores se sigue mostrando.
   if (me?.status !== 'active') return { ...emptySnapshot('ready'), me };
 
+  const invitationEmails = new Map([...db.invitationEmailStatuses.iter()].map((row) => [row.email, row]));
   const authors = new Map<string, string[]>();
   for (const row of db.workAuthors.iter()) {
     const id = row.workId.toString();
@@ -212,12 +213,19 @@ export function readSnapshot(connection: Pick<DbConnection, 'db'>, identity: str
       kind: enumValue(row.kind, ['guided', 'peer']), text: row.text, answer: row.answer,
       createdAt: row.createdAt.toDate(), answeredAt: row.answeredAt?.toDate(),
     })),
-    invitations: me.isCreator ? [...db.invitations.iter()].map((row) => ({
-      email: row.email,
-      isCreator: row.isCreator,
-      invitedBy: row.invitedBy.toHexString(),
-      createdAt: row.createdAt.toDate(),
-    })) : [],
+    invitations: me.isCreator ? [...db.invitations.iter()].map((row) => {
+      const email = invitationEmails.get(row.email);
+      return {
+        email: row.email,
+        isCreator: row.isCreator,
+        invitedBy: row.invitedBy.toHexString(),
+        createdAt: row.createdAt.toDate(),
+        // Para quien administra, "en curso" incluye el envío que el worker tiene tomado.
+        emailStatus: email ? enumValue(email.status === 'leased' ? 'pending' : email.status, ['pending', 'sent', 'failed']) : undefined,
+        emailRequestedAt: email?.requestedAt.toDate(),
+        emailSentAt: email?.sentAt?.toDate(),
+      };
+    }) : [],
     subjects: [...db.subjects.iter()].map((row) => ({
       id: row.id.toString(), name: row.name, code: row.code || undefined, period: row.period,
     })),

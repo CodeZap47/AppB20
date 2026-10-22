@@ -218,6 +218,7 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
     }),
     joinGroup: (displayName) => getConnection().reducers.joinGroup({ displayName }),
     inviteMember: (email, isCreator) => getConnection().reducers.inviteMember({ email, isCreator }),
+    resendInvitationEmail: (email) => getConnection().reducers.resendInvitationEmail({ email }),
     revokeInvitation: (email) => getConnection().reducers.revokeInvitation({ email }),
     removeMember: (memberId) => getConnection().reducers.removeMember({ identity: member(memberId) }),
     importCurriculum: () => getConnection().reducers.importCurriculum({ codes: CURRICULUM.map((s) => s.code),
