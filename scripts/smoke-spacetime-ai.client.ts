@@ -27,7 +27,7 @@ export async function runSmoke(options: { address: string; database: string; tok
   const close = () => { for (const connection of connections) connection.disconnect(); connections.clear(); };
   try {
     let owner = await connect(options.tokens[0]!);
-    await owner.reducers.setAuthConfig({ issuer: 'https://auth.spacetimedb.com/oidc', audiences: ['b20-local-smoke'] });
+    await owner.reducers.setAuthConfig({ issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audiences: ['b20-local-smoke'] });
     await owner.reducers.inviteMember({ email: 'owner@b20-smoke.invalid', isCreator: true });
     await owner.reducers.inviteMember({ email: 'author@b20-smoke.invalid', isCreator: false });
     await owner.reducers.joinGroup({ displayName: 'Synthetic owner' });

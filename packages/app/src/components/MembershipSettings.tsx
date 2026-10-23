@@ -67,7 +67,7 @@ function InvitationsSection() {
       <p className="muted">
         {simulated
           ? 'Este formulario modifica datos de prueba: no envía invitaciones ni controla quién puede iniciar sesión.'
-          : 'Le mandamos un correo con el enlace a la app. Solo entran los correos de esta lista, verificados por SpacetimeAuth.'}
+          : 'Su cuenta queda activada: al escribir su correo en B20 recibe un código y crea su contraseña. Solo entran los correos de esta lista.'}
       </p>
       <form className="form" onSubmit={submit}>
         <label className="field">

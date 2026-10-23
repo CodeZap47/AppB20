@@ -171,7 +171,6 @@ import SetSpacedEnrollmentReducer from "../set_spaced_enrollment_reducer";
 import SetStickerPackSharedReducer from "../set_sticker_pack_shared_reducer";
 import SetStudyRoomMaterialReducer from "../set_study_room_material_reducer";
 import SetStudyRoomStatusReducer from "../set_study_room_status_reducer";
-import SetSupabaseAuthReducer from "../set_supabase_auth_reducer";
 import SetTeachingReviewerReducer from "../set_teaching_reviewer_reducer";
 import SetTypingReducer from "../set_typing_reducer";
 import ShareBirthdayReducer from "../share_birthday_reducer";
@@ -365,7 +364,6 @@ export type SetSpacedEnrollmentParams = __Infer<typeof SetSpacedEnrollmentReduce
 export type SetStickerPackSharedParams = __Infer<typeof SetStickerPackSharedReducer>;
 export type SetStudyRoomMaterialParams = __Infer<typeof SetStudyRoomMaterialReducer>;
 export type SetStudyRoomStatusParams = __Infer<typeof SetStudyRoomStatusReducer>;
-export type SetSupabaseAuthParams = __Infer<typeof SetSupabaseAuthReducer>;
 export type SetTeachingReviewerParams = __Infer<typeof SetTeachingReviewerReducer>;
 export type SetTypingParams = __Infer<typeof SetTypingReducer>;
 export type ShareBirthdayParams = __Infer<typeof ShareBirthdayReducer>;

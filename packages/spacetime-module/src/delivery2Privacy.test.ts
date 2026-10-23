@@ -15,7 +15,7 @@ const keyOf = (value: unknown) => value && typeof value === 'object' && 'toHexSt
 function setup(extra: Record<string, Row[]> = {}) {
   const initial: Record<string, Row[]> = {
     member: [admin, author, peer].map((identity) => ({ identity, status: 'active', isCreator: identity === admin })),
-    authConfig: [{ id: 0, issuer: 'https://auth.spacetimedb.com/oidc', audiences: ['test'] }], subject: [{ id: 1n }], ...extra,
+    authConfig: [{ id: 0, issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audiences: ['test'] }], subject: [{ id: 1n }], ...extra,
   };
   const db = new Proxy({}, { get(_target, name: string) {
     const rows = initial[name] ?? [];
@@ -25,7 +25,7 @@ function setup(extra: Record<string, Row[]> = {}) {
         filter: (value: unknown) => rows.filter((row) => keyOf(row[key]) === keyOf(value)) };
     } });
   } });
-  const state = { db, sender: peer, timestamp: at, env: {}, senderAuth: { jwt: { issuer: 'https://auth.spacetimedb.com/oidc', audience: ['test'], fullPayload: { email: 'local@example.com', email_verified: true } } } };
+  const state = { db, sender: peer, timestamp: at, env: {}, senderAuth: { jwt: { issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audience: ['test'], fullPayload: { email: 'local@example.com', email_verified: true } } } };
   return { ctx: state as unknown as Ctx & Parameters<typeof change_history>[0], as: (identity: Identity) => { state.sender = identity; } };
 }
 

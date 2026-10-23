@@ -38,7 +38,6 @@ ausencia de EXECUTE para `anon` y `authenticated`; metadatos falsificados no ver
 ## Cliente
 
 ```dotenv
-VITE_AUTH_PROVIDER=supabase
 VITE_SUPABASE_URL=https://tgtvvbqlmlljuufrutbk.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 VITE_SUPABASE_OAUTH_PROVIDERS=
@@ -106,24 +105,25 @@ Antes de activar a compañeros, comprobar el SMTP del proyecto: el servicio de c
 predeterminado de Supabase tiene restricciones de destinatarios y de envío. No se enviaron correos
 de prueba ni se crearon cuentas reales durante esta integración.
 
-## Cambio de producción y conservación de cuentas
+## Supabase Auth como único proveedor
 
-1. Publicar el módulo compatible con `--delete-data=never` y mantener al propietario técnico actual.
-2. Identificar la membresía original y la identidad de conexión nueva de cada cuenta mediante un
-   proceso de recuperación verificado. **No usar nombres o metadatos editables como prueba.**
-3. El propietario llama `link_auth_identity(sessionIdentity, memberIdentity)` para cada cuenta aprobada.
-   No permite fusionar dos miembros, cambiar un vínculo existente, crear cadenas ni vincular el owner técnico.
-   `unlink_auth_identity` revoca un vínculo explícitamente.
-4. El propietario configura `set_supabase_auth` con issuer `https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1`,
-   audiencia `authenticated` y `enabled=true`. Usa la fila adicional 1, conservando el proveedor
-   anterior en la fila 0 para los miembros que todavía no han migrado. Registrar primero el
-   retorno HTTPS exacto de la web final. Se puede revocar la fila adicional con `enabled=false`.
-5. Ajustar los Workers: `OIDC_ISSUER` al issuer anterior, `OIDC_AUDIENCE=authenticated`,
-   `OIDC_JWKS_URI` al JWKS anterior. La API valida firma RS256/ES256, issuer, audiencia,
-   vencimiento, correo verificado y membresía activa en cada solicitud.
-6. Activar `VITE_AUTH_PROVIDER=supabase` en el build de producción, publicar el cliente y
-   reconectar los clientes existentes. Verificar login y permisos antes de retirar el flujo anterior;
-   al finalizar la transición, `set_auth_config` puede sustituir el proveedor principal por Supabase.
+Desde el 23 de octubre de 2026 B20 ya no usa SpacetimeAuth. El corte consistió en:
+
+1. `set_auth_config` con el emisor `https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1` y la
+   audiencia `authenticated`. Desde ese momento las sesiones de SpacetimeAuth dejan de valer.
+2. Publicar el módulo que solo acepta emisores de Supabase (`allowedAuthIssuer`) y lee una sola
+   fila de `auth_config`.
+3. Desplegar los Workers con `OIDC_ISSUER`, `OIDC_AUDIENCE=authenticated` y el JWKS del proyecto.
+   La API valida firma RS256/ES256, emisor, audiencia, vencimiento, correo verificado y
+   membresía activa en cada solicitud.
+4. Publicar la web con `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY`; el cliente ya no
+   incluye `oidc-client-ts` ni la pantalla de SpacetimeAuth.
+
+Las membresías creadas con SpacetimeAuth conservan autoría, progreso y mensajes: el propietario
+las vincula a la cuenta nueva con `link_auth_identity(sessionIdentity, memberIdentity)`. No
+permite fusionar dos miembros, cambiar un vínculo existente, crear cadenas ni vincular el owner
+técnico; `unlink_auth_identity` revoca un vínculo. Hasta vincularse, esas personas no tienen
+acceso. **No usar nombres o metadatos editables como prueba de identidad.**
 
 ### Obtener la identidad nueva de cada miembro
 

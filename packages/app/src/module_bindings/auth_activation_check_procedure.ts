@@ -10,8 +10,7 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default {
-  issuer: __t.string(),
-  audiences: __t.array(__t.string()),
-  enabled: __t.bool(),
+export const params = {
+  payload: __t.string(),
 };
+export const returnType = __t.bool()

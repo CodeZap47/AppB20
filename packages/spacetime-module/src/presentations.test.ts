@@ -54,7 +54,7 @@ function setup() {
   const owner = identity('owner'); const reviewer = identity('reviewer'); const third = identity('third'); const admin = identity('admin');
   const db = {
     appConfig: tableStore('id', [{ id: 0, owner: admin }]),
-    authConfig: tableStore('id', [{ id: 0, issuer: 'https://auth.spacetimedb.com/oidc', audiences: ['web'] }]),
+    authConfig: tableStore('id', [{ id: 0, issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audiences: ['web'] }]),
     member: tableStore('identity', [owner, reviewer, third, admin].map((person) => ({ identity: person, status: 'active', isCreator: person === admin }))),
     subject: tableStore('id', [{ id: 1n }, { id: 2n }]), term: tableStore('id', [{ id: 10n, subjectId: 1n }, { id: 20n, subjectId: 2n }]),
     note: tableStore('id', [{ id: 101n, author: owner, subjectId: 1n, visibility: 'personal', version: 2 },
@@ -66,7 +66,7 @@ function setup() {
     presentationQuestion: tableStore('id'), presentationFeedback: tableStore('id'), changeLog: { insert: vi.fn() },
   };
   const mutableCtx = { sender: owner, db, timestamp: new Timestamp(1_800_000_000_000_123n), env: {},
-    senderAuth: { jwt: { issuer: 'https://auth.spacetimedb.com/oidc', audience: ['web'], fullPayload: { email: 'a@example.com', email_verified: true } } } };
+    senderAuth: { jwt: { issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audience: ['web'], fullPayload: { email: 'a@example.com', email_verified: true } } } };
   const ctx = mutableCtx as unknown as Parameters<typeof save_presentation_practice>[0] & Parameters<typeof presentation_practices>[0];
   const as = (person: ReturnType<typeof identity>) => { mutableCtx.sender = person; };
   const remove = (person: ReturnType<typeof identity>) => db.member.rows.set(person.toHexString(), { identity: person, status: 'removed' });

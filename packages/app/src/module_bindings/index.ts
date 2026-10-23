@@ -199,7 +199,6 @@ import SetSpacedEnrollmentReducer from "./set_spaced_enrollment_reducer";
 import SetStickerPackSharedReducer from "./set_sticker_pack_shared_reducer";
 import SetStudyRoomMaterialReducer from "./set_study_room_material_reducer";
 import SetStudyRoomStatusReducer from "./set_study_room_status_reducer";
-import SetSupabaseAuthReducer from "./set_supabase_auth_reducer";
 import SetTeachingReviewerReducer from "./set_teaching_reviewer_reducer";
 import SetTypingReducer from "./set_typing_reducer";
 import ShareBirthdayReducer from "./share_birthday_reducer";
@@ -244,6 +243,7 @@ import * as AiPrepareProcedure from "./ai_prepare_procedure";
 import * as AiPublishGenerationProcedure from "./ai_publish_generation_procedure";
 import * as AiSetConsentProcedure from "./ai_set_consent_procedure";
 import * as AiStatusProcedure from "./ai_status_procedure";
+import * as AuthActivationCheckProcedure from "./auth_activation_check_procedure";
 import * as AuthorizeFileUploadProcedure from "./authorize_file_upload_procedure";
 import * as CreateStickerPackNativeProcedure from "./create_sticker_pack_native_procedure";
 import * as ExamActionProcedure from "./exam_action_procedure";
@@ -1365,7 +1365,6 @@ const reducersSchema = __reducers(
   __reducerSchema("set_sticker_pack_shared", SetStickerPackSharedReducer),
   __reducerSchema("set_study_room_material", SetStudyRoomMaterialReducer),
   __reducerSchema("set_study_room_status", SetStudyRoomStatusReducer),
-  __reducerSchema("set_supabase_auth", SetSupabaseAuthReducer),
   __reducerSchema("set_teaching_reviewer", SetTeachingReviewerReducer),
   __reducerSchema("set_typing", SetTypingReducer),
   __reducerSchema("share_birthday", ShareBirthdayReducer),
@@ -1412,6 +1411,7 @@ const proceduresSchema = __procedures(
   __procedureSchema("ai_publish_generation", AiPublishGenerationProcedure.params, AiPublishGenerationProcedure.returnType),
   __procedureSchema("ai_set_consent", AiSetConsentProcedure.params, AiSetConsentProcedure.returnType),
   __procedureSchema("ai_status", AiStatusProcedure.params, AiStatusProcedure.returnType),
+  __procedureSchema("auth_activation_check", AuthActivationCheckProcedure.params, AuthActivationCheckProcedure.returnType),
   __procedureSchema("authorize_file_upload", AuthorizeFileUploadProcedure.params, AuthorizeFileUploadProcedure.returnType),
   __procedureSchema("create_sticker_pack_native", CreateStickerPackNativeProcedure.params, CreateStickerPackNativeProcedure.returnType),
   __procedureSchema("exam_action", ExamActionProcedure.params, ExamActionProcedure.returnType),

@@ -56,7 +56,7 @@ function setup() {
   const people = [owner, other, admin];
   const db = {
     appConfig: tableStore('id', [{ id: 0, owner: admin }]),
-    authConfig: tableStore('id', [{ id: 0, issuer: 'https://auth.spacetimedb.com/oidc', audiences: ['web'] }]),
+    authConfig: tableStore('id', [{ id: 0, issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audiences: ['web'] }]),
     member: tableStore('identity', people.map((person) => ({ identity: person, status: 'active', isCreator: person === admin }))),
     subject: tableStore('id', [{ id: 1n }, { id: 2n }]),
     term: tableStore('id', [{ id: 10n, subjectId: 1n }, { id: 20n, subjectId: 2n }]),
@@ -73,7 +73,7 @@ function setup() {
   };
   const mutableCtx = {
     sender: owner, db, timestamp: new Timestamp(1_800_000_000_000_123n), env: {},
-    senderAuth: { jwt: { issuer: 'https://auth.spacetimedb.com/oidc', audience: ['web'],
+    senderAuth: { jwt: { issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audience: ['web'],
       fullPayload: { email: 'member@example.com', email_verified: true } } },
   };
   const ctx = mutableCtx as unknown as Parameters<typeof save_spaced_collection>[0]

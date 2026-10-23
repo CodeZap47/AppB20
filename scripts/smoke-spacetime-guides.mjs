@@ -83,7 +83,7 @@ try {
     const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
     const now = Math.floor(Date.now() / 1000);
     const payload = `${encode({ alg: 'ES256', typ: 'JWT' })}.${encode({
-      iss: 'https://auth.spacetimedb.com/oidc', sub: `b20-local-smoke-${subject}`,
+      iss: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', sub: `b20-local-smoke-${subject}`,
       aud: ['b20-local-smoke'], iat: now, exp: now + 7200,
       email: `${subject}@b20-smoke.invalid`, email_verified: true,
     })}`;

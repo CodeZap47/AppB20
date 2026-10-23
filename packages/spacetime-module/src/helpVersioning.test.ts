@@ -11,7 +11,7 @@ const owner = Identity.fromString('a'.repeat(64)), peer = Identity.fromString('b
 type Row = Record<string, unknown>;
 const key = (value: unknown): string => value instanceof Identity ? value.toHexString() : String(value);
 function fixture() {
-  const initial: Record<string, Row[]> = { member: [owner, peer].map(identity => ({ identity, status: 'active', isCreator: identity === peer })), appConfig: [{ id: 0, owner: peer }], authConfig: [{ id: 0, issuer: 'https://auth.spacetimedb.com/oidc', audiences: ['test'] }], subject: [{ id: 1n }] };
+  const initial: Record<string, Row[]> = { member: [owner, peer].map(identity => ({ identity, status: 'active', isCreator: identity === peer })), appConfig: [{ id: 0, owner: peer }], authConfig: [{ id: 0, issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audiences: ['test'] }], subject: [{ id: 1n }] };
   const primary: Record<string, string> = { member: 'identity', helpVersion: 'postId', helpRevision: 'key', helpIntent: 'key' };
   const tables = new Map<string, Map<string, Row>>(); let next = 1n;
   const db = new Proxy({}, { get(_target, table: string) {
@@ -22,7 +22,7 @@ function fixture() {
       return { find: (value: unknown) => [...rows.values()].find(row => key(row[index]) === key(value)), filter: (value: unknown) => [...rows.values()].filter(row => key(row[index]) === key(value)), update: (row: Row) => rows.set(key(row[pk]), row), delete: (value: unknown) => rows.delete(key(value)) };
     } });
   } });
-  const state = { db, sender: owner, timestamp: new Timestamp(1_700_000_000_000_000n), env: {}, senderAuth: { jwt: { issuer: 'https://auth.spacetimedb.com/oidc', audience: ['test'], fullPayload: { email: 'owner@example.test', email_verified: true } } } };
+  const state = { db, sender: owner, timestamp: new Timestamp(1_700_000_000_000_000n), env: {}, senderAuth: { jwt: { issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audience: ['test'], fullPayload: { email: 'owner@example.test', email_verified: true } } } };
   return { ctx: state as unknown as Ctx, as: (sender: Identity) => { state.sender = sender; }, rows: (table: string) => [...(tables.get(table)?.values() ?? [])] };
 }
 const fields = { kind: 'offer', subjectId: '1', title: 'Repasar lógica', topic: 'Condiciones', description: 'Explicación', level: 'initial', modality: 'messages', availability: '' };

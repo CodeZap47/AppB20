@@ -449,7 +449,7 @@ La web/PWA está publicada y las compilaciones de web/PWA y extensión se compro
 
 ### Autenticación
 
-**Decisión confirmada: SpacetimeAuth mediante OIDC, con Google como proveedor de entrada, más invitación del grupo**. Autenticarse no reemplaza comprobar permisos y membresía en el módulo. La guía de configuración está en [`spacetimeauth.md`](spacetimeauth.md). [[9]](https://spacetimedb.com/docs/core-concepts/authentication)
+**Decisión confirmada: SpacetimeAuth mediante OIDC, con Google como proveedor de entrada, más invitación del grupo**. Autenticarse no reemplaza comprobar permisos y membresía en el módulo. La guía vigente, tras sustituir SpacetimeAuth por Supabase Auth, está en [`supabase-auth.md`](supabase-auth.md). [[9]](https://spacetimedb.com/docs/core-concepts/authentication)
 
 Validar emisor, audiencia, identidad y pertenencia antes de permitir lectura o escritura. No solicitar acceso a Gmail ni leer correos para iniciar sesión o usar Gemini. La documentación específica de SpacetimeAuth todavía advierte estado beta; el piloto debe validar acceso, renovación, cierre de sesión y rechazo de cuentas no invitadas antes de distribuirse. [[10]](https://spacetimedb.com/docs/core-concepts/authentication/spacetimeauth)
 

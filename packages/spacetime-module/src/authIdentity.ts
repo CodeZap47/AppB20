@@ -18,8 +18,7 @@ export function memberIdentityFor(ctx: IdentityContext): Identity {
   return ctx.db.authIdentityLink?.sessionIdentity.find(ctx.sender)?.memberIdentity ?? ctx.sender;
 }
 
+/** Supabase Auth es el único proveedor: proyectos alojados con OIDC y JWKS bajo /auth/v1. */
 export function allowedAuthIssuer(issuer: string): boolean {
-  if (issuer === 'https://auth.spacetimedb.com/oidc') return true;
-  // Los proyectos Supabase alojados publican descubrimiento OIDC y JWKS bajo /auth/v1.
-  return /^https:\/\/[a-z0-9]+\.supabase\.co\/auth\/v1$/.test(issuer);
+  return /^https:\/\/[a-z0-9]{20}\.supabase\.co\/auth\/v1$/.test(issuer);
 }

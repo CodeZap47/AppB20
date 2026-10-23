@@ -15,9 +15,9 @@
   },
   "vars": {
     "CORS_ORIGINS": "https://b20.mx,https://app-b20.pages.dev,http://localhost:5173,capacitor://localhost,https://localhost",
-    "OIDC_ISSUER": "https://auth.spacetimedb.com/oidc",
-    "OIDC_AUDIENCE": "client_034jL0AHYYQ1bps8SupHU0",
-    "OIDC_JWKS_URI": "https://auth.spacetimedb.com/oidc/jwks",
+    "OIDC_ISSUER": "https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1",
+    "OIDC_AUDIENCE": "authenticated",
+    "OIDC_JWKS_URI": "https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1/.well-known/jwks.json",
     "SPACETIMEDB_URI": "https://maincloud.spacetimedb.com",
     "SPACETIMEDB_MODULE": "app-b20-34245",
     "AI_ENABLED": "true",

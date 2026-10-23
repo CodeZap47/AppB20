@@ -16,7 +16,7 @@
     "type": "module"
   },
   "permissions": ["sidePanel", "storage", "identity"],
-  "host_permissions": ["https://auth.spacetimedb.com/*"],
+  "host_permissions": ["https://tgtvvbqlmlljuufrutbk.supabase.co/*"],
   "icons": {
     "128": "icons/icon-128.png"
   }

@@ -13,7 +13,7 @@ const admin = person('a'), author = person('b'), peer = person('c'), service = p
 type Row = Record<string, unknown>;
 const keyOf = (value: unknown): string => value && typeof value === 'object' && 'toHexString' in value ? (value as Identity).toHexString() : String(value);
 function setup() {
-  const initial: Record<string, Row[]> = { member: [admin, author, peer].map((identity) => ({ identity, status: 'active', isCreator: identity === admin })), appConfig: [{ id: 0, owner: admin }], notificationServiceConfig: [{ id: 0, identity: service, enabled: true }], authConfig: [{ id: 0, issuer: 'https://auth.spacetimedb.com/oidc', audiences: ['test'] }] };
+  const initial: Record<string, Row[]> = { member: [admin, author, peer].map((identity) => ({ identity, status: 'active', isCreator: identity === admin })), appConfig: [{ id: 0, owner: admin }], notificationServiceConfig: [{ id: 0, identity: service, enabled: true }], authConfig: [{ id: 0, issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audiences: ['test'] }] };
   const keys: Record<string, string> = { member: 'identity', birthday: 'identity', notificationPreference: 'memberId', notificationReminderCursor: 'memberId', notificationEvent: 'key', notificationDelivery: 'id', conversationState: 'key', memberBlock: 'key', roomMember: 'key' };
   const all = new Map<string, Row[]>(); let next = 1n;
   const rows = (name: string) => { if (!all.has(name)) all.set(name, initial[name] ?? []); return all.get(name)!; };
@@ -21,7 +21,7 @@ function setup() {
     if (field in target) return target[field as keyof typeof target];
     return { find: (value: unknown) => table.find((row) => keyOf(row[field]) === keyOf(value)), filter: (value: unknown) => table.filter((row) => keyOf(row[field]) === keyOf(value)), update: (row: Row) => { const index = table.findIndex((old) => keyOf(old[primary]) === keyOf(row[primary])); if (index < 0) throw new Error(`Missing ${name}`); table[index] = { ...row }; return row; }, delete: (value: unknown) => { const index = table.findIndex((row) => keyOf(row[field]) === keyOf(value)); if (index >= 0) table.splice(index, 1); } };
   } }); } });
-  const state = { db, sender: author, timestamp: new Timestamp(BigInt(Date.parse('2026-10-21T16:00:00Z')) * 1000n), env: {} as Record<string, string>, senderAuth: { jwt: { issuer: 'https://auth.spacetimedb.com/oidc', audience: ['test'], fullPayload: { email: 'local@example.com', email_verified: true } } } };
+  const state = { db, sender: author, timestamp: new Timestamp(BigInt(Date.parse('2026-10-21T16:00:00Z')) * 1000n), env: {} as Record<string, string>, senderAuth: { jwt: { issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audience: ['test'], fullPayload: { email: 'local@example.com', email_verified: true } } } };
   return { ctx: state as unknown as Ctx, rows, env: state.env, as: (sender: Identity) => { state.sender = sender; }, tick: (seconds: number) => { state.timestamp = new Timestamp(state.timestamp.microsSinceUnixEpoch + BigInt(seconds) * 1_000_000n); } };
 }
 const installation = { id: '10000000-0000-4000-8000-000000000001', label: 'Mi teléfono', endpoint: 'https://fcm.googleapis.com/fcm/send/example', p256dh: 'B' + 'A'.repeat(86), auth: 'A'.repeat(22) };

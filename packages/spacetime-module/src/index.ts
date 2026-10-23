@@ -905,13 +905,11 @@ function requirePeriod(period: number): number {
 function trustedSession(ctx: Ctx) {
   const jwt = ctx.senderAuth.jwt;
   if (!jwt) throw new SenderError('Inicia sesión para acceder al grupo.');
-  const configs = [ctx.db.authConfig.id.find(0), ctx.db.authConfig.id.find(1)]
-    .filter((row) => !!row && row.audiences.length > 0);
-  if (!configs.length) {
+  const config = ctx.db.authConfig.id.find(0);
+  if (!config || !config.audiences.length) {
     throw new SenderError('El acceso todavía no está configurado.');
   }
-  const config = configs.find((row) => row!.issuer === jwt.issuer);
-  if (!config) throw new SenderError('Emisor de sesión no permitido.');
+  if (jwt.issuer !== config.issuer) throw new SenderError('Emisor de sesión no permitido.');
   if (!jwt.audience.some((aud) => config.audiences.includes(aud))) {
     throw new SenderError('Sesión emitida para otra aplicación.');
   }
@@ -965,7 +963,7 @@ function log(ctx: Ctx, action: string, entity: string, entityId: string | bigint
   });
 }
 
-/** Correo verificado del ID token OIDC de SpacetimeAuth, nunca del formulario del cliente. */
+/** Correo verificado por el hook de Supabase Auth en el token, nunca del formulario del cliente. */
 function verifiedEmail(ctx: Ctx): string {
   const jwt = trustedSession(ctx);
   const { email, email_verified: emailVerified } = jwt.fullPayload;
@@ -1009,7 +1007,7 @@ export const on_connect = spacetimedb.clientConnected((ctx) => {
   }
 });
 
-/** Los client IDs no son secretos. Una tabla nueva conserva app_config y datos existentes. */
+/** Emisor y audiencias de Supabase Auth, el único proveedor. Ninguno de los dos es secreto. */
 export const set_auth_config = spacetimedb.reducer(
   { issuer: t.string(), audiences: t.array(t.string()) },
   (ctx, { issuer, audiences }) => {
@@ -1018,31 +1016,15 @@ export const set_auth_config = spacetimedb.reducer(
   },
 );
 
-/** Añade Supabase durante la transición sin sustituir el acceso de los miembros actuales. */
-export const set_supabase_auth = spacetimedb.reducer(
-  { issuer: t.string(), audiences: t.array(t.string()), enabled: t.bool() },
-  (ctx, { issuer, audiences, enabled }) => {
-    if (!isOwner(ctx) && !isAuthSetup(ctx)) throw new SenderError('Solo el propietario puede habilitar Supabase.');
-    if (!allowedAuthIssuer(issuer.trim()) || issuer.trim() === 'https://auth.spacetimedb.com/oidc') {
-      throw new SenderError('Usa el emisor de tu proyecto Supabase.');
-    }
-    if (enabled) saveAuthConfig(ctx, 1, issuer, audiences);
-    else {
-      ctx.db.authConfig.id.delete(1);
-      log(ctx, 'disable', 'auth_config', '1');
-    }
-  },
-);
-
 function saveAuthConfig(ctx: Ctx, id: number, issuer: string, audiences: string[]) {
   const normalizedIssuer = issuer.trim();
   if (!allowedAuthIssuer(normalizedIssuer)) {
-    throw new SenderError('Usa el emisor de SpacetimeAuth o de un proyecto Supabase alojado.');
+    throw new SenderError('Usa el emisor de tu proyecto Supabase: https://<ref>.supabase.co/auth/v1');
   }
   const normalizedAudiences = [...new Set(audiences.map((value) => value.trim()))];
   if (!normalizedAudiences.length || normalizedAudiences.length > 10 ||
       normalizedAudiences.some((value) => !value || /\s/.test(value) || value.length > 200)) {
-    throw new SenderError('Configura de 1 a 10 audiencias o client IDs válidos.');
+    throw new SenderError('Configura de 1 a 10 audiencias válidas; Supabase usa `authenticated`.');
   }
   // En una actualización init no vuelve a correr. Solo la identidad fijada por el deployer
   // puede completar esta fila; una fila existente nunca se sustituye por el entorno.

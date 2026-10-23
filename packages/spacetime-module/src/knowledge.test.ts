@@ -34,7 +34,7 @@ function setup() {
   const privateNote = { id: 70n, subjectId: 1n, topic: 'Tema', title: 'Apunte privado', body: 'Borrador secreto\n![Diagrama](resource:file-native)', tags: ['tema'], visibility: 'personal', source: 'student', author,
     version: 1, createdAt: at, updatedAt: at };
   const initial: Record<string, Row[]> = {
-    authConfig: [{ id: 0, issuer: 'https://auth.spacetimedb.com/oidc', audiences: ['test'] }],
+    authConfig: [{ id: 0, issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audiences: ['test'] }],
     member: [author, peer, removed].map((identity) => ({ identity, displayName: identity.toHexString()[0], status: identity.isEqual(removed) ? 'removed' : 'active', isCreator: identity.isEqual(author) })),
     subject: [{ id: 1n, name: 'Lógica' }, { id: 2n, name: 'Álgebra' }], term: [{ id: 11n, subjectId: 1n }, { id: 12n, subjectId: 2n }],
     assignment: [{ id: 20n, subjectId: 1n }], activity: [{ id: 30n, subjectId: 1n }],
@@ -51,7 +51,7 @@ function setup() {
   const keys: Record<string, string> = { member: 'identity', noteDetail: 'noteId', answerUsefulness: 'key', contentStatus: 'key', resourceVersion: 'key' };
   const tables = new Map<string, ReturnType<typeof tableStore>>();
   const db = new Proxy({}, { get: (_target, name: string) => { if (!tables.has(name)) tables.set(name, tableStore(keys[name] ?? 'id', initial[name])); return tables.get(name); } });
-  const state = { db, sender: author, identity: author, timestamp: at, env: {}, senderAuth: { jwt: { issuer: 'https://auth.spacetimedb.com/oidc', audience: ['test'], fullPayload: { email: 'alumno@example.com', email_verified: true } } } };
+  const state = { db, sender: author, identity: author, timestamp: at, env: {}, senderAuth: { jwt: { issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audience: ['test'], fullPayload: { email: 'alumno@example.com', email_verified: true } } } };
   const ctx = state as unknown as Ctx & Parameters<typeof note_versions>[0];
   const proc = { withTx: (fn: (tx: typeof ctx) => unknown) => fn(ctx) } as unknown as Parameters<typeof get_resource_manifest>[0];
   const rows = (name: string) => [...(db as Record<string, ReturnType<typeof tableStore>>)[name].rows.values()];

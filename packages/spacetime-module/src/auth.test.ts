@@ -17,10 +17,9 @@ import {
   assert_active_member, invite_member, join_group, my_member, on_connect,
   remove_member, revoke_invitation, set_auth_config, subjects,
   link_auth_identity, unlink_auth_identity, update_profile,
-  set_supabase_auth,
 } from './index';
 
-const issuer = 'https://auth.spacetimedb.com/oidc';
+const issuer = 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1';
 const identity = (hex: string) => ({
   toHexString: () => hex,
   isEqual: (other: { toHexString(): string }) => other.toHexString() === hex,
@@ -88,25 +87,20 @@ function setup() {
   return { ctx, mutableCtx, db, student, owner, asOwner, asStudent, invite, join };
 }
 
-describe('SpacetimeAuth y acceso por invitación en módulo', () => {
-  it('el propietario añade Supabase sin cortar el acceso anterior y puede revocarlo por separado', () => {
+describe('Supabase Auth y acceso por invitación en módulo', () => {
+  it('Supabase es el único emisor: SpacetimeAuth y otros proyectos quedan fuera', () => {
     const { ctx, mutableCtx, asOwner, asStudent, join } = setup();
-    join(); asOwner();
-    const supabaseIssuer = 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1';
-    set_supabase_auth(ctx, { issuer: supabaseIssuer, audiences: ['authenticated'], enabled: true });
-    asStudent();
+    join();
     expect(() => assert_active_member(ctx, {})).not.toThrow();
-    mutableCtx.senderAuth.jwt!.issuer = supabaseIssuer;
-    mutableCtx.senderAuth.jwt!.audience = ['authenticated'];
-    expect(() => assert_active_member(ctx, {})).not.toThrow();
-    expect(() => set_supabase_auth(ctx, { issuer: supabaseIssuer, audiences: ['authenticated'], enabled: false })).toThrow(/propietario/);
+    for (const other of ['https://auth.spacetimedb.com/oidc', 'https://zyxwvutsrqponmlkjihg.supabase.co/auth/v1']) {
+      mutableCtx.senderAuth.jwt!.issuer = other;
+      expect(() => assert_active_member(ctx, {})).toThrow(/Emisor/);
+    }
     asOwner();
-    set_supabase_auth(ctx, { issuer: supabaseIssuer, audiences: [], enabled: false });
+    for (const bad of ['https://auth.spacetimedb.com/oidc', 'https://corto.supabase.co/auth/v1', 'https://tgtvvbqlmlljuufrutbk.supabase.co']) {
+      expect(() => set_auth_config(ctx, { issuer: bad, audiences: ['authenticated'] })).toThrow(/emisor/);
+    }
     asStudent();
-    expect(() => assert_active_member(ctx, {})).toThrow(/Emisor/);
-    mutableCtx.senderAuth.jwt!.issuer = issuer;
-    mutableCtx.senderAuth.jwt!.audience = ['web-client'];
-    expect(() => assert_active_member(ctx, {})).not.toThrow();
   });
   it('admite Supabase con audiencia configurada, pero nunca confía en metadatos de correo editables', () => {
     const { ctx, mutableCtx, db, asOwner, asStudent, invite } = setup();
@@ -259,7 +253,7 @@ describe('SpacetimeAuth y acceso por invitación en módulo', () => {
     expect(() => on_connect(ctx, {})).toThrow(/correo verificado/);
   });
 
-  it('falla cerrado si no se ha configurado SpacetimeAuth, pero permite bootstrap del owner', () => {
+  it('falla cerrado si no se ha configurado el acceso, pero permite bootstrap del owner', () => {
     const { ctx, db, asOwner } = setup();
     db.authConfig.rows.clear();
     expect(() => on_connect(ctx, {})).toThrow(/no está configurado/);
@@ -269,13 +263,13 @@ describe('SpacetimeAuth y acceso por invitación en módulo', () => {
     expect(db.authConfig.rows.get('0')?.audiences).toEqual(['opaque-client-id']);
   });
 
-  it('solo creadores autorizados configuran y solo se acepta emisor de SpacetimeAuth', () => {
+  it('solo creadores autorizados configuran y solo se acepta un emisor de Supabase', () => {
     const { ctx, asOwner, join } = setup();
     join();
     expect(() => set_auth_config(ctx, { issuer, audiences: ['some-client'] })).toThrow(/creadores/);
     asOwner();
     expect(() => set_auth_config(ctx, { issuer: 'https://accounts.google.com', audiences: ['some-client'] })).toThrow(/emisor/);
-    expect(() => set_auth_config(ctx, { issuer, audiences: [] })).toThrow(/client IDs/);
+    expect(() => set_auth_config(ctx, { issuer, audiences: [] })).toThrow(/audiencias/);
   });
 
   it('una DB existente sin app_config falla cerrado sin owner de bootstrap explícito', () => {

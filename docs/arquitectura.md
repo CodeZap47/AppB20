@@ -15,7 +15,7 @@ documentan el código publicado y la conservación de datos.
 | --- | --- | --- |
 | Interfaz | React 19 + TypeScript + Vite, `react-router` con rutas hash | Una sola app para todas las presentaciones. |
 | Datos y backend principal | SpacetimeDB, SDK `spacetimedb` (cliente y módulo en TypeScript) | Datos, archivos binarios privados, permisos, reducers, vistas, procedures y trabajos programados. |
-| Autenticación | SpacetimeAuth OIDC (Google) + invitaciones (`invitation`) | Emisor y audiencias configurables en `auth_config`; alta con correo verificado, vistas/acciones y backend con membresía activa. |
+| Autenticación | Supabase Auth + invitaciones (`invitation`) | Supabase solo autentica (código, contraseña y sesión); emisor y audiencia en `auth_config`; alta con correo verificado, vistas/acciones y backend con membresía activa. |
 | Integraciones complementarias | Cloudflare Workers + Hono | Cifrado BYOK, solicitudes autorizadas a Gemini, planificación y entrega Web Push, y mantenimiento de respaldo. Conserva compatibilidad opcional con R2 anterior; los archivos nuevos no requieren Worker. |
 | Gemini BYOK | Claves personales cifradas en SpacetimeDB; clave maestra en Cloudflare Secrets | Publicado y configurado para el grupo, con consentimiento, límites y presupuesto. Las claves no vuelven al cliente; generar exige clave propia y confirmación. La prueba real de Gemini sigue pendiente. |
 | Web/PWA | Cloudflare Pages + `vite-plugin-pwa`, service worker propio (`apps/web/src/sw.ts`) | Web estática, instalación y base para Web Push; recepción real por validar. |
@@ -239,32 +239,32 @@ borrar datos. Esta entrega no activa datos reales ni cambia la configuración de
 
 Las pantallas leen y escriben a través de `DataSource` (`packages/app/src/data/types.ts`),
 cuyas acciones corresponden a los reducers del módulo y cuyo `Snapshot` corresponde a sus
-vistas. La sesión real utiliza la implementación de SpacetimeDB con el ID token de SpacetimeAuth;
+vistas. La sesión real utiliza la implementación de SpacetimeDB con el token de Supabase Auth;
 la demo usa `DemoDataSource`, con datos de prueba en memoria y un selector «Ver como». Iniciar
 sesión no selecciona automáticamente un usuario de la demo ni sustituye la validación del módulo.
 
 ## Autenticación y membresía
 
-La web inicia Authorization Code con PKCE mediante SpacetimeAuth. El callback es
-`/auth/callback` y el retorno de logout es `/auth/logout`, fuera de las rutas hash; el hosting
-debe resolverlos a la aplicación. El cliente renueva la sesión y vuelve a autenticar la conexión de datos con su ID token. La configuración
-pública solo contiene emisor, client ID y direcciones de retorno.
+Supabase Auth es el único proveedor. Nadie se registra por su cuenta: invitar a alguien en B20
+activa su cuenta desde el Worker de IA, y el primer acceso pide un código enviado al correo y
+una contraseña obligatoria. El cliente renueva la sesión con el SDK de Supabase y vuelve a
+autenticar la conexión de datos con su token. La configuración pública solo contiene la URL del
+proyecto y la clave `sb_publishable_`.
 
-`set_auth_config` configura el emisor y las audiencias admitidas del módulo con la identidad
-que publicó la base. Es obligatorio validar la audiencia porque distintos proyectos de
-SpacetimeAuth comparten emisor. El backend obtiene las claves públicas OIDC y verifica firma,
-emisor y audiencia; además consulta `assert_active_member` antes de las rutas protegidas.
+`set_auth_config` configura el emisor (`https://<ref>.supabase.co/auth/v1`) y la audiencia
+(`authenticated`) con la identidad que publicó la base; el módulo rechaza cualquier otro
+proveedor. El backend obtiene las claves públicas del proyecto y verifica firma, emisor y
+audiencia; además consulta `assert_active_member` antes de las rutas protegidas.
 
 `join_group` conserva la comprobación del correo verificado contra `invitation`. Las vistas y
 acciones exigen miembro activo; los privilegios de creador se asignan en la invitación del
 módulo. La primera invitación se prepara desde la CLI, pues la identidad del publicador no es
-la identidad OIDC con la que después entra al navegador. No se fusionan identidades antiguas
-de Google con las nuevas por correo.
+la identidad de Supabase con la que después entra al navegador. Las cuentas creadas antes de
+Supabase conservan su membresía mediante `link_auth_identity`, que autoriza el propietario.
 
-La configuración del panel y del primer creador está en
-[`spacetimeauth.md`](spacetimeauth.md). Web/PWA usa redirecciones en su origen; extensión y
-Android usan el navegador del sistema y callbacks propios que deben registrarse y probarse
-antes de distribuirse.
+La configuración completa está en [`supabase-auth.md`](supabase-auth.md). El acceso con código
+y contraseña funciona igual en web, extensión y Android sin redirecciones; OAuth, si se habilita,
+necesita registrar los retornos de cada presentación.
 
 ### Repaso espaciado (7.9)
 

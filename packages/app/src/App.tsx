@@ -171,14 +171,9 @@ const router = createHashRouter(routes);
 
 /** La autenticación es obligatoria en ambos modos; la URL nunca permite omitirla. */
 export function App({ platform }: { platform: Platform }) {
-  const clientId = platform === 'android'
-    ? config.spacetimeAuthAndroidClientId || config.spacetimeAuthClientId
-    : platform.startsWith('extension')
-      ? config.spacetimeAuthExtensionClientId || config.spacetimeAuthClientId
-      : config.spacetimeAuthClientId;
   return (
     <ThemeProvider><PlatformContext value={platform}>
-      <AuthProvider clientId={clientId} platform={platform}>
+      <AuthProvider platform={platform}>
         <SignedInGate />
       </AuthProvider>
     </PlatformContext></ThemeProvider>

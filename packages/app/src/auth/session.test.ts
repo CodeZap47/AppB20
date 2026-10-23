@@ -10,7 +10,7 @@ function token(extra: Record<string, unknown> = {}): string {
 
 afterEach(() => vi.useRealTimers());
 
-describe('perfil de SpacetimeAuth', () => {
+describe('perfil de la sesión', () => {
   it('lee la cuenta y el correo verificado sin confundirlo con una autorización del grupo', () => {
     expect(decodeIdToken(token())).toEqual({ subject: 'user_123', email: 'ana@ejemplo.mx',
       name: 'Ana Pérez', picture: undefined, expiresAt: 3_600_000 });

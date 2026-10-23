@@ -12,7 +12,7 @@ test('la identidad tiene el formato de SpacetimeDB y es determinista', () => {
 
 test('cambiar emisor o sujeto produce otra identidad', () => {
   const identity = identityFromClaims(SUPABASE_ISSUER, uid);
-  assert.notEqual(identityFromClaims('https://auth.spacetimedb.com/oidc', uid), identity);
+  assert.notEqual(identityFromClaims('https://zyxwvutsrqponmlkjihg.supabase.co/auth/v1', uid), identity);
   assert.notEqual(identityFromClaims(SUPABASE_ISSUER, uid.replace(/f$/, 'e')), identity);
 });
 

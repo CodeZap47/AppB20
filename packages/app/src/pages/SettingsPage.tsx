@@ -117,8 +117,8 @@ function AccountSettings({ admin }: { admin: boolean }) {
         {session?.status === 'signedIn' && (
           <>
             <p className="field__hint">{simulated
-              ? 'Tu sesión es real y la administra SpacetimeAuth. Elegir un perfil simulado no cambia esta cuenta.'
-              : 'Sesión administrada por SpacetimeAuth. El acceso al grupo depende de tu invitación.'}</p>
+              ? 'Tu sesión es real y la administra Supabase Auth. Elegir un perfil simulado no cambia esta cuenta.'
+              : 'Sesión administrada por Supabase Auth. El acceso al grupo depende de tu invitación.'}</p>
             <div className="form__actions">
               <button type="button" className="secondary" onClick={() => sessionStore?.signOut()}>
                 Cerrar sesión

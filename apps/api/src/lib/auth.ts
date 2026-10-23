@@ -4,7 +4,7 @@ import { env } from '../env.ts';
 import { checkActiveMembership } from './membership.ts';
 
 export interface AuthUser {
-  /** `sub` del ID token OIDC de SpacetimeAuth. */
+  /** `sub` del token de Supabase Auth (User UID). */
   subject: string;
   email: string;
 }

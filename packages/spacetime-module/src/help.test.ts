@@ -72,7 +72,7 @@ function setup() {
   const sender = identity('02');
   const third = identity('03');
   const admin = identity('04');
-  const issuer = 'https://auth.spacetimedb.com/oidc';
+  const issuer = 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1';
   const db = {
     appConfig: tableStore('id', [{ id: 0, owner: admin }]),
     authConfig: tableStore('id', [{ id: 0, issuer, audiences: ['b20'] }]),

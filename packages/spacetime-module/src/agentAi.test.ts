@@ -40,7 +40,7 @@ const essay = 'Un ciclo while repite instrucciones mientras su condición sea ve
 function setup() {
   const member = [admin, owner, peer].map((person) => ({ identity: person, displayName: person === peer ? 'Ana Pérez' : person === owner ? 'Luis Flores' : 'Admin', isCreator: person === admin, status: 'active', joinedAt: at }));
   const initial: Record<string, Row[]> = {
-    member, appConfig: [{ id: 0, owner: admin }], authConfig: [{ id: 0, issuer: 'https://auth.spacetimedb.com/oidc', audiences: ['test'] }],
+    member, appConfig: [{ id: 0, owner: admin }], authConfig: [{ id: 0, issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audiences: ['test'] }],
     aiServiceConfig: [{ id: 0, identity: service, enabled: true, dailyTokenBudget: 100_000 }],
     aiConsent: [owner, peer].map((actor) => ({ actor, version: AI_CONSENT_VERSION, accepted: true, updatedAt: at })),
     aiKey: [owner, peer].map((actor) => ({ actor, keyId: actor === owner ? uid(901) : uid(902), provider: 'gemini', ciphertext: 'cifrado', iv: 'AAAAAAAAAAAAAAAA', masterVersion: 'v1', updatedAt: at })),
@@ -55,7 +55,7 @@ function setup() {
     if (!tables.has(property)) tables.set(property, store(keys[property] ?? 'id', initial[property]));
     return tables.get(property);
   } });
-  const state = { db, sender: owner, identity: admin, timestamp: at, env: {}, senderAuth: { jwt: { issuer: 'https://auth.spacetimedb.com/oidc', audience: ['test'], fullPayload: { email: 'alumno@example.com', email_verified: true } } } };
+  const state = { db, sender: owner, identity: admin, timestamp: at, env: {}, senderAuth: { jwt: { issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audience: ['test'], fullPayload: { email: 'alumno@example.com', email_verified: true } } } };
   const ctx = state as unknown as Ctx;
   const proc = { withTx: (fn: (tx: Ctx) => unknown) => fn(ctx) } as unknown as Parameters<typeof agent_ai>[0];
   const rows = (table: string) => [...(db as Record<string, ReturnType<typeof store>>)[table].rows.values()];

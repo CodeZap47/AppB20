@@ -38,7 +38,7 @@ function setup() {
   const member = [admin, author, other, removed].map((person) => ({ identity: person, displayName: 'Alumno', isCreator: person === admin, status: person === removed ? 'removed' : 'active' }));
   const note = (id: bigint, visibility: string) => ({ id, subjectId: 1n, title: 'Apunte', topic: '', body: 'Contenido', tags: [], visibility, source: 'student', author, version: 1, createdAt: at, updatedAt: at });
   const initial: Record<string, Row[]> = {
-    member, appConfig: [{ id: 0, owner: admin }], authConfig: [{ id: 0, issuer: 'https://auth.spacetimedb.com/oidc', audiences: ['test'] }], subject: [{ id: 1n, name: 'Lógica' }],
+    member, appConfig: [{ id: 0, owner: admin }], authConfig: [{ id: 0, issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audiences: ['test'] }], subject: [{ id: 1n, name: 'Lógica' }],
     note: [note(1n, 'group'), note(2n, 'personal')],
     question: [{ id: 3n, author, subjectId: 1n, title: 'Pregunta', body: 'Texto', topic: '', createdAt: at, status: 'open' }],
     poll: [{ id: 5n, title: 'Votación', cancelledAt: undefined }, { id: 6n, title: 'Cancelada', cancelledAt: at }],
@@ -49,7 +49,7 @@ function setup() {
     if (!tables.has(property)) tables.set(property, store(keys[property] ?? 'id', initial[property]));
     return tables.get(property);
   } });
-  const state = { db, sender: author, timestamp: at, env: {}, senderAuth: { jwt: { issuer: 'https://auth.spacetimedb.com/oidc', audience: ['test'], fullPayload: { email: 'alumno@example.com', email_verified: true } } } };
+  const state = { db, sender: author, timestamp: at, env: {}, senderAuth: { jwt: { issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audience: ['test'], fullPayload: { email: 'alumno@example.com', email_verified: true } } } };
   return { ctx: state as unknown as Ctx, as: (sender: Identity) => { state.sender = sender; },
     rows: (table: string) => [...(db as Record<string, ReturnType<typeof store>>)[table].rows.values()] };
 }
