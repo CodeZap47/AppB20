@@ -30,6 +30,8 @@ async function input(element: HTMLInputElement | HTMLTextAreaElement, value: str
   await act(async () => { Object.getOwnPropertyDescriptor(element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, 'value')!.set!.call(element, value); element.dispatchEvent(new Event('input', { bubbles: true })); });
 }
 async function click(label: string) { const button = [...container.querySelectorAll('button')].find((entry) => entry.textContent === label)!; expect(button).toBeTruthy(); await act(async () => button.click()); }
+function visibilityButton(action: 'Mostrar' | 'Ocultar') { return container.querySelector<HTMLButtonElement>(`button[aria-label="${action} clave de Gemini"]`)!; }
+async function revealKey() { const button = visibilityButton('Mostrar'); expect(button).toBeTruthy(); await act(async () => button.click()); }
 async function subjectWithMaterial() {
   const subjectId = source.getSnapshot().notes[0]!.subjectId;
   const select = container.querySelector<HTMLSelectElement>('section[aria-label="Preparar material para IA"] .ai-scope select')!;
@@ -80,16 +82,30 @@ describe('Ajustes de BYOK y preparación de fuentes', () => {
     }); vi.stubGlobal('fetch', network);
     await show(false, true);
     const password = container.querySelector<HTMLInputElement>('input[type=password]')!;
-    expect(password.disabled).toBe(false); await input(password, 'secret-is-only-transient-12345');
+    expect(password.disabled).toBe(false);
+    expect(password.autocomplete).toBe('new-password'); expect(password.minLength).toBe(20); expect(password.maxLength).toBe(256);
+    await input(password, 'secret-is-only-transient-12345'); await revealKey();
+    expect(password.type).toBe('text'); expect(password.value).toBe('secret-is-only-transient-12345');
+    expect(network.mock.calls.some((call) => call[1]?.method === 'PUT')).toBe(false);
     await act(async () => password.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
-    expect(password.value).toBe('');
+    expect(password.value).toBe(''); expect(password.type).toBe('password');
+    expect(password.disabled).toBe(true); expect(visibilityButton('Mostrar').disabled).toBe(true);
+    await act(async () => visibilityButton('Mostrar').click()); expect(password.type).toBe('password');
     const put = network.mock.calls.find((call) => call[1]?.method === 'PUT')!;
     expect(JSON.parse(String(put[1]?.body))).toEqual({ apiKey: 'secret-is-only-transient-12345' });
     expect(container.textContent).not.toContain('secret-is-only-transient');
     await act(async () => resolveSave(Response.json({ configured: true })));
-    await input(password, 'cancel-this-secret-12345'); await click('Cancelar'); expect(password.value).toBe('');
-    await input(password, 'clear-on-session-change-12345'); auth.session = signedIn('two'); await show(false, true);
-    expect(container.querySelector<HTMLInputElement>('input[type=password]')!.value).toBe(''); expect(password.value).toBe('');
+    expect(visibilityButton('Mostrar').disabled).toBe(false);
+    await input(password, 'cancel-this-secret-12345'); await revealKey();
+    expect(password.type).toBe('text'); await click('Cancelar'); expect(password.value).toBe(''); expect(password.type).toBe('password');
+    await input(password, 'clear-on-session-change-12345'); await revealKey();
+    expect(password.type).toBe('text'); auth.session = signedIn('two'); await show(false, true);
+    const nextPassword = container.querySelector<HTMLInputElement>('input[type=password]')!;
+    expect(nextPassword.value).toBe(''); expect(password.value).toBe(''); expect(visibilityButton('Mostrar')).toBeTruthy();
+    await input(nextPassword, 'clear-on-leave-12345'); await revealKey();
+    await act(async () => root.render(null)); expect(nextPassword.value).toBe('');
+    await show(false, true);
+    expect(container.querySelector<HTMLInputElement>('input[type=password]')!.value).toBe(''); expect(visibilityButton('Mostrar')).toBeTruthy();
     expect(sessionStorage.length).toBe(0); expect(localStorage.length).toBe(0);
   });
 

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { config } from '../config';
+import { PasswordField } from '../components/PasswordField';
 import { useSupabaseAuth } from './SupabaseAuthProvider';
 import { AuthFrame } from './AuthFrame';
 import { pendingInviteLink } from './inviteLink';
@@ -63,7 +64,7 @@ export function SupabaseSignInForm() {
       void run(async () => { await auth.signIn(address, password); setPassword(''); });
     }}>
       <p className="auth-feedback">Entrar como <strong>{address}</strong></p>
-      <label className="auth-email"><span>Contraseña</span><input type="password" autoComplete="current-password" required autoFocus value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+      <PasswordField className="auth-email" label="Contraseña" autoComplete="current-password" required autoFocus value={password} onChange={(event) => setPassword(event.target.value)} />
       <button className="auth-action" disabled={auth.busy || !password}>{auth.busy ? 'Un momento…' : 'Entrar a B20'}</button>
       <button type="button" className="auth-link" disabled={auth.busy} onClick={() => void sendCode()}>Olvidé mi contraseña</button>
     </form>}
@@ -93,8 +94,8 @@ export function CreatePasswordPage() {
       if (password !== confirmation) { setError('Las contraseñas no coinciden.'); return; }
       void auth?.updatePassword(password).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'No se pudo guardar la contraseña.'));
     }}>
-      <label className="auth-email"><span>Contraseña</span><input type="password" autoComplete="new-password" required minLength={8} autoFocus value={password} onChange={(event) => setPassword(event.target.value)} /></label>
-      <label className="auth-email"><span>Repite la contraseña</span><input type="password" autoComplete="new-password" required minLength={8} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label>
+      <PasswordField className="auth-email" label="Contraseña" autoComplete="new-password" required minLength={8} autoFocus value={password} onChange={(event) => setPassword(event.target.value)} />
+      <PasswordField className="auth-email" label="Repite la contraseña" visibilityLabel="confirmación de contraseña" autoComplete="new-password" required minLength={8} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} />
       <button className="auth-action" disabled={auth?.busy}>{auth?.busy ? 'Guardando…' : 'Guardar contraseña'}</button>
       {error && <p role="alert" className="auth-feedback auth-feedback--error">{error}</p>}
     </form>
