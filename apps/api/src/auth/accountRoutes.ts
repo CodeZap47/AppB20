@@ -26,7 +26,7 @@ export function createSupabaseAdmin(url: string, secretKey: string, fetchFn: typ
   return {
     async state(email) {
       const response = await request('/rest/v1/rpc/b20_account_state', { p_email: email });
-      if (!response.ok) { await response.body?.cancel(); throw new Error('Supabase account state failed.'); }
+      if (!response.ok) { await response.body?.cancel(); throw new Error(`Supabase account state failed (HTTP ${response.status}).`); }
       const value: unknown = await response.json();
       if (value !== 'password' && value !== 'setup' && value !== 'none') throw new Error('Unexpected Supabase account state.');
       return value;
@@ -37,7 +37,7 @@ export function createSupabaseAdmin(url: string, secretKey: string, fetchFn: typ
       if (response.ok) return;
       const error = await response.json().catch(() => null) as { error_code?: string } | null;
       if (error?.error_code === 'email_exists') return;
-      throw new Error('Supabase account creation failed.');
+      throw new Error(`Supabase account creation failed (HTTP ${response.status}).`);
     },
   };
 }
@@ -66,8 +66,9 @@ export function accountRoutes(options: { admin?: (env: AccountEnv) => SupabaseAd
       const call = options.call?.(c.env) ?? createNotificationCall({ uri: c.env.SPACETIMEDB_URI, module: c.env.SPACETIMEDB_MODULE, serviceToken: serviceToken! });
       const state = await accountState(email, { admin, invited: (value) => call<boolean>('auth_activation_check', { email: value }) });
       return c.json({ state });
-    } catch {
-      console.error(JSON.stringify({ event: 'account_state_error' }));
+    } catch (error) {
+      // El motivo no incluye secretos: solo el paso que falló y su código HTTP.
+      console.error(JSON.stringify({ event: 'account_state_error', reason: error instanceof Error ? error.message.slice(0, 200) : 'unknown' }));
       return c.json({ error: 'No pudimos comprobar tu cuenta. Inténtalo de nuevo.' }, 503);
     }
   });

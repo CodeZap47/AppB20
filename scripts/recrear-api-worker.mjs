@@ -87,9 +87,32 @@ function askHidden(question) {
   });
 }
 
+/** Ventana de macOS con la respuesta oculta: pegar ahí no depende de la terminal ni del portapapeles. */
+function askDialog() {
+  const script = 'text returned of (display dialog "Pega la clave sb_secret_ del proyecto pypdkigeywdughdhxlcm" '
+    + 'default answer "" with hidden answer with title "B20")';
+  const result = spawnSync('osascript', ['-e', script], { encoding: 'utf8' });
+  return result.status === 0 ? result.stdout.trim() : '';
+}
+
+/** Solo cambia SUPABASE_SECRET_KEY y borra secretos creados por error con nombre de clave (sb_…). */
+function updateSupabaseSecret(npx) {
+  const supabaseSecret = askDialog();
+  if (!supabaseSecret.startsWith('sb_secret_')) throw new Error('No se recibió una clave sb_secret_. No se cambió nada.');
+  const listed = JSON.parse(run(npx, ['wrangler', 'secret', 'list', '--config', WORKER_CONFIG, '--format', 'json'], { quiet: true }));
+  const strays = listed.map((secret) => secret.name).filter((name) => /^sb_/.test(name));
+  const changes = { SUPABASE_SECRET_KEY: supabaseSecret, ...Object.fromEntries(strays.map((name) => [name, null])) };
+  const result = spawnSync(npx, ['wrangler', 'secret', 'bulk', '--config', WORKER_CONFIG], {
+    cwd: ROOT, input: JSON.stringify(changes), stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf8',
+  });
+  if (result.status !== 0) throw new Error('Cloudflare no aceptó el cambio de secretos. No se mostró ninguna clave.');
+  console.log(`Listo: SUPABASE_SECRET_KEY actualizado${strays.length ? ` y ${strays.length} secreto(s) mal nombrado(s) borrado(s)` : ''}.`);
+}
+
 async function main() {
   if (Number(process.versions.node.split('.')[0]) < 22) throw new Error('Usa Node 22 o superior (nvm use 22).');
   const npx = join(dirname(process.execPath), 'npx');
+  if (process.argv.includes('--solo-supabase')) return updateSupabaseSecret(npx);
   const spacetime = run('spacetime', ['login', 'show'], { quiet: true }).trim();
   console.log(`SpacetimeDB: ${spacetime}`);
   console.log('Se registrarán las identidades técnicas con esa sesión; debe ser la propietaria de la base.\n');
