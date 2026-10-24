@@ -3,26 +3,49 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { disableBrowserPush, enableBrowserPush } from './browserPush';
 
 const publicKey = btoa(String.fromCharCode(4, ...new Array<number>(64).fill(1))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-function browser(permission: NotificationPermission = 'granted') {
+function browser(permission: NotificationPermission = 'granted', requestedPermission: NotificationPermission | Promise<NotificationPermission> = permission) {
   const unsubscribe = vi.fn().mockResolvedValue(true);
   const subscription = { toJSON: () => ({ endpoint: 'https://web.push.apple.com/example', keys: { p256dh: 'public-key', auth: 'auth-secret' } }), unsubscribe };
   const subscribe = vi.fn().mockResolvedValue(subscription);
   const worker = { pushManager: { getSubscription: vi.fn().mockResolvedValue(null), subscribe } };
   Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: { getRegistration: vi.fn().mockResolvedValue(worker), ready: Promise.resolve(worker) } });
-  vi.stubGlobal('Notification', { permission, requestPermission: vi.fn().mockResolvedValue(permission) });
-  return { subscribe, unsubscribe, worker, subscription };
+  const requestPermission = vi.fn().mockResolvedValue(requestedPermission);
+  vi.stubGlobal('Notification', { permission, requestPermission });
+  return { subscribe, unsubscribe, worker, subscription, requestPermission };
 }
 afterEach(() => { localStorage.clear(); vi.unstubAllGlobals(); Reflect.deleteProperty(navigator, 'serviceWorker'); });
 
 describe('registro Web Push solicitado por la persona', () => {
   it('registra un dispositivo con id estable y no guarda claves ni endpoint en almacenamiento local', async () => {
-    const { subscribe } = browser(); const register = vi.fn();
+    const { subscribe, requestPermission } = browser(); const register = vi.fn();
     const first = await enableBrowserPush('member', publicKey, register);
     expect(await enableBrowserPush('member', publicKey, register)).toBe(first);
     expect(register).toHaveBeenCalledWith(expect.objectContaining({ id: first, label: 'Web/PWA' }));
     expect(subscribe).toHaveBeenCalledWith(expect.objectContaining({ userVisibleOnly: true }));
+    expect(requestPermission).not.toHaveBeenCalled();
     expect(JSON.stringify(localStorage)).not.toContain('auth-secret');
     expect(JSON.stringify(localStorage)).not.toContain('web.push.apple.com');
+  });
+  it.each(['granted', 'denied'] as const)('espera la decisión del permiso inicial antes de registrar (%s)', async (decision) => {
+    let resolvePermission!: (permission: NotificationPermission) => void;
+    const permission = new Promise<NotificationPermission>((resolve) => { resolvePermission = resolve; });
+    const { subscribe, worker, requestPermission } = browser('default', permission); const register = vi.fn();
+    const enabling = enableBrowserPush('member', publicKey, register);
+    expect(requestPermission).toHaveBeenCalledOnce();
+    expect(navigator.serviceWorker.getRegistration).not.toHaveBeenCalled();
+    expect(worker.pushManager.getSubscription).not.toHaveBeenCalled();
+    expect(subscribe).not.toHaveBeenCalled(); expect(register).not.toHaveBeenCalled();
+    expect(localStorage.length).toBe(0);
+    resolvePermission(decision);
+    if (decision === 'granted') {
+      const id = await enabling;
+      expect(subscribe).toHaveBeenCalledOnce();
+      expect(register).toHaveBeenCalledWith(expect.objectContaining({ id }));
+    } else {
+      await expect(enabling).rejects.toThrow('no autorizó');
+      expect(subscribe).not.toHaveBeenCalled(); expect(register).not.toHaveBeenCalled();
+      expect(localStorage.length).toBe(0);
+    }
   });
   it('conserva la bandeja sin registrar un dispositivo al denegar permiso', async () => {
     const { subscribe } = browser('denied'); const register = vi.fn();
