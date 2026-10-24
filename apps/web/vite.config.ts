@@ -8,7 +8,6 @@ import { parsePagesOrigin, parseWebOrigin } from './src/canonicalOrigin.ts';
 // `--mode capacitor` genera la misma app para el APK Android, sin service worker de PWA:
 // en el APK se conserva la bandeja; el push nativo sigue pendiente.
 export default defineConfig(({ mode }) => {
-  const brand = process.env.VITE_BRAND === 'campus' ? 'campus' : 'studio';
   const designPreview = mode === 'design-preview';
   if (mode === 'pages') {
     const env = loadEnv(mode, '../..', 'VITE_');
@@ -80,7 +79,7 @@ export default defineConfig(({ mode }) => {
           scope: './',
           display: 'standalone',
           background_color: '#f7f7f9',
-          theme_color: brand === 'campus' ? '#3152a0' : '#6942b5',
+          theme_color: '#3152a0',
           icons: [
             { src: 'icons/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
             // TODO(Etapa 0): agregar PNG 192, 512 y apple-touch-icon 180 para iPhone.

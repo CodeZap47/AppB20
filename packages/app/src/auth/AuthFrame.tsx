@@ -1,5 +1,4 @@
 import { useId, type ReactNode } from 'react';
-import { ThemeSwitch } from '../design/Theme';
 import { Icon } from '../components/Icon';
 
 /** Marco visual del acceso. La autenticación y la elección de datos viven fuera de él. */
@@ -17,7 +16,6 @@ export function AuthFrame({ title, description, variant = 'compact', busy = fals
         <span className="auth-brand__mark" aria-hidden="true">B20</span>
         <span className="auth-brand__caption">Espacio del grupo</span>
       </header>
-      {variant === 'welcome' && <ThemeSwitch />}
       <div className="auth-layout">
         {variant === 'welcome' && (
           <div className="auth-intro">

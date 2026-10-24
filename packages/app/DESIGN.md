@@ -1,18 +1,14 @@
-# B20 — two visual editions
+# B20 — Campus visual edition
 
-The user pinned the references and requested both editions. These commitments take precedence over a randomly selected visual direction.
+The user pinned the references and chose the Campus edition as the only one. These commitments take precedence over a randomly selected visual direction.
 
 ## Shared system
 
 Operate mode for the signed-in app; focused access and onboarding flows. Bright surfaces support daytime campus and phone use. Use a generous but compact rhythm, clear controls, responsive layouts and strong keyboard focus. Keep the existing icon family. Animation expands navigation panels and eases page transitions; disable it for reduced motion.
 
-## Studio edition
-
-Learnora's lavender, plum ink and lime, with the flowing geometry and welcoming split composition of Kids’ Language School. Manrope is the rounded geometric display/UI face. The login pairs a plum learning composition with a clear white access form. Reusable abstract geometry symbolizes linked classmates and materials; no borrowed people or fictitious claims.
-
 ## Campus edition
 
-CESUN-inspired navy/royal blue and vivid green, grounded in the inspected university website, with the same confident scale and graphic grammar as Studio. Figtree follows the university's typographic direction. Keep the B20 wordmark, not an imitation institutional seal.
+CESUN-inspired navy/royal blue and vivid green, grounded in the inspected university website, with a confident scale and a welcoming split composition: the login pairs a navy learning composition with a clear white access form. Reusable abstract geometry symbolizes linked classmates and materials; no borrowed people or fictitious claims. Figtree follows the university's typographic direction. Keep the B20 wordmark, not an imitation institutional seal.
 
 ## Admin identity
 
