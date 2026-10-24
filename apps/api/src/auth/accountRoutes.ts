@@ -15,6 +15,14 @@ export interface SupabaseAdmin {
 }
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** Código del enlace de invitación: 32 bytes en base64url. */
+const INVITE = /^[A-Za-z0-9_-]{43}$/;
+
+/** El módulo solo conoce el hash del código, nunca el código. */
+export async function inviteHash(code: string): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code)));
+  return [...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
 
 export function createSupabaseAdmin(url: string, secretKey: string, fetchFn: typeof fetch = fetch): SupabaseAdmin {
   const base = new URL(url);
@@ -42,11 +50,21 @@ export function createSupabaseAdmin(url: string, secretKey: string, fetchFn: typ
   };
 }
 
-/** Activa la cuenta la primera vez que una persona invitada escribe su correo. */
-export async function accountState(email: string, deps: { admin: SupabaseAdmin; invited(email: string): Promise<boolean> }): Promise<AccountState> {
+/**
+ * Activa la cuenta la primera vez que una persona invitada escribe su correo. Con un enlace de
+ * invitación (`redeem`), el módulo crea antes la invitación de ese correo si el enlace sigue vigente.
+ */
+export async function accountState(email: string, deps: {
+  admin: SupabaseAdmin; invited(email: string): Promise<boolean>; redeem?: (email: string) => Promise<boolean>;
+}): Promise<AccountState> {
   const state = await deps.admin.state(email);
-  if (state !== 'none') return state;
-  if (!await deps.invited(email)) return 'inactive';
+  const allowed = async () => await deps.invited(email) || (!!deps.redeem && await deps.redeem(email));
+  if (state !== 'none') {
+    // Una cuenta que ya existe también puede unirse con el enlace; su acceso no cambia.
+    if (deps.redeem) await allowed();
+    return state;
+  }
+  if (!await allowed()) return 'inactive';
   await deps.admin.create(email);
   return 'setup';
 }
@@ -55,16 +73,22 @@ export function accountRoutes(options: { admin?: (env: AccountEnv) => SupabaseAd
   const app = new Hono<{ Bindings: AccountEnv }>();
   app.post('/state', bodyLimit({ maxSize: 1024, onError: (c) => c.json({ error: 'Escribe un correo válido.' }, 400) }), async (c) => {
     c.header('Cache-Control', 'no-store');
-    const body = await c.req.json<{ email?: unknown }>().catch(() => null);
+    const body = await c.req.json<{ email?: unknown; invite?: unknown }>().catch(() => null);
     const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
     if (!EMAIL.test(email) || email.length > 320) return c.json({ error: 'Escribe un correo válido.' }, 400);
+    const invite = typeof body?.invite === 'string' && INVITE.test(body.invite) ? body.invite : undefined;
     const { SUPABASE_URL: url, SUPABASE_SECRET_KEY: key, NOTIFICATION_SERVICE_TOKEN: serviceToken } = c.env;
     if (!options.admin && (!url || !key)) return c.json({ error: 'El acceso todavía no está configurado.' }, 503);
     if (!options.call && !serviceToken) return c.json({ error: 'El acceso todavía no está configurado.' }, 503);
     try {
       const admin = options.admin?.(c.env) ?? createSupabaseAdmin(url!, key!);
       const call = options.call?.(c.env) ?? createNotificationCall({ uri: c.env.SPACETIMEDB_URI, module: c.env.SPACETIMEDB_MODULE, serviceToken: serviceToken! });
-      const state = await accountState(email, { admin, invited: (value) => call<boolean>('auth_activation_check', { email: value }) });
+      const tokenHash = invite ? await inviteHash(invite) : undefined;
+      const state = await accountState(email, {
+        admin,
+        invited: (value) => call<boolean>('auth_activation_check', { email: value }),
+        redeem: tokenHash ? (value) => call<boolean>('invite_link_redeem', { tokenHash, email: value }) : undefined,
+      });
       return c.json({ state });
     } catch (error) {
       // El motivo no incluye secretos: solo el paso que falló y su código HTTP.

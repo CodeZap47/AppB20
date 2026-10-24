@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { config } from '../config';
 import { useSupabaseAuth } from './SupabaseAuthProvider';
 import { AuthFrame } from './AuthFrame';
+import { pendingInviteLink } from './inviteLink';
 
 type Step = 'email' | 'password' | 'code';
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -15,6 +16,7 @@ export function SupabaseSignInForm() {
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [invited] = useState(() => !!pendingInviteLink());
   if (!auth) return null;
   const address = email.trim().toLowerCase();
   const run = async (action: () => Promise<unknown>) => {
@@ -32,7 +34,11 @@ export function SupabaseSignInForm() {
     event.preventDefault();
     void run(async () => {
       const state = await auth.lookup(address);
-      if (state === 'inactive') throw new Error('Tu correo todavía no está activado en B20. Pide a quien administra el grupo que te dé acceso.');
+      if (state === 'inactive') {
+        throw new Error(invited
+          ? 'Este enlace venció, se revocó o ya no tiene usos. Pide uno nuevo a quien administra el grupo.'
+          : 'Tu correo todavía no está activado en B20. Pide a quien administra el grupo que te dé acceso.');
+      }
       if (state === 'password') { setStep('password'); return; }
       await auth.sendCode(address);
       setCode(''); setStep('code');
@@ -40,6 +46,7 @@ export function SupabaseSignInForm() {
     });
   };
   return <>
+    {step === 'email' && invited && <p className="auth-feedback" role="status">Te invitaron a B20. Escribe el correo con el que quieres entrar.</p>}
     {step === 'email' && <>
       {config.supabaseOAuthProviders.map((provider) => <button key={provider} type="button" className="auth-action auth-action--social" disabled={auth.busy}
         onClick={() => void run(() => auth.oauth(provider))}>Continuar con {provider === 'google' ? 'Google' : 'GitHub'}</button>)}

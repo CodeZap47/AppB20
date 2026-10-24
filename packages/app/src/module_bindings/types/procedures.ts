@@ -35,6 +35,7 @@ import * as HelpMutateProcedure from "../help_mutate_procedure";
 import * as HelpReadHistoryProcedure from "../help_read_history_procedure";
 import * as InvitationEmailsClaimProcedure from "../invitation_emails_claim_procedure";
 import * as InvitationEmailsFinishProcedure from "../invitation_emails_finish_procedure";
+import * as InviteLinkRedeemProcedure from "../invite_link_redeem_procedure";
 import * as NotificationCommitRemindersProcedure from "../notification_commit_reminders_procedure";
 import * as NotificationReminderContextProcedure from "../notification_reminder_context_procedure";
 import * as NotificationsAuthorizeProcedure from "../notifications_authorize_procedure";
@@ -106,6 +107,8 @@ export type InvitationEmailsClaimArgs = __Infer<typeof InvitationEmailsClaimProc
 export type InvitationEmailsClaimResult = __Infer<typeof InvitationEmailsClaimProcedure.returnType>;
 export type InvitationEmailsFinishArgs = __Infer<typeof InvitationEmailsFinishProcedure.params>;
 export type InvitationEmailsFinishResult = __Infer<typeof InvitationEmailsFinishProcedure.returnType>;
+export type InviteLinkRedeemArgs = __Infer<typeof InviteLinkRedeemProcedure.params>;
+export type InviteLinkRedeemResult = __Infer<typeof InviteLinkRedeemProcedure.returnType>;
 export type NotificationCommitRemindersArgs = __Infer<typeof NotificationCommitRemindersProcedure.params>;
 export type NotificationCommitRemindersResult = __Infer<typeof NotificationCommitRemindersProcedure.returnType>;
 export type NotificationReminderContextArgs = __Infer<typeof NotificationReminderContextProcedure.params>;

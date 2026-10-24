@@ -16,7 +16,7 @@ const table = (rows: unknown[] = []) => ({ iter: () => rows.values() });
 /** Tables are stubbed at the cache boundary; production rows remain inferred from generated bindings. */
 function connection(overrides: Record<string, unknown[]> = {}): Pick<DbConnection, 'db'> {
   const names = [
-    'myMember', 'myAuthIdentity', 'members', 'invitations', 'invitationEmailStatuses', 'subjects', 'terms', 'calendar', 'assignments',
+    'myMember', 'myAuthIdentity', 'members', 'invitations', 'invitationEmailStatuses', 'inviteLinks', 'subjects', 'terms', 'calendar', 'assignments',
     'pageRevisions', 'works', 'workAuthors', 'workFiles', 'groupMessages',
     'myDirectConversations', 'myDirectMessages', 'messageReactions', 'stickerPacks',
     'stickers', 'myChatCommands', 'birthdays', 'activities', 'evidences', 'notes',

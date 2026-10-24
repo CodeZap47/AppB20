@@ -124,7 +124,12 @@ describe('sesiones de Supabase', () => {
     await act(async () => { result = await auth!.lookup('a@b.mx'); });
     expect(result).toBe('setup');
     expect(String(fetchMock.mock.calls[0]![0])).toBe('https://api.b20.invalid/auth/account/state');
+    expect(JSON.parse(String(fetchMock.mock.calls[0]![1]!.body))).toEqual({ email: 'a@b.mx' });
     await expect(auth!.lookup('a@b.mx')).rejects.toThrow('No pudimos comprobar tu cuenta.');
+    sessionStorage.setItem('b20.inviteLink', 'c'.repeat(43));
+    fetchMock.mockResolvedValueOnce(Response.json({ state: 'setup' }));
+    await auth!.lookup('a@b.mx');
+    expect(JSON.parse(String(fetchMock.mock.calls[2]![1]!.body))).toEqual({ email: 'a@b.mx', invite: 'c'.repeat(43) });
     fetchMock.mockRestore();
   });
 

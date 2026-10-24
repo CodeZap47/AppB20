@@ -257,6 +257,17 @@ export interface Invitation {
   emailSentAt?: Date;
 }
 
+/** Enlace de invitación. Solo los creadores lo ven; el código solo se muestra al crearlo. */
+export interface InviteLink {
+  id: Id;
+  createdBy: Id;
+  createdAt: Date;
+  expiresAt: Date;
+  maxUses: number;
+  uses: number;
+  revokedAt?: Date;
+}
+
 export interface Subject {
   id: Id;
   name: string;
@@ -762,6 +773,7 @@ export interface Snapshot extends StudyRoomsSnapshot, NotificationsSnapshot, Pre
   members: Member[];
   /** Solo para creadores: correos autorizados, ya unidos o no. */
   invitations: Invitation[];
+  inviteLinks: InviteLink[];
   subjects: Subject[];
   terms: Term[];
   /** Fechas de los parciales ya configurados; de aquí sale el cuatrimestre y parcial vigente. */
@@ -875,6 +887,10 @@ export interface Actions extends Delivery2Actions, StudyRoomActions, Notificatio
   resendInvitationEmail(email: string): MaybePromise<void>;
   /** Solo creadores: retira una invitación de alguien que todavía no se une. */
   revokeInvitation(email: string): MaybePromise<void>;
+  /** Solo creadores: crea un enlace de invitación y devuelve su dirección, que solo se muestra esta vez. */
+  createInviteLink(expiresInDays: number, maxUses: number): MaybePromise<string>;
+  /** Solo creadores: el enlace deja de servir y se retiran las invitaciones que nadie aceptó. */
+  revokeInviteLink(id: Id): MaybePromise<void>;
   /** Solo creadores: da de baja a un miembro; su historial se conserva. */
   removeMember(memberId: Id): MaybePromise<void>;
   /** Solo creadores: carga las materias de `CURRICULUM` que falten, con sus tres parciales. */

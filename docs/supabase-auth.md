@@ -109,6 +109,29 @@ Antes de activar a compañeros, comprobar el SMTP del proyecto: el servicio de c
 predeterminado de Supabase tiene restricciones de destinatarios y de envío. No se enviaron correos
 de prueba ni se crearon cuentas reales durante esta integración.
 
+### Enlace de invitación
+
+Además de invitar correo por correo, un creador puede compartir **un enlace** desde
+**Ajustes → Enlace de invitación**. Quien lo abra entra con **cualquier correo**: la API crea la
+invitación de integrante para ese correo, envía el código y la persona crea su contraseña y se
+une. El rol siempre es integrante; nunca da administración.
+
+- **Dirección:** `https://b20.mx/#/unirme/<código>`. El código son 32 bytes aleatorios generados en
+  el navegador de quien lo crea; el módulo solo guarda su **hash SHA-256** (`invite_link`), así que
+  el enlace se muestra **una sola vez**. Lo que va después de `#` no viaja al servidor; la web lo
+  guarda en `sessionStorage` hasta que la persona se une.
+- **Límites:** vence en 1, 7 o 30 días; de 1 a 100 usos; como máximo 10 enlaces vigentes. Cada
+  correo gasta un uso una sola vez (`invite_link_redemption`). Si el correo ya tenía invitación,
+  se respeta la que hay y no se gasta uso.
+- **Canje:** `POST /auth/account/state` recibe `invite`; el Worker calcula el hash y llama
+  `invite_link_redeem` con la identidad técnica de avisos. El módulo responde `true`/`false` sin
+  explicar por qué; la web muestra «Este enlace venció, se revocó o ya no tiene usos».
+- **Revocar:** el enlace deja de servir y se retiran las invitaciones que creó y que nadie aceptó.
+  Quien ya se unió sigue en el grupo.
+- **Cuidado:** quien tenga el enlace puede entrar. Compártelo solo con el grupo y revócalo si se
+  filtra. El correo con el código solo llega a personas fuera de tu equipo de Supabase cuando
+  Resend está configurado como SMTP.
+
 ## Supabase Auth como único proveedor
 
 Desde el 23 de octubre de 2026 B20 ya no usa SpacetimeAuth. El corte consistió en:

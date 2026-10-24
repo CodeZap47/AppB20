@@ -5,7 +5,7 @@ import { formatMediumDate } from '../lib/format';
 import { Avatar } from './Avatar';
 import { useAction } from './useAction';
 import { DemoDataSource } from '../data/demo';
-import type { Invitation } from '../data/types';
+import type { Invitation, InviteLink } from '../data/types';
 
 const RESEND_INTERVAL_MS = 10 * 60_000;
 
@@ -17,6 +17,7 @@ export function MembershipSettings() {
     <>
       <AdminSummary />
       <InvitationsSection />
+      <InviteLinksSection />
       <MembersSection />
       <CurriculumSection />
     </>
@@ -141,6 +142,106 @@ function InvitationsSection() {
       )}
     </section>
   );
+}
+
+/** Un enlace que cualquiera puede usar con su propio correo; el código solo se muestra al crearlo. */
+function InviteLinksSection() {
+  const source = useDataSource();
+  const simulated = source instanceof DemoDataSource;
+  const { inviteLinks } = useSnapshot();
+  const { error, pending, run } = useAction();
+  const [days, setDays] = useState(7);
+  const [uses, setUses] = useState(30);
+  const [created, setCreated] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    const url = await run(() => source.createInviteLink(days, uses));
+    if (url) { setCreated(url); setCopied(false); }
+  };
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(created); setCopied(true); } catch { setCopied(false); }
+  };
+
+  const sorted = [...inviteLinks].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  return (
+    <section className="panel settings" aria-labelledby="settings-invite-links-title">
+      <h2 id="settings-invite-links-title">{simulated ? 'Enlaces de invitación simulados' : 'Enlace de invitación'}</h2>
+      <p className="muted">
+        {simulated
+          ? 'En la simulación el enlace se muestra, pero nadie puede entrar con él.'
+          : 'Quien abra el enlace entra con cualquier correo: recibe un código en ese correo, crea su contraseña y se une como integrante. Compártelo solo con el grupo.'}
+      </p>
+      <form className="form" onSubmit={submit}>
+        <label className="field">
+          <span className="field__label">Vence en</span>
+          <select value={days} onChange={(e) => setDays(Number(e.target.value))}>
+            <option value={1}>1 día</option>
+            <option value={7}>7 días</option>
+            <option value={30}>30 días</option>
+          </select>
+        </label>
+        <label className="field">
+          <span className="field__label">Número de usos</span>
+          <input type="number" min={1} max={100} required value={uses} onChange={(e) => setUses(Number(e.target.value))} />
+          <span className="field__hint">Cada correo distinto gasta un uso. Máximo 100.</span>
+        </label>
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="form__actions">
+          <button type="submit" disabled={pending}>
+            Crear enlace
+          </button>
+        </div>
+      </form>
+      {created && (
+        <div className="notice" role="status">
+          <p>Copia el enlace ahora: por seguridad no se vuelve a mostrar.</p>
+          <input readOnly value={created} aria-label="Enlace de invitación" onFocus={(e) => e.target.select()} />
+          <div className="form__actions">
+            <button type="button" onClick={() => void copy()}>{copied ? 'Enlace copiado' : 'Copiar enlace'}</button>
+          </div>
+        </div>
+      )}
+      {sorted.length > 0 ? (
+        <ul className="plain-list">
+          {sorted.map((link) => (
+            <li key={link.id} className="row row--between">
+              <span className="settings-person">
+                <span className="settings-person__name">{link.uses} de {link.maxUses} usos</span>
+                <span className="field__hint">Creado el {formatMediumDate(link.createdAt)} · {inviteLinkStatus(link)}</span>
+              </span>
+              {!link.revokedAt && (
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() =>
+                    window.confirm('¿Revocar este enlace? Dejará de servir y se retirarán las invitaciones que nadie haya aceptado.') &&
+                    run(() => source.revokeInviteLink(link.id))
+                  }
+                >
+                  Revocar
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="field__hint">No hay enlaces creados.</p>
+      )}
+    </section>
+  );
+}
+
+function inviteLinkStatus(link: InviteLink, now = Date.now()): string {
+  if (link.revokedAt) return `Revocado el ${formatMediumDate(link.revokedAt)}`;
+  if (link.expiresAt.getTime() <= now) return `Venció el ${formatMediumDate(link.expiresAt)}`;
+  if (link.uses >= link.maxUses) return 'Sin usos disponibles';
+  return `Vigente hasta el ${formatMediumDate(link.expiresAt)}`;
 }
 
 function emailStatusText(invitation: Invitation): string | undefined {

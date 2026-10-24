@@ -36,6 +36,8 @@ import { notificationTables, notification, notificationPreference } from './noti
 import * as notifications from './notificationHandlers';
 import { invitationEmailTables, invitationEmail } from './invitationEmailTables';
 import * as invitationEmails from './invitationEmailHandlers';
+import { inviteLinkTables, inviteLink } from './inviteLinkTables';
+import * as inviteLinks from './inviteLinkHandlers';
 import { trashTables } from './trashTables';
 import * as trash from './trashHandlers';
 import { practiceTables, codingChallenge, challengeHint, challengeProgress, challengeSolution, challengeComment, codeReview, codeReviewVersion, codeReviewComment } from './practiceTables';
@@ -813,6 +815,7 @@ const spacetimedb = schema({
   ...aiTables,
   ...notificationTables,
   ...invitationEmailTables,
+  ...inviteLinkTables,
   ...trashTables,
   presentationPractice, presentationAttempt, presentationPersonal, presentationQuestion, presentationFeedback,
   ...examTables,
@@ -1140,6 +1143,20 @@ export const revoke_invitation = spacetimedb.reducer({ email: t.string() }, (ctx
   ctx.db.invitation.email.delete(normalized);
   invitationEmails.cancelInvitationEmail(ctx, normalized);
   log(ctx, 'revoke', 'invitation', normalized);
+});
+
+/** Enlace de invitación: el navegador genera el código y solo envía su hash SHA-256. */
+export const create_invite_link = spacetimedb.reducer(
+  { tokenHash: t.string(), expiresInDays: t.u32(), maxUses: t.u32() },
+  (ctx, input) => {
+    requireCreator(ctx);
+    inviteLinks.createInviteLink(ctx, memberIdentityFor(ctx), input);
+  },
+);
+
+export const revoke_invite_link = spacetimedb.reducer({ id: t.u64() }, (ctx, { id }) => {
+  requireCreator(ctx);
+  inviteLinks.revokeInviteLink(ctx, id);
 });
 
 /** Vuelve a mandar el correo de una invitación pendiente, como máximo cada 10 minutos. */
@@ -4438,6 +4455,13 @@ export const invitations = spacetimedb.view(
   },
 );
 
+/** Enlaces de invitación para los creadores, sin el hash del código. */
+export const invite_links = spacetimedb.view(
+  { name: 'invite_links', public: true },
+  t.array(inviteLink.rowType),
+  (ctx) => inviteLinks.inviteLinks(ctx.db, memberIdentityFor(ctx)),
+);
+
 export const invitation_email_statuses = spacetimedb.view(
   { name: 'invitation_email_statuses', public: true },
   t.array(invitationEmail.rowType),
@@ -4905,6 +4929,10 @@ export const invitation_emails_finish = spacetimedb.procedure({ payload: t.strin
 }));
 export const auth_activation_check = spacetimedb.procedure({ payload: t.string() }, t.bool(), (ctx, { payload }) => ctx.withTx((tx) =>
   invitationEmails.invitationPending(tx, notificationText(notificationPayload(payload), 'email'))));
+export const invite_link_redeem = spacetimedb.procedure({ payload: t.string() }, t.bool(), (ctx, { payload }) => ctx.withTx((tx) => {
+  const input = notificationPayload(payload);
+  return inviteLinks.redeemInviteLink(tx, { tokenHash: notificationText(input, 'tokenHash'), email: notificationText(input, 'email') });
+}));
 export const notification_reminder_context = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => {
   const input = notificationPayload(payload); return JSON.stringify(notifications.reminderContext(tx, notificationNumber(input, 'limit', 1, 10, 4)));
 }));

@@ -989,6 +989,29 @@ export type InvitationEmailStatuses = __Infer<typeof InvitationEmailStatuses>;
 export const Invitations = __t.object("Invitations", {});
 export type Invitations = __Infer<typeof Invitations>;
 
+export const InviteLink = __t.object("InviteLink", {
+  id: __t.u64(),
+  tokenHash: __t.string(),
+  createdBy: __t.identity(),
+  createdAt: __t.timestamp(),
+  expiresAt: __t.timestamp(),
+  maxUses: __t.u32(),
+  uses: __t.u32(),
+  revokedAt: __t.option(__t.timestamp()),
+});
+export type InviteLink = __Infer<typeof InviteLink>;
+
+export const InviteLinkRedemption = __t.object("InviteLinkRedemption", {
+  key: __t.string(),
+  linkId: __t.u64(),
+  email: __t.string(),
+  redeemedAt: __t.timestamp(),
+});
+export type InviteLinkRedemption = __Infer<typeof InviteLinkRedemption>;
+
+export const InviteLinks = __t.object("InviteLinks", {});
+export type InviteLinks = __Infer<typeof InviteLinks>;
+
 export const LastSeen = __t.object("LastSeen", {
   identity: __t.identity(),
   at: __t.timestamp(),

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { accountRoutes, accountState, createSupabaseAdmin, type SupabaseAdmin } from './accountRoutes.ts';
+import { accountRoutes, accountState, createSupabaseAdmin, inviteHash, type SupabaseAdmin } from './accountRoutes.ts';
 
 const env = { SPACETIMEDB_URI: 'https://maincloud.spacetimedb.com', SPACETIMEDB_MODULE: 'b20' };
 function admin(state: 'password' | 'setup' | 'none'): SupabaseAdmin & { create: ReturnType<typeof vi.fn> } {
@@ -46,6 +46,44 @@ describe('estado de la cuenta para el acceso', () => {
 
   it('sin la configuración de Supabase responde que el acceso no está listo', async () => {
     expect((await post(accountRoutes(), { email: 'a@b.mx' })).status).toBe(503);
+  });
+});
+
+describe('enlace de invitación en el estado de la cuenta', () => {
+  const code = 'A'.repeat(43);
+
+  it('sin invitación, el enlace vigente activa la cuenta; uno inválido no', async () => {
+    const supabase = admin('none');
+    const redeem = vi.fn(async () => true);
+    expect(await accountState('a@b.mx', { admin: supabase, invited: async () => false, redeem })).toBe('setup');
+    expect(redeem).toHaveBeenCalledWith('a@b.mx');
+    expect(supabase.create).toHaveBeenCalledWith('a@b.mx');
+    const other = admin('none');
+    expect(await accountState('a@b.mx', { admin: other, invited: async () => false, redeem: async () => false })).toBe('inactive');
+    expect(other.create).not.toHaveBeenCalled();
+  });
+
+  it('con invitación por correo no gasta el enlace; una cuenta existente también lo canjea', async () => {
+    const redeem = vi.fn(async () => true);
+    expect(await accountState('a@b.mx', { admin: admin('none'), invited: async () => true, redeem })).toBe('setup');
+    expect(redeem).not.toHaveBeenCalled();
+    expect(await accountState('a@b.mx', { admin: admin('password'), invited: async () => false, redeem })).toBe('password');
+    expect(redeem).toHaveBeenCalledWith('a@b.mx');
+  });
+
+  it('la ruta envía al módulo solo el hash del código, y descarta códigos mal formados', async () => {
+    const call = vi.fn(async (name: string) => name === 'invite_link_redeem');
+    const app = accountRoutes({ admin: () => admin('none'), call: () => call as never });
+    expect(await (await post(app, { email: 'a@b.mx', invite: code })).json()).toEqual({ state: 'setup' });
+    expect(call).toHaveBeenCalledWith('invite_link_redeem', { tokenHash: await inviteHash(code), email: 'a@b.mx' });
+    expect(JSON.stringify(call.mock.calls)).not.toContain(code);
+    call.mockClear();
+    expect(await (await post(app, { email: 'a@b.mx', invite: 'corto' })).json()).toEqual({ state: 'inactive' });
+    expect(call).not.toHaveBeenCalledWith('invite_link_redeem', expect.anything());
+  });
+
+  it('el hash es SHA-256 en hexadecimal', async () => {
+    expect(await inviteHash('abc')).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
   });
 });
 

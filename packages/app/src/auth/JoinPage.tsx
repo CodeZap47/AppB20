@@ -3,6 +3,7 @@ import { useAction } from '../components/useAction';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import { useSession, useSessionStore } from './AuthContext';
 import { AuthFrame } from './AuthFrame';
+import { clearInviteLink } from './inviteLink';
 
 /** Con sesión pero sin membresía: unirse con el nombre que verá el grupo. */
 export function JoinPage() {
@@ -16,7 +17,8 @@ export function JoinPage() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    await run(() => source.joinGroup(name));
+    const joined = await run(async () => (await source.joinGroup(name), true));
+    if (joined) clearInviteLink();
   };
 
   if (me?.status === 'removed') {

@@ -8,6 +8,7 @@ import { createCommunity4Actions } from './community4Actions';
 import { createFeedActions } from './feedActions';
 import { createAgentActions } from './agentActions';
 import { helpResponse } from './helpResponse';
+import { inviteLinkUrl, newInviteCode } from '../auth/inviteLink';
 import { Identity, Timestamp } from 'spacetimedb';
 import type { DbConnection } from '../module_bindings';
 import type { ResourceTargetKind } from './types';
@@ -225,6 +226,12 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
     inviteMember: (email, isCreator) => getConnection().reducers.inviteMember({ email, isCreator }),
     resendInvitationEmail: (email) => getConnection().reducers.resendInvitationEmail({ email }),
     revokeInvitation: (email) => getConnection().reducers.revokeInvitation({ email }),
+    createInviteLink: async (expiresInDays, maxUses) => {
+      const { code, hash } = await newInviteCode();
+      await getConnection().reducers.createInviteLink({ tokenHash: hash, expiresInDays, maxUses });
+      return inviteLinkUrl(code);
+    },
+    revokeInviteLink: (linkId) => getConnection().reducers.revokeInviteLink({ id: id(linkId) }),
     removeMember: (memberId) => getConnection().reducers.removeMember({ identity: member(memberId) }),
     importCurriculum: () => getConnection().reducers.importCurriculum({ codes: CURRICULUM.map((s) => s.code),
       names: CURRICULUM.map((s) => s.name), periods: CURRICULUM.map((s) => s.period) }),

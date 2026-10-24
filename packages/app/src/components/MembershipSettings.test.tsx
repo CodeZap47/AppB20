@@ -71,7 +71,7 @@ it('muestra el estado del correo y permite reenviar solo cuando corresponde', as
   const me = { id: 'yo', displayName: 'Ana', status: 'active', isCreator: true, joinedAt: new Date() };
   const base = { invitedBy: 'yo', createdAt: new Date('2026-10-20T12:00:00Z'), isCreator: false };
   const snapshot = {
-    me, members: [me], subjects: [],
+    me, members: [me], subjects: [], inviteLinks: [],
     invitations: [
       { ...base, email: 'enviando@ejemplo.mx', emailStatus: 'pending', emailRequestedAt: new Date() },
       { ...base, email: 'reciente@ejemplo.mx', emailStatus: 'sent', emailRequestedAt: new Date(), emailSentAt: new Date() },
@@ -92,4 +92,23 @@ it('muestra el estado del correo y permite reenviar solo cuando corresponde', as
 
   await act(async () => resend('fallido@ejemplo.mx')!.click());
   expect(resendInvitationEmail).toHaveBeenCalledWith('fallido@ejemplo.mx');
+});
+
+it('un creador crea un enlace de invitación, lo ve una sola vez y lo revoca', async () => {
+  const source = new DemoDataSource(createDemoState(), 'demo-1');
+  await render(source);
+  const createButton = () => [...container.querySelectorAll('button')].find((b) => b.textContent === 'Crear enlace')!;
+  await act(async () => createButton().click());
+
+  const shown = container.querySelector<HTMLInputElement>('input[aria-label="Enlace de invitación"]');
+  expect(shown?.value).toContain('/#/unirme/');
+  expect(container.textContent).toContain('no se vuelve a mostrar');
+  expect(source.getSnapshot().inviteLinks).toEqual([expect.objectContaining({ maxUses: 30, uses: 0 })]);
+  const linkItem = () => [...container.querySelectorAll('li')].find((li) => li.textContent?.includes('de 30 usos'))!;
+  expect(linkItem().textContent).toContain('Vigente hasta');
+
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
+  await act(async () => [...linkItem().querySelectorAll('button')].find((b) => b.textContent === 'Revocar')!.click());
+  expect(linkItem().textContent).toContain('Revocado');
+  expect([...linkItem().querySelectorAll('button')].some((b) => b.textContent === 'Revocar')).toBe(false);
 });

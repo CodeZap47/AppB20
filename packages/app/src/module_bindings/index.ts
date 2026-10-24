@@ -73,6 +73,7 @@ import CreateAssignmentV2Reducer from "./create_assignment_v_2_reducer";
 import CreateChatChannelReducer from "./create_chat_channel_reducer";
 import CreateFeedPostReducer from "./create_feed_post_reducer";
 import CreateGuideReducer from "./create_guide_reducer";
+import CreateInviteLinkReducer from "./create_invite_link_reducer";
 import CreateMuseumReducer from "./create_museum_reducer";
 import CreateOpportunityReducer from "./create_opportunity_reducer";
 import CreatePollReducer from "./create_poll_reducer";
@@ -156,6 +157,7 @@ import ReviewGuideV3Reducer from "./review_guide_v_3_reducer";
 import ReviewSpacedCardReducer from "./review_spaced_card_reducer";
 import ReviewWorkReducer from "./review_work_reducer";
 import RevokeInvitationReducer from "./revoke_invitation_reducer";
+import RevokeInviteLinkReducer from "./revoke_invite_link_reducer";
 import SaveActivityLinksReducer from "./save_activity_links_reducer";
 import SaveAgentDraftReducer from "./save_agent_draft_reducer";
 import SaveCalendarReducer from "./save_calendar_reducer";
@@ -257,6 +259,7 @@ import * as HelpMutateProcedure from "./help_mutate_procedure";
 import * as HelpReadHistoryProcedure from "./help_read_history_procedure";
 import * as InvitationEmailsClaimProcedure from "./invitation_emails_claim_procedure";
 import * as InvitationEmailsFinishProcedure from "./invitation_emails_finish_procedure";
+import * as InviteLinkRedeemProcedure from "./invite_link_redeem_procedure";
 import * as NotificationCommitRemindersProcedure from "./notification_commit_reminders_procedure";
 import * as NotificationReminderContextProcedure from "./notification_reminder_context_procedure";
 import * as NotificationsAuthorizeProcedure from "./notifications_authorize_procedure";
@@ -306,6 +309,7 @@ import HelpPostVersionsRow from "./help_post_versions_table";
 import HelpPostsRow from "./help_posts_table";
 import InvitationEmailStatusesRow from "./invitation_email_statuses_table";
 import InvitationsRow from "./invitations_table";
+import InviteLinksRow from "./invite_links_table";
 import MemberProfileCoversRow from "./member_profile_covers_table";
 import MemberProfilesRow from "./member_profiles_table";
 import MembersRow from "./members_table";
@@ -636,6 +640,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, InvitationsRow),
+  inviteLinks: __table({
+    name: 'invite_links',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, InviteLinksRow),
   memberProfileCovers: __table({
     name: 'member_profile_covers',
     indexes: [
@@ -1239,6 +1250,7 @@ const reducersSchema = __reducers(
   __reducerSchema("create_chat_channel", CreateChatChannelReducer),
   __reducerSchema("create_feed_post", CreateFeedPostReducer),
   __reducerSchema("create_guide", CreateGuideReducer),
+  __reducerSchema("create_invite_link", CreateInviteLinkReducer),
   __reducerSchema("create_museum", CreateMuseumReducer),
   __reducerSchema("create_opportunity", CreateOpportunityReducer),
   __reducerSchema("create_poll", CreatePollReducer),
@@ -1322,6 +1334,7 @@ const reducersSchema = __reducers(
   __reducerSchema("review_spaced_card", ReviewSpacedCardReducer),
   __reducerSchema("review_work", ReviewWorkReducer),
   __reducerSchema("revoke_invitation", RevokeInvitationReducer),
+  __reducerSchema("revoke_invite_link", RevokeInviteLinkReducer),
   __reducerSchema("save_activity_links", SaveActivityLinksReducer),
   __reducerSchema("save_agent_draft", SaveAgentDraftReducer),
   __reducerSchema("save_calendar", SaveCalendarReducer),
@@ -1425,6 +1438,7 @@ const proceduresSchema = __procedures(
   __procedureSchema("help_read_history", HelpReadHistoryProcedure.params, HelpReadHistoryProcedure.returnType),
   __procedureSchema("invitation_emails_claim", InvitationEmailsClaimProcedure.params, InvitationEmailsClaimProcedure.returnType),
   __procedureSchema("invitation_emails_finish", InvitationEmailsFinishProcedure.params, InvitationEmailsFinishProcedure.returnType),
+  __procedureSchema("invite_link_redeem", InviteLinkRedeemProcedure.params, InviteLinkRedeemProcedure.returnType),
   __procedureSchema("notification_commit_reminders", NotificationCommitRemindersProcedure.params, NotificationCommitRemindersProcedure.returnType),
   __procedureSchema("notification_reminder_context", NotificationReminderContextProcedure.params, NotificationReminderContextProcedure.returnType),
   __procedureSchema("notifications_authorize", NotificationsAuthorizeProcedure.params, NotificationsAuthorizeProcedure.returnType),
@@ -1497,6 +1511,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "help_posts": Omit<typeof tablesSchema.schemaType.tables["helpPosts"], "accessorName"> & { readonly accessorName: "help_posts" };
     /** @deprecated Use `invitationEmailStatuses` instead. This alias will be removed in the next major version. */
     readonly "invitation_email_statuses": Omit<typeof tablesSchema.schemaType.tables["invitationEmailStatuses"], "accessorName"> & { readonly accessorName: "invitation_email_statuses" };
+    /** @deprecated Use `inviteLinks` instead. This alias will be removed in the next major version. */
+    readonly "invite_links": Omit<typeof tablesSchema.schemaType.tables["inviteLinks"], "accessorName"> & { readonly accessorName: "invite_links" };
     /** @deprecated Use `memberProfileCovers` instead. This alias will be removed in the next major version. */
     readonly "member_profile_covers": Omit<typeof tablesSchema.schemaType.tables["memberProfileCovers"], "accessorName"> & { readonly accessorName: "member_profile_covers" };
     /** @deprecated Use `memberProfiles` instead. This alias will be removed in the next major version. */
@@ -1685,6 +1701,7 @@ const tableAccessorAliases = {
   "help_post_versions": "helpPostVersions",
   "help_posts": "helpPosts",
   "invitation_email_statuses": "invitationEmailStatuses",
+  "invite_links": "inviteLinks",
   "member_profile_covers": "memberProfileCovers",
   "member_profiles": "memberProfiles",
   "message_reactions": "messageReactions",
@@ -1832,6 +1849,8 @@ export type DbView = __DbViewBase & {
   readonly "help_posts": __DbViewBase["helpPosts"];
   /** @deprecated Use `invitationEmailStatuses` instead. This alias will be removed in the next major version. */
   readonly "invitation_email_statuses": __DbViewBase["invitationEmailStatuses"];
+  /** @deprecated Use `inviteLinks` instead. This alias will be removed in the next major version. */
+  readonly "invite_links": __DbViewBase["inviteLinks"];
   /** @deprecated Use `memberProfileCovers` instead. This alias will be removed in the next major version. */
   readonly "member_profile_covers": __DbViewBase["memberProfileCovers"];
   /** @deprecated Use `memberProfiles` instead. This alias will be removed in the next major version. */
@@ -2034,6 +2053,8 @@ export type Tables = __TablesBase & {
   readonly "help_posts": __TablesBase["helpPosts"];
   /** @deprecated Use `invitationEmailStatuses` instead. This alias will be removed in the next major version. */
   readonly "invitation_email_statuses": __TablesBase["invitationEmailStatuses"];
+  /** @deprecated Use `inviteLinks` instead. This alias will be removed in the next major version. */
+  readonly "invite_links": __TablesBase["inviteLinks"];
   /** @deprecated Use `memberProfileCovers` instead. This alias will be removed in the next major version. */
   readonly "member_profile_covers": __TablesBase["memberProfileCovers"];
   /** @deprecated Use `memberProfiles` instead. This alias will be removed in the next major version. */

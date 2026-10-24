@@ -8,6 +8,7 @@ import { SessionStore } from './session';
 import { createB20Supabase, supabaseRedirect, supabaseStorage } from './supabaseClient';
 import { getChromeAuth } from './platformAuth';
 import { matchesCallback, signinReturnTo } from './callbacks';
+import { pendingInviteLink } from './inviteLink';
 
 /** `password`: activada y sin contraseña. `inactive`: sin invitación pendiente en B20. */
 export type AccountState = 'password' | 'setup' | 'inactive';
@@ -158,7 +159,7 @@ function SupabaseBridge({ client, platform, children }: {
     lookup: (email) => run(async () => {
       if (!config.aiApiUrl) throw new Error('El acceso todavía no está configurado.');
       const response = await fetch(new URL('/auth/account/state', config.aiApiUrl), {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, invite: pendingInviteLink() }),
       }).catch(() => null);
       const body = await response?.json().catch(() => null) as { state?: AccountState; error?: string } | null;
       if (!response?.ok || !body?.state) throw new Error(body?.error ?? 'No pudimos comprobar tu cuenta. Inténtalo de nuevo.');

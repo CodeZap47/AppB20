@@ -52,6 +52,7 @@ import { ThemeProvider } from './design/Theme';
 import { AssignmentCalendarPage, SubjectsPage } from './pages/AcademicHubPages';
 import { useSupabaseAuth } from './auth/SupabaseAuthProvider';
 import { CreatePasswordPage, PasskeySuggestionPage } from './auth/SupabaseSignInForm';
+import { captureInviteLink } from './auth/inviteLink';
 
 /**
  * Se usa hash routing porque funciona igual en la web, en las páginas empaquetadas de la
@@ -167,6 +168,8 @@ export const routes: RouteObject[] = [
   },
 ];
 
+// Antes de crear el router: #/unirme/<código> no es una pantalla, solo guarda el enlace de invitación.
+captureInviteLink();
 const router = createHashRouter(routes);
 
 /** La autenticación es obligatoria en ambos modos; la URL nunca permite omitirla. */
