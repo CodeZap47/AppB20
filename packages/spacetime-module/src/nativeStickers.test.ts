@@ -15,7 +15,7 @@ type Row = Record<string, unknown>;
 const keyOf = (value: unknown) => value && typeof value === 'object' && 'toHexString' in value ? (value as Identity).toHexString() : String(value);
 function setup() {
   const initial: Record<string, Row[]> = { member: [admin, author, peer].map((identity) => ({ identity, isCreator: identity === admin, status: 'active' })),
-    authConfig: [{ id: 0, issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audiences: ['test'] }] };
+    authConfig: [{ id: 0, issuer: 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1', audiences: ['test'] }] };
   const keys: Record<string, string> = { member: 'identity', stickerBlob: 'stickerId', stickerImport: 'requestId' };
   const allRows = new Map<string, Row[]>(); let next = 1n;
   const db = new Proxy({}, { get(_target, name: string) {
@@ -29,7 +29,7 @@ function setup() {
         delete: (value: unknown) => { const index = rows.findIndex((row) => keyOf(row[field]) === keyOf(value)); if (index >= 0) rows.splice(index, 1); } };
     } });
   } });
-  const state = { db, sender: author, timestamp: new Timestamp(1_700_000_000_000_000n), env: {}, senderAuth: { jwt: { issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audience: ['test'], fullPayload: { email: 'local@example.com', email_verified: true } } } };
+  const state = { db, sender: author, timestamp: new Timestamp(1_700_000_000_000_000n), env: {}, senderAuth: { jwt: { issuer: 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1', audience: ['test'], fullPayload: { email: 'local@example.com', email_verified: true } } } };
   return { ctx: state as unknown as Ctx, as: (sender: Identity) => { state.sender = sender; }, rows: (name: string) => {
     if (!allRows.has(name)) allRows.set(name, initial[name] ?? []);
     return allRows.get(name)!;

@@ -54,7 +54,7 @@ export async function runSmoke(options: {
   try {
     let owner = await connect(options.tokens[0]!);
     await owner.reducers.setAuthConfig({
-      issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1',
+      issuer: 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1',
       audiences: ['b20-local-smoke'],
     });
     for (const [name, isCreator] of [

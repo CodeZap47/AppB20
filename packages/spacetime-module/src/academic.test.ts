@@ -65,7 +65,7 @@ function setup() {
   };
   const initial: Record<string, Row[]> = {
     appConfig: [{ id: 0, owner }],
-    authConfig: [{ id: 0, issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audiences: ['test'] }],
+    authConfig: [{ id: 0, issuer: 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1', audiences: ['test'] }],
     member: [owner, author, coauthor, removed].map((identity) => ({ identity,
       displayName: identity.toHexString()[0], status: identity === removed ? 'removed' : 'active', isCreator: identity === owner })),
     subject: [{ id: 1n, name: 'Lógica' }, { id: 2n, name: 'Álgebra' }],
@@ -89,7 +89,7 @@ function setup() {
   } });
   const state = { db, sender: author, identity: service, timestamp: at,
     env: { B20_FILE_SERVICE_IDENTITY: service.toHexString() },
-    senderAuth: { jwt: { issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audience: ['test'],
+    senderAuth: { jwt: { issuer: 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1', audience: ['test'],
       fullPayload: { email: 'alumno@example.com', email_verified: true } } },
   };
   const ctx = state as unknown as Parameters<typeof set_progress>[0] & Parameters<typeof my_progress>[0];

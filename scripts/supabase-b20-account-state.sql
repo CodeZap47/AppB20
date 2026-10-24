@@ -1,4 +1,4 @@
--- casdrecords: estado de la cuenta para el acceso por pasos de B20.
+-- Supabase pypdkigeywdughdhxlcm: estado de la cuenta para el acceso por pasos de B20.
 -- Ejecutar como postgres. Solo lo llama el Worker de B20 con la clave secreta (service_role):
 -- 'password' si la cuenta ya tiene contraseña, 'setup' si fue activada y aún no la crea,
 -- 'none' si no existe. No devuelve ningún otro dato de la cuenta.

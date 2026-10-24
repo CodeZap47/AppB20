@@ -8,9 +8,9 @@
   "observability": { "enabled": true, "head_sampling_rate": 1 },
   "vars": {
     "CORS_ORIGINS": "https://b20.mx,https://app-b20.pages.dev,http://localhost:5173,capacitor://localhost,https://localhost",
-    "OIDC_ISSUER": "https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1",
+    "OIDC_ISSUER": "https://pypdkigeywdughdhxlcm.supabase.co/auth/v1",
     "OIDC_AUDIENCE": "authenticated",
-    "OIDC_JWKS_URI": "https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1/.well-known/jwks.json",
+    "OIDC_JWKS_URI": "https://pypdkigeywdughdhxlcm.supabase.co/auth/v1/.well-known/jwks.json",
     "SPACETIMEDB_URI": "https://maincloud.spacetimedb.com",
     "SPACETIMEDB_MODULE": "app-b20-34245",
     "AI_ENABLED": "false",

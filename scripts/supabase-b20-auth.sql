@@ -1,4 +1,4 @@
--- casdrecords: solo autenticación. No crea tablas de dominio de B20.
+-- Supabase pypdkigeywdughdhxlcm: solo autenticación. No crea tablas de dominio de B20.
 -- Ejecutar como postgres y activar la función como Custom Access Token Hook.
 -- No sustituir un hook existente sin incorporar primero su comportamiento.
 begin;

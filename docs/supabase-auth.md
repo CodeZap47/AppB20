@@ -1,29 +1,33 @@
 # Supabase Auth + SpacetimeDB en B20
 
-Proyecto autorizado: **casdrecords**, referencia `tgtvvbqlmlljuufrutbk`.
+Proyecto actual: referencia **`pypdkigeywdughdhxlcm`** (`https://pypdkigeywdughdhxlcm.supabase.co`),
+en uso desde el 23 de octubre de 2026. Sustituyó al proyecto anterior `casdrecords`
+(`tgtvvbqlmlljuufrutbk`), cuya configuración no se completó.
 
 Supabase solo gestiona credenciales, confirmación de correo, recuperación y sesiones.
 Los perfiles, membresías, permisos, trabajos, archivos, calendario y mensajes permanecen
 en el módulo de SpacetimeDB. B20 no consulta tablas de dominio de Supabase.
 
-## Configuración realizada el 22 de octubre de 2026
+## Estado del proyecto actual
 
-- SQL aprobado aplicado mediante el plugin Supabase como `b20_auth_verified_email_hook`.
-- Hook `b20_auth.access_token_hook` habilitado en Authentication → Auth Hooks, con aprobación explícita.
-- Retorno exacto `http://localhost:5173/auth/callback` registrado, con aprobación explícita.
-- Site URL existente `http://localhost:3000` conservada.
-- Descubrimiento OIDC comprobado: `https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1/.well-known/openid-configuration`.
-- JWKS comprobado: `https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1/.well-known/jwks.json`, clave ES256.
-- API pública de configuración: email habilitado, registro habilitado, confirmación de correo requerida;
-  Google, GitHub, teléfono y acceso anónimo deshabilitados.
-- `.env.local` usa Supabase Auth con la clave publishable pública obtenida del proyecto.
-  El preview actual usa `VITE_DATA_MODE=spacetime`, `wss://maincloud.spacetimedb.com` y `app-b20-34245`.
-- No se publicó el módulo en Maincloud, no se cambió su proveedor de producción ni se vincularon cuentas reales.
-- No se hicieron commits, push ni despliegues de Cloudflare.
+Comprobado el 23 de octubre de 2026 con su configuración pública:
 
-El plugin permite SQL y consultar el proyecto, pero no editar los ajustes de Auth.
-La activación del hook y el retorno se completaron en el panel. El SQL fuente reproducible
-está en `scripts/supabase-b20-auth.sql`.
+- Emisor `https://pypdkigeywdughdhxlcm.supabase.co/auth/v1`; JWKS en
+  `/auth/v1/.well-known/jwks.json` con una clave **ES256**, que SpacetimeDB y el Worker verifican.
+- Correo habilitado, acceso anónimo deshabilitado.
+
+Configuración pendiente en el panel del proyecto:
+
+1. **SQL Editor:** ejecutar `scripts/supabase-b20-auth.sql` y activar `b20_auth.access_token_hook`
+   en **Authentication → Hooks → Customize Access Token**.
+2. **SQL Editor:** ejecutar `scripts/supabase-b20-account-state.sql`.
+3. Desactivar **Allow new users to sign up** (hoy sigue abierto).
+4. Plantilla **Magic Link** con `docs/email/supabase-magic-link.html` y SMTP de Resend;
+   Site URL `https://b20.mx`.
+5. Crear una clave `sb_secret_` y guardarla como `SUPABASE_SECRET_KEY` del Worker de IA.
+
+`scripts/supabase-reset-for-b20.sql` es un registro del proyecto anterior: **no** se ejecuta en
+este, cuyo esquema `public` ya está vacío.
 
 ## Correo verificado
 
@@ -38,7 +42,7 @@ ausencia de EXECUTE para `anon` y `authenticated`; metadatos falsificados no ver
 ## Cliente
 
 ```dotenv
-VITE_SUPABASE_URL=https://tgtvvbqlmlljuufrutbk.supabase.co
+VITE_SUPABASE_URL=https://pypdkigeywdughdhxlcm.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 VITE_SUPABASE_OAUTH_PROVIDERS=
 VITE_SUPABASE_PASSKEYS_ENABLED=false
@@ -93,7 +97,7 @@ El Worker no limita todavía cuántas consultas de estado recibe; la respuesta r
 está activado. Si hiciera falta, añadir una regla de rate limiting de Cloudflare a esa ruta.
 
 Google/GitHub solo aparecen al configurar `VITE_SUPABASE_OAUTH_PROVIDERS`; no están habilitados
-en casdrecords. Las passkeys están preparadas detrás de una bandera y requieren habilitar/configurar
+en el proyecto. Las passkeys están preparadas detrás de una bandera y requieren habilitar/configurar
 su RP ID y origins en Supabase. Su UI se ofrece solo en la web con WebAuthn; el APK necesita
 la integración nativa correspondiente. No se cambió esa configuración ni se registraron credenciales.
 
@@ -109,7 +113,7 @@ de prueba ni se crearon cuentas reales durante esta integración.
 
 Desde el 23 de octubre de 2026 B20 ya no usa SpacetimeAuth. El corte consistió en:
 
-1. `set_auth_config` con el emisor `https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1` y la
+1. `set_auth_config` con el emisor `https://pypdkigeywdughdhxlcm.supabase.co/auth/v1` y la
    audiencia `authenticated`. Desde ese momento las sesiones de SpacetimeAuth dejan de valer.
 2. Publicar el módulo que solo acepta emisores de Supabase (`allowedAuthIssuer`) y lee una sola
    fila de `auth_config`.
@@ -180,7 +184,7 @@ vínculo; una caché de otra cuenta nunca basta para aceptar su membresía.
 - No se completó login con una cuenta real; requiere que su titular introduzca sus credenciales.
 - Revisión visual de localhost pendiente: se denegó acceso del navegador a ese origen.
 
-## Limpieza de la aplicación anterior, autorizada por el propietario
+## Limpieza de la aplicación anterior en casdrecords (proyecto anterior)
 
 El 22 de octubre de 2026 se aplicó mediante el plugin la migración
 `reset_legacy_schema_for_b20_auth_only`, con autorización explícita de eliminar la base anterior.

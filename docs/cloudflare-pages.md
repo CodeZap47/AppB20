@@ -58,7 +58,7 @@ el cambio a la rama de producción. No hace falta duplicarlas en el panel.
 | `VITE_WEB_ORIGIN` | `https://app-b20.pages.dev` |
 | `VITE_SPACETIME_URI` | `wss://maincloud.spacetimedb.com` |
 | `VITE_SPACETIME_DB` | `app-b20-34245` |
-| `VITE_SUPABASE_URL` | `https://tgtvvbqlmlljuufrutbk.supabase.co` |
+| `VITE_SUPABASE_URL` | `https://pypdkigeywdughdhxlcm.supabase.co` |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | Clave pública `sb_publishable_…`; nunca la secreta |
 | `VITE_SUPABASE_OAUTH_PROVIDERS` | `""` |
 | `VITE_SUPABASE_PASSKEYS_ENABLED` | `false` |

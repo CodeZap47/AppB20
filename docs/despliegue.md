@@ -8,7 +8,7 @@ que necesita una cuenta lo hace una persona del grupo.
 | Pieza | Dónde | Requisito de esta entrega |
 | --- | --- | --- |
 | Datos y archivos (`packages/spacetime-module`) | **SpacetimeDB Maincloud** | Tablas privadas, fragmentos de 1 MiB, permisos y operaciones del grupo. |
-| Autenticación | **Supabase Auth** (`casdrecords`) | Solo cuentas, código, contraseña y sesión; la membresía vive en SpacetimeDB. La identidad de CLI no es la del alumno. |
+| Autenticación | **Supabase Auth** (`pypdkigeywdughdhxlcm`) | Solo cuentas, código, contraseña y sesión; la membresía vive en SpacetimeDB. La identidad de CLI no es la del alumno. |
 | Web/PWA (`apps/web`) | **Cloudflare Pages** | Compilación estática con HTTPS en `*.pages.dev`. |
 | IA, Exámenes y recordatorios (`app-b20-ai`, `apps/api/wrangler.ai.jsonc`) | **Cloudflare Workers** | Gemini BYOK, Guías, operaciones privadas de Exámenes y cron de avisos; sin R2. |
 | Archivos anteriores (`app-b20-api`) | **Cloudflare Workers** y su R2 existente | Compatibilidad conservada; los archivos nuevos siguen en SpacetimeDB. |
@@ -23,7 +23,7 @@ sus instrucciones antiguas no forman parte de esta entrega ni justifican añadir
 
 Los comandos de Maincloud de esta guía apuntan a **`app-b20-34245`**, la base indicada para
 B20. Su identidad indicada es `c2006d3bbe49dc8cabbfa144282ee0af8edb84292d74f2e48128a0e0f4f626ba`. El nombre e
-identidad de base son distintos al proyecto de Supabase Auth (`tgtvvbqlmlljuufrutbk`).
+identidad de base son distintos al proyecto de Supabase Auth (`pypdkigeywdughdhxlcm`).
 
 En desarrollo local se puede conservar `app-b20` con el servidor `http://localhost:3000`.
 No ejecutes una creación con `--template chat-react-ts` en este repositorio: la aplicación y el
@@ -57,7 +57,7 @@ requisitos implementados de las comprobaciones pendientes.
 
 ### 1. Supabase Auth
 
-B20 usa únicamente Supabase Auth, en el proyecto `casdrecords`. Nadie se registra por su cuenta:
+B20 usa únicamente Supabase Auth, en el proyecto `pypdkigeywdughdhxlcm`. Nadie se registra por su cuenta:
 invitar a alguien en B20 activa su cuenta, y el primer acceso pide un código enviado al correo
 y una contraseña. La configuración completa (hook `email_verified`, `b20_account_state`,
 plantilla del código, SMTP y secreto del Worker) está en [`supabase-auth.md`](supabase-auth.md).
@@ -70,7 +70,7 @@ npm run spacetime:generate
 
 # Ejecutar con la misma identidad de CLI que publicó la base:
 spacetime call -s maincloud app-b20-34245 set_auth_config \
-  '"https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1"' '["authenticated"]'
+  '"https://pypdkigeywdughdhxlcm.supabase.co/auth/v1"' '["authenticated"]'
 spacetime call -s maincloud app-b20-34245 invite_member '"tu-correo@gmail.com"' true
 ```
 

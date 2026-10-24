@@ -19,7 +19,7 @@ import {
   link_auth_identity, unlink_auth_identity, update_profile,
 } from './index';
 
-const issuer = 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1';
+const issuer = 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1';
 const identity = (hex: string) => ({
   toHexString: () => hex,
   isEqual: (other: { toHexString(): string }) => other.toHexString() === hex,
@@ -97,7 +97,7 @@ describe('Supabase Auth y acceso por invitación en módulo', () => {
       expect(() => assert_active_member(ctx, {})).toThrow(/Emisor/);
     }
     asOwner();
-    for (const bad of ['https://auth.spacetimedb.com/oidc', 'https://corto.supabase.co/auth/v1', 'https://tgtvvbqlmlljuufrutbk.supabase.co']) {
+    for (const bad of ['https://auth.spacetimedb.com/oidc', 'https://corto.supabase.co/auth/v1', 'https://pypdkigeywdughdhxlcm.supabase.co']) {
       expect(() => set_auth_config(ctx, { issuer: bad, audiences: ['authenticated'] })).toThrow(/emisor/);
     }
     asStudent();
@@ -105,7 +105,7 @@ describe('Supabase Auth y acceso por invitación en módulo', () => {
   it('admite Supabase con audiencia configurada, pero nunca confía en metadatos de correo editables', () => {
     const { ctx, mutableCtx, db, asOwner, asStudent, invite } = setup();
     invite(); asOwner();
-    const supabaseIssuer = 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1';
+    const supabaseIssuer = 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1';
     set_auth_config(ctx, { issuer: supabaseIssuer, audiences: ['authenticated'] });
     asStudent();
     Object.assign(mutableCtx.senderAuth.jwt!, { issuer: supabaseIssuer, audience: ['authenticated'],

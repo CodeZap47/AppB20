@@ -36,7 +36,7 @@ function tableStore(primary: string, initial: Row[] = []) {
 function setup() {
   const at = new Timestamp(1_790_000_000_000_000n);
   const initial: Record<string, Row[]> = {
-    appConfig: [{ id: 0, owner: admin }], authConfig: [{ id: 0, issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audiences: ['test'] }],
+    appConfig: [{ id: 0, owner: admin }], authConfig: [{ id: 0, issuer: 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1', audiences: ['test'] }],
     member: [owner, peer, third, admin].map((identity) => ({ identity, status: 'active', isCreator: identity.isEqual(admin) })),
     subject: [{ id: 1n, name: 'Lógica' }, { id: 2n, name: 'Álgebra' }],
     note: [
@@ -54,7 +54,7 @@ function setup() {
     return tables.get(name);
   } });
   const state = { db, sender: owner, timestamp: at, env: {}, senderAuth: { jwt: {
-    issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audience: ['test'], fullPayload: { email: 'member@example.test', email_verified: true },
+    issuer: 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1', audience: ['test'], fullPayload: { email: 'member@example.test', email_verified: true },
   } } };
   const ctx = state as unknown as Ctx & Parameters<typeof study_rooms>[0];
   const proc = { withTx: (fn: (tx: typeof ctx) => unknown) => fn(ctx) } as unknown as Parameters<typeof study_room_clock>[0];

@@ -42,7 +42,7 @@ export async function runSmoke(options: { address: string; database: string; tok
   const close = () => { for (const connection of connections) connection.disconnect(); connections.clear(); };
   try {
     let admin = await connect(options.tokens[0]);
-    await admin.reducers.setAuthConfig({ issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audiences: ['b20-local-smoke'] });
+    await admin.reducers.setAuthConfig({ issuer: 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1', audiences: ['b20-local-smoke'] });
     for (const name of ['owner', 'author', 'reviewer']) {
       await admin.reducers.inviteMember({ email: `${name}@b20-smoke.invalid`, isCreator: name === 'owner' });
     }

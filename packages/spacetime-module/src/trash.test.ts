@@ -21,7 +21,7 @@ function setup(extra: Record<string, Row[]> = {}) {
   const note = (id: bigint, visibility = 'group') => ({ id, subjectId: 1n, title: `Apunte ${id}`, body: `Contenido privado ${id}`, topic: '', tags: [], visibility, source: 'student', author, version: 1, createdAt: at, updatedAt: at });
   const initial: Record<string, Row[]> = {
     member: [admin, author, coauthor, other].map((person) => ({ identity: person, status: 'active', isCreator: person === admin })),
-    appConfig: [{ id: 0, owner: admin }], authConfig: [{ id: 0, issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audiences: ['test'] }],
+    appConfig: [{ id: 0, owner: admin }], authConfig: [{ id: 0, issuer: 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1', audiences: ['test'] }],
     subject: [{ id: 1n }], note: [note(1n), note(2n, 'personal')], ...extra,
   };
   const keys: Record<string, string> = { member: 'identity', contentStatus: 'key', contentRetention: 'key', noteDetail: 'noteId', resourceVersion: 'key', evidenceDetail: 'evidenceId', workDetail: 'workId', contributionTombstone: 'fingerprint', roomSummary: 'roomId', teachingPersonal: 'practiceId', guideAiProvenance: 'key' };
@@ -36,7 +36,7 @@ function setup(extra: Record<string, Row[]> = {}) {
         delete: (value: unknown) => { const index = table.findIndex((row) => keyOf(row[field]) === keyOf(value)); if (index >= 0) table.splice(index, 1); } };
     } });
   } });
-  const mutable = { db, sender: author, identity: moduleId, timestamp: at, env: {}, senderAuth: { jwt: { issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audience: ['test'], fullPayload: { email: 'synthetic@example.test', email_verified: true } } } };
+  const mutable = { db, sender: author, identity: moduleId, timestamp: at, env: {}, senderAuth: { jwt: { issuer: 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1', audience: ['test'], fullPayload: { email: 'synthetic@example.test', email_verified: true } } } };
   const ctx = mutable as unknown as Ctx;
   return { ctx, rows, note, as: (sender: Identity) => { mutable.sender = sender; }, time: (micros: bigint) => { mutable.timestamp = new Timestamp(micros); },
     maintenance: () => { mutable.sender = admin; setMaintenanceService(ctx, { identity: service }); mutable.sender = service; } };

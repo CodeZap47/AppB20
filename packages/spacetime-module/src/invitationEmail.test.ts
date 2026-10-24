@@ -18,7 +18,7 @@ import {
 } from './index';
 import { claimInvitationEmails, finishInvitationEmail, invitationPending } from './invitationEmailHandlers';
 
-const issuer = 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1';
+const issuer = 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1';
 const identity = (hex: string) => ({
   toHexString: () => hex,
   isEqual: (other: { toHexString(): string }) => other.toHexString() === hex,

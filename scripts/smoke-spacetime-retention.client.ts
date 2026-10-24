@@ -33,7 +33,7 @@ export async function runSmoke(options: { address: string; database: string; tok
   };
   try {
     const owner = await connect(options.tokens[0]!);
-    await owner.reducers.setAuthConfig({ issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audiences: ['b20-local-smoke'] });
+    await owner.reducers.setAuthConfig({ issuer: 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1', audiences: ['b20-local-smoke'] });
     for (const name of ['owner', 'author', 'outsider']) await owner.reducers.inviteMember({ email: `${name}@b20-smoke.invalid`, isCreator: name === 'owner' });
     await owner.reducers.joinGroup({ displayName: 'Synthetic retention owner' });
     const author = await connect(options.tokens[1]!); await author.reducers.joinGroup({ displayName: 'Synthetic retention author' });

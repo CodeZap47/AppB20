@@ -4,7 +4,7 @@
 import { blake3 } from '@noble/hashes/blake3.js';
 import { pathToFileURL } from 'node:url';
 
-export const SUPABASE_ISSUER = 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1';
+export const SUPABASE_ISSUER = 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1';
 const DATABASE = 'app-b20-34245';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const IDENTITY = /^(?:0x)?c200[0-9a-f]{60}$/;

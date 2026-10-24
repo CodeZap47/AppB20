@@ -12,7 +12,7 @@ export async function runSmoke(options: { address: string; database: string; tok
   const fields = { intention: 'Hacer un ciclo', symptom: 'No termina', cause: 'Hipótesis: no avanza índice', correction: '', learning: 'Revisar incremento', minimalCode: 'while (i < 10) {}', evidence: 'Reproducción sintética', language: 'JS', topic: 'Ciclos', bugType: 'Lógico', noteIds: [], questionIds: [] };
   const opportunityFields = { kind: 'event', title: 'Synthetic manual event', topic: 'Rust', modality: 'online', sourceUrl: 'https://example.com/event', organizer: 'Synthetic university', requirements: 'Register manually', costKnown: false, cost: '' };
   try {
-    let owner = await connect(options.tokens[0]!); await owner.reducers.setAuthConfig({ issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audiences: ['b20-local-smoke'] });
+    let owner = await connect(options.tokens[0]!); await owner.reducers.setAuthConfig({ issuer: 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1', audiences: ['b20-local-smoke'] });
     for (const name of ['owner', 'author', 'outsider']) await owner.reducers.inviteMember({ email: `${name}@b20-smoke.invalid`, isCreator: name === 'owner' });
     await owner.reducers.joinGroup({ displayName: 'Synthetic owner' }); let author = await connect(options.tokens[1]!); await author.reducers.joinGroup({ displayName: 'Synthetic author' }); let peer = await connect(options.tokens[2]!); await peer.reducers.joinGroup({ displayName: 'Synthetic peer' });
     await Promise.all([subscribe(owner), subscribe(author), subscribe(peer)]); await author.reducers.createSubject({ name: 'Community smoke', period: 1 }); const subjectId = [...author.db.subjects.iter()][0]!.id;
