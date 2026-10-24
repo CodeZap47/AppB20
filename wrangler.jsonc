@@ -20,7 +20,7 @@
     "VITE_SUPABASE_PASSKEYS_ENABLED": "false",
     // Vacío: ningún archivo usa ya R2; todos viven en SpacetimeDB.
     "VITE_API_URL": "",
-    "VITE_AI_API_URL": "https://app-b20-ai.aguaseero.workers.dev",
-    "VITE_VAPID_PUBLIC_KEY": "BDcU2DLr4bYXsOFyDIR5GJIPFDP8lg0UTdSUg4T7HhSvrO0fIK_YEuXE1cxySQIjYANBXvGBxmL-r6t4bN6nBBo"
+    "VITE_AI_API_URL": "https://api.b20.mx",
+    "VITE_VAPID_PUBLIC_KEY": "BI3gEf_VjuIUVWb__T2opJzEo-boIJ1L4-gRWSJptTM5VTVvbn8hAZPW5ixl92Iq1_FWkk1gmalQxu1wmxj_36U"
   }
 }

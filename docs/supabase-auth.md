@@ -24,7 +24,7 @@ Configuración pendiente en el panel del proyecto:
 3. Desactivar **Allow new users to sign up** (hoy sigue abierto).
 4. Plantilla **Magic Link** con `docs/email/supabase-magic-link.html` y SMTP de Resend;
    Site URL `https://b20.mx`.
-5. Crear una clave `sb_secret_` y guardarla como `SUPABASE_SECRET_KEY` del Worker de IA.
+5. Crear una clave `sb_secret_`; `node scripts/recrear-api-worker.mjs` la guarda como `SUPABASE_SECRET_KEY` del Worker `b20-api`.
 
 `scripts/supabase-reset-for-b20.sql` es un registro del proyecto anterior: **no** se ejecuta en
 este, cuyo esquema `public` ya está vacío.

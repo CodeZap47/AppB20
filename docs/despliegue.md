@@ -10,7 +10,7 @@ que necesita una cuenta lo hace una persona del grupo.
 | Datos y archivos (`packages/spacetime-module`) | **SpacetimeDB Maincloud** | Tablas privadas, fragmentos de 1 MiB, permisos y operaciones del grupo. |
 | Autenticación | **Supabase Auth** (`pypdkigeywdughdhxlcm`) | Solo cuentas, código, contraseña y sesión; la membresía vive en SpacetimeDB. La identidad de CLI no es la del alumno. |
 | Web/PWA (`apps/web`) | **Cloudflare Pages** | Compilación estática con HTTPS en `*.pages.dev`. |
-| IA, Exámenes y recordatorios (`app-b20-ai`, `apps/api/wrangler.ai.jsonc`) | **Cloudflare Workers** | Gemini BYOK, Guías, operaciones privadas de Exámenes y cron de avisos; sin R2. |
+| Acceso, IA, Exámenes y recordatorios (`b20-api` en `api.b20.mx`, `apps/api/wrangler.ai.jsonc`) | **Cloudflare Workers** | Gemini BYOK, Guías, operaciones privadas de Exámenes y cron de avisos; sin R2. |
 | Archivos anteriores (`app-b20-api`) | **Cloudflare Workers** y su R2 existente | Compatibilidad conservada; los archivos nuevos siguen en SpacetimeDB. |
 | Extensión (`apps/extension`) | Paquete local/controlado | Panel lateral y vista completa; publicación en tienda fuera del presupuesto inicial. |
 | Android (`apps/android`) | APK firmado, descarga controlada | Sin Firebase como requisito nuevo; push nativo con la app cerrada permanece pendiente. |
@@ -102,13 +102,22 @@ usa como depósito de archivos nuevos. No retirar credenciales o buckets hasta c
 los IDs y versiones. La guía anterior de [Workers/R2](archivos-cloudflare.md) se conserva para
 operación de esa compatibilidad, no como requisito de una instalación nueva.
 
-### 3.1. Worker de IA y recordatorios
+### 3.1. Worker de la API: acceso, IA y recordatorios
 
-El servicio actual se llama **`app-b20-ai`** y se configura con
-`apps/api/wrangler.ai.jsonc`, con entrada `src/guideWorker.ts`. Está separado del Worker
-heredado `app-b20-api` y no requiere un bucket R2. Usa la misma base Maincloud y el mismo
-cliente de autenticación que Pages. `VITE_AI_API_URL=https://app-b20-ai.aguaseero.workers.dev`
-selecciona este servicio; `VITE_API_URL` conserva las descargas anteriores.
+El servicio se llama **`b20-api`** y responde en el dominio propio **`https://api.b20.mx`**,
+dentro de la zona de `b20.mx`. Se configura con `apps/api/wrangler.ai.jsonc`, con entrada
+`src/guideWorker.ts`, y no requiere un bucket R2. Usa la misma base Maincloud y el mismo
+proyecto de Supabase Auth que Pages. `VITE_AI_API_URL=https://api.b20.mx` selecciona este
+servicio. Sustituye al Worker `app-b20-ai`, que se eliminó el 24 de octubre de 2026 junto con
+sus secretos.
+
+Para crearlo de nuevo con secretos nuevos, ejecutar `node scripts/recrear-api-worker.mjs`
+con Node 22 y la CLI de SpacetimeDB en la sesión propietaria. El script pide la clave
+`sb_secret_` sin mostrarla (o la lee del portapapeles con `pbpaste | node scripts/recrear-api-worker.mjs`), genera la clave maestra (versión `v2`), el par VAPID y dos
+identidades técnicas, las registra con `set_ai_service` y `set_notification_service`, guarda
+la clave VAPID pública en la configuración y despliega con `--secrets-file` temporal. Al
+cambiar la clave maestra, cada persona vuelve a guardar su clave de Gemini; al cambiar el par
+VAPID, vuelve a activar las notificaciones en su dispositivo.
 
 Los secretos `AI_SERVICE_TOKEN` y `AI_MASTER_KEYS_JSON` pertenecen al servicio IA y deben
 conservarse al publicar. Los avisos añaden `NOTIFICATION_SERVICE_TOKEN` y
@@ -138,7 +147,7 @@ necesario ejecutar una purga ni adelantar el vencimiento para desplegar la entre
 
 ### 4. Web en Cloudflare Pages
 
-Guías y Exámenes reutilizan el servicio `app-b20-ai` con `VITE_AI_API_URL=https://app-b20-ai.aguaseero.workers.dev`. Las claves cifradas y el consentimiento permanecen en SpacetimeDB; las maestras y el token técnico exclusivo permanecen en Cloudflare Secrets. La entrega de Exámenes no crea credenciales nuevas ni sustituye el Worker de archivos anteriores. Primero se publica el módulo aditivo con `--delete-data=never`, después `apps/api/wrangler.ai.jsonc` conservando los secretos y la política vigente, y por último Pages. Resolver exámenes guardados usa `/ai/exams` autenticado y funciona sin clave ni llamadas al proveedor. Consultar el [registro de Exámenes](examenes-entrega.md) para separar pruebas locales, publicación y aceptación humana.
+Guías y Exámenes reutilizan el servicio `b20-api` con `VITE_AI_API_URL=https://api.b20.mx`. Las claves cifradas y el consentimiento permanecen en SpacetimeDB; las maestras y el token técnico exclusivo permanecen en Cloudflare Secrets. La entrega de Exámenes no crea credenciales nuevas ni sustituye el Worker de archivos anteriores. Primero se publica el módulo aditivo con `--delete-data=never`, después `apps/api/wrangler.ai.jsonc` conservando los secretos y la política vigente, y por último Pages. Resolver exámenes guardados usa `/ai/exams` autenticado y funciona sin clave ni llamadas al proveedor. Consultar el [registro de Exámenes](examenes-entrega.md) para separar pruebas locales, publicación y aceptación humana.
 
 El registro anterior de Pages apunta a **https://app-b20.pages.dev** con integración Git:
 el commit `59d17a7` terminó en **Success** y se comprobó entonces la pantalla de acceso.

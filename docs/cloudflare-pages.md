@@ -63,7 +63,7 @@ el cambio a la rama de producción. No hace falta duplicarlas en el panel.
 | `VITE_SUPABASE_OAUTH_PROVIDERS` | `""` |
 | `VITE_SUPABASE_PASSKEYS_ENABLED` | `false` |
 | `VITE_API_URL` | `https://app-b20-api.sucanasta1.workers.dev`, compatibilidad R2 anterior |
-| `VITE_AI_API_URL` | `https://app-b20-ai.aguaseero.workers.dev`, IA y Guías en el Worker dedicado |
+| `VITE_AI_API_URL` | `https://api.b20.mx`, API de acceso, IA y avisos en el Worker `b20-api` |
 | `VITE_VAPID_PUBLIC_KEY` | Misma clave pública VAPID del Worker; valor completo en `wrangler.jsonc` |
 
 Esta tabla refleja la configuración preparada en `wrangler.jsonc`, no las variables del
@@ -235,7 +235,7 @@ la web. Los archivos nuevos se transfieren directamente a SpacetimeDB; el Worker
 las descargas heredadas de R2 mientras existan objetos que dependan de ellas.
 
 La interfaz de IA/BYOK conecta con el Worker indicado por `VITE_AI_API_URL`. El servicio
-`app-b20-ai`, configurado en `apps/api/wrangler.ai.jsonc`, comparte la autenticación y base
+`b20-api` (`https://api.b20.mx`), configurado en `apps/api/wrangler.ai.jsonc`, comparte la autenticación y base
 de Pages sin depender del Worker R2 anterior. Su habilitación requiere publicar el módulo
 y el Worker actualizados y conservar los secretos descritos en [gemini-byok.md](gemini-byok.md).
 Los recordatorios y Web Push usan una identidad técnica exclusiva y se activan según
