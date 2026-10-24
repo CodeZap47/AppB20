@@ -8,7 +8,6 @@ import { NotificationSettings } from '../components/NotificationSettings';
 import { useSession, useSessionStore } from '../auth/AuthContext';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import { DemoDataSource } from '../data/demo';
-import { ThemeSwitch } from '../design/Theme';
 import { replayWelcomeTour } from '../components/WelcomeTour';
 import { PasskeySettings } from '../auth/SupabaseSignInForm';
 
@@ -90,7 +89,7 @@ function AccountSettings({ admin }: { admin: boolean }) {
 
   return (
     <>
-      <section className="panel settings"><h2>Hazlo tuyo</h2><p className="muted">Elige la edición visual y conoce las herramientas de tu grupo.</p><ThemeSwitch /><p><button type="button" className="secondary" onClick={replayWelcomeTour}>Volver a ver el tutorial</button></p></section>
+      <section className="panel settings"><h2>Hazlo tuyo</h2><p className="muted">Conoce las herramientas de tu grupo.</p><p><button type="button" className="secondary" onClick={replayWelcomeTour}>Volver a ver el tutorial</button></p></section>
       <PasskeySettings />
       {simulated && (
         <section className="panel panel--warn settings">

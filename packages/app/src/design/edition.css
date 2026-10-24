@@ -1,11 +1,4 @@
 @font-face {
-  font-family: Manrope;
-  src: url('../assets/fonts/manrope.ttf') format('truetype');
-  font-style: normal;
-  font-weight: 200 800;
-  font-display: swap;
-}
-@font-face {
   font-family: Figtree;
   src: url('../assets/fonts/figtree.ttf') format('truetype');
   font-style: normal;
@@ -15,31 +8,31 @@
 
 :root[data-brand] {
   color-scheme: light;
-  --bg: #f8f7fc;
+  --bg: #f5f7fb;
   --surface: #fff;
-  --text: #241a35;
-  --muted: #6b6277;
-  --border: #e6e0ed;
-  --accent: #6942b5;
+  --text: #182e4d;
+  --muted: #596c83;
+  --border: #dee5ef;
+  --accent: #3152a0;
   --on-accent: #fff;
-  --brand-deep: #35204f;
-  --brand-soft: #eee6fa;
-  --brand-bright: #d6f982;
-  --brand-art: #b09ae2;
-  --brand-hover: #52318f;
-  --font-body: Manrope, sans-serif;
-  --font-display: Manrope, sans-serif;
+  --brand-deep: #193657;
+  --brand-soft: #e6edf9;
+  --brand-bright: #9efa68;
+  --brand-art: #6c8fce;
+  --brand-hover: #244180;
+  --font-body: Figtree, sans-serif;
+  --font-display: Figtree, sans-serif;
   --radius: 12px;
   --content-max: 1320px;
   --gutter: clamp(1.2rem, 3vw, 3rem);
   font-family: var(--font-body);
   font-size: 15px;
-  --color-brand-50: #f6f2fc;
-  --color-brand-100: #eee6fa;
-  --color-brand-200: #ddcef3;
-  --color-brand-500: #8054cb;
-  --color-brand-600: #6942b5;
-  --color-brand-700: #52318f;
+  --color-brand-50: #f0f4fc;
+  --color-brand-100: #e6edf9;
+  --color-brand-200: #c8d6f0;
+  --color-brand-500: #446aba;
+  --color-brand-600: #3152a0;
+  --color-brand-700: #244180;
   --color-bg-primary: var(--surface);
   --color-bg-primary_hover: var(--bg);
   --color-bg-secondary: var(--brand-soft);
@@ -55,26 +48,6 @@
   --color-fg-quaternary: var(--muted);
   --color-border-primary: var(--border);
   --color-border-secondary: var(--border);
-}
-:root[data-brand='campus'] {
-  --bg: #f5f7fb;
-  --text: #182e4d;
-  --muted: #596c83;
-  --border: #dee5ef;
-  --accent: #3152a0;
-  --brand-deep: #193657;
-  --brand-soft: #e6edf9;
-  --brand-art: #6c8fce;
-  --brand-bright: #9efa68;
-  --brand-hover: #244180;
-  --font-body: Figtree, sans-serif;
-  --font-display: Figtree, sans-serif;
-  --color-brand-50: #f0f4fc;
-  --color-brand-100: #e6edf9;
-  --color-brand-200: #c8d6f0;
-  --color-brand-500: #446aba;
-  --color-brand-600: #3152a0;
-  --color-brand-700: #244180;
 }
 html[data-brand] body {
   font-family: var(--font-body);
@@ -105,35 +78,13 @@ html[data-brand] :focus-visible {
   outline-offset: 4px;
 }
 
-.edition-switch {
-  display: inline-flex;
-  gap: 3px;
-  padding: 4px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 100px;
-}
-html[data-brand] .edition-switch button {
-  padding: 6px 14px;
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--muted);
-  border: 0;
-  border-radius: 100px;
-  background: transparent;
-}
-html[data-brand] .edition-switch button[aria-pressed='true'] {
-  color: var(--on-accent);
-  background: var(--accent);
-}
-
 /* The access composition uses graphic geometry rather than a mock student photograph. */
 html[data-brand] .auth-screen--welcome {
   min-height: 100dvh;
   padding: clamp(20px, 3vw, 48px);
   background: var(--bg);
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr;
   grid-template-rows: auto 1fr auto;
   align-content: initial;
   gap: 28px;
@@ -158,10 +109,6 @@ html[data-brand] .auth-brand__caption {
   color: var(--muted);
   font-size: 0.78rem;
   letter-spacing: 0;
-}
-html[data-brand] .auth-screen--welcome > .edition-switch {
-  justify-self: end;
-  align-self: center;
 }
 html[data-brand] .auth-screen--welcome .auth-layout {
   grid-column: 1 / -1;
@@ -198,14 +145,11 @@ html[data-brand] .auth-intro__title span {
   color: var(--brand-bright);
 }
 html[data-brand] .auth-intro__description {
-  color: #e0d7ec;
+  color: #d5e4f5;
   font-size: 1rem;
   line-height: 1.7;
   margin: 0;
   max-width: 38ch;
-}
-html[data-brand='campus'] .auth-intro__description {
-  color: #d5e4f5;
 }
 html[data-brand] .auth-screen--welcome .auth-card {
   align-self: center;
@@ -270,7 +214,7 @@ html[data-brand] .auth-action--social > svg {
 .auth-social-mark {
   font-weight: 800;
   font-size: 20px;
-  font-family: Manrope, sans-serif;
+  font-family: var(--font-display);
 }
 .auth-social-help {
   text-align: center;
@@ -381,7 +325,7 @@ html[data-brand] .auth-footer {
   padding: 22px;
   border-radius: 16px;
   transform: rotate(-8deg);
-  box-shadow: 0 22px 36px #13082126;
+  box-shadow: 0 22px 36px #0b1a2e26;
 }
 .learning-note > span {
   display: block;
@@ -459,7 +403,7 @@ html[data-brand] .auth-footer {
   max-width: min(420px, calc(100vw - 36px));
   border: 1px solid var(--border);
   border-radius: 12px;
-  box-shadow: 0 6px 24px #20102c1a;
+  box-shadow: 0 6px 24px #12243d1a;
   color: var(--text);
   background: var(--surface);
   font-size: 0.75rem;
@@ -500,11 +444,11 @@ html[data-brand] .auth-footer {
   border-radius: 20px;
   background: var(--surface);
   color: var(--text);
-  box-shadow: 0 26px 80px #1e103840;
+  box-shadow: 0 26px 80px #10213a40;
   overflow: auto;
 }
 .welcome-tour::backdrop {
-  background: #1f153a70;
+  background: #13284670;
 }
 .welcome-tour__art {
   display: grid;

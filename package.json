@@ -12,7 +12,6 @@
     "node": ">=22"
   },
   "scripts": {
-    "build:variants": "node scripts/build-variants.mjs",
     "dev": "npm run dev -w @b20/web",
     "dev:api": "npm run dev -w @b20/api",
     "prebuild": "node scripts/check-node.mjs",

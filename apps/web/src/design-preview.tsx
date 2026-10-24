@@ -3,7 +3,7 @@ import { createHashRouter, RouterProvider } from 'react-router';
 import { routes } from '../../../packages/app/src/App';
 import { DataProvider } from '../../../packages/app/src/data/DataContext';
 import { createDemoState, DemoDataSource } from '../../../packages/app/src/data/demo';
-import { ThemeProvider, ThemeSwitch } from '../../../packages/app/src/design/Theme';
+import { ThemeProvider } from '../../../packages/app/src/design/Theme';
 import { PlatformContext } from '../../../packages/app/src/components/PlatformContext';
 import { replayWelcomeTour } from '../../../packages/app/src/components/WelcomeTour';
 import { dayKey } from '../../../packages/app/src/lib/dueCalendar';
@@ -82,7 +82,6 @@ function PreviewTools() {
     <details className="design-preview-tools">
       <summary>Vista de diseño · datos ficticios</summary>
       <div>
-        <ThemeSwitch />
         <nav aria-label="Comparar pantallas">
           <a href="./">Login</a>
           <a href="#/m/calendario">Calendario</a>

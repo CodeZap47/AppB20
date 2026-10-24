@@ -2,16 +2,17 @@
 
 Trabajo sobre `main`, base `b94506f`. **Sin commits, push ni despliegue.**
 
-## Dos ediciones
+## Edición visual Campus
 
-- **Studio:** lavanda, ciruela y lima; tipografía Manrope; geometría y composición inspiradas en las referencias Learnora y Kids’ Language School proporcionadas por el usuario.
 - **Campus:** azul y verde inspirados en el sitio de CESUN; tipografía Figtree; conserva la identidad B20 y no se presenta como un producto oficial de la universidad.
 
-Las fuentes se alojan localmente y conservan sus licencias OFL. Ambas ediciones comparten comportamiento, datos y permisos. Se cambian desde el acceso o Ajustes. Las preferencias visuales respetan movimiento reducido.
+Originalmente hubo una segunda edición, Studio (lavanda y Manrope), con un selector en el acceso y en Ajustes. Se retiró el 23 de octubre de 2026: Campus es la única edición y ya no hay selector.
 
-`npm run build:variants` crea `build/studio` y `build/campus`, ignorados por Git. Cada carpeta contiene el acceso normal y `design-preview.html`, una entrada separada con datos ficticios para comparar pantallas. Esa entrada no se incluye en el build normal. Su código siempre instancia la demo, nunca una conexión a producción.
+La fuente se aloja localmente y conserva su licencia OFL. Las preferencias visuales respetan movimiento reducido.
 
-Para desarrollo normal: `npm run dev`, puerto 5173. La vista de diseño está en `/design-preview.html?theme=studio#/m/calendario`; `theme=campus` abre la otra edición. Los controles de la esquina permiten saltar entre pantallas y reproducir el tutorial.
+`npm run build -w @b20/web -- --mode design-preview` incluye `design-preview.html`, una entrada separada con datos ficticios para revisar pantallas. Esa entrada no se incluye en el build normal. Su código siempre instancia la demo, nunca una conexión a producción.
+
+Para desarrollo normal: `npm run dev`, puerto 5173. La vista de diseño está en `/design-preview.html#/m/calendario`. Los controles de la esquina permiten saltar entre pantallas y reproducir el tutorial.
 
 ## Funciones
 
