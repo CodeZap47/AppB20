@@ -1,3 +1,14 @@
+export const DISPLAY_NAME_MAX_LENGTH = 80;
+
+/** El nombre del grupo se escribe explícitamente; nunca puede ser un correo. */
+export function displayNameError(value: string): string | undefined {
+  const name = value.trim();
+  if (!name) return 'El nombre es obligatorio.';
+  if (name.length > DISPLAY_NAME_MAX_LENGTH) return `El nombre excede ${DISPLAY_NAME_MAX_LENGTH} caracteres.`;
+  if (name.includes('@')) return 'Escribe tu nombre, no tu correo electrónico.';
+  return undefined;
+}
+
 /** Degradados disponibles para la portada del perfil; `lavanda` es la portada predeterminada. */
 export const PROFILE_COVER_PRESETS = [
   { id: 'lavanda', label: 'Lavanda', from: '#aebcf0', to: '#f0c6e8' },

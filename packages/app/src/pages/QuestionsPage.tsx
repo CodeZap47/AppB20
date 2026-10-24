@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { PERIOD_COUNT, periodLabel } from '@b20/core';
 import { useDataSource, useSnapshot } from '../data/DataContext';
@@ -10,6 +10,7 @@ import { ResourceSection } from '../components/AcademicTools';
 import { StructuredEditor, StructuredText } from '../components/StructuredText';
 import { ContentWithdrawal } from '../components/ContentWithdrawal';
 import { useAction } from '../components/useAction';
+import { AttachmentUploader, useResourceUploadQueue } from '../components/uploads/ResourceUploader';
 import { formatListTime, formatTime, memberName } from '../lib/format';
 import { previewText } from '../lib/messages';
 import { currentPlacement, lastPeriod, rememberPeriod } from '../lib/period';
@@ -471,7 +472,14 @@ export function AskQuestionPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const { me, questions, answers, subjects, calendar } = useSnapshot();
-  const { error, run } = useAction();
+  const { error, pending, run } = useAction();
+  const queue = useResourceUploadQueue();
+  const saved = useRef<{ id: string; version: number } | null>(null);
+  const submitting = useRef(false);
+  const active = useRef(true);
+  const [contentSaved, setContentSaved] = useState(false);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
+  const locked = pending || queue.busy || contentSaved;
   const preset = subjects.find((s) => s.id === params.get('materia'));
   const [period, setPeriod] = useState(
     () => preset?.period ?? currentPlacement(calendar)?.period ?? lastPeriod(),
@@ -494,18 +502,23 @@ export function AskQuestionPage() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const id = await run(() =>
-      source.askQuestion({
-        subjectId,
-        topic: topic.trim(),
-        title: title.trim(),
-        body: body.trim(),
-      }),
-    );
-    if (id) {
-      rememberPeriod(period);
-      void navigate(`/m/preguntas/${id}`, { replace: true });
-    }
+    if (submitting.current || queue.busy) return;
+    submitting.current = true;
+    try {
+      await run(async () => {
+        if (!saved.current) {
+          const id = await source.askQuestion({ subjectId, topic: topic.trim(), title: title.trim(), body: body.trim() });
+          if (!active.current) return;
+          saved.current = { id, version: 1 };
+          setContentSaved(true);
+        }
+        const target = saved.current;
+        if (await queue.upload('question', target.id, target.version) && active.current) {
+          rememberPeriod(period);
+          void navigate(`/m/preguntas/${target.id}`, { replace: true });
+        }
+      });
+    } finally { submitting.current = false; }
   };
 
   return (
@@ -524,6 +537,7 @@ export function AskQuestionPage() {
 
       <div className="detail">
         <form className="panel form form--wide" onSubmit={submit}>
+          <fieldset className="upload-form-fields" disabled={locked}>
           <section className="form__section">
             <h2>Tu pregunta</h2>
             <label className="field">
@@ -612,8 +626,12 @@ export function AskQuestionPage() {
           <section className="form__section">
             <h2>Contexto</h2>
             <StructuredEditor label="Qué intentaste (opcional)" value={body} onChange={setBody} rows={8} />
-            <p className="field__hint">Qué esperabas, qué pasó y el error exacto. Al publicar podrás adjuntar imágenes y documentos a esta pregunta.</p>
+            <p className="field__hint">Qué esperabas, qué pasó y el error exacto.</p>
           </section>
+
+          </fieldset>
+          <AttachmentUploader queue={queue} disabled={pending || contentSaved} title="Archivos de la pregunta" />
+          {contentSaved && <p className="field__hint">La pregunta ya está publicada. Termina o retira los archivos pendientes para continuar.</p>}
 
           {error && (
             <p className="error" role="alert">
@@ -624,8 +642,8 @@ export function AskQuestionPage() {
             <Link to="/m/preguntas" className="button secondary">
               Cancelar
             </Link>
-            <button type="submit" disabled={!title.trim() || !subjectId}>
-              Publicar pregunta
+            <button type="submit" disabled={pending || queue.busy || !title.trim() || !subjectId}>
+              {contentSaved ? queue.pendingCount ? 'Reintentar archivos pendientes' : 'Continuar' : 'Publicar pregunta'}
             </button>
           </div>
         </form>
@@ -733,11 +751,22 @@ function AnswerCard({
 
 /** Página de una pregunta: el planteamiento, las respuestas y el formulario para responder. */
 export function QuestionPage() {
+  const { questionId } = useParams();
+  return <QuestionDetail key={questionId} />;
+}
+
+function QuestionDetail() {
   const { questionId = '' } = useParams();
   const source = useDataSource();
   const { me, questions, answers, members, subjects, notes, museumEntries, answerUsefulness } = useSnapshot();
-  const { error, run } = useAction();
+  const { error, pending, run } = useAction();
   const [answer, setAnswer] = useState('');
+  const queue = useResourceUploadQueue();
+  const saved = useRef<{ id: string; version: number } | null>(null);
+  const submitting = useRef(false);
+  const active = useRef(true);
+  const [contentSaved, setContentSaved] = useState(false);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const question = questions.find((q) => q.id === questionId);
 
   if (!question) {
@@ -791,7 +820,25 @@ export function QuestionPage() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (await run(() => source.answerQuestion(question.id, answer.trim()))) setAnswer('');
+    if (submitting.current || queue.busy) return;
+    submitting.current = true;
+    try {
+      await run(async () => {
+        if (!saved.current) {
+          const id = await source.answerQuestion(question.id, answer.trim());
+          if (!active.current) return;
+          saved.current = { id, version: 1 };
+          setContentSaved(true);
+        }
+        const target = saved.current;
+        if (await queue.upload('answer', target.id, target.version) && active.current) {
+          queue.reset();
+          saved.current = null;
+          setContentSaved(false);
+          setAnswer('');
+        }
+      });
+    } finally { submitting.current = false; }
   };
 
   // El enrutador usa el hash de la URL, así que el salto al formulario se hace a mano.
@@ -880,16 +927,20 @@ export function QuestionPage() {
             </Empty>
           )}
           {!question.withdrawnAt && <form id="responder" className="panel form qa-reply" onSubmit={submit}>
+            <fieldset className="upload-form-fields" disabled={pending || queue.busy || contentSaved}>
             <StructuredEditor label={isAuthor ? 'Agregar algo o responder' : 'Tu respuesta'} value={answer} onChange={setAnswer} rows={5} />
             <p className="field__hint">Explica el razonamiento, no solo el resultado. Las aclaraciones se escriben junto a la pregunta o respuesta correspondiente.</p>
+            </fieldset>
+            <AttachmentUploader queue={queue} disabled={pending || contentSaved} title="Archivos de la respuesta" />
+            {contentSaved && <p className="field__hint">La respuesta ya está publicada. Termina o retira los archivos pendientes para continuar.</p>}
             {error && (
               <p className="error" role="alert">
                 {error}
               </p>
             )}
             <div className="form__actions">
-              <button type="submit" className="with-icon" disabled={!answer.trim()}>
-                <Icon name="send" size={16} /> Responder
+              <button type="submit" className="with-icon" disabled={pending || queue.busy || !answer.trim()}>
+                <Icon name="send" size={16} /> {contentSaved ? queue.pendingCount ? 'Reintentar archivos pendientes' : 'Continuar' : 'Responder'}
               </button>
             </div>
           </form>}

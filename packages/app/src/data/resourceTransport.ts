@@ -131,6 +131,34 @@ export class ResourceTransport {
     return body.fileId;
   }
 
+  async discardUpload(kind: ResourceTargetKind, targetId: Id, file: File): Promise<Id | undefined> {
+    if (!('getConnection' in this.options)) throw new Error('Esta subida anterior no admite descartar intentos pendientes.');
+    const options = this.options;
+    const actor = options.getIdentity();
+    this.connection(options, actor);
+    let hash = this.hashes.get(file);
+    if (!hash) { hash = file.arrayBuffer().then((buffer) => digest(new Uint8Array(buffer))); this.hashes.set(file, hash); }
+    const sha256 = await hash;
+    this.connection(options, actor);
+    const key = `${RECEIPT_PREFIX}${JSON.stringify([actor, kind, targetId, sha256, file.name, file.type || 'application/octet-stream'])}`;
+    let uploadId = this.receipts.get(key)?.uploadId;
+    if (!uploadId) {
+      try {
+        const saved = JSON.parse(this.storage(options)?.getItem(key) ?? 'null') as { uploadId?: unknown } | null;
+        if (typeof saved?.uploadId === 'string' && /^[0-9a-f-]{36}$/i.test(saved.uploadId)) uploadId = saved.uploadId;
+      } catch { /* No existe un recibo local válido. */ }
+    }
+    if (!uploadId) return undefined;
+    let state = await this.status(options, actor, uploadId, sha256);
+    if (state?.state === 'pending') {
+      await this.connection(options, actor).reducers.cancelResourceUpload({ uploadId });
+      state = await this.status(options, actor, uploadId, sha256);
+    }
+    if (state?.state === 'pending') throw new Error('No se pudo confirmar la cancelación. Vuelve a intentar quitar el archivo.');
+    this.forget(options, key);
+    return state?.state === 'ready' ? state.fileId : undefined;
+  }
+
   async download(fileId: Id, transfer: ResourceTransferOptions = {}): Promise<Blob> {
     abort(transfer.signal);
     if ('getConnection' in this.options) return this.downloadNative(this.options, fileId, transfer);
@@ -209,6 +237,7 @@ export class ResourceTransport {
     const confirmed = (fileId: string) => {
       this.forget(options, key);
       transfer.onProgress?.(file.size, file.size);
+      transfer.onConfirmed?.(fileId, receipt.expectedVersion + 1);
       return fileId;
     };
     const committed = async () => {

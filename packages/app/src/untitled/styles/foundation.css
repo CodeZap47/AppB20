@@ -6,6 +6,7 @@
 
 @source "../**/*.{ts,tsx}";
 @source "../../components/messaging/**/*.{ts,tsx}";
+@source "../../components/uploads/**/*.{ts,tsx}";
 @source "../../components/Composer.tsx";
 @source "../../components/MessageList.tsx";
 @source "../../components/MessageParts.tsx";
@@ -37,17 +38,17 @@
 }
 
 /* Reset only the B20 navigation, messaging surfaces and their React Aria portals. */
-:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay),
-:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay) *,
-:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay)::before,
-:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay)::after,
-:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay) ::before,
-:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay) ::after {
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay, .b20-upload),
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay, .b20-upload) *,
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay, .b20-upload)::before,
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay, .b20-upload)::after,
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay, .b20-upload) ::before,
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay, .b20-upload) ::after {
   box-sizing: border-box;
   border: 0 solid;
 }
 
-:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay) :where(button, input, optgroup, select, textarea),
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay, .b20-upload) :where(button, input, optgroup, select, textarea),
 button.b20-navigation-overlay,
 button.b20-messaging-overlay {
   font: inherit;
@@ -60,34 +61,34 @@ button.b20-messaging-overlay {
   padding: 0;
 }
 
-:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay) :where(button, [role="button"]) {
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay, .b20-upload) :where(button, [role="button"]) {
   cursor: pointer;
 }
 
-:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay) :where(button, input, select, textarea):disabled {
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay, .b20-upload) :where(button, input, select, textarea):disabled {
   cursor: default;
 }
 
-:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay) :where(ol, ul, menu) {
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay, .b20-upload) :where(ol, ul, menu) {
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay) :where(p, h1, h2, h3, h4, blockquote) {
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay, .b20-upload) :where(p, h1, h2, h3, h4, blockquote) {
   margin: 0;
 }
 
-:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay) :where(img, svg, video, canvas, audio) {
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay, .b20-upload) :where(img, svg, video, canvas, audio) {
   display: block;
   vertical-align: middle;
 }
 
-:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay) :where(img, video) {
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay, .b20-upload) :where(img, video) {
   max-width: 100%;
   height: auto;
 }
 
-:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay) [hidden] {
+:is(.b20-navigation, .b20-navigation-overlay, .b20-messaging, .b20-messaging-overlay, .b20-upload) [hidden] {
   display: none !important;
 }

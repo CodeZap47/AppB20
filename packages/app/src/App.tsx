@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createHashRouter, RouterProvider, type RouteObject } from 'react-router';
+import { displayNameError } from '@b20/core';
 import { ErrorPage } from './components/ErrorPage';
 import { Layout } from './components/Layout';
 import { HomePage } from './pages/HomePage';
@@ -201,8 +202,7 @@ function SignedInGate() {
 }
 
 /**
- * Con sesión: mientras llegan los datos dice que está conectando; sin membresía activa pide
- * unirse. Solo después muestra la app.
+ * Con sesión: espera los datos y exige membresía activa y nombre válido antes de abrir la app.
  */
 function MembershipGate() {
   const { connection, connectionError, me } = useSnapshot();
@@ -229,7 +229,7 @@ function MembershipGate() {
       </AuthFrame>
     );
   }
-  if (me?.status !== 'active') return <JoinPage />;
+  if (me?.status !== 'active' || displayNameError(me.displayName)) return <JoinPage />;
   return <RouterProvider router={router} />;
 }
 

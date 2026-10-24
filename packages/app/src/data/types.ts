@@ -414,6 +414,8 @@ export interface AcademicComment {
 export interface ResourceTransferOptions {
   signal?: AbortSignal;
   onProgress?: (transferredBytes: number, totalBytes: number) => void;
+  /** Versión real del recibo confirmado, también al recuperar una respuesta perdida. */
+  onConfirmed?: (fileId: Id, resultingVersion: number) => void;
 }
 
 /** ID UUID para los nuevos; `legacy:<id>` conserva referencias a work_file existentes. */
@@ -919,6 +921,8 @@ export interface Actions extends Delivery2Actions, StudyRoomActions, Notificatio
   saveActivityLinks(activityId: Id, assignmentIds: Id[], noteIds: Id[], expectedVersion?: number): MaybePromise<void>;
   restorePageSnapshot(page: ProgressTargetKind, pageId: Id, version: number, expectedVersion: number): MaybePromise<void>;
   attachResourceFile(targetKind: ResourceTargetKind, targetId: Id, file: File, expectedVersion?: number, transfer?: ResourceTransferOptions): Promise<Id>;
+  /** Libera un intento pendiente; devuelve el archivo si ya se confirmó para poder retirarlo. */
+  discardResourceUpload(targetKind: ResourceTargetKind, targetId: Id, file: File): Promise<Id | undefined>;
   removeResourceFile(fileId: Id, expectedVersion?: number): MaybePromise<void>;
   restoreResourceFile(fileId: Id, expectedVersion: number): MaybePromise<void>;
   downloadResourceFile(fileId: Id, transfer?: ResourceTransferOptions): Promise<Blob>;

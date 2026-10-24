@@ -82,6 +82,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   await act(async () => root.unmount());
+  if (control.realSource instanceof DemoDataSource) control.realSource.dispose();
   container.remove();
 });
 
@@ -204,6 +205,74 @@ describe('login real antes de cualquier fuente de datos', () => {
     await renderApp();
     expect(control.realConnections).toHaveBeenCalledWith('token-a');
     expect(container.textContent).toContain('Unirme al grupo');
+    expect(container.querySelector('[data-simulation]')).toBeNull();
+  });
+
+  it.each(['alumno@example.test', '', '   ', 'A'.repeat(81)])('exige corregir el nombre inválido de un miembro activo antes de montar las rutas (%s)', async (name) => {
+    control.config.dataMode = 'spacetime';
+    control.session = signedIn();
+    const state = createDemoState();
+    state.members[0]!.displayName = name;
+    control.realSource = new DemoDataSource(state, state.members[0]!.id);
+    window.history.replaceState({}, '', '/#/m/mensajes');
+    await renderApp();
+    expect(container.textContent).toContain('Completa tu nombre');
+    expect(container.querySelector('input')!.value).toBe('');
+    expect(container.querySelector('[data-simulation]')).toBeNull();
+  });
+
+  it('espera el nombre confirmado en los datos y después abre las rutas conservando el perfil', async () => {
+    control.config.dataMode = 'spacetime';
+    control.session = signedIn();
+    const state = createDemoState();
+    state.members[0]!.displayName = 'alumno@example.test';
+    state.members[0]!.photoUrl = 'https://example.test/foto.png';
+    const source = new DemoDataSource(state, state.members[0]!.id);
+    control.realSource = source;
+    const original = source.getSnapshot().me!;
+    const applyUpdate = source.updateProfile.bind(source);
+    const update = vi.spyOn(source, 'updateProfile').mockImplementation(() => {});
+    const join = vi.spyOn(source, 'joinGroup');
+    await renderApp();
+    const input = container.querySelector('input')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '  Ana Pérez  ');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+    expect(update).toHaveBeenCalledExactlyOnceWith('Ana Pérez', original.photoUrl);
+    expect(join).not.toHaveBeenCalled();
+    expect(container.querySelector('[data-simulation]')).toBeNull();
+    expect(container.textContent).toContain('Completa tu nombre');
+    await act(async () => applyUpdate('Ana Pérez', original.photoUrl));
+    expect(container.querySelector('[data-simulation]')).not.toBeNull();
+    expect(container.textContent).not.toContain('Completa tu nombre');
+    expect(source.getSnapshot().me).toEqual({ ...original, displayName: 'Ana Pérez' });
+  });
+
+  it('mantiene el acceso cerrado a miembros dados de baja aunque tengan un nombre inválido', async () => {
+    control.config.dataMode = 'spacetime';
+    control.session = signedIn();
+    const state = createDemoState();
+    Object.assign(state.members[0]!, { displayName: 'alumno@example.test', status: 'removed' });
+    control.realSource = new DemoDataSource(state, state.members[0]!.id);
+    await renderApp();
+    expect(container.textContent).toContain('Tu acceso al grupo está cerrado');
+    expect(container.querySelector('form')).toBeNull();
+    expect(container.querySelector('[data-simulation]')).toBeNull();
+  });
+
+  it('espera la conexión antes de pedir corregir un nombre', async () => {
+    control.config.dataMode = 'spacetime';
+    control.session = signedIn();
+    const state = createDemoState();
+    state.members[0]!.displayName = 'alumno@example.test';
+    const source = new DemoDataSource(state, state.members[0]!.id);
+    control.realSource = source;
+    vi.spyOn(source, 'getSnapshot').mockReturnValue({ ...source.getSnapshot(), connection: 'connecting' });
+    await renderApp();
+    expect(container.textContent).toContain('Conectando con tu grupo');
+    expect(container.querySelector('form')).toBeNull();
     expect(container.querySelector('[data-simulation]')).toBeNull();
   });
 });

@@ -105,6 +105,71 @@ function native() {
 }
 
 describe('archivos nativos de SpacetimeDB', () => {
+  it('descarta un intento fallido y libera su reserva sin iniciar otra subida', async () => {
+    const wire = native();
+    const file = new File(['datos'], 'datos.txt');
+    wire.reducers.putResourceChunk.mockRejectedValueOnce(new Error('sin conexión'));
+    await expect(wire.transport.upload('assignment', '8', file, 1)).rejects.toThrow();
+    expect(wire.receipts.size).toBe(1);
+    await expect(wire.transport.discardUpload('assignment', '8', file)).resolves.toBeUndefined();
+    expect(wire.reducers.cancelResourceUpload).toHaveBeenCalledOnce();
+    expect(wire.reducers.beginResourceUpload).toHaveBeenCalledOnce();
+    expect(wire.receipts.size).toBe(0);
+  });
+
+  it('devuelve un commit recuperado al descartar para que la interfaz pueda retirarlo', async () => {
+    const wire = native();
+    const file = new File(['datos'], 'datos.txt');
+    wire.reducers.putResourceChunk.mockRejectedValueOnce(new Error('sin conexión'));
+    await expect(wire.transport.upload('work', '8', file, 1)).rejects.toThrow();
+    const [uploadId, upload] = [...wire.uploads.entries()][0]!;
+    upload.state = 'ready';
+    await expect(wire.transport.discardUpload('work', '8', file)).resolves.toBe(uploadId);
+    expect(wire.reducers.cancelResourceUpload).not.toHaveBeenCalled();
+    expect(wire.receipts.size).toBe(0);
+  });
+
+  it('informa la versión original al recuperar un archivo ya confirmado', async () => {
+    const wire = native(); const file = new File(['datos'], 'datos.txt');
+    wire.reducers.putResourceChunk.mockRejectedValueOnce(new Error('offline'));
+    await expect(wire.transport.upload('work', '8', file, 1)).rejects.toThrow();
+    const [id, pending] = [...wire.uploads.entries()][0]!;
+    pending.state = 'ready';
+    const onConfirmed = vi.fn();
+    expect(await wire.transport.upload('work', '8', file, 2, { onConfirmed })).toBe(id);
+    expect(onConfirmed).toHaveBeenCalledExactlyOnceWith(id, 2);
+    expect(wire.reducers.beginResourceUpload).toHaveBeenCalledOnce();
+  });
+
+  it('conserva el recibo ante una cancelación incierta y permite reintentar el descarte', async () => {
+    const wire = native(); const file = new File(['datos'], 'datos.txt');
+    wire.reducers.putResourceChunk.mockRejectedValueOnce(new Error('offline'));
+    await expect(wire.transport.upload('work', '8', file, 1)).rejects.toThrow();
+    wire.reducers.cancelResourceUpload.mockRejectedValueOnce(new Error('sin confirmar'));
+    await expect(wire.transport.discardUpload('work', '8', file)).rejects.toThrow('sin confirmar');
+    expect(wire.receipts.size).toBe(1);
+    await expect(wire.transport.discardUpload('work', '8', file)).resolves.toBeUndefined();
+    expect(wire.receipts.size).toBe(0);
+  });
+
+  it('reconoce una confirmación que gana la carrera a cancelar', async () => {
+    const wire = native(); const file = new File(['datos'], 'datos.txt');
+    wire.reducers.putResourceChunk.mockRejectedValueOnce(new Error('offline'));
+    await expect(wire.transport.upload('work', '8', file, 1)).rejects.toThrow();
+    wire.reducers.cancelResourceUpload.mockImplementationOnce(async ({ uploadId }) => { wire.uploads.get(uploadId)!.state = 'ready'; });
+    const id = [...wire.uploads.keys()][0]!;
+    await expect(wire.transport.discardUpload('work', '8', file)).resolves.toBe(id);
+    expect(wire.receipts.size).toBe(0);
+  });
+
+  it('no crea recibos ni cancela archivos ajenos al descartar una selección local', async () => {
+    const wire = native();
+    await expect(wire.transport.discardUpload('work', '8', new File(['datos'], 'datos.txt'))).resolves.toBeUndefined();
+    expect(wire.receipts.size).toBe(0);
+    expect(wire.reducers.beginResourceUpload).not.toHaveBeenCalled();
+    expect(wire.reducers.cancelResourceUpload).not.toHaveBeenCalled();
+  });
+
   it('fragmenta en 1 MiB, confirma hashes y descarga solamente bajo demanda', async () => {
     const wire = native();
     const bytes = new Uint8Array(1024 * 1024 + 3).fill(71);

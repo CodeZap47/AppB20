@@ -70,6 +70,64 @@ describe('flujos académicos en la interfaz', () => {
 
 
 describe('concurrencia y recuperación de la interfaz', () => {
+  it('no vuelve a mostrar como completado un archivo de la cola después de retirarlo', async () => {
+    const work = source.getSnapshot().works.find((item) => item.authorIds.includes('demo-1'))!;
+    function CurrentResources() {
+      const current = useSnapshot().works.find((item) => item.id === work.id)!;
+      return <ResourceSection kind="work" id={work.id} version={current.version} canEdit />;
+    }
+    await show(<CurrentResources />);
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const file = new File(['documento'], 'nuevo-que-se-retira.pdf');
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
+    const stored = source.getSnapshot().resourceFiles.find((item) => item.targetId === work.id && item.name === file.name)!;
+    expect(stored).toBeDefined();
+    const remove = container.querySelector<HTMLButtonElement>('button[aria-label="Quitar nuevo-que-se-retira.pdf"]')!;
+    expect(remove.disabled).toBe(false);
+    await act(async () => remove.click());
+    expect(source.getSnapshot().resourceFiles.find((item) => item.id === stored.id)?.removedAt).toBeDefined();
+    expect(container.textContent).not.toContain(file.name);
+    expect(container.querySelector('[data-upload-state="complete"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="Quitar nuevo-que-se-retira.pdf"]')).toBeNull();
+  });
+
+  it('bloquea quitar y restaurar adjuntos existentes mientras otro archivo sigue incierto', async () => {
+    const activity = source.getSnapshot().activities[0]!;
+    const evidenceId = source.addEvidence(activity.id, 'Resultado', []);
+    const oldId = await source.attachResourceFile('evidence', evidenceId, new File(['anterior'], 'retirado.txt'), 1);
+    source.removeResourceFile(oldId, 2);
+    await source.attachResourceFile('evidence', evidenceId, new File(['actual'], 'activo.txt'), 3);
+    vi.spyOn(source, 'attachResourceFile').mockRejectedValueOnce(new Error('Confirmación incierta'));
+    const removeResource = vi.spyOn(source, 'removeResourceFile');
+    const restoreResource = vi.spyOn(source, 'restoreResourceFile');
+    function CurrentEvidence() {
+      const data = useSnapshot();
+      const evidence = data.evidences.find((item) => item.id === evidenceId)!;
+      return <ResourceSection kind="evidence" id={evidenceId} version={evidence.version ?? 1} canEdit />;
+    }
+    await show(<CurrentEvidence />);
+    const remove = container.querySelector<HTMLButtonElement>('button[aria-label="Quitar activo.txt"]')!;
+    const restore = container.querySelector<HTMLButtonElement>('button[aria-label="Restaurar retirado.txt"]')!;
+    expect(remove.disabled).toBe(false);
+    expect(restore.disabled).toBe(false);
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(input, 'files', { value: [new File(['pendiente'], 'incierto.pdf')], configurable: true });
+    await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
+    expect(remove.disabled).toBe(true);
+    expect(restore.disabled).toBe(true);
+    expect(input.disabled).toBe(true);
+    expect(container.querySelector<HTMLButtonElement>('.academic-file-name')?.disabled).toBe(false);
+    await act(async () => { remove.click(); restore.click(); });
+    expect(removeResource).not.toHaveBeenCalled();
+    expect(restoreResource).not.toHaveBeenCalled();
+    const discard = [...container.querySelectorAll('button')].find((button) => button.textContent === 'Descartar pendientes')!;
+    await act(async () => discard.click());
+    expect(remove.disabled).toBe(false);
+    expect(restore.disabled).toBe(false);
+    expect(input.disabled).toBe(false);
+  });
+
   it('descarta la cola anterior cuando cambia el destino de los adjuntos', async () => {
     const work = source.getSnapshot().works.find((w) => w.authorIds.includes('demo-1'))!;
     const nextId = source.publishWork({ assignmentId: work.assignmentId, title: 'Otro trabajo', description: '', coauthorIds: [] });
@@ -190,7 +248,7 @@ describe('concurrencia y recuperación de la interfaz', () => {
 
 
 describe('transferencias y recuperación de evidencias', () => {
-  it('muestra progreso y permite cancelar una subida sin dejar una cola de reintentos', async () => {
+  it('muestra progreso por archivo y conserva el archivo cancelado para reintentar', async () => {
     const work = source.getSnapshot().works.find((item) => item.authorIds.includes('demo-1'))!;
     let signal: AbortSignal | undefined;
     vi.spyOn(source, 'attachResourceFile').mockImplementation(async (_kind, _id, file, _version, transfer) => {
@@ -202,12 +260,13 @@ describe('transferencias y recuperación de evidencias', () => {
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     Object.defineProperty(input, 'files', { value: [new File(['hola'], 'ejemplo.txt')], configurable: true });
     await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
-    expect(container.textContent).toContain('50 %');
-    const cancel = [...container.querySelectorAll('button')].find((item) => item.textContent === 'Cancelar subida')!;
+    expect(container.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('50');
+    const cancel = container.querySelector<HTMLButtonElement>('button[aria-label="Cancelar ejemplo.txt"]')!;
     await act(async () => cancel.click());
     expect(signal?.aborted).toBe(true);
-    expect(container.textContent).not.toContain('Reintentar archivos pendientes');
-    expect(container.textContent).toContain('Cancelaste la transferencia');
+    expect(container.textContent).toContain('Reintentar archivos pendientes');
+    expect(container.querySelector('[data-upload-state="cancelled"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="Reintentar ejemplo.txt"]')).not.toBeNull();
   });
 
   it('permite cancelar descargas sin crear un enlace parcial', async () => {

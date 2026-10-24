@@ -44,3 +44,13 @@ Revisar estas adaptaciones antes de regenerar; no sobrescribir archivos con
 `--yes` ni `--overwrite` sin revisar sus diferencias.
 
 Documentación: [Untitled UI React](https://www.untitledui.com/react/docs/installation).
+
+Las subidas usan la base gratuita oficial `file-upload-base`, con `ButtonUtility`,
+`ProgressBar`, `FeaturedIcon` y `@untitledui/file-icons`. Se conservaron sus fuentes
+MIT bajo `components/application/file-upload` y sus auxiliares. La adaptación B20
+usa `File[]` directamente para selección y arrastre, traduce las etiquetas y añade
+estados de preparación/confirmación, nombres accesibles y cancelación. Los archivos
+reales, el progreso, los reintentos y las versiones los gestionan los adaptadores de
+`components/uploads`; los ejemplos de progreso simulado no forman parte de la app.
+El reset y las utilidades del cargador quedan acotados a `.b20-upload`, también en
+los formularios que conservan los estilos anteriores.

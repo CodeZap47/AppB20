@@ -57,6 +57,7 @@ import {
   MAX_SPACED_EXPLANATION_LENGTH,
   MAX_SPACED_HINT_LENGTH,
   DEFAULT_PROFILE_COVER,
+  displayNameError,
 } from '@b20/core';
 import type {
   HelpPost,
@@ -244,6 +245,12 @@ function requireText(value: string, field: string, max = MAX_TEXT): string {
   if (!trimmed) throw new Error(`${field} no puede estar vacío.`);
   if (trimmed.length > max) throw new Error(`${field} excede ${max} caracteres.`);
   return trimmed;
+}
+
+function requireDisplayName(value: string): string {
+  const error = displayNameError(value);
+  if (error) throw new Error(error);
+  return value.trim();
 }
 
 function toBase64(bytes: Uint8Array): string {
@@ -908,7 +915,7 @@ export class DemoDataSource implements DataSource {
     const me = this.#state.members.find((m) => m.id === this.#viewerId);
     if (me?.status === 'removed') throw new Error('Tu acceso fue dado de baja.');
     if (me) return;
-    requireText(displayName, 'El nombre', 80);
+    requireDisplayName(displayName);
     // La demo no tiene correos: quien no es miembro nunca está en la lista.
     throw new Error('Tu correo no está en la lista autorizada del grupo.');
   }
@@ -1010,7 +1017,7 @@ export class DemoDataSource implements DataSource {
 
   updateProfile(displayName: string, photoUrl?: string) {
     const me = this.#activeMember();
-    const name = requireText(displayName, 'El nombre', 80);
+    const name = requireDisplayName(displayName);
     this.#state.members = this.#state.members.map((m) =>
       m.id === me.id ? { ...m, displayName: name, photoUrl } : m,
     );
@@ -1200,6 +1207,11 @@ export class DemoDataSource implements DataSource {
   }
   removeResourceFile(id: Id, expectedVersion?: number) { const file = this.#resourceFile(id); return this.#chat.handles(file.targetKind) ? this.#chat.removeResourceFile(id, expectedVersion) : this.#academic.removeResourceFile(id, expectedVersion); }
   restoreResourceFile(id: Id, expectedVersion: number) { const file = this.#resourceFile(id); return this.#chat.handles(file.targetKind) ? this.#chat.restoreResourceFile(id, expectedVersion) : this.#academic.restoreResourceFile(id, expectedVersion); }
+  async discardResourceUpload(_kind: ResourceTargetKind, _id: Id, _file: File): Promise<Id | undefined> {
+    this.#activeMember();
+    // La demo confirma de forma atómica: no reserva fragmentos remotos pendientes.
+    return undefined;
+  }
   async downloadResourceFile(id: Id, transfer?: ResourceTransferOptions) { const file = this.#resourceFile(id); return this.#chat.handles(file.targetKind) ? this.#chat.downloadResourceFile(id, transfer) : this.#academic.downloadResourceFile(id, transfer); }
 
   createChatChannel(input: CreateChatChannelInput) { return this.#chat.createChatChannel(input); }

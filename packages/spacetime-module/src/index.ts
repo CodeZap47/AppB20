@@ -17,6 +17,7 @@ import { schema, SenderError, t, table, type ReducerCtx } from 'spacetimedb/serv
 import { ScheduleAt, Timestamp } from 'spacetimedb';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { nextSpacedSchedule, type SpacedRating } from '../../core/src/spaced';
+import { displayNameError } from '../../core/src/profiles';
 import { normalizePresentationConfiguration, normalizePresentationBody, normalizePresentationObservations,
   normalizePresentationNextSteps, normalizePresentationQuestion, normalizePresentationAnswer,
   normalizePresentationFeedback, presentationGuidingQuestions } from '../../core/src/presentations';
@@ -958,6 +959,12 @@ function requireText(value: string, field: string, max = MAX_MESSAGE_LENGTH): st
   return trimmed;
 }
 
+function requireDisplayName(value: string): string {
+  const error = displayNameError(value);
+  if (error) throw new SenderError(error);
+  return value.trim();
+}
+
 function log(ctx: Ctx, action: string, entity: string, entityId: string | bigint) {
   ctx.db.changeLog.insert({
     id: 0n,
@@ -1123,12 +1130,13 @@ export const join_group = spacetimedb.reducer(
     }
     const invite = ctx.db.invitation.email.find(email);
     if (!invite) throw new SenderError('Tu correo no está en la lista autorizada del grupo.');
+    const name = requireDisplayName(displayName);
     // Al aceptarla deja de estar pendiente: la lista muestra solo a quien falta por unirse.
     ctx.db.invitation.email.delete(email);
     invitationEmails.cancelInvitationEmail(ctx, email);
     ctx.db.member.insert({
       identity: memberIdentityFor(ctx),
-      displayName: requireText(displayName, 'El nombre', 80),
+      displayName: name,
       photoUrl: undefined,
       status: 'active',
       isCreator: invite.isCreator,
@@ -1190,7 +1198,7 @@ export const update_profile = spacetimedb.reducer(
     const row = activeMember(ctx);
     ctx.db.member.identity.update({
       ...row,
-      displayName: requireText(displayName, 'El nombre', 80),
+      displayName: requireDisplayName(displayName),
       photoUrl,
     });
   },

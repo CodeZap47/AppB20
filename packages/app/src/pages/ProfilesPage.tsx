@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   HELP_KIND_LABEL,
@@ -7,6 +7,8 @@ import {
   WORK_KIND_LABEL,
   workKindGroup,
   hasRoyalBanner,
+  DISPLAY_NAME_MAX_LENGTH,
+  displayNameError,
 } from '@b20/core';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import type { Id, Member, Snapshot, Subject } from '../data/types';
@@ -290,35 +292,49 @@ export function ProfilesPage() {
 
 function EditName({ current, onDone }: { current: string; onDone: () => void }) {
   const source = useDataSource();
+  const { me } = useSnapshot();
   const [name, setName] = useState(current);
-  const { error, run } = useAction();
+  const { error, pending, run } = useAction();
+  const submitting = useRef(false);
+  const errorId = useId();
+  const validationError = displayNameError(name);
+  const message = validationError ?? error;
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (await run(async () => (await source.updateProfile(name.trim()), true))) onDone();
+    if (submitting.current || displayNameError(name) || name.trim() === current) return;
+    submitting.current = true;
+    try {
+      if (await run(async () => (await source.updateProfile(name.trim(), me?.photoUrl), true))) onDone();
+    } finally {
+      submitting.current = false;
+    }
   };
   return (
-    <form className="profile-edit" onSubmit={submit}>
+    <form className="profile-edit" onSubmit={submit} aria-busy={pending}>
       <label className="field">
         <span className="field__label">Nombre que verá el grupo</span>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          maxLength={80}
+          maxLength={DISPLAY_NAME_MAX_LENGTH}
+          disabled={pending}
+          aria-invalid={Boolean(validationError)}
+          aria-describedby={message ? errorId : undefined}
           required
           autoFocus
         />
       </label>
-      {error && (
-        <p className="error" role="alert">
-          {error}
+      {message && (
+        <p id={errorId} className="error" role="alert">
+          {message}
         </p>
       )}
       <div className="form__actions">
-        <button type="button" className="secondary" onClick={onDone}>
+        <button type="button" className="secondary" onClick={onDone} disabled={pending}>
           Cancelar
         </button>
-        <button type="submit" disabled={!name.trim() || name.trim() === current}>
-          Guardar
+        <button type="submit" disabled={pending || Boolean(validationError) || name.trim() === current}>
+          {pending ? 'Guardando…' : 'Guardar'}
         </button>
       </div>
     </form>

@@ -4,12 +4,13 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type DragEvent,
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useSnapshot } from '../data/DataContext';
-import { fileSizeError, formatBytes } from '@b20/core';
+import { fileSizeError } from '@b20/core';
 import type { Id } from '../data/types';
 import type { ChatMessage } from '../lib/messages';
 import {
@@ -28,6 +29,9 @@ import { mentionToken } from '../lib/chat';
 import { Icon, type IconName } from './Icon';
 import { StickerPicker } from './StickerPicker';
 import { ChatButton, ChatTextArea } from './messaging/Messaging';
+import { FilePicker } from './FilePicker';
+import { UploadFileList, type UploadFileItem } from './uploads/UploadFileList';
+import './uploads/consumers.css';
 
 /** Borradores por conversación: cambiar de chat no borra lo que estabas escribiendo. */
 const drafts = new Map<string, string>();
@@ -87,6 +91,9 @@ export function Composer({
   mentionMemberIds,
   disabled = false,
   retryingAttachments = false,
+  uploadItems = [],
+  onCancelAttachments,
+  onDiscardAttachments,
   onTyping,
 }: {
   placeholder: string;
@@ -103,6 +110,9 @@ export function Composer({
   mentionMemberIds?: Id[];
   disabled?: boolean;
   retryingAttachments?: boolean;
+  uploadItems?: UploadFileItem[];
+  onCancelAttachments?: () => void;
+  onDiscardAttachments?: () => Promise<boolean>;
   onTyping?: (typing: boolean) => void;
 }) {
   const data = useSnapshot();
@@ -117,10 +127,35 @@ export function Composer({
   const [fileError, setFileError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false);
-  const fileInput = useRef<HTMLInputElement>(null);
+  const [attachmentsOpen, setAttachmentsOpen] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const editing = mode?.kind === 'edit' ? mode.message : undefined;
   const remaining = maxLength - text.length;
+  const attachmentsBlocked = disabled || sending || retryingAttachments || Boolean(editing);
+  const attachmentPanelId = `${menuId}-attachments`;
+
+  const takeFiles = (list: File[]) => {
+    if (attachmentsBlocked) return;
+    const accepted: File[] = [];
+    const errors: string[] = [];
+    for (const file of list) {
+      const problem = fileSizeError(file.name, file.size);
+      if (problem) errors.push(problem); else accepted.push(file);
+    }
+    if (accepted.length) setFiles((current) => [...current, ...accepted]);
+    setFileError(errors.join(' ') || null);
+    setAttachmentsOpen(true);
+  };
+  const revealAttachments = (event: DragEvent) => {
+    if (!attachments || !Array.from(event.dataTransfer.types).includes('Files')) return;
+    event.preventDefault();
+    if (!attachmentsBlocked) setAttachmentsOpen(true);
+  };
+  const dropAttachments = (event: DragEvent) => {
+    if (!attachments || event.defaultPrevented || !event.dataTransfer.files.length) return;
+    event.preventDefault();
+    takeFiles(Array.from(event.dataTransfer.files));
+  };
 
   // El cuadro crece con el texto hasta el máximo que fija el CSS.
   useLayoutEffect(() => {
@@ -184,6 +219,15 @@ export function Composer({
       setSending(false);
       inputRef.current?.focus();
     });
+  };
+
+  const discardAttachments = async () => {
+    if (sendingRef.current || !onDiscardAttachments) return;
+    sendingRef.current = true;
+    setSending(true);
+    try {
+      if (await onDiscardAttachments()) { update(''); setRefs([]); setFiles([]); setFileError(null); }
+    } finally { sendingRef.current = false; setSending(false); }
   };
 
   const addRef = (ref: Reference) => {
@@ -304,19 +348,27 @@ export function Composer({
   const optionId = (i: number) => `${menuId}-${i}`;
 
   return (
-    <form className="composer messaging-composer" onSubmit={submit} aria-label="Escribir mensaje" aria-busy={sending}>
+    <form className="composer messaging-composer" onSubmit={submit} aria-label="Escribir mensaje" aria-busy={sending}
+      onDragEnter={revealAttachments} onDragOver={revealAttachments} onDrop={dropAttachments}>
       {error && (
         <p className="composer__error error" role="alert">
           {error}
         </p>
       )}
       {fileError && <p className="composer__error error" role="alert">{fileError}</p>}
-      {files.length > 0 && <ul className="composer__refs" aria-label="Archivos que se enviarán">
-        {files.map((file, index) => <li className="ref-chip" key={`${file.name}:${index}`}>
-          <Icon name="file" size={14} /><span>{file.name} · {formatBytes(file.size)}</span>
-          <ChatButton variant="tertiary" type="button" disabled={sending || retryingAttachments} aria-label={`Quitar ${file.name}`} onClick={() => setFiles((current) => current.filter((_file, i) => i !== index))}><Icon name="close" size={14} /></ChatButton>
-        </li>)}
-      </ul>}
+      {attachments && (attachmentsOpen || files.length > 0 || uploadItems.length > 0) && <section id={attachmentPanelId} className="b20-upload b20-upload--composer" aria-label="Archivos adjuntos">
+        <FilePicker onFiles={takeFiles} disabled={attachmentsBlocked} label="Adjuntar archivos" />
+        <UploadFileList
+          items={uploadItems.length && (sending || retryingAttachments || !files.length) ? uploadItems : files.map((file, index) => ({
+            id: `attachment-${index}`, name: file.name, size: file.size, type: file.type, progress: 0, state: 'selected' as const,
+          }))}
+          onRemove={!attachmentsBlocked && files.length ? (id) => setFiles((current) => current.filter((_file, index) => `attachment-${index}` !== id)) : undefined}
+          onRetry={retryingAttachments && !sending ? () => { void send(); } : undefined}
+          onCancel={sending && onCancelAttachments ? () => onCancelAttachments() : undefined}
+        />
+        {retryingAttachments && onDiscardAttachments && <ChatButton type="button" variant="tertiary" disabled={sending}
+          onClick={() => { void discardAttachments(); }}>Descartar adjuntos pendientes</ChatButton>}
+      </section>}
 
       {mode && (
         <div className="composer__mode">
@@ -439,19 +491,9 @@ export function Composer({
         />
         <div className="composer__row messaging-composer__toolbar">
           <div className="messaging-composer__tools">
-        {attachments && <>
-          <input ref={fileInput} className="sr-only" type="file" multiple aria-label="Adjuntar archivos" disabled={disabled || sending || retryingAttachments || Boolean(editing)}
-            onChange={(event) => {
-              const accepted: File[] = []; const errors: string[] = [];
-              for (const file of Array.from(event.target.files ?? [])) {
-                const problem = fileSizeError(file.name, file.size);
-                if (problem) errors.push(problem); else accepted.push(file);
-              }
-              if (accepted.length) setFiles((current) => [...current, ...accepted]);
-              setFileError(errors.join(' ') || null); event.target.value = '';
-            }} />
-          <ChatButton variant="tertiary" type="button" className="icon-button composer__tool" aria-label="Elegir archivos adjuntos" title="Adjuntar archivos" onClick={() => fileInput.current?.click()} disabled={disabled || sending || retryingAttachments || Boolean(editing)}><Icon name="upload" /></ChatButton>
-        </>}
+        {attachments && <ChatButton variant="tertiary" type="button" className="icon-button composer__tool" aria-label="Elegir archivos adjuntos" title="Adjuntar archivos"
+          aria-expanded={attachmentsOpen || files.length > 0 || uploadItems.length > 0} aria-controls={attachmentPanelId}
+          onClick={() => setAttachmentsOpen((open) => !open)} disabled={attachmentsBlocked}><Icon name="upload" /></ChatButton>}
         <ChatButton variant="tertiary"
           type="button"
           className="icon-button composer__tool"
