@@ -156,9 +156,9 @@ el commit `59d17a7` terminó en **Success** y se comprobó entonces la pantalla 
 Esto no acredita la publicación de esta entrega; verificar configuración y registrar el nuevo
 resultado. Los detalles previos están en [`cloudflare-pages.md`](cloudflare-pages.md).
 
-- Repositorio `CodeZap47/AppB20`, rama de producción **`codex/pages-spacetimeauth`**.
-  Integrar únicamente la revisión validada para publicar; `main` puede contener entregas
-  aún no activadas y las ramas no se fusionan automáticamente.
+- Repositorio `CodeZap47/AppB20`, rama de producción **`main`** desde el 26 de octubre de 2026.
+  Los pushes a `main` publican la web. Si cambian el módulo o la API, actualizarlos primero
+  conservando datos y secretos; Pages no despliega esos servicios.
 - Raíz `/`, comando `npm run build:pages`, salida `apps/web/dist`, preset **None**.
 - Node.js `22` en `.nvmrc`.
 - Variables públicas en **`wrangler.jsonc → vars`**, incluyendo `VITE_DATA_MODE=spacetime`.

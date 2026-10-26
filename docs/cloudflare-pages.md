@@ -23,18 +23,17 @@ DNS ni entrar a **Custom Domains**. El nombre del proyecto define la URL asignad
 | --- | --- |
 | Servicio | **Pages**, proyecto `app-b20` |
 | Repositorio | `CodeZap47/AppB20` |
-| Production branch registrada | `codex/pages-spacetimeauth`; consultar Pages antes de publicar |
+| Production branch registrada | `main`, configurada el 26 de octubre de 2026 |
 | Framework preset | **None** |
 | Root directory | `/`, raíz del repositorio |
 | Build command | `npm run build:pages` |
 | Build output directory | `apps/web/dist` |
 | Node.js | `22`, indicado en `.nvmrc` |
 
-El registro anterior usa `codex/pages-spacetimeauth` como rama de producción. La rama local
-o el último commit de GitHub no determinan por sí solos qué sirve Pages: consultar la rama
-de producción y el despliegue activo antes de enviar cambios o usar Wrangler. Publicar desde
-otra rama puede crear una vista previa. Un cambio de rama de producción debe acompañar la
-integración del código que se quiere servir. [Integración Git](https://developers.cloudflare.com/pages/get-started/git-integration/).
+Desde el 26 de octubre de 2026, `main` es la rama de producción y sus pushes activan la
+publicación de la web. Sustituye a `codex/pages-spacetimeauth` después de integrar los cambios
+locales con `main`. Los cambios del módulo y la API se publican antes de la web; Pages solo
+compila el cliente. Consultar el despliegue activo para confirmar qué revisión sirve el dominio. [Integración Git](https://developers.cloudflare.com/pages/get-started/git-integration/).
 
 La carpeta local avanzada se llama `appb20-stdb`, pero es un repositorio independiente. No
 pongas `appb20-stdb` ni `apps/web` en **Root directory**: `package.json`, `.nvmrc`,
