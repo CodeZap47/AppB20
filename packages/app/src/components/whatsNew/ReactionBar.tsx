@@ -18,7 +18,7 @@ export function ReactionBar({ reactions, members, meId, disabled, onReact }: Pro
   const mine = reactions.find((r) => r.memberId === meId)?.emoji;
   const counts = FEED_REACTIONS.map((emoji) => ({ emoji, people: reactions.filter((r) => r.emoji === emoji).map((r) => r.memberId) }))
     .filter((c) => c.people.length > 0);
-  const react = (emoji: FeedReactionEmoji) => { setPicking(false); onReact(emoji); };
+  const react = (emoji: FeedReactionEmoji) => { if (disabled) return; setPicking(false); onReact(emoji); };
 
   return (
     <div className="reactions">
@@ -49,7 +49,7 @@ export function ReactionBar({ reactions, members, meId, disabled, onReact }: Pro
       {picking && (
         <div className="reaction-picker" role="group" aria-label="Elige una reacción">
           {FEED_REACTIONS.map((emoji) => (
-            <button key={emoji} type="button" aria-pressed={mine === emoji} onClick={() => react(emoji)}>
+            <button key={emoji} type="button" disabled={disabled} aria-pressed={mine === emoji} onClick={() => react(emoji)}>
               {emoji}
             </button>
           ))}

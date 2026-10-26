@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ExamMaterialLink } from '../components/ExamMaterialLink';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router';
 import { isValidPeriod, PERIOD_COUNT, periodLabel, WORK_KIND_LABEL } from '@b20/core';
@@ -11,6 +11,7 @@ import { Icon } from '../components/Icon';
 import { AcademicComments, ActivityRelations, PageHistory, ProgressControl, ResourceSection } from '../components/AcademicTools';
 import { RichText } from '../components/RichText';
 import { useAction } from '../components/useAction';
+import { AttachmentUploader, useResourceUploadQueue } from '../components/uploads/ResourceUploader';
 import { participantsOf } from '../lib/activities';
 import {
   formatLongDay,
@@ -75,7 +76,13 @@ export function ActivitiesPage() {
 function EvidenceForm({ activityId, onDone }: { activityId: string; onDone: () => void }) {
   const source = useDataSource();
   const { me, members } = useSnapshot();
-  const { error, run } = useAction();
+  const { error, pending, run } = useAction();
+  const queue = useResourceUploadQueue();
+  const submitting = useRef(false);
+  const active = useRef(true);
+  const savedParent = useRef<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const [content, setContent] = useState('');
   const [participantIds, setParticipantIds] = useState<string[]>([]);
   const others = members.filter((m) => m.id !== me?.id && m.status === 'active');
@@ -84,11 +91,20 @@ function EvidenceForm({ activityId, onDone }: { activityId: string; onDone: () =
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (await run(() => source.addEvidence(activityId, content, participantIds))) onDone();
+    if (submitting.current) return;
+    submitting.current = true;
+    try {
+      const id = savedParent.current ?? await run(() => source.addEvidence(activityId, content, participantIds));
+      if (!active.current || !id) return;
+      savedParent.current = id;
+      setSaved(true);
+      if (await queue.upload('evidence', id, 1) && active.current) onDone();
+    } finally { submitting.current = false; }
   };
 
   return (
-    <form className="panel form" onSubmit={submit}>
+    <form className="panel form" onSubmit={submit} aria-busy={pending || queue.busy}>
+      <fieldset className="academic-publish-fields" disabled={pending || queue.busy || saved}>
       <label className="field">
         <span className="field__label">Qué hizo tu equipo</span>
         <textarea
@@ -129,17 +145,20 @@ function EvidenceForm({ activityId, onDone }: { activityId: string; onDone: () =
           <span className="field__hint">Tú ya cuentas. Tu evidencia no reemplaza la de otro equipo.</span>
         </fieldset>
       )}
+      </fieldset>
+      {saved && <p role="status">La evidencia ya está publicada. {queue.pendingCount ? 'Reintenta los archivos pendientes para terminar.' : 'Puedes continuar.'}</p>}
+      <AttachmentUploader queue={queue} disabled={pending} title="Archivos de esta evidencia" />
       {error && (
         <p className="error" role="alert">
           {error}
         </p>
       )}
       <div className="form__actions">
-        <button type="button" className="secondary" onClick={onDone}>
+        <button type="button" className="secondary" onClick={onDone} disabled={pending || queue.busy}>
           Cancelar
         </button>
-        <button type="submit" disabled={!content.trim()}>
-          Agregar evidencia
+        <button type="submit" disabled={pending || queue.busy || !content.trim()}>
+          {pending || queue.busy ? 'Guardando…' : saved ? queue.pendingCount ? 'Reintentar archivos pendientes' : 'Continuar' : 'Agregar evidencia'}
         </button>
       </div>
     </form>
@@ -404,7 +423,13 @@ function ActivityForm({ activity }: { activity: Activity | undefined }) {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const { subjects, terms, members, calendar } = useSnapshot();
-  const { error, run } = useAction();
+  const { error, pending, run } = useAction();
+  const queue = useResourceUploadQueue();
+  const submitting = useRef(false);
+  const active = useRef(true);
+  const savedParent = useRef<{ id: string; version: number } | null>(null);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const backTo = activity ? `/m/actividades/${activity.id}` : LIST;
   // Al registrar, el formulario abre en el cuatrimestre y parcial vigentes según Ajustes.
   const current = currentPlacement(calendar);
@@ -445,15 +470,25 @@ function ActivityForm({ activity }: { activity: Activity | undefined }) {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const input = { subjectId, termId: termId || undefined, topic, date, title, objective, instructions };
-    const id = await run(async () => {
-      if (!activity) return source.createActivity(input);
-      await source.updateActivity(activity.id, input, baseVersion);
-      return activity.id;
-    });
-    if (!id) return;
-    rememberPeriod(period);
-    void navigate(`/m/actividades/${id}`);
+    if (submitting.current) return;
+    submitting.current = true;
+    try {
+      if (!savedParent.current) {
+        const input = { subjectId, termId: termId || undefined, topic, date, title, objective, instructions };
+        const result = await run(async () => {
+          if (!activity) return { id: await source.createActivity(input), version: 1 };
+          if (changed) await source.updateActivity(activity.id, input, baseVersion);
+          return { id: activity.id, version: (baseVersion ?? activity.version) + (changed ? 1 : 0) };
+        });
+        if (!active.current || !result) return;
+        savedParent.current = result;
+        setSaved(true);
+      }
+      const target = savedParent.current;
+      if (!await queue.upload('activity', target.id, target.version) || !active.current) return;
+      rememberPeriod(period);
+      void navigate(`/m/actividades/${target.id}`);
+    } finally { submitting.current = false; }
   };
 
   return (
@@ -472,7 +507,8 @@ function ActivityForm({ activity }: { activity: Activity | undefined }) {
         </div>
       </header>
 
-      <form className="panel form form--wide" onSubmit={submit}>
+      <form className="panel form form--wide" onSubmit={submit} aria-busy={pending || queue.busy}>
+        <fieldset className="academic-publish-fields" disabled={pending || queue.busy || saved}>
         <section className="form__section">
           <h2>Cuándo y en qué materia</h2>
           {!activity && current && period === current.period && (
@@ -572,6 +608,9 @@ function ActivityForm({ activity }: { activity: Activity | undefined }) {
           </label>
         </section>
 
+        </fieldset>
+        {saved && <p role="status">La actividad ya está guardada. {queue.pendingCount ? 'Reintenta los archivos pendientes para terminar.' : 'Puedes continuar.'} <Link to={`/m/actividades/${savedParent.current!.id}`}>Abrir la actividad</Link></p>}
+        <AttachmentUploader queue={queue} disabled={pending} title="Recursos de la actividad" />
         {error && (
           <p className="error" role="alert">
             {error}
@@ -586,8 +625,8 @@ function ActivityForm({ activity }: { activity: Activity | undefined }) {
           <Link to={backTo} className="button secondary">
             Cancelar
           </Link>
-          <button type="submit" disabled={!changed}>
-            {activity ? 'Guardar versión nueva' : 'Registrar'}
+          <button type="submit" disabled={pending || queue.busy || (!saved && !changed && !queue.hasFiles)}>
+            {pending || queue.busy ? 'Guardando…' : saved ? queue.pendingCount ? 'Reintentar archivos pendientes' : 'Continuar' : activity ? 'Guardar versión nueva' : 'Registrar'}
           </button>
         </div>
       </form>

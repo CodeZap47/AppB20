@@ -3,6 +3,7 @@ import { EXAM_ACTIONS } from '@b20/core';
 import { readAiBody } from './body.ts';
 import { AiApiError } from './database.ts';
 import type { AiRouteContext } from './routes.ts';
+import { revalidateDocumentOriginals } from './documentRoutes.ts';
 
 // Editing a complete Unicode question set must fit without truncating its content.
 const BODY_BYTES = 2 * 1024 * 1024;
@@ -19,6 +20,11 @@ export function examRoutes() {
     }
     // Membership, source access, phase-specific solutions and concurrency are checked
     // transactionally in SpacetimeDB. Never substitute the technical service token.
+    if (['approveVersion', 'setVisibility', 'startAttempt', 'getVersion', 'getExam', 'getAttempt', 'confirmAnswer', 'saveAnswer',
+      'finishAttempt', 'evaluateOpenAnswer', 'sendToSpaced', 'saveToBank', 'setBankVisibility', 'getBankQuestion', 'listBank',
+      'previewVariant', 'createVariant', 'importGeneration', 'replaceQuestions'].includes(body.action)) {
+      await revalidateDocumentOriginals(c.get('ai'), c.get('sessionToken'), c.env, { examRequest: body });
+    }
     return c.json(await c.get('ai').user(c.get('sessionToken'), 'exam_action', body));
   });
   return app;

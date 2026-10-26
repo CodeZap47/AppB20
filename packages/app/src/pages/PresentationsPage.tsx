@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   emptyPresentationObservations, PRESENTATION_LIMITS, PRESENTATION_RUBRIC,
   presentationTextEstimate, type PresentationObservations,
 } from '@b20/core';
+import { PresentationAiPanel, PresentationMediaPanel } from '../components/PresentationFeatures';
 import { Empty } from '../components/Empty';
 import { Icon } from '../components/Icon';
 import { RichText } from '../components/RichText';
@@ -73,7 +74,7 @@ export function PresentationsPage() {
     .filter((practice) => matches(query, practice.title, practice.topic))
     .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
   return <>
-    <header className="page-header"><div><h1>Simulador de exposiciones</h1><p className="muted">Ensaya por escrito, responde preguntas y compara tus intentos.</p></div>
+    <header className="page-header"><div><h1>Simulador de exposiciones</h1><p className="muted">Ensaya por escrito o con audio, revisa la ayuda de Gemini y compara tus intentos.</p></div>
       <Link to={`${BASE}/nueva`} className="button with-icon"><Icon name="plus" size={18} /> Nueva exposición</Link></header>
     <p className="teaching-privacy with-icon"><Icon name="lock" size={16} /> Tus borradores y observaciones son privados. Tú eliges a quién invitar.</p>
     <div className="segmented teaching-tabs" role="group" aria-label="Exposiciones">
@@ -275,6 +276,7 @@ export function PresentationAttemptPage() {
 }
 
 function AttemptDetail({ data, practice, attempt }: { data: Snapshot; practice: PresentationPractice; attempt: PresentationAttempt }) {
+  const source = useDataSource(); const [audioReady, setAudioReady] = useState(false); const onAudioReady = useCallback((ready: boolean) => setAudioReady(ready), []);
   const owner = practice.ownerId === data.me?.id;
   const questions = data.presentationQuestions.filter((question) => question.attemptId === attempt.id).sort((a, b) => {
     const byDate = a.createdAt.getTime() - b.createdAt.getTime();
@@ -292,7 +294,9 @@ function AttemptDetail({ data, practice, attempt }: { data: Snapshot; practice: 
     <header className="page-header"><div><p className="eyebrow">{attempt.title} · {data.subjects.find((subject) => subject.id === attempt.subjectId)?.name}{attempt.termId && ` · ${data.terms.find((term) => term.id === attempt.termId)?.name ?? ''}`}</p><h1>Intento {attempt.number}</h1><p className="muted">{formatTime(attempt.completedAt ?? attempt.updatedAt)}</p></div><span className="badge">{attempt.status === 'completed' ? 'Concluido' : 'Borrador privado'}</span></header>
     {practice.archived && <p className="presentation-notice">Exposición archivada: el intento y su historial son de solo lectura.</p>}
     <div className="detail presentation-detail"><main className="detail__main">
-      {owner ? <AttemptEditor attempt={attempt} practice={practice} data={data} /> : <section className="panel"><h2>Explicación concluida</h2><RichText text={attempt.body} /><TimeEstimate body={attempt.body} /></section>}
+      {source.presentationFeatures && <PresentationMediaPanel actions={source.presentationFeatures} attempt={attempt} practice={practice} owner={owner} onReady={onAudioReady} />}
+      {owner ? <AttemptEditor attempt={attempt} practice={practice} data={data} audioReady={audioReady} /> : <section className="panel"><h2>Explicación concluida</h2><RichText text={attempt.body} /><TimeEstimate body={attempt.body} /></section>}
+      {owner && source.presentationFeatures && <PresentationAiPanel actions={source.presentationFeatures} attempt={attempt} archived={practice.archived} />}
       {previous && <details className="panel presentation-comparison"><summary>Comparar con el intento {previous.number}</summary><p className="muted">Explicación anterior, conservada sin cambios.</p><RichText text={previous.body} /><Link to={attemptPath(practice.id, previous.id)}>Abrir intento anterior, preguntas y observaciones</Link></details>}
       {attempt.status === 'completed' && <>
         <section className="panel"><h2>Preguntas de apoyo</h2><p className="muted">Las cinco preguntas orientadoras usan plantillas locales, sin IA. Las preguntas que escribas también se comparten con el revisor invitado.</p>
@@ -323,7 +327,7 @@ function ObservationFields({ value, onChange, disabled }: { value: PresentationO
   return PRESENTATION_RUBRIC.map(({ key, label, prompt }) => <label className="field" key={key}>{label}<textarea value={value[key]} rows={3} maxLength={PRESENTATION_LIMITS.observation} onChange={(e) => onChange({ ...value, [key]: e.target.value })} disabled={disabled} /><span className="field__hint">{prompt}</span></label>);
 }
 
-function AttemptEditor({ attempt, practice, data }: { attempt: PresentationAttempt; practice: PresentationPractice; data: Snapshot }) {
+function AttemptEditor({ attempt, practice, data, audioReady = false }: { attempt: PresentationAttempt; practice: PresentationPractice; data: Snapshot; audioReady?: boolean }) {
   const source = useDataSource();
   const personal = data.presentationPersonal.find((item) => item.attemptId === attempt.id);
   const [cache] = useState<AttemptDraft>(() => {
@@ -397,7 +401,7 @@ function AttemptEditor({ attempt, practice, data }: { attempt: PresentationAttem
     {cache.error && <p className="error" role="alert">{cache.error} Tu texto permanece aquí para reintentar.</p>}
     {saved && <p className="muted" role="status">{completed ? 'Intento concluido. La explicación quedó conservada.' : 'Borrador guardado.'}</p>}
     {!locked && <><p className="field__hint">Al concluir, la explicación y tus observaciones quedan conservadas. Para cambiarlas, crea un nuevo intento. Se añadirán cinco preguntas de apoyo con plantillas locales.</p>
-      <div className="form__actions"><button type="submit" className="secondary" disabled={pending}>{pending ? 'Guardando…' : 'Guardar borrador'}</button><button type="button" disabled={pending || !body.trim()} onClick={() => void save(true)}>Guardar y concluir intento</button></div></>}
+      <div className="form__actions"><button type="submit" className="secondary" disabled={pending}>{pending ? 'Guardando…' : 'Guardar borrador'}</button><button type="button" disabled={pending || (!body.trim() && !audioReady)} onClick={() => void save(true)}>Guardar y concluir intento</button></div></>}
   </form>;
 }
 

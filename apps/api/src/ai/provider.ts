@@ -13,7 +13,7 @@ export function aiPurposeInstructions(config: AiGenerationConfig): string {
   if (config.purpose === 'spaced_cards') return 'Crea hasta la cantidad solicitada de tarjetas para repaso, cada una con question, explanation, hint y citations. Cada tarjeta debe usar una sola nota o guía de origen; sus citas deben corresponder a esa fuente. No establezcas intervalos ni uses respuestas, avances o historial de estudio. Devuelve purpose spaced_cards, title y cards. ';
   if (config.purpose === 'guide') return 'Crea una guía con exactamente estas ocho secciones en este orden: ' + GUIDE_SECTIONS.map((section) => section.title).join(', ') + '. Devuelve purpose, title y sections; cada sección lleva heading, text y citations con IDs reales. Cada sección debe explicar el razonamiento y citar los fragmentos usados. ';
   if (config.purpose === 'explanation') return 'Crea una explicación con concepto, ejemplo y límites. Devuelve purpose, title y sections; cada sección lleva heading, text y citations con IDs reales. Cada sección debe explicar el razonamiento y citar los fragmentos usados. ';
-  return 'Crea la cantidad y tipos de preguntas solicitados con respuesta correcta, explicación y citas. ';
+  return 'Crea la cantidad y tipos de preguntas solicitados con respuesta correcta, explicación y citas. Para type open usa options vacío, correctOptionId vacío, referenceAnswer y rubric con version 1 y criteria (id, description, maxPoints); no incluyas opciones. Para single/boolean conserva opciones y correctOptionId. ';
 }
 export function aiPurposeSchema(config: AiGenerationConfig) {
   return config.purpose === 'teaching_questions' ? AI_TEACHING_SCHEMA : config.purpose === 'spaced_cards' ? AI_SPACED_SCHEMA

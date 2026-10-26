@@ -70,7 +70,7 @@ describe('API del agente con Gemini simulado', () => {
   });
   it('un paso apagado no autoriza envíos nuevos', async () => {
     const response = await app({ ...env, AGENT_AI_STEPS: 'style,plan' }); expect(response.status).toBe(503); expect(lastAuthorize.allowNew).toBe(false); expect(calls).toBe(0);
-    expect((await app({ ...env, AGENT_AI_STEPS: undefined })).status).toBe(503);
+    expect((await app({ ...env, AGENT_AI_STEPS: '' })).status).toBe(503);
   });
   it('JSON inválido falla y el tiempo agotado queda incierto, sin repetir el proveedor', async () => {
     output = 'NOT JSON'; expect(await (await app()).json()).toMatchObject({ state: 'failed' }); await app(); expect(calls).toBe(1);

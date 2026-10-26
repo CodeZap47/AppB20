@@ -1,4 +1,4 @@
-import { celebrationDate, type FeedTargetKind } from '@b20/core';
+import { celebrationDate, type ExamSummary, type FeedTargetKind } from '@b20/core';
 import type { Assignment, Birthday, FeedPost, Id, Note, Snapshot } from '../data/types';
 import { formatDate, memberName, parseDay } from './format';
 import { unreadMessages as unreadChatMessages } from './chat';
@@ -20,7 +20,15 @@ export type NewsKind =
   | 'ayuda'
   | 'repaso'
   | 'publicacion'
-  | 'ranking';
+  | 'ranking'
+  | 'reto'
+  | 'solucion'
+  | 'revision'
+  | 'observacion'
+  | 'museo'
+  | 'oportunidad'
+  | 'sala'
+  | 'examen';
 
 export interface NewsItem {
   key: string;
@@ -35,6 +43,8 @@ export interface NewsItem {
    * derivados (como el #1 del ranking) no tienen y no admiten reacciones.
    */
   target?: { kind: FeedTargetKind; id: Id };
+  /** Recurso del módulo; no amplía los objetivos de reacciones admitidos por el servidor. */
+  resource?: { kind: string; id: Id };
   /** Extracto del contenido para la vista Feed; la Clásica no lo muestra. */
   preview?: string;
   /** El mismo aviso en segunda persona, para cuando quien lo ve es quien lo hizo. */
@@ -57,15 +67,27 @@ export const NEWS_LABEL: Record<NewsKind, string> = {
   repaso: 'Colecciones de repaso',
   publicacion: 'Publicaciones',
   ranking: 'Ranking',
+  reto: 'Retos',
+  solucion: 'Soluciones de retos',
+  revision: 'Revisiones de código',
+  observacion: 'Observaciones de código',
+  museo: 'Museo de bugs',
+  oportunidad: 'Oportunidades',
+  sala: 'Salas de estudio',
+  examen: 'Exámenes de estudio',
 };
 
 /**
  * Novedades del grupo para «¿Qué me perdí?» (7.1), sin IA. Solo usa lo que el snapshot ya
  * permite ver (las notas personales ajenas nunca llegan) y omite lo que hizo el propio usuario.
  */
-export function buildNews(snapshot: Snapshot, now = new Date()): NewsItem[] {
+export function buildNews(snapshot: Snapshot, now = new Date(), sharedExams: ExamSummary[] = []): NewsItem[] {
+  return newsCatalog(snapshot, now, sharedExams).filter((item) => item.actorId !== snapshot.me?.id);
+}
+
+/** Catálogo común: una sola tarjeta por recurso, tanto para actividad propia como ajena. */
+function newsCatalog(snapshot: Snapshot, now: Date, sharedExams: ExamSummary[]): NewsItem[] {
   if (!snapshot.me || snapshot.me.status !== 'active') return [];
-  const meId = snapshot.me?.id;
   const assignmentOf = (id: Id) => snapshot.assignments.find((a) => a.id === id);
   const questionOf = (id: Id) => snapshot.questions.find((q) => q.id === id);
   const activityOf = (id: Id) => snapshot.activities.find((a) => a.id === id);
@@ -110,6 +132,7 @@ export function buildNews(snapshot: Snapshot, now = new Date()): NewsItem[] {
         subjectId: assignment?.subjectId,
         actorId: w.authorIds[0] ?? '',
         text: `subió su trabajo a «${assignment?.title ?? 'una tarea'}»`,
+        selfText: `subiste tu trabajo a «${assignment?.title ?? 'una tarea'}»`,
         link: `/m/tareas/${w.assignmentId}?trabajo=${w.id}`,
         at: w.createdAt,
         target: { kind: 'work' as const, id: w.id },
@@ -139,17 +162,20 @@ export function buildNews(snapshot: Snapshot, now = new Date()): NewsItem[] {
       target: { kind: 'evidence' as const, id: e.id },
       preview: excerpt(e.content),
     })),
-    ...snapshot.questions.filter((question) => !question.withdrawnAt).map((q) => ({
+    ...snapshot.questions.filter((question) => !question.withdrawnAt).map((q) => {
+      const museum = snapshot.museumEntries.find((entry) => entry.questionId === q.id);
+      return ({
       key: `q${q.id}`,
-      kind: 'pregunta' as const,
+      kind: museum ? 'museo' as const : 'pregunta' as const,
       subjectId: q.subjectId,
-      actorId: q.authorId,
-      text: `preguntó «${q.title}»`,
+      actorId: museum?.updatedBy ?? q.authorId,
+      text: museum ? `${museum.version > 1 ? 'actualizó' : 'compartió'} el bug «${q.title}»` : `preguntó «${q.title}»`,
       link: `/m/preguntas/${q.id}`,
-      at: q.createdAt,
+      at: museum?.updatedAt ?? q.createdAt,
       target: { kind: 'question' as const, id: q.id },
-      preview: excerpt(q.body),
-    })),
+      resource: museum ? { kind: 'museum', id: q.id } : undefined,
+      preview: excerpt(museum?.symptom ?? q.body),
+    }); }),
     ...snapshot.answers.filter((answer) => !answer.withdrawnAt && questionOf(answer.questionId) && !questionOf(answer.questionId)!.withdrawnAt).map((r) => ({
       key: `r${r.id}`,
       kind: 'respuesta' as const,
@@ -222,11 +248,12 @@ export function buildNews(snapshot: Snapshot, now = new Date()): NewsItem[] {
         at: collection.updatedAt,
         target: { kind: 'spaced' as const, id: collection.id },
       })),
+    ...moduleNews(snapshot, sharedExams),
     ...snapshot.feedPosts.map(postNews),
     ...rankingNews(snapshot, now),
   ];
 
-  return [...new Map(items.filter((i) => i.actorId && i.actorId !== meId).map((i) => [i.key, i])).values()]
+  return [...new Map(items.filter((item) => item.actorId).map((item) => [item.key, { ...item, selfText: item.selfText ?? ownText(item.text) }])).values()]
     .sort((a, b) => b.at.getTime() - a.at.getTime() || a.key.localeCompare(b.key));
 }
 
@@ -285,17 +312,62 @@ function rankingNews(snapshot: Snapshot, now: Date): NewsItem[] {
   }));
 }
 
-/**
- * Lo tuyo que sí se ve en el feed aunque `buildNews` lo omita: tus publicaciones, tus notas de
- * clase compartidas y tus llegadas al #1 del ranking.
- */
-export function ownFeedNews(snapshot: Snapshot, now = new Date()): NewsItem[] {
-  const meId = snapshot.me?.id;
-  if (!meId || snapshot.me?.status !== 'active') return [];
+/** Todos los aportes propios publicados; los borradores y recursos privados quedan fuera. */
+export function ownFeedNews(snapshot: Snapshot, now = new Date(), sharedExams: ExamSummary[] = []): NewsItem[] {
+  return newsCatalog(snapshot, now, sharedExams).filter((item) => item.actorId === snapshot.me?.id);
+}
+
+/** Los verbos del catálogo se conjugan una sola vez, sin cambiar el contenido de los títulos. */
+function ownText(text: string): string {
+  const verbs: Record<string, string> = { cambió: 'cambiaste', quitó: 'quitaste', editó: 'editaste', creó: 'creaste', subió: 'subiste',
+    compartió: 'compartiste', actualizó: 'actualizaste', registró: 'registraste', preguntó: 'preguntaste', respondió: 'respondiste',
+    aceptó: 'aceptaste', publicó: 'publicaste', abrió: 'abriste', organizó: 'organizaste', propuso: 'propusiste' };
+  return text.replace(/^\S+/, (verb) => verbs[verb] ?? verb);
+}
+
+/** Nuevos módulos compartidos: nunca se usan prácticas, progreso ni conversaciones privadas. */
+function moduleNews(snapshot: Snapshot, sharedExams: ExamSummary[]): NewsItem[] {
+  const challengeOf = (id: Id) => snapshot.codingChallenges.find((entry) => entry.id === id);
+  const reviewOf = (id: Id) => snapshot.codeReviews.find((entry) => entry.id === id);
   return [
-    ...snapshot.feedPosts.filter((post) => post.authorId === meId).map((post) => ({ ...postNews(post), selfText: 'publicaste en el grupo' })),
-    ...sharedNotes(snapshot).filter((note) => note.authorId === meId).map(noteNews),
-    ...rankingNews(snapshot, now).filter((item) => item.actorId === meId),
+    ...snapshot.codingChallenges.map((entry) => ({
+      key: `ch${entry.id}`, kind: 'reto' as const, subjectId: entry.subjectId, actorId: entry.authorId,
+      text: `${entry.version > 1 ? 'actualizó' : 'publicó'} el reto «${entry.title}»`, link: `/m/retos/${entry.id}`,
+      at: entry.updatedAt, resource: { kind: 'challenge', id: entry.id }, preview: excerpt(entry.objective),
+    })),
+    ...snapshot.challengeSolutions.filter((entry) => challengeOf(entry.challengeId)).map((entry) => ({
+      key: `cs${entry.id}`, kind: 'solucion' as const, subjectId: challengeOf(entry.challengeId)!.subjectId, actorId: entry.authorId,
+      text: `${entry.version > 1 ? 'actualizó' : 'compartió'} una solución de «${challengeOf(entry.challengeId)!.title}»`,
+      link: `/m/retos/${entry.challengeId}?solucion=${encodeURIComponent(entry.id)}`, at: entry.updatedAt,
+      resource: { kind: 'solution', id: entry.id }, preview: excerpt(entry.explanation),
+    })),
+    ...snapshot.codeReviews.map((entry) => ({
+      key: `cr${entry.id}`, kind: 'revision' as const, subjectId: entry.subjectId, actorId: entry.authorId,
+      text: `${entry.currentVersion > 1 ? 'actualizó' : 'publicó'} la revisión de código «${entry.title}»`,
+      link: `/m/revision-codigo/${entry.id}`, at: entry.updatedAt,
+      resource: { kind: 'review', id: entry.id },
+      preview: excerpt(snapshot.codeReviewVersions.find((version) => version.reviewId === entry.id && version.number === entry.currentVersion)?.summary),
+    })),
+    ...snapshot.codeReviewComments.filter((entry) => reviewOf(entry.reviewId)).map((entry) => ({
+      key: `cc${entry.id}`, kind: 'observacion' as const, subjectId: reviewOf(entry.reviewId)!.subjectId, actorId: entry.authorId,
+      text: `publicó una observación en «${reviewOf(entry.reviewId)!.title}»`, link: `/m/revision-codigo/${entry.reviewId}?observacion=${encodeURIComponent(entry.id)}`,
+      at: entry.updatedAt, resource: { kind: 'review-comment', id: entry.id }, preview: excerpt(entry.body),
+    })),
+    ...snapshot.opportunities.filter((entry) => !entry.withdrawn).map((entry) => ({
+      key: `op${entry.id}`, kind: 'oportunidad' as const, subjectId: undefined, actorId: entry.updatedBy,
+      text: `${entry.version > 1 ? 'actualizó' : 'compartió'} la oportunidad «${entry.title}»`, link: `/m/oportunidades?oportunidad=${encodeURIComponent(entry.id)}`,
+      at: entry.updatedAt, resource: { kind: 'opportunity', id: entry.id }, preview: excerpt(entry.requirements),
+    })),
+    ...snapshot.studyRooms.filter((entry) => entry.visibility === 'group').map((entry) => ({
+      key: `room${entry.id}`, kind: 'sala' as const, subjectId: entry.subjectId, actorId: entry.organizerId,
+      text: `${entry.version > 1 ? 'actualizó' : 'organizó'} la sala «${entry.title}»`, link: `/m/salas/${entry.id}`,
+      at: entry.updatedAt, resource: { kind: 'room', id: entry.id }, preview: excerpt(entry.objective),
+    })),
+    ...sharedExams.filter((entry) => entry.visibility === 'group' && entry.readyVersion && !entry.archived).map((entry) => ({
+      key: `exam${entry.id}`, kind: 'examen' as const, subjectId: entry.subjectId, actorId: entry.ownerId,
+      text: `compartió el examen de estudio «${entry.title}»`, link: `/m/examenes/${entry.id}`,
+      at: new Date(entry.updatedAt), resource: { kind: 'exam', id: entry.id }, preview: excerpt(entry.topics.join(' · ')),
+    })),
   ];
 }
 
@@ -342,6 +414,14 @@ const NOUNS: Record<NewsKind, [string, string]> = {
   repaso: ['colección de repaso', 'colecciones de repaso'],
   publicacion: ['publicación', 'publicaciones'],
   ranking: ['cambio en el #1 del ranking', 'cambios en el #1 del ranking'],
+  reto: ['reto', 'retos'],
+  solucion: ['solución de reto', 'soluciones de retos'],
+  revision: ['revisión de código', 'revisiones de código'],
+  observacion: ['observación de código', 'observaciones de código'],
+  museo: ['bug documentado', 'bugs documentados'],
+  oportunidad: ['oportunidad', 'oportunidades'],
+  sala: ['sala de estudio', 'salas de estudio'],
+  examen: ['examen de estudio', 'exámenes de estudio'],
 };
 
 const listFormat = new Intl.ListFormat('es-MX', { style: 'long', type: 'conjunction' });

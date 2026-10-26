@@ -104,3 +104,13 @@ describe('recorrido de Exámenes de estudio', () => {
     await check('Material EX2 compartido'); const topicChecks = [...container.querySelectorAll<HTMLInputElement>('.ai-source__topics input')]; for (const checkbox of topicChecks) await act(async () => checkbox.click()); await click('Preparar vista previa sin enviar a Gemini'); expect(container.textContent).toContain('Texto exacto preparado');
   });
 });
+
+describe('EX-3 respuestas abiertas y banco', () => {
+  it('guarda texto sin revelar la rúbrica hasta cerrar y permite evaluar por criterio', async () => {
+    const generation = await generated({ ...input, config: { ...input.config!, questionCount: 1, types: ['open'] } }); let ready = await source.examAction({ action: 'importGeneration', generationId: generation.id, requestId: crypto.randomUUID(), title: 'Abiertas EX3' }); ready = await source.examAction({ action: 'approveVersion', examId: ready.id, version: 1, expectedRevision: ready.revision, reviewedQuestionIds: ['question-1'] }); const attempt = await source.examAction({ action: 'startAttempt', examId: ready.id, version: 1, mode: 'simulation', requestId: crypto.randomUUID() }); await show(`/m/examenes/intentos/${attempt.id}`);
+    expect(container.textContent).not.toContain('Respuesta ficticia de referencia'); const textarea = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Respuesta abierta 1"]')!; await act(async () => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, 'Mi argumento con evidencia.'); textarea.dispatchEvent(new Event('input', { bubbles: true })); }); await click('Guardar respuesta 1'); await click('Terminar intento y ver resultado privado'); expect(container.textContent).toContain('1 pendientes'); expect(container.textContent).toContain('Respuesta ficticia de referencia'); await fill('Puntos de clarity, máximo 4', '3'); await click('Guardar mi evaluación por criterio'); expect(container.textContent).toContain('3/4 puntos'); expect(container.textContent).toContain('0 pendientes');
+  });
+  it('guarda una pregunta aprobada en el banco sin publicar ni crear duplicados', async () => {
+    const ready = await exam(); await show(`/m/examenes/${ready.id}`); await click('Guardar pregunta aprobada en mi banco'); await click('Guardar pregunta aprobada en mi banco'); const bank = await source.examAction({ action: 'listBank' }); expect(bank).toHaveLength(1); expect(bank[0]!.visibility).toBe('personal'); expect(container.textContent).toContain('Pregunta guardada en mi banco');
+  });
+});

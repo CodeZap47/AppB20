@@ -3,6 +3,8 @@ import { SenderError } from 'spacetimedb/server';
 import { activeMember, bumpMaterial, expectVersion, log, requireSubject, saveTargetBaseline, targetVersion, type Ctx } from './moduleContext';
 import { canReadTarget, contentOwner } from './delivery2Handlers';
 import { assertRetentionReadable, restoreRetention, scheduleRetention } from './trashHandlers';
+import { contentImpact, MANAGED_CONTENT_KINDS } from './contentInventory';
+import { suppressContentNotifications } from './notificationHandlers';
 
 interface ProfileInput {
   preferredName: string; bio: string; interests: string[]; learningGoals: string;
@@ -89,8 +91,8 @@ export function saveProfileCover(ctx: Ctx, input: { expectedVersion: number; pre
   log(ctx, 'update', 'member_profile', profile.id);
 }
 
-const WITHDRAWABLE = ['note', 'question', 'answer', 'guide', 'work', 'evidence'];
-export function withdrawContent(ctx: Ctx, input: { kind: string; targetId: bigint; withdrawn: boolean; expectedVersion: number; reason: string }) {
+const WITHDRAWABLE = MANAGED_CONTENT_KINDS;
+export function withdrawContent(ctx: Ctx, input: { kind: string; targetId: bigint; withdrawn: boolean; expectedVersion: number; reason: string; acknowledgeImpact?: boolean; administrative?: boolean }) {
   const member = activeMember(ctx);
   if (!WITHDRAWABLE.includes(input.kind)) throw new SenderError('Este tipo de contenido no se puede retirar.');
   const owner = contentOwner(ctx.db, input.kind, input.targetId);
@@ -99,12 +101,21 @@ export function withdrawContent(ctx: Ctx, input: { kind: string; targetId: bigin
     ? [...ctx.db.workAuthor.workId.filter(input.targetId)].map((row) => row.author)
     : [owner];
   const own = authors.some((author) => author.isEqual(memberIdentityFor(ctx)));
+  const communalMessage = input.kind === 'group_message' || input.kind === 'channel_message';
+  const terminal = input.kind === 'feed_post' ? ctx.db.feedPost.id.find(input.targetId)?.deletedAt
+    : input.kind === 'feed_comment' ? ctx.db.feedComment.id.find(input.targetId)?.deletedAt
+    : input.kind === 'group_message' ? ctx.db.groupMessage.id.find(input.targetId)?.deletedAt
+    : input.kind === 'channel_message' ? ctx.db.channelMessage.id.find(input.targetId)?.deletedAt : undefined;
+  if (terminal) throw new SenderError('El contenido se eliminó definitivamente y no se puede recuperar.');
   if (!input.withdrawn) assertRetentionReadable(ctx, input.kind, input.targetId);
-  if (!own && !canReadTarget(ctx.db, memberIdentityFor(ctx), input.kind, input.targetId)) throw new SenderError('El contenido no está disponible.');
+  if (!own && !(communalMessage && member.isCreator) && !canReadTarget(ctx.db, memberIdentityFor(ctx), input.kind, input.targetId)) throw new SenderError('El contenido no está disponible.');
   if (!own && !member.isCreator) throw new SenderError('Solo su autor o un administrador pueden retirar este contenido.');
   // La membresía de administración no concede acceso a apuntes personales ajenos.
   if (input.kind === 'note' && ctx.db.note.id.find(input.targetId)?.visibility === 'personal' && !own) {
     throw new SenderError('Solo su autor puede retirar o restaurar un apunte personal.');
+  }
+  if (input.withdrawn && member.isCreator && (!own || input.administrative) && !contentImpact(ctx.db, input.kind, input.targetId).safeForBulk && !input.acknowledgeImpact) {
+    throw new SenderError('Revisa y acepta el impacto en coautores, dependencias o archivos conservados.');
   }
   expectVersion(targetVersion(ctx, input.kind, input.targetId), input.expectedVersion);
   const key = `${input.kind}:${input.targetId}`;
@@ -112,7 +123,7 @@ export function withdrawContent(ctx: Ctx, input: { kind: string; targetId: bigin
   const wasWithdrawn = previous?.withdrawnAt !== undefined;
   if (wasWithdrawn === input.withdrawn) return;
   const reason = optionalText(input.reason, 'El motivo', 1000);
-  if (input.withdrawn && !own && !reason) throw new SenderError('Indica el motivo de la retirada por moderación.');
+  if (input.withdrawn && (!own || input.administrative) && !reason) throw new SenderError('Indica el motivo de la retirada por moderación.');
   if (!input.withdrawn && previous?.withdrawnBy) {
     const moderation = !authors.some((author) => author.isEqual(previous.withdrawnBy!));
     if (moderation && !member.isCreator) throw new SenderError('Un administrador debe revisar esta retirada antes de restaurarla.');
@@ -126,7 +137,10 @@ export function withdrawContent(ctx: Ctx, input: { kind: string; targetId: bigin
     withdrawnBy: input.withdrawn ? memberIdentityFor(ctx) : undefined,
     reason: input.withdrawn ? reason : '' };
   if (previous) ctx.db.contentStatus.key.update(row); else ctx.db.contentStatus.insert(row);
-  if (input.withdrawn) scheduleRetention(ctx, input.kind, input.targetId, actorRole);
+  if (input.withdrawn) {
+    scheduleRetention(ctx, input.kind, input.targetId, actorRole);
+    suppressContentNotifications(ctx, input.kind, input.targetId);
+  }
   bumpMaterial(ctx, input.kind, input.targetId);
   log(ctx, input.withdrawn ? 'withdraw' : 'restore', input.kind, input.targetId);
 }

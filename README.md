@@ -74,6 +74,7 @@ primera versión sin IA que también requiere comprobación con cuentas reales.
 | **Votaciones y contribuciones** | Votaciones nominales con participantes elegibles y reglas de cierre; puntos con reglas y desglose de aportes. Falta validar con datos reales y acordar la puntuación con el grupo. |
 | **Perfiles y cumpleaños** | Presentación voluntaria, foto privada bajo demanda, portafolio y archivo de trabajos; calendario mensual/anual y recordatorios con preferencias y zona horaria. El planificador está publicado y configurado; queda pendiente validar la recepción en dispositivos. |
 | **Avisos y papelera** | Bandeja privada, lectura y Web Push configurable; recuperación de contenido retirado antes de 30 días y purga programada con limpieza de referencias y bytes sin uso. |
+| **Administración de accesos** | Enlaces reutilizables con caducidad/cupo, revocación independiente, bajas y bloqueo de correos, historial y retirada selectiva de aportes a Papelera. [Implementación](docs/control-accesos-administracion.md) y [publicación con conservación de datos](docs/administracion-produccion-2026-10-24.md). |
 | **¿Qué me perdí?** | Novedades de materiales, guías, votaciones abiertas, ayuda y repaso compartido; lectura de chats separada. Excluye contenido privado y retirado. Se ve como feed (historias, publicaciones propias, reacciones y comentarios) o como la lista clásica. |
 
 Salas de estudio está implementada y publicada sin IA: acceso abierto o privado,
@@ -93,7 +94,7 @@ Quedan tres módulos sin implementar, previstos para la quinta entrega:
 - **7.6 Microproyectos.**
 - **7.11 Préstamo de materiales.**
 
-En módulos existentes, siguen pendientes estas ampliaciones:
+En módulos existentes, EX-3 y Exposiciones con Gemini/audio tienen [implementación local lista para revisión](docs/examenes-exposiciones-ampliaciones.md), pendiente de publicación y aceptación. Las ampliaciones aún pendientes de publicación o implementación son:
 
 - **Exposiciones:** audio y generación con Gemini.
 - **¿Qué me perdí?:** resumen de novedades con IA.

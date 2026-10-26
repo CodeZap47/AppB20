@@ -53,6 +53,11 @@ async function fill(input: HTMLInputElement | HTMLTextAreaElement, value: string
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
 }
+async function dropFiles(files: File[]) {
+  const drop = new Event('drop', { bubbles: true, cancelable: true });
+  Object.defineProperty(drop, 'dataTransfer', { value: { files, types: ['Files'] } });
+  await act(async () => container.querySelector('textarea')!.dispatchEvent(drop));
+}
 
 describe('mensajería de la segunda entrega', () => {
   const conversations = [
@@ -106,6 +111,7 @@ describe('mensajería de la segunda entrega', () => {
     actions.attachResourceFile.mockRejectedValueOnce(new Error('Respuesta incierta')).mockResolvedValueOnce('file');
     await show();
     await fill(container.querySelector('textarea')!, 'Adjunto para el salón');
+    await click(container.querySelector('[aria-label="Elegir archivos adjuntos"]')!);
     const file = new File(['hola'], 'hola.txt', { type: 'text/plain' });
     const picker = container.querySelector<HTMLInputElement>('input[type="file"]')!;
     Object.defineProperty(picker, 'files', { configurable: true, value: [file] });
@@ -117,6 +123,99 @@ describe('mensajería de la segunda entrega', () => {
     expect(actions.sendGroupMessage).toHaveBeenCalledExactlyOnceWith('Adjunto para el salón', undefined);
     expect(actions.attachResourceFile).toHaveBeenCalledTimes(2);
     for (const call of actions.attachResourceFile.mock.calls) expect(call.slice(0, 4)).toEqual(['group_message', 'new-message', file, 1]);
+    expect(container.querySelector('textarea')?.value).toBe('');
+  });
+  it('espera la confirmación del adjunto aunque todos los bytes ya se transfirieron', async () => {
+    let confirm!: (id: string) => void;
+    source.attachResourceFile = vi.fn((_kind, _id, file, _version, options) => {
+      options?.onProgress?.(file.size, file.size);
+      return new Promise<string>((resolve) => { confirm = resolve; });
+    });
+    await show();
+    const file = new File(['hola'], 'confirmar.txt', { type: 'text/plain' });
+    const drop = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, 'dataTransfer', { value: { files: [file], types: ['Files'] } });
+    await act(async () => container.querySelector('textarea')!.dispatchEvent(drop));
+    await click(container.querySelector('[aria-label="Enviar mensaje"]')!);
+    expect(container.querySelector('[data-upload-state="confirming"]')).not.toBeNull();
+    expect(container.querySelector('[data-upload-state="complete"]')).toBeNull();
+    expect(container.querySelector('[role="progressbar"]')?.hasAttribute('aria-valuenow')).toBe(false);
+    await act(async () => confirm('file'));
+    expect(container.querySelector('[data-upload-state="complete"]')).not.toBeNull();
+    expect(actions.sendGroupMessage).toHaveBeenCalledExactlyOnceWith('Archivo adjunto', undefined);
+  });
+
+  it('reintenta la parte pendiente de una cola sin duplicar el mensaje ni el archivo confirmado', async () => {
+    const attach = vi.fn<DataSource['attachResourceFile']>()
+      .mockResolvedValueOnce('first-file').mockRejectedValueOnce(new Error('Sin conexión')).mockResolvedValueOnce('second-file');
+    source.attachResourceFile = attach;
+    await show();
+    const files = [new File(['uno'], 'uno.txt', { type: 'text/plain' }), new File(['dos'], 'dos.txt', { type: 'text/plain' })];
+    const drop = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, 'dataTransfer', { value: { files, types: ['Files'] } });
+    await act(async () => container.querySelector('textarea')!.dispatchEvent(drop));
+    await click(container.querySelector('[aria-label="Enviar mensaje"]')!);
+    expect(container.querySelector('[data-upload-state="complete"]')?.textContent).toContain('uno.txt');
+    expect(container.querySelector('[data-upload-state="failed"]')?.textContent).toContain('dos.txt');
+    await click(container.querySelector('[aria-label="Reintentar dos.txt"]')!);
+    expect(actions.sendGroupMessage).toHaveBeenCalledTimes(1);
+    expect(attach.mock.calls.map((call) => [call[1], call[2], call[3]])).toEqual([
+      ['new-message', files[0], 1], ['new-message', files[1], 2], ['new-message', files[1], 2],
+    ]);
+    expect(container.querySelectorAll('[data-upload-state="complete"]')).toHaveLength(2);
+  });
+
+  it('conserva una cola cancelada para reintentar los mismos archivos sobre el mismo mensaje', async () => {
+    const attach = vi.fn<DataSource['attachResourceFile']>().mockImplementationOnce((_kind, _id, file, _version, options) => {
+      options?.onProgress?.(1, file.size);
+      return new Promise((_resolve, reject) => options?.signal?.addEventListener('abort', () => reject(new DOMException('Cancelaste la transferencia.', 'AbortError')), { once: true }));
+    }).mockResolvedValue('file');
+    source.attachResourceFile = attach;
+    const file = new File(['archivo'], 'cancelar.txt', { type: 'text/plain' });
+    await show();
+    await fill(container.querySelector('textarea')!, 'Mensaje con adjunto');
+    await dropFiles([file]);
+    await click(container.querySelector('[aria-label="Enviar mensaje"]')!);
+    await click(container.querySelector('[aria-label="Cancelar cancelar.txt"]')!);
+    expect(container.querySelector('[data-upload-state="cancelled"]')).not.toBeNull();
+    expect(container.querySelector('textarea')?.value).toBe('Mensaje con adjunto');
+    await click(container.querySelector('[aria-label="Reintentar cancelar.txt"]')!);
+    expect(actions.sendGroupMessage).toHaveBeenCalledExactlyOnceWith('Mensaje con adjunto', undefined);
+    expect(attach).toHaveBeenCalledTimes(2);
+    expect(attach.mock.calls[0]?.slice(0, 4)).toEqual(attach.mock.calls[1]?.slice(0, 4));
+    expect(container.querySelector('[data-upload-state="complete"]')).not.toBeNull();
+  });
+
+  it('no pierde los archivos si falla el descarte y reconoce un adjunto que ya estaba confirmado', async () => {
+    source.attachResourceFile = vi.fn<DataSource['attachResourceFile']>().mockRejectedValue(new Error('Respuesta perdida'));
+    source.discardResourceUpload = vi.fn<DataSource['discardResourceUpload']>().mockRejectedValueOnce(new Error('No pudimos cancelar')).mockResolvedValueOnce('file-ready');
+    const file = new File(['archivo'], 'incierto.txt', { type: 'text/plain' });
+    await show();
+    await dropFiles([file]);
+    await click(container.querySelector('[aria-label="Enviar mensaje"]')!);
+    const discard = () => [...container.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Descartar adjuntos pendientes')!;
+    await click(discard());
+    expect(container.textContent).toContain('No pudimos cancelar');
+    expect(container.querySelector('[data-upload-state="failed"]')).not.toBeNull();
+    expect(container.querySelector('textarea')?.disabled).toBe(true);
+    await click(discard());
+    expect(source.discardResourceUpload).toHaveBeenCalledTimes(2);
+    expect(source.discardResourceUpload).toHaveBeenLastCalledWith('group_message', 'new-message', file);
+    expect(container.querySelector('[data-upload-state="complete"]')).not.toBeNull();
+    expect(container.querySelector('textarea')?.disabled).toBe(false);
+    expect(actions.sendGroupMessage).toHaveBeenCalledOnce();
+  });
+
+  it('no inicia adjuntos antiguos si el mensaje se confirma después de cambiar de conversación', async () => {
+    let confirmMessage!: (id: string) => void;
+    actions.sendGroupMessage.mockImplementationOnce(() => new Promise((resolve) => { confirmMessage = resolve; }));
+    await show();
+    await dropFiles([new File(['archivo'], 'anterior.txt', { type: 'text/plain' })]);
+    await click(container.querySelector('[aria-label="Enviar mensaje"]')!);
+    await click(container.querySelector('a[href="/m/mensajes/directos/private"]')!);
+    await act(async () => confirmMessage('old-message'));
+    expect(actions.attachResourceFile).not.toHaveBeenCalled();
+    expect(container.querySelector('[data-upload-state]')).toBeNull();
     expect(container.querySelector('textarea')?.value).toBe('');
   });
   it('ofrece reporte con evidencia sin seleccionar por defecto', async () => {

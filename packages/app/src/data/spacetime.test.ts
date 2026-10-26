@@ -1,12 +1,16 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DbConnection } from '../module_bindings';
-import { SpacetimeDataSource, type ConnectionCallbacks, type ConnectionFactory } from './spacetime';
+import { createSpacetimeDataSource, SpacetimeDataSource, type ConnectionCallbacks, type ConnectionFactory } from './spacetime';
 import { emptySnapshot, PUBLIC_VIEWS, readSnapshot } from './spacetimeSnapshot';
 
 vi.mock('./spacetimeSnapshot', async (original) => {
   const actual = await original<typeof import('./spacetimeSnapshot')>();
   return { ...actual, readSnapshot: vi.fn() };
 });
+vi.mock('../config', () => ({ config: {
+  apiUrl: '', aiApiUrl: 'https://dedicated.example', invitationApiUrl: 'https://dedicated.example',
+} }));
+afterEach(() => vi.unstubAllGlobals());
 
 function transport() {
   let callbacks!: ConnectionCallbacks;
@@ -104,5 +108,20 @@ describe('authenticated group connection', () => {
     source.connect();
     expect(wire.factory).not.toHaveBeenCalled();
     expect(source.getSnapshot().connection).toBe('offline');
+  });
+
+  it.each([
+    [{}, 'https://dedicated.example'],
+    [{ invitationApiUrl: 'https://invitations.example' }, 'https://invitations.example'],
+    [{ apiUrl: 'https://single-worker.example' }, 'https://single-worker.example'],
+  ])('routes invitation operations to their configured service (%j)', async (overrides, expectedUrl) => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ id: 'link', url: 'https://app.example/#/invitacion?token=secret' })));
+    vi.stubGlobal('fetch', fetcher);
+    const wire = transport();
+    const source = createSpacetimeDataSource({ ...options, ...overrides }, wire.factory);
+    source.connect(); wire.connected(); wire.applied();
+    await source.copyInvitationLink('link');
+    expect(fetcher).toHaveBeenCalledWith(`${expectedUrl}/admin/invitation-links/link/copy`, expect.objectContaining({ method: 'POST' }));
+    source.disconnect();
   });
 });

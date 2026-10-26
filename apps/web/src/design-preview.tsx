@@ -7,6 +7,7 @@ import { ThemeProvider } from '../../../packages/app/src/design/Theme';
 import { PlatformContext } from '../../../packages/app/src/components/PlatformContext';
 import { replayWelcomeTour } from '../../../packages/app/src/components/WelcomeTour';
 import { dayKey } from '../../../packages/app/src/lib/dueCalendar';
+import { seedFeedReview } from './feedReviewFixtures';
 import '@b20/app/styles.css';
 
 /** Separate comparison entry: synthetic data only, excluded from normal production builds. */
@@ -60,6 +61,7 @@ if (exampleNote) {
   exampleNote.subjectId = exampleAssignment.subjectId;
   exampleNote.assignmentIds = [exampleAssignment.id];
 }
+if (new URLSearchParams(window.location.search).get('feed-review') === '1') seedFeedReview(state);
 const source = new DemoDataSource(state, 'demo-1');
 source.saveMemberProfile({
   preferredName: 'Kevin',

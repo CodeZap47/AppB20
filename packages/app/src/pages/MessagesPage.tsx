@@ -16,6 +16,7 @@ import { ConversationMute, MessageReportsPanel, ReportMessageForm } from '../com
 import '../chat.css';
 import { TypingIndicator } from '../components/TypingIndicator';
 import { useTyping } from '../lib/useTyping';
+import type { UploadFileItem } from '../components/uploads/UploadFileList';
 
 const GROUP_NAME = 'Canal del salón';
 
@@ -327,14 +328,18 @@ function useThread(scope: MessageScope, conversationId: string, sendNew: (text: 
   const readAction = useAction();
   const [mode, setMode] = useState<ComposerMode | undefined>();
   const [report, setReport] = useState<ChatMessage | null>(null);
-  const [progress, setProgress] = useState<{ name: string; done: number; total: number } | null>(null);
+  const [uploadItems, setUploadItems] = useState<UploadFileItem[]>([]);
   const [retryingAttachments, setRetryingAttachments] = useState(false);
   const upload = useRef<{ id: string; files: File[]; next: number; version: number } | null>(null);
   const controller = useRef<AbortController | null>(null);
-  useEffect(() => () => controller.current?.abort(), []);
+  const sending = useRef(false);
+  const generation = useRef(0);
   useEffect(() => {
-    controller.current?.abort(); upload.current = null; setMode(undefined); setReport(null); setRetryingAttachments(false); setProgress(null);
-  }, [scope, conversationId]);
+    generation.current++;
+    controller.current?.abort(); upload.current = null; setMode(undefined); setReport(null); setRetryingAttachments(false); setUploadItems([]);
+    sending.current = false;
+    return () => { generation.current++; controller.current?.abort(); upload.current = null; };
+  }, [scope, conversationId, me?.id]);
   const lastRead = conversationStates.find((row) => row.scope === scope && row.conversationId === conversationId)?.readThroughId;
   const requestedRead = useRef<string | undefined>(undefined);
   useEffect(() => { requestedRead.current = undefined; }, [scope, conversationId]);
@@ -364,46 +369,102 @@ function useThread(scope: MessageScope, conversationId: string, sendNew: (text: 
   };
 
   const onSend = async (text: string, files: File[] = []) => {
+    if (sending.current) return false;
+    sending.current = true;
+    const requestedGeneration = generation.current;
     onTyping(false);
-    const ok =
-      (await run(async () => {
-        if (mode?.kind === 'edit') await source.editMessage(scope, mode.message.id, text);
-        else {
-          if (!upload.current) {
-            const id = await sendNew(text || 'Archivo adjunto', mode?.kind === 'reply' ? mode.message.id : undefined);
-            if (files.length) upload.current = { id, files, next: 0, version: 1 };
-          }
-          if (upload.current) {
-            const current = new AbortController(); controller.current = current;
-            try {
+    try {
+      const ok =
+        (await run(async () => {
+          if (mode?.kind === 'edit') await source.editMessage(scope, mode.message.id, text);
+          else {
+            if (!upload.current) {
+              const id = await sendNew(text || 'Archivo adjunto', mode?.kind === 'reply' ? mode.message.id : undefined);
+              if (generation.current !== requestedGeneration) return false;
+              if (files.length) upload.current = { id, files, next: 0, version: 1 };
+              setUploadItems(files.map((file, index) => ({ id: `attachment-${index}`, name: file.name, size: file.size,
+                type: file.type, progress: 0, state: 'queued' })));
+            }
+            if (upload.current) {
+              const current = new AbortController(); controller.current = current;
               const pending = upload.current;
-              for (; pending.next < pending.files.length; pending.next++) {
-                const file = pending.files[pending.next]!;
-                setProgress({ name: file.name, done: 0, total: file.size });
-                await source.attachResourceFile(chatTarget(scope), pending.id, file, pending.version, { signal: current.signal,
-                  onProgress: (done, total) => setProgress({ name: file.name, done, total }) });
-                pending.version++;
-              }
-              upload.current = null; setRetryingAttachments(false);
-            } catch (failure) {
-              if (current.signal.aborted) { upload.current = null; setRetryingAttachments(false); }
-              else { setRetryingAttachments(true); throw failure; }
-            } finally { controller.current = null; setProgress(null); }
+              try {
+                const updateItem = (index: number, change: Partial<UploadFileItem>) => {
+                  if (upload.current === pending) setUploadItems((items) => items.map((item, i) => i === index ? { ...item, ...change } : item));
+                };
+                for (; pending.next < pending.files.length; pending.next++) {
+                  const file = pending.files[pending.next]!;
+                  const index = pending.next;
+                  const expectedVersion = pending.version;
+                  let resultingVersion: number | undefined;
+                  updateItem(index, { state: 'preparing', progress: 0, error: undefined });
+                  await source.attachResourceFile(chatTarget(scope), pending.id, file, expectedVersion, { signal: current.signal,
+                    onConfirmed: (_fileId, confirmedVersion) => { resultingVersion = confirmedVersion; },
+                    onProgress: (done, total) => updateItem(index, {
+                      state: total > 0 && done >= total ? 'confirming' : 'uploading',
+                      progress: total > 0 ? Math.min(99, Math.round(done / total * 100)) : 0,
+                    }) });
+                  if (upload.current !== pending) return false;
+                  updateItem(index, { state: 'complete', progress: 100 });
+                  pending.version = Math.max(pending.version, resultingVersion ?? expectedVersion + 1);
+                  if (current.signal.aborted) {
+                    pending.next++;
+                    if (pending.next < pending.files.length) throw new DOMException('Cancelaste la subida. Puedes reintentar los adjuntos pendientes.', 'AbortError');
+                    break;
+                  }
+                }
+                upload.current = null; setRetryingAttachments(false);
+              } catch (failure) {
+                if (upload.current !== pending || generation.current !== requestedGeneration) return false;
+                if (current.signal.aborted) {
+                  setUploadItems((items) => items.map((item, index) => index >= pending.next ? { ...item, state: 'cancelled' } : item));
+                  setRetryingAttachments(true);
+                  throw failure;
+                } else {
+                  setUploadItems((items) => items.map((item, index) => index === pending.next ? { ...item, state: 'failed',
+                    error: failure instanceof Error ? failure.message : 'No se pudo subir el archivo.' } : item));
+                  setRetryingAttachments(true); throw failure;
+                }
+              } finally { if (controller.current === current) controller.current = null; }
+            }
           }
+          return true;
+        })) ?? false;
+      if (ok) setMode(undefined);
+      return ok;
+    } finally { if (generation.current === requestedGeneration) sending.current = false; }
+  };
+
+  const discardAttachments = async () => {
+    if (sending.current || !upload.current) return false;
+    sending.current = true;
+    const pending = upload.current;
+    const requestedGeneration = generation.current;
+    try {
+      return (await run(async () => {
+        for (let index = pending.next; index < pending.files.length; index++) {
+          const ready = await source.discardResourceUpload(chatTarget(scope), pending.id, pending.files[index]!);
+          if (upload.current !== pending || generation.current !== requestedGeneration) return false;
+          setUploadItems((items) => items.map((item, i) => i === index ? {
+            ...item, state: ready ? 'complete' : 'cancelled', progress: ready ? 100 : item.progress, error: undefined,
+          } : item));
+          if (ready) pending.version++;
+          pending.next = index + 1;
         }
+        upload.current = null;
+        setRetryingAttachments(false);
         return true;
       })) ?? false;
-    if (ok) setMode(undefined);
-    return ok;
+    } finally { if (generation.current === requestedGeneration) sending.current = false; }
   };
 
   const extras = <>
     <TypingIndicator scope={scope} conversationId={conversationId} />
-    {progress && <p className="chat-transfer" role="status">Subiendo {progress.name}: {Math.round(progress.done / progress.total * 100)} % <ChatButton type="button" variant="tertiary" className="link-button" onClick={() => controller.current?.abort()}>Cancelar subida</ChatButton></p>}
     {retryingAttachments && <p className="chat-transfer" role="status">El mensaje ya se envió. Pulsa «Reintentar adjuntos» para continuar la misma subida sin duplicarlo.</p>}
     {report && <ReportMessageForm scope={scope} message={report} onClose={() => setReport(null)} />}
   </>;
-  return { error: error ?? readAction.error, handlers, mode, onSend, onTyping, onReadThrough, retryingAttachments, extras, cancel: () => setMode(undefined) };
+  return { error: error ?? readAction.error, handlers, mode, onSend, onTyping, onReadThrough, retryingAttachments, uploadItems,
+    cancelAttachments: () => controller.current?.abort(), discardAttachments, extras, cancel: () => setMode(undefined) };
 }
 
 export function ChannelThread() {
@@ -428,7 +489,8 @@ export function ChannelThread() {
     {thread.extras}
     {channel.archivedAt && <p className="chat-transfer">Canal archivado. Puedes consultar el historial y descargar sus adjuntos.</p>}
     <Composer key={`${me?.id}:canal:${channel.id}`} draftKey={`${me?.id}:canal:${channel.id}`} placeholder={`Escribe en ${channel.name}`} error={thread.error} onSend={thread.onSend} onTyping={thread.onTyping} mode={thread.mode} onCancelMode={thread.cancel}
-      attachments retryingAttachments={thread.retryingAttachments} disabled={Boolean(channel.archivedAt)} mentionMemberIds={members.filter((member) => member.status === 'active').map((member) => member.id)} />
+      attachments retryingAttachments={thread.retryingAttachments} uploadItems={thread.uploadItems} onCancelAttachments={thread.cancelAttachments} onDiscardAttachments={thread.discardAttachments}
+      disabled={Boolean(channel.archivedAt)} mentionMemberIds={members.filter((member) => member.status === 'active').map((member) => member.id)} />
   </>;
 }
 
@@ -471,6 +533,7 @@ export function GroupThread() {
         onCancelMode={thread.cancel}
         attachments
         retryingAttachments={thread.retryingAttachments}
+        uploadItems={thread.uploadItems} onCancelAttachments={thread.cancelAttachments} onDiscardAttachments={thread.discardAttachments}
         mentionMemberIds={members.filter((member) => member.status === 'active').map((member) => member.id)}
       />
     </>
@@ -561,6 +624,7 @@ export function DirectThread() {
         onCancelMode={thread.cancel}
         attachments
         retryingAttachments={thread.retryingAttachments}
+        uploadItems={thread.uploadItems} onCancelAttachments={thread.cancelAttachments} onDiscardAttachments={thread.discardAttachments}
         disabled={blocked}
         mentionMemberIds={conversation.participantIds}
       />

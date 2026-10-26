@@ -1,0 +1,23 @@
+.b20-upload {
+  min-width: 0;
+  width: 100%;
+  /* El tema de B20 controla el contraste aunque el sistema prefiera otro modo. */
+  --color-text-brand-secondary: var(--accent);
+  --color-text-brand-secondary_hover: var(--accent);
+  --text-color-brand-secondary: var(--accent);
+  --text-color-brand-secondary_hover: var(--accent);
+}
+.b20-upload [data-dropzone] { min-height: 154px; display: flex; flex-direction: column; justify-content: center; gap: 12px; border: 0; font-weight: 400; }
+.b20-upload [data-dropzone]:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.b20-upload .upload-errors { color: var(--danger, #b42318); font-size: .82rem; margin-top: .6rem; }
+.b20-upload .upload-file-list { margin-top: .75rem; }
+.b20-upload [data-upload-state] { min-width: 0; }
+.b20-upload [data-upload-state] button { flex-shrink: 0; }
+.b20-upload [data-upload-state] p { overflow-wrap: anywhere; }
+.upload-form-fields { display: contents; }
+.upload-saved-notice { padding: .75rem 1rem; border-radius: .65rem; background: color-mix(in srgb, var(--accent) 8%, var(--surface)); color: var(--text); font-size: .9rem; }
+.upload-actions { display: flex; gap: .65rem; flex-wrap: wrap; align-items: center; margin-top: .75rem; }
+.upload-indeterminate { animation: upload-sweep 1.2s ease-in-out infinite alternate; }
+@keyframes upload-sweep { from { transform: translateX(0); } to { transform: translateX(200%); } }
+@media (prefers-reduced-motion: reduce) { .upload-indeterminate { animation: none; width: 100%; opacity: .5; } .b20-upload * { transition-duration: 0s !important; } }
+@media (max-width: 400px) { .b20-upload [data-dropzone] { padding: 1rem .75rem; } .b20-upload [data-upload-state] { padding: .8rem; gap: .6rem; } }

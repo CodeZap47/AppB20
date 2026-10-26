@@ -8,6 +8,8 @@ type TrashState = ContributionState & Pick<Snapshot, 'questions' | 'noteComments
 interface Context {
   state(): TrashState; active(): Member; now(): Date; emit(): void; resources(): ResourceFile[];
   purgePrivate(targets: ReadonlySet<string>): void;
+  extraContent?(kind: WithdrawableKind, id: Id): { ownerIds: Id[]; version: number; personal?: boolean } | undefined;
+  extraTargets?(targets: Set<string>): void;
 }
 interface Metadata { kind: WithdrawableKind; targetId: Id; withdrawnAt: Date; expiresAt: Date; state: TrashEntry['state']; moderation: boolean }
 interface Store { entries: Map<string, Metadata>; tombstones: Map<string, DemoContributionTombstone> }
@@ -27,9 +29,10 @@ export class DemoTrashStore {
     const s = this.ctx.state();
     return kind === 'note' ? s.notes.find((row) => row.id === id) : kind === 'guide' ? s.guides.find((row) => row.id === id)
       : kind === 'question' ? s.questions.find((row) => row.id === id) : kind === 'answer' ? s.answers.find((row) => row.id === id)
-        : kind === 'work' ? s.works.find((row) => row.id === id) : s.evidences.find((row) => row.id === id);
+        : kind === 'work' ? s.works.find((row) => row.id === id) : kind === 'evidence' ? s.evidences.find((row) => row.id === id) : undefined;
   }
   private authors(kind: WithdrawableKind, id: Id) {
+    const extra = this.ctx.extraContent?.(kind, id); if (extra) return extra.ownerIds;
     const row = this.row(kind, id);
     return !row ? [] : 'authorIds' in row ? row.authorIds : ['authorId' in row ? row.authorId : row.createdBy];
   }
@@ -50,9 +53,9 @@ export class DemoTrashStore {
     const me = this.ctx.active(); if (me.id !== viewerId) return [];
     return [...this.store.entries.values()].flatMap((entry) => {
       if (entry.state !== 'pending') return [];
-      const row = this.row(entry.kind, entry.targetId); const own = this.authors(entry.kind, entry.targetId).includes(me.id);
-      if (!row || !own && (!me.isCreator || 'visibility' in row && row.visibility === 'personal')) return [];
-      return [{ ...entry, canRestore: !this.blocksRead(entry.kind, entry.targetId) && (entry.moderation ? me.isCreator : own), version: row.version ?? 1 }];
+      const row = this.row(entry.kind, entry.targetId), extra = this.ctx.extraContent?.(entry.kind, entry.targetId); const own = this.authors(entry.kind, entry.targetId).includes(me.id);
+      if ((!row && !extra) || !own && (!me.isCreator || extra?.personal || row && 'visibility' in row && row.visibility === 'personal')) return [];
+      return [{ ...entry, canRestore: !this.blocksRead(entry.kind, entry.targetId) && (entry.moderation ? me.isCreator : own), version: extra?.version ?? row?.version ?? 1 }];
     });
   }
   purgedKeys(): string[] { return [...this.store.entries.entries()].filter(([, entry]) => entry.state === 'purged').map(([key]) => key); }
@@ -64,6 +67,7 @@ export class DemoTrashStore {
     if (!due.length) return false;
     const targets = new Set(due.map(([key]) => key));
     for (const [, entry] of due) if (entry.kind === 'question') for (const answer of s.answers.filter((row) => row.questionId === entry.targetId)) targets.add(keyOf('answer', answer.id));
+    this.ctx.extraTargets?.(targets);
     const inputs = collectDemoContributionInputs(s, this.ctx.resources());
     const origins = computeDemoContributionOrigins(inputs, this.store.tombstones);
     for (let index = 0; index < inputs.length; index++) {

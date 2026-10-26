@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { aiQuestionPayload, buildAiPreparation, estimateAiQuestionTokens, validateAiGenerationConfig } from './ai';
-import { examAttemptOrder, examTopicDistribution, scoreExam } from './exams';
+import { examAttemptOrder, examPreparedSourceKey, examTopicDistribution, scoreExam, scoreOpenExam, selectExamVariant } from './exams';
 import { validateAiQuestionDraft, type AiQuestion } from './exam';
 
 const questions: AiQuestion[] = [
@@ -42,5 +42,28 @@ describe('EX-2: plano, orden y corrección deterministas', () => {
     const selective = buildAiPreparation({ subjectId: '1', topics: ['Ciclos', 'Funciones'], sources: [{ kind: 'note', refId: '1', topics: ['Ciclos'], includeUnplaced: true }], config: weighted },
       [{ kind: 'note', refId: '1', subjectId: '1', title: 'Ciclos', version: 1, visibility: 'group', fields: [{ name: 'body', text: 'Material solo sobre ciclos' }] }], { id: '10000000-0000-4000-8000-000000000002', model: 'test', now: 1 });
     expect(selective.coverage.find((item) => item.topic === 'Funciones')!.sourceIds).toEqual([]); expect(selective.canGenerate).toBe(true);
+  });
+});
+
+describe('EX-3: abiertas y variantes', () => {
+  it('valida la rúbrica y no cuenta pendientes como cero ni como preguntas cerradas', () => {
+    const open: AiQuestion = { ...questions[0]!, type: 'open', options: [], correctOptionId: '', referenceAnswer: 'Referencia', rubric: { version: 1, criteria: [{ id: 'a', description: 'Argumento', maxPoints: 4 }] } };
+    expect(scoreExam([open, questions[1]!], {})).toMatchObject({ total: 1, correct: 0 }); expect(scoreOpenExam([open], [])).toEqual({ pending: 1, evaluated: 0, points: 0, maxPoints: 0 });
+    expect(scoreOpenExam([open], [{ questionId: open.id, confirmed: true, evaluation: { rubricVersion: 1, evaluatedAt: 1, origin: 'manual', feedback: '', criteria: [{ criterionId: 'a', points: 2, feedback: '' }] } }])).toMatchObject({ pending: 0, evaluated: 1, points: 2, maxPoints: 4, percentage: 50 });
+  });
+  it('selecciona miembros reproducibles sin duplicados y muestra déficit por tema', () => {
+    const candidates = ['a', 'b', 'c'].map((id) => ({ id, version: 1, ownerId: 'owner', visibility: 'group' as const, subjectId: '1', topic: 'A', type: 'single' as const, difficulty: 'basic' as const, text: id, updatedAt: 1, canEdit: false, sourceIssues: [] })); const plan = { subjectId: '1', topics: ['A', 'B'], questionCount: 4, types: ['single' as const], difficulty: 'basic' as const, seed: 'fija' };
+    const first = selectExamVariant([...candidates, candidates[0]!], plan); expect(selectExamVariant([...candidates].reverse(), plan)).toEqual(first); expect(first.selected).toHaveLength(2); expect(new Set(first.selected.map((row) => row.id)).size).toBe(2); expect(first.deficits).toEqual([{ topic: 'B', requested: 2, available: 0 }]); const copied = { ...candidates[0]!, id: 'copy', text: '  A  ' }; const normalized = selectExamVariant([...candidates, copied], { ...plan, topics: ['A'], questionCount: 4 }); expect(normalized.selected).toHaveLength(3); expect(normalized.deficits).toEqual([{ topic: 'A', requested: 4, available: 3 }]);
+  });
+});
+
+
+describe('Selecciones de procedencia del banco', () => {
+  it('solo agrupa snapshots y selecciones idénticos, incluidas páginas documentales', () => {
+    const source = buildAiPreparation({ subjectId: '1', topics: ['Tema'], sources: [{ kind: 'note', refId: '1', topics: ['Tema'], includeUnplaced: true }] }, [{ kind: 'note', refId: '1', version: 1, subjectId: '1', title: 'Texto', visibility: 'group', fields: [{ name: 'Texto', text: 'Material de estudio.' }] }], { id: '20000000-0000-4000-8000-000000000001', model: 'test', now: 1 }).sources[0]!;
+    const base = examPreparedSourceKey(source);
+    expect(examPreparedSourceKey(structuredClone(source))).toBe(base);
+    for (const selection of [ { fingerprint: 'otra-instantanea' }, { answerIds: ['2'] }, { transcriptionIds: ['20000000-0000-4000-8000-000000000002'] }, { segmentIds: ['page-2'] } ]) expect(examPreparedSourceKey({ ...source, ...selection })).not.toBe(base);
+    expect(examPreparedSourceKey({ ...source, segmentIds: ['page-1'] })).not.toBe(examPreparedSourceKey({ ...source, segmentIds: ['page-2'] }));
   });
 });

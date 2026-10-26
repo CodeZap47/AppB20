@@ -1,0 +1,12 @@
+import { aiRecord, sanitizeAiText, type AiGenerationState } from './ai';
+import { validateOpenEvaluation, type ExamAttempt, type ExamOpenEvaluation } from './exams';
+import type { AiQuestion } from './exam';
+export interface ExamEvaluationSnapshot { attemptId: string; questionId: string; revision: number; question: AiQuestion; answer: string; citations: unknown[]; fingerprint: string }
+export interface ExamEvaluationResult { criteria: ExamOpenEvaluation['criteria']; feedback: string }
+export interface ExamEvaluationDraft { id: string; attemptId: string; questionId: string; revision: number; fingerprint: string; snapshot: ExamEvaluationSnapshot; model: string; estimatedTokens: number; state: AiGenerationState | 'cancelled' | 'accepted'; createdAt: number; generationId?: string; result?: ExamEvaluationResult; error?: string; acceptedRequestHash?: string; acceptedAttempt?: ExamAttempt }
+export type ExamEvaluationActionRequest = { action: 'list'; attemptId: string } | { action: 'prepare'; id: string; attemptId: string; questionId: string } | { action: 'get' | 'cancel'; id: string } | { action: 'generate'; id: string; generationId: string; fingerprint: string; confirmed: boolean; acknowledgeUnknown?: boolean } | { action: 'accept'; id: string; requestId: string; expectedRevision: number; criteria: ExamOpenEvaluation['criteria']; feedback: string };
+export type ExamEvaluationActionResponse<A extends ExamEvaluationActionRequest['action']> = A extends 'list' ? ExamEvaluationDraft[] : A extends 'accept' ? ExamAttempt : ExamEvaluationDraft;
+export const EXAM_EVALUATION_SCHEMA = { type: 'object', additionalProperties: false, required: ['criteria', 'feedback'], properties: { feedback: { type: 'string' }, criteria: { type: 'array', minItems: 1, maxItems: 10, items: { type: 'object', additionalProperties: false, required: ['criterionId', 'points', 'feedback'], properties: { criterionId: { type: 'string' }, points: { type: 'number' }, feedback: { type: 'string' } } } } } };
+export function validateExamEvaluationResult(value: unknown, question: AiQuestion): ExamEvaluationResult {
+  if (!aiRecord(value)) throw new Error('La sugerencia de evaluación no es válida.'); const criteria = value.criteria as ExamOpenEvaluation['criteria']; const feedback = value.feedback as string; validateOpenEvaluation(question, criteria, feedback); return { criteria: criteria.map((criterion) => ({ ...criterion, feedback: sanitizeAiText(criterion.feedback) })), feedback: sanitizeAiText(feedback) };
+}

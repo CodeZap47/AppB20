@@ -1,13 +1,15 @@
+import { sendExamToSpaced } from './examSpaced';
 import { memberIdentityFor } from './authIdentity';
 import { SenderError } from 'spacetimedb/server';
 import { aiHash, aiRecord, aiSourceFingerprint, aiUuid, sanitizeAiText, validateAiGenerationConfig,
   type AiGenerationConfig, type AiPreparation } from '../../core/src/ai';
 import { validateAiQuestionDraft, type AiQuestion } from '../../core/src/exam';
-import { examAttemptOrder, examTopicDistribution, scoreExam, type ExamAttempt, type ExamAttemptSummary, type ExamDetail,
+import { examAttemptOrder, examPreparedSourceKey, examTopicDistribution, scoreExam, scoreOpenExam, selectExamVariant, validateOpenEvaluation, type ExamAttempt, type ExamAttemptSummary, type ExamDetail,
   type ExamDraft, type ExamEditableQuestion, type ExamGenerationSummary, type ExamScore, type ExamSourceIssue, type ExamSummary,
-  type ExamVersionSummary } from '../../core/src/exams';
+  type ExamVersionSummary, type ExamOpenEvaluation, type ExamBankSummary, type ExamBankDetail, type ExamVariantPlan } from '../../core/src/exams';
 import { activeMember, type Ctx } from './moduleContext';
-import { resolveAiSource } from './aiHandlers';
+import { validateDocumentOrigins } from './documentHandlers';
+import { resolveAiSource, resolveAiSelection } from './aiHandlers';
 
 type ExamRow = NonNullable<ReturnType<Ctx['db']['studyExam']['id']['find']>>;
 type VersionRow = NonNullable<ReturnType<Ctx['db']['examVersion']['key']['find']>>;
@@ -16,7 +18,7 @@ interface StoredVersion { title: string; config: AiGenerationConfig; timeLimitSe
   approvedAt?: number; hasPersonalSources: boolean; purgedQuestionIds?: string[] }
 interface StoredAttempt { title: string; mode: 'practice' | 'simulation'; startedAt: number; deadlineAt?: number; closedAt?: number;
   closeReason?: 'submitted' | 'timeout'; order: { questionId: string; optionIds: string[] }[];
-  answers: Record<string, { optionId: string; confirmed: boolean }>; result?: ExamScore }
+  answers: Record<string, { optionId?: string; text?: string; confirmed: boolean; evaluation?: ExamOpenEvaluation }>; result?: ExamScore; openResult?: import('../../core/src/exams').ExamOpenScore }
 function fail(code: string, message: string): never { throw new SenderError(`${code}:${message}`); }
 function expectVersion(actual: number, expected: number) { if (actual !== expected) fail('conflict', 'El contenido cambió. Recarga antes de guardar otra vez.'); }
 function obj(value: unknown) { if (!aiRecord(value)) fail('invalid', 'Se esperaba un objeto.'); return value; }
@@ -54,28 +56,47 @@ function remember(ctx: Ctx, raw: Record<string, unknown>, op: ReturnType<typeof 
   ctx.db.examOperation.insert({ key: op.key, actor: memberIdentityFor(ctx), action: String(raw.action), requestHash: op.hash, examId, attemptId, createdAt: ctx.timestamp });
 }
 function preparations(version: StoredVersion) { return [version.preparation]; }
-function prepIssues(ctx: Ctx, prep: AiPreparation): ExamSourceIssue[] {
-  const issues: ExamSourceIssue[] = [];
-  for (const source of prep.sources) {
-    try {
-      if (source.status === 'unauthorized') throw new Error('purged');
-      const current = resolveAiSource(ctx, source.kind, source.refId);
-      if (current.subjectId !== prep.subjectId || (prep.termId && current.termId && prep.termId !== current.termId)) throw new Error('classification');
-      for (const origin of source.origins) { const original = resolveAiSource(ctx, origin.kind, origin.refId); if (original.visibility !== 'group') throw new Error('origin'); }
-      if (aiSourceFingerprint(current) !== source.fingerprint) issues.push({ kind: source.kind, refId: source.refId, state: 'outdated', message: 'La fuente cambió después de preparar esta versión.' });
-    } catch { issues.push({ kind: source.kind, refId: source.refId, state: 'unavailable', message: 'La fuente ya no está disponible para esta persona.' }); }
+function resolvedPreparedSource(ctx: Ctx, prep: AiPreparation, source: AiPreparation['sources'][number], actor = memberIdentityFor(ctx), fragment?: AiPreparation['fragments'][number]) {
+  if (source.status === 'unauthorized') fail('unavailable', 'La fuente fue eliminada.');
+  const relevantFragments = fragment ? [fragment] : prep.fragments.filter((entry) => source.fragmentIds.includes(entry.id));
+  const selectedOrigins = relevantFragments.flatMap((entry) => entry.origins).filter((origin) => source.kind === origin.kind && source.refId === origin.refId || source.origins.some((dependency) => dependency.kind === origin.kind && dependency.refId === origin.refId));
+  const scoped = { ...source,
+    ...(source.kind === 'question' ? { answerIds: [...new Set(selectedOrigins.filter((origin) => origin.kind === 'answer').map((origin) => origin.refId))] } : {}),
+    ...(fragment ? { transcriptionIds: [...new Set(selectedOrigins.flatMap((origin) => origin.transcriptionId ? [origin.transcriptionId] : []))] } : {}),
+  };
+  let current: ReturnType<typeof resolveAiSelection>;
+  if (fragment) current = resolveAiSource(ctx, scoped.kind, scoped.refId, actor, scoped);
+  else {
+    try { current = resolveAiSelection(ctx, source, actor, { reuseReviewed: true }); }
+    catch { current = resolveAiSource(ctx, scoped.kind, scoped.refId, actor, scoped); validateDocumentOrigins(ctx, { fragments: relevantFragments }, actor); }
   }
-  return issues;
+  if (current.subjectId !== prep.subjectId || (prep.termId && current.termId && prep.termId !== current.termId)) fail('unavailable', 'La clasificación de la fuente cambió.');
+  // Selected answers have their own fragment provenance. A question body never adopts a newly accepted answer.
+  const dependencies = source.kind === 'question' ? (fragment ? selectedOrigins : (scoped.answerIds ?? []).map((refId) => ({ kind: 'answer' as const, refId, version: 1 }))) : source.origins;
+  for (const origin of dependencies) resolveAiSource(ctx, origin.kind, origin.refId, actor, origin.kind === 'question' ? { answerIds: [] } : undefined);
+  return current;
+}
+function prepIssues(ctx: Ctx, prep: AiPreparation, actor = memberIdentityFor(ctx)): ExamSourceIssue[] {
+  return prep.sources.flatMap<ExamSourceIssue>((source) => {
+    try { const current = resolvedPreparedSource(ctx, prep, source, actor);
+      return aiSourceFingerprint(current) !== source.fingerprint ? [{ kind: source.kind, refId: source.refId, state: 'outdated', message: 'La fuente cambió después de preparar esta versión.' }] : [];
+    } catch { return [{ kind: source.kind, refId: source.refId, state: 'unavailable', message: 'La fuente ya no está disponible para esta persona.' }]; }
+  });
 }
 function versionIssues(ctx: Ctx, version: StoredVersion) { return [...new Map(preparations(version).flatMap((prep) => prepIssues(ctx, prep)).map((issue) => [`${issue.kind}:${issue.refId}:${issue.state}`, issue])).values()]; }
-function questionAvailable(ctx: Ctx, version: StoredVersion, question: AiQuestion, issues?: ExamSourceIssue[]) {
-  if (version.purgedQuestionIds?.includes(question.id)) return false;
-  const prep = version.preparation;
-  const inaccessible = new Set((issues ?? prepIssues(ctx, prep)).filter((issue) => issue.state === 'unavailable').map((issue) => `${issue.kind}:${issue.refId}`));
-  return question.citations.every((citation) => {
-    const fragment = prep.fragments.find((item) => item.id === citation); if (!fragment) return false;
-    return fragment.origins.some((origin) => !inaccessible.has(`${origin.kind}:${origin.refId}`));
+function availableOrigins(ctx: Ctx, version: StoredVersion, fragment: AiPreparation['fragments'][number], _issues: ExamSourceIssue[], actor = memberIdentityFor(ctx)) {
+  return fragment.origins.filter((origin) => {
+    const backed = version.preparation.sources.some((source) => {
+      if (!source.fragmentIds.includes(fragment.id) || !(source.kind === origin.kind && source.refId === origin.refId || source.origins.some((dependency) => dependency.kind === origin.kind && dependency.refId === origin.refId))) return false;
+      try { resolvedPreparedSource(ctx, version.preparation, source, actor, fragment); return true; } catch { return false; }
+    });
+    if (!backed) return false;
+    try { validateDocumentOrigins(ctx, { fragments: [{ ...fragment, origins: [origin] }] }, actor); return true; } catch { return false; }
   });
+}
+function questionAvailable(ctx: Ctx, version: StoredVersion, question: AiQuestion, issues = prepIssues(ctx, version.preparation), actor = memberIdentityFor(ctx)) {
+  if (version.purgedQuestionIds?.includes(question.id)) return false;
+  return question.citations.every((citation) => { const fragment = version.preparation.fragments.find((item) => item.id === citation); return !!fragment && availableOrigins(ctx, version, fragment, issues, actor).length > 0; });
 }
 function requireAccess(ctx: Ctx, version: StoredVersion, fresh = false) {
   const issues = versionIssues(ctx, version);
@@ -89,7 +110,7 @@ function validatedQuestions(value: unknown, prep: AiPreparation, config: AiGener
     if (issue.length > 500) fail('invalid', 'La observación excede 500 caracteres.');
     for (const citation of question.citations) if (!prep.sources.some((source) => source.topics.includes(question.topic) && source.fragmentIds.includes(citation))) fail('invalid', 'La cita debe respaldar el tema seleccionado para la pregunta.');
     return { ...question, text: sanitizeAiText(question.text), explanation: sanitizeAiText(question.explanation),
-      options: question.options.map((option) => ({ ...option, text: sanitizeAiText(option.text) })), ...(issue ? { issue: sanitizeAiText(issue) } : {}) };
+      options: question.options.map((option) => ({ ...option, text: sanitizeAiText(option.text) })), ...(question.type === 'open' ? { referenceAnswer: sanitizeAiText(question.referenceAnswer!), rubric: { ...question.rubric!, criteria: question.rubric!.criteria.map((criterion) => ({ ...criterion, description: sanitizeAiText(criterion.description) })) } } : {}), ...(issue ? { issue: sanitizeAiText(issue) } : {}) };
   });
 }
 function versionSummary(ctx: Ctx, row: VersionRow): ExamVersionSummary {
@@ -100,13 +121,14 @@ function versionDto(ctx: Ctx, exam: ExamRow, row: VersionRow): ExamDraft {
   const value = data(row); requireAccess(ctx, value); return { ...versionSummary(ctx, row), examId: exam.id, title: value.title, config: value.config,
     ...(value.timeLimitSeconds ? { timeLimitSeconds: value.timeLimitSeconds } : {}), preparation: value.preparation, questions: value.questions };
 }
-function examSummary(ctx: Ctx, exam: ExamRow): ExamSummary {
-  const isOwner = exam.owner.isEqual(memberIdentityFor(ctx)); const number = isOwner ? exam.draftVersion ?? exam.readyVersion : exam.readyVersion;
+function examSummary(ctx: Ctx, exam: ExamRow, sharedOnly = false): ExamSummary {
+  const isOwner = exam.owner.isEqual(memberIdentityFor(ctx)); const ownerProjection = isOwner && !sharedOnly;
+  const number = ownerProjection ? exam.draftVersion ?? exam.readyVersion : exam.readyVersion;
   const value = number ? data(requireVersion(ctx, exam.id, number)) : undefined;
-  return { id: exam.id, revision: isOwner ? exam.revision : exam.readyVersion ?? 0, title: isOwner ? value?.title ?? exam.title : exam.title, subjectId: String(exam.subjectId), ...(exam.termId ? { termId: String(exam.termId) } : {}),
+  return { id: exam.id, revision: ownerProjection ? exam.revision : exam.readyVersion ?? 0, title: sharedOnly || isOwner ? value?.title ?? exam.title : exam.title, subjectId: String(exam.subjectId), ...(exam.termId ? { termId: String(exam.termId) } : {}),
     ownerId: exam.owner.toHexString(), visibility: exam.visibility as 'personal' | 'group', archived: exam.archived, readyVersion: exam.readyVersion,
-    ...(isOwner && exam.draftVersion ? { draftVersion: exam.draftVersion } : {}), questionCount: value?.questions.length ?? 0, topics: value?.preparation.topics ?? [],
-    createdAt: at(exam.createdAt), updatedAt: isOwner ? at(exam.updatedAt) : value?.approvedAt ?? at(exam.createdAt), canEdit: isOwner, sourceIssues: value ? versionIssues(ctx, value) : [] };
+    ...(ownerProjection && exam.draftVersion ? { draftVersion: exam.draftVersion } : {}), questionCount: value?.questions.length ?? 0, topics: value?.preparation.topics ?? [],
+    createdAt: at(exam.createdAt), updatedAt: ownerProjection ? at(exam.updatedAt) : value?.approvedAt ?? at(exam.createdAt), canEdit: isOwner, sourceIssues: value ? versionIssues(ctx, value) : [] };
 }
 function detail(ctx: Ctx, exam: ExamRow): ExamDetail {
   const owner = exam.owner.isEqual(memberIdentityFor(ctx));
@@ -179,7 +201,7 @@ function approveVersion(ctx: Ctx, raw: Record<string, unknown>): ExamDetail {
   if (value.questions.some((question) => question.issue)) fail('invalid', 'Corrige o retira las preguntas con observaciones antes de aprobar.');
   if (!Array.isArray(raw.reviewedQuestionIds) || new Set(raw.reviewedQuestionIds).size !== value.questions.length || raw.reviewedQuestionIds.length !== value.questions.length || value.questions.some((question) => !(raw.reviewedQuestionIds as unknown[]).includes(question.id))) fail('invalid', 'Confirma la revisión de todas las preguntas.');
   if (value.config.topicWeights && examTopicDistribution(value.preparation.topics, value.questions.length, value.config.topicWeights).some((item) => value.questions.filter((question) => question.topic === item.topic).length !== item.count)) fail('invalid', 'La distribución no coincide con el plano del examen.');
-  const hasPersonalSources = value.hasPersonalSources || value.preparation.sources.some((source) => resolveAiSource(ctx, source.kind, source.refId).visibility === 'personal');
+  const hasPersonalSources = value.hasPersonalSources || value.preparation.sources.some((source) => resolveAiSelection(ctx, source, memberIdentityFor(ctx), { reuseReviewed: true }).visibility === 'personal');
   ctx.db.examVersion.key.update({ ...version, state: 'ready', json: JSON.stringify({ ...value, hasPersonalSources, approvedAt: now(ctx) }) });
   return detail(ctx, bump(ctx, exam, { readyVersion: version.version, draftVersion: undefined, title: value.title,
     ...(hasPersonalSources ? { visibility: 'personal' } : {}) }));
@@ -190,7 +212,7 @@ function setVisibility(ctx: Ctx, raw: Record<string, unknown>): ExamDetail {
   if (raw.visibility === 'group') {
     if (!exam.readyVersion || exam.archived) fail('invalid', 'Aprueba una versión antes de compartir.');
     const value = data(requireVersion(ctx, exam.id, exam.readyVersion)); requireAccess(ctx, value);
-    if (value.hasPersonalSources || preparations(value).some((prep) => prep.sources.some((source) => source.visibility !== 'group' || resolveAiSource(ctx, source.kind, source.refId).visibility !== 'group'))) fail('unauthorized', 'Una fuente personal impide compartir. Publica una copia de la fuente y genera una versión nueva con material de grupo.');
+    if (value.hasPersonalSources || preparations(value).some((prep) => prep.sources.some((source) => source.visibility !== 'group' || resolveAiSelection(ctx, source, memberIdentityFor(ctx), { reuseReviewed: true }).visibility !== 'group'))) fail('unauthorized', 'Una fuente personal impide compartir. Publica una copia de la fuente y genera una versión nueva con material de grupo.');
   }
   return detail(ctx, bump(ctx, exam, { visibility: String(raw.visibility) }));
 }
@@ -199,6 +221,7 @@ function closeAttempt(ctx: Ctx, row: AttemptRow, reason: 'submitted' | 'timeout'
   if (row.state === 'closed') return row;
   const value = attemptData(row); const version = data(requireVersion(ctx, row.examId, row.version));
   value.result = scoreExam(version.questions, Object.fromEntries(Object.entries(value.answers).map(([id, answer]) => [id, answer.optionId])));
+  if (version.questions.some((question) => question.type === 'open')) value.openResult = scoreOpenExam(version.questions, Object.entries(value.answers).map(([questionId, answer]) => ({ questionId, ...answer })));
   value.closedAt = now(ctx); value.closeReason = reason;
   const next = { ...row, revision: row.revision + 1, state: 'closed', json: JSON.stringify(value) }; ctx.db.examAttempt.id.update(next); return next;
 }
@@ -209,28 +232,27 @@ function attemptSummary(row: AttemptRow): ExamAttemptSummary {
   const value = attemptData(row); return { id: row.id, examId: row.examId, examVersion: row.version, title: value.title, mode: value.mode,
     state: row.state as 'active' | 'closed', revision: row.revision, startedAt: value.startedAt,
     ...(value.deadlineAt !== undefined ? { deadlineAt: value.deadlineAt } : {}), ...(value.closedAt !== undefined ? { closedAt: value.closedAt, closeReason: value.closeReason } : {}),
-    ...(row.state === 'closed' && value.result ? { result: value.result } : {}) };
+    ...(row.state === 'closed' && value.result ? { result: value.result } : {}), ...(row.state === 'closed' && value.openResult ? { openResult: value.openResult } : {}) };
 }
 function attemptDto(ctx: Ctx, initial: AttemptRow): ExamAttempt {
   const row = expireAttempt(ctx, initial); const value = attemptData(row); const version = data(requireVersion(ctx, row.examId, row.version));
   const exam = ctx.db.studyExam.id.find(row.examId); const mayReadExam = !!exam && (exam.owner.isEqual(memberIdentityFor(ctx)) || exam.visibility === 'group');
   const sourceIssues = versionIssues(ctx, version); const answers: ExamAttempt['answers'] = [];
-  const unavailable = new Set(sourceIssues.filter((issue) => issue.state === 'unavailable').map((issue) => `${issue.kind}:${issue.refId}`));
   const questions = value.order.map((order): ExamAttempt['questions'][number] => {
     const question = version.questions.find((item) => item.id === order.questionId)!;
     const available = mayReadExam && questionAvailable(ctx, version, question, sourceIssues);
     const answer = Object.hasOwn(value.answers, question.id) ? value.answers[question.id] : undefined;
-    const reveal = available && (row.state === 'closed' || value.mode === 'practice' && answer?.confirmed === true);
-    answers.push({ questionId: question.id, ...(answer ? { optionId: answer.optionId } : {}), confirmed: answer?.confirmed ?? false,
-      ...(reveal ? { correct: answer?.optionId === question.correctOptionId } : {}) });
+    const reveal = available && (row.state === 'closed' || value.mode === 'practice' && question.type !== 'open' && answer?.confirmed === true);
+    answers.push({ questionId: question.id, ...(answer ? { optionId: answer.optionId, text: answer.text, evaluation: answer.evaluation } : {}), confirmed: answer?.confirmed ?? false,
+      ...(reveal && question.type !== 'open' ? { correct: answer?.optionId === question.correctOptionId } : {}) });
     if (!available) return { id: question.id, type: question.type, topic: question.topic, text: 'Contenido no disponible', options: [], unavailable: true };
     const options = order.optionIds.map((id) => question.options.find((option) => option.id === id)!);
     const prep = version.preparation;
     return { id: question.id, type: question.type, topic: question.topic, text: question.text, options,
-      ...(reveal ? { solution: { correctOptionId: question.correctOptionId, explanation: question.explanation,
-        citations: question.citations.map((citation) => prep.fragments.find((fragment) => fragment.id === citation)!).map(({ id, text, origins }) => ({ id, text, origins: origins.filter((origin) => !unavailable.has(`${origin.kind}:${origin.refId}`)) })) } } : {}) };
+      ...(reveal ? { solution: { correctOptionId: question.correctOptionId, explanation: question.explanation, ...(question.type === 'open' ? { referenceAnswer: question.referenceAnswer, rubric: question.rubric } : {}),
+        citations: question.citations.map((citation) => prep.fragments.find((fragment) => fragment.id === citation)!).map(({ id, text, origins }) => ({ id, text, origins: availableOrigins(ctx, version, { id, text, origins }, sourceIssues) })) } } : {}) };
   });
-  return { ...attemptSummary(row), questions, answers, sourceIssues: mayReadExam ? sourceIssues : [{ kind: 'exam', refId: row.examId, state: 'unavailable', message: 'El examen ya no está compartido contigo.' }],
+  return { ...attemptSummary(row), ...(row.state === 'closed' && version.questions.some((question) => question.type === 'open') ? { openResult: scoreOpenExam(version.questions, answers) } : {}), questions, answers, sourceIssues: mayReadExam ? sourceIssues : [{ kind: 'exam', refId: row.examId, state: 'unavailable', message: 'El examen ya no está compartido contigo.' }],
     contentUnavailable: questions.some((question) => question.unavailable) };
 }
 function startAttempt(ctx: Ctx, raw: Record<string, unknown>): ExamAttempt {
@@ -252,15 +274,18 @@ function answerAttempt(ctx: Ctx, raw: Record<string, unknown>): ExamAttempt {
   const value = attemptData(row); const version = data(requireVersion(ctx, row.examId, row.version)); const exam = ctx.db.studyExam.id.find(row.examId);
   if (!exam || !(exam.owner.isEqual(memberIdentityFor(ctx)) || exam.visibility === 'group')) fail('unavailable', 'El examen ya no está disponible.');
   const question = version.questions.find((item) => item.id === raw.questionId);
-  if (!question || !question.options.some((option) => option.id === raw.optionId)) fail('invalid', 'Elige una opción existente de esta pregunta.');
+  if (!question) fail('invalid', 'La pregunta no existe.');
+  if (question.type === 'open') { if (typeof raw.text !== 'string' || raw.text.length > 12000) fail('invalid', 'La respuesta abierta admite hasta 12.000 caracteres.'); }
+  else if (!question.options.some((option) => option.id === raw.optionId)) fail('invalid', 'Elige una opción existente de esta pregunta.');
   if (!questionAvailable(ctx, version, question)) fail('unavailable', 'La fuente de esta pregunta ya no está disponible.');
+  if (raw.action === 'confirmAnswer' && question.type === 'open') fail('invalid', 'Las respuestas abiertas se revisan después de finalizar el intento.');
   if (raw.action === 'confirmAnswer' && value.mode !== 'practice') fail('invalid', 'El simulacro revela las soluciones únicamente después del cierre.');
   const previous = Object.hasOwn(value.answers, question.id) ? value.answers[question.id] : undefined;
   if (previous?.confirmed) {
-    if (previous.optionId !== raw.optionId) fail('conflict', 'La respuesta de práctica ya fue confirmada y es irreversible.');
+    if (question.type === 'open' ? previous.text !== raw.text : previous.optionId !== raw.optionId) fail('conflict', 'La respuesta de práctica ya fue confirmada y es irreversible.');
     remember(ctx, raw, op, row.examId, row.id); return attemptDto(ctx, row);
   }
-  value.answers = { ...value.answers, [question.id]: { optionId: String(raw.optionId), confirmed: raw.action === 'confirmAnswer' } };
+  value.answers = { ...value.answers, [question.id]: { ...(question.type === 'open' ? { text: sanitizeAiText(String(raw.text)) } : { optionId: String(raw.optionId) }), confirmed: raw.action === 'confirmAnswer' } };
   row = { ...row, revision: row.revision + 1, json: JSON.stringify(value) }; ctx.db.examAttempt.id.update(row);
   remember(ctx, raw, op, row.examId, row.id); return attemptDto(ctx, row);
 }
@@ -271,11 +296,45 @@ function finishAttempt(ctx: Ctx, raw: Record<string, unknown>): ExamAttempt {
   remember(ctx, raw, op, row.examId, row.id); return attemptDto(ctx, row);
 }
 
+
+type BankRow = NonNullable<ReturnType<Ctx['db']['examBankQuestion']['id']['find']>>;
+function bankVersion(ctx: Ctx, row: BankRow, number = row.version) { const stored = ctx.db.examBankVersion.key.find(`${row.id}:${number}`); if (!stored) fail('unavailable', 'La versión del banco no está disponible.'); return JSON.parse(stored.json) as StoredVersion; }
+function bankOwn(ctx: Ctx, id: unknown) { const row = ctx.db.examBankQuestion.id.find(uuid(id)); if (!row || !row.owner.isEqual(memberIdentityFor(ctx))) fail('unavailable', 'La pregunta no está disponible para editar.'); return row; }
+function bankSummary(ctx: Ctx, row: BankRow): ExamBankSummary { const value = bankVersion(ctx, row); const question = value.questions[0]!; return { id: row.id, version: row.version, ownerId: row.owner.toHexString(), visibility: row.visibility as 'personal' | 'group', subjectId: String(row.subjectId), termId: row.termId ? String(row.termId) : undefined, topic: question.topic, type: question.type, difficulty: question.difficulty ?? value.config.difficulty, text: question.text, updatedAt: at(row.updatedAt), canEdit: row.owner.isEqual(memberIdentityFor(ctx)), sourceIssues: versionIssues(ctx, value) }; }
+function bankList(ctx: Ctx, raw: Record<string, unknown>): ExamBankSummary[] { return [...ctx.db.examBankQuestion.iter()].filter((row) => (row.owner.isEqual(memberIdentityFor(ctx)) || row.visibility === 'group') && (raw.subjectId === undefined || String(row.subjectId) === raw.subjectId) && (raw.termId === undefined || String(row.termId) === raw.termId)).map((row) => bankSummary(ctx, row)).filter((row) => !row.sourceIssues.some((issue) => issue.state === 'unavailable')).sort((a, b) => b.updatedAt - a.updatedAt); }
+function bankDetail(ctx: Ctx, raw: Record<string, unknown>): ExamBankDetail { const row = ctx.db.examBankQuestion.id.find(uuid(raw.bankId)); if (!row || !(row.owner.isEqual(memberIdentityFor(ctx)) || row.visibility === 'group')) fail('unavailable', 'La pregunta no está disponible.'); const summary = bankSummary(ctx, row); const value = bankVersion(ctx, row, raw.version === undefined ? row.version : integer(raw.version, 'Versión')); requireAccess(ctx, value); return { ...summary, ...(row.owner.isEqual(memberIdentityFor(ctx)) ? { question: value.questions[0], preparation: value.preparation } : {}) }; }
+function shareable(ctx: Ctx, value: StoredVersion) { requireAccess(ctx, value); validateDocumentOrigins(ctx, value.preparation, memberIdentityFor(ctx), { sharing: true }); if (value.hasPersonalSources || value.preparation.sources.some((source) => source.visibility !== 'group' || resolveAiSelection(ctx, source, memberIdentityFor(ctx), { reuseReviewed: true }).visibility !== 'group')) fail('unauthorized', 'Una fuente personal impide compartir esta pregunta.'); }
+function saveToBank(ctx: Ctx, raw: Record<string, unknown>) { const op = operation(ctx, raw); if (op.previous) return bankDetail(ctx, { bankId: op.previous.examId }); const exam = own(ctx, raw.examId); const version = requireVersion(ctx, exam.id, raw.version); if (version.state !== 'ready') fail('invalid', 'Solo se guardan preguntas de una versión aprobada.'); const value = data(version); requireAccess(ctx, value); const question = value.questions.find((question) => question.id === raw.questionId); if (!question) fail('invalid', 'La pregunta no existe.');
+  const previous = raw.bankId === undefined ? undefined : bankOwn(ctx, raw.bankId); if (previous) expectVersion(previous.version, integer(raw.expectedVersion, 'Versión'));
+  const citationIds = new Set(question.citations); const fragments = value.preparation.fragments.filter((fragment) => citationIds.has(fragment.id)); const sources = value.preparation.sources.filter((source) => source.fragmentIds.some((id) => citationIds.has(id))).map((source) => ({ ...source, topics: [question.topic], fragmentIds: source.fragmentIds.filter((id) => citationIds.has(id)) }));
+  const preparation = { ...value.preparation, topics: [question.topic], sources, fragments, coverage: [{ topic: question.topic, sourceIds: sources.map((source) => `${source.kind}:${source.refId}`) }] }; const config = { ...value.config, questionCount: 1, types: [question.type], topicWeights: [{ topic: question.topic, weight: 1 }] }; const stored: StoredVersion = { ...value, config, preparation, questions: [{ ...question, difficulty: question.difficulty ?? config.difficulty }], hasPersonalSources: sources.some((source) => source.visibility === 'personal') };
+  if (previous?.visibility === 'group') shareable(ctx, stored); const number = previous ? previous.version + 1 : 1; const id = previous?.id ?? op.requestId; if (!previous && ctx.db.examBankQuestion.id.find(id)) fail('conflict', 'El identificador ya existe.');
+  const row = { id, owner: memberIdentityFor(ctx), subjectId: exam.subjectId, termId: exam.termId, visibility: previous?.visibility ?? 'personal', version: number, updatedAt: ctx.timestamp }; if (previous) ctx.db.examBankQuestion.id.update(row); else ctx.db.examBankQuestion.insert(row); ctx.db.examBankVersion.insert({ key: `${id}:${number}`, bankId: id, version: number, json: JSON.stringify(stored), createdAt: ctx.timestamp }); remember(ctx, raw, op, id); return bankDetail(ctx, { bankId: id });
+}
+function variantPlan(raw: unknown): ExamVariantPlan { const value = obj(raw); const config = examConfig({ questionCount: value.questionCount, types: value.types, difficulty: value.difficulty, topicWeights: value.topicWeights }); if (typeof value.subjectId !== 'string' || !/^\d+$/.test(value.subjectId) || value.termId !== undefined && (typeof value.termId !== 'string' || !/^\d+$/.test(value.termId)) || !Array.isArray(value.topics) || !value.topics.length || value.topics.some((topic) => typeof topic !== 'string' || !topic.trim() || topic.length > 120) || new Set(value.topics).size !== value.topics.length || value.bankIds !== undefined && (!Array.isArray(value.bankIds) || value.bankIds.some((id) => !aiUuid(id)))) fail('invalid', 'El plano de la variante no es válido.'); return { ...config, subjectId: value.subjectId, termId: value.termId as string | undefined, topics: value.topics as string[], seed: text(value.seed, 'La semilla'), bankIds: value.bankIds as string[] | undefined }; }
+function createVariant(ctx: Ctx, raw: Record<string, unknown>) { const op = operation(ctx, raw); if (op.previous) return detail(ctx, own(ctx, op.previous.examId)); const plan = variantPlan(raw.plan); const preview = selectExamVariant(bankList(ctx, {}), plan); if (preview.deficits.length) fail('invalid', `Faltan preguntas: ${preview.deficits.map((slot) => `${slot.topic} (${slot.available}/${slot.requested})`).join(', ')}.`); const values = preview.selected.map((summary) => ({ id: summary.id, value: bankVersion(ctx, ctx.db.examBankQuestion.id.find(summary.id)!) }));
+  const fragments: AiPreparation['fragments'] = []; const sources = new Map<string, AiPreparation['sources'][number]>(); const questions: ExamEditableQuestion[] = [];
+  for (const item of values) { requireAccess(ctx, item.value); const mapping = new Map(item.value.preparation.fragments.map((fragment) => [fragment.id, `${item.id}:${fragment.id}`])); fragments.push(...item.value.preparation.fragments.map((fragment) => ({ ...fragment, id: mapping.get(fragment.id)! }))); for (const source of item.value.preparation.sources) { const key = examPreparedSourceKey(source); const existing = sources.get(key); sources.set(key, { ...source, topics: [...new Set([...(existing?.topics ?? []), ...source.topics])], fragmentIds: [...new Set([...(existing?.fragmentIds ?? []), ...source.fragmentIds.map((id) => mapping.get(id)!)])] }); } questions.push({ ...item.value.questions[0]!, id: item.id, citations: item.value.questions[0]!.citations.map((id) => mapping.get(id)!) }); }
+  const base = values[0]!.value.preparation; const config: AiGenerationConfig = { purpose: 'questions', questionCount: questions.length, types: plan.types, difficulty: plan.difficulty, topicWeights: plan.topicWeights }; const preparation: AiPreparation = { ...base, id: op.requestId, subjectId: plan.subjectId, termId: plan.termId, topics: plan.topics, sources: [...sources.values()], fragments, config, fingerprint: aiHash([plan, preview.selected]), coverage: plan.topics.map((topic) => ({ topic, sourceIds: [...sources.entries()].filter(([, source]) => source.topics.includes(topic)).map(([key]) => key) })) };
+  const title = text(raw.title, 'El título'); const value: StoredVersion = { title, config, preparation, questions, timeLimitSeconds: timeLimit(raw.timeLimitSeconds), hasPersonalSources: preparation.sources.some((source) => source.visibility === 'personal') }; validatedQuestions(questions, preparation, config); const exam = ctx.db.studyExam.insert({ id: op.requestId, owner: memberIdentityFor(ctx), title, subjectId: BigInt(plan.subjectId), termId: plan.termId ? BigInt(plan.termId) : undefined, visibility: 'personal', archived: false, revision: 1, readyVersion: undefined, draftVersion: 1, createdAt: ctx.timestamp, updatedAt: ctx.timestamp }); ctx.db.examVersion.insert({ key: `${exam.id}:1`, examId: exam.id, version: 1, state: 'draft', json: JSON.stringify(value), createdAt: ctx.timestamp }); remember(ctx, raw, op, exam.id); return detail(ctx, exam);
+}
+export function evaluateOpen(ctx: Ctx, raw: Record<string, unknown>, origin: 'manual' | 'assisted' = 'manual') { const op = operation(ctx, raw); if (op.previous) return attemptDto(ctx, ownAttempt(ctx, op.previous.attemptId)); const row = ownAttempt(ctx, raw.attemptId); if (row.state !== 'closed') fail('invalid', 'Termina el intento antes de evaluar respuestas abiertas.'); expectVersion(row.revision, integer(raw.expectedRevision, 'Revisión')); const value = attemptData(row); const version = data(requireVersion(ctx, row.examId, row.version)); const question = version.questions.find((question) => question.id === raw.questionId); if (!question || !questionAvailable(ctx, version, question)) fail('unavailable', 'La pregunta no está disponible.'); if (raw.suggestionId !== undefined) fail('invalid', 'Acepta la sugerencia desde su solicitud guardada.'); const criteria = raw.criteria as ExamOpenEvaluation['criteria']; const feedback = typeof raw.feedback === 'string' ? raw.feedback : ''; validateOpenEvaluation(question, criteria, feedback); const answer = value.answers[question.id] ?? { text: '', confirmed: true }; value.answers = { ...value.answers, [question.id]: { ...answer, evaluation: { rubricVersion: question.rubric!.version, criteria: criteria.map((criterion) => ({ ...criterion, feedback: sanitizeAiText(criterion.feedback) })), feedback: sanitizeAiText(feedback), evaluatedAt: now(ctx), origin } } }; value.openResult = scoreOpenExam(version.questions, Object.entries(value.answers).map(([questionId, answer]) => ({ questionId, ...answer }))); const next = { ...row, revision: row.revision + 1, json: JSON.stringify(value) }; ctx.db.examAttempt.id.update(next); remember(ctx, raw, op, row.examId, row.id); return attemptDto(ctx, next); }
+
 function dispatch(ctx: Ctx, raw: Record<string, unknown>): unknown {
   activeMember(ctx);
-  if (raw.action === 'listExams') return [...ctx.db.studyExam.iter()].filter((exam) => exam.owner.isEqual(memberIdentityFor(ctx))
+  if (raw.action === 'listBank') return bankList(ctx, raw);
+  if (raw.action === 'getBankQuestion') return bankDetail(ctx, raw);
+  if (raw.action === 'saveToBank') return saveToBank(ctx, raw);
+  if (raw.action === 'setBankVisibility') { const row = bankOwn(ctx, raw.bankId); expectVersion(row.version, integer(raw.expectedVersion, 'Versión')); if (!['personal', 'group'].includes(String(raw.visibility))) fail('invalid', 'Visibilidad inválida.'); if (raw.visibility === 'group') shareable(ctx, bankVersion(ctx, row)); ctx.db.examBankQuestion.id.update({ ...row, visibility: String(raw.visibility), updatedAt: ctx.timestamp }); return bankDetail(ctx, { bankId: row.id }); }
+  if (raw.action === 'previewVariant') return selectExamVariant(bankList(ctx, {}), variantPlan(raw.plan));
+  if (raw.action === 'createVariant') return createVariant(ctx, raw);
+  if (raw.action === 'evaluateOpenAnswer') return evaluateOpen(ctx, raw);
+  if (raw.action === 'sendToSpaced') return sendExamToSpaced(ctx, raw);
+  if (raw.action === 'listExams') return [...ctx.db.studyExam.iter()].filter((exam) => raw.sharedOnly === true
+    ? exam.visibility === 'group' && exam.readyVersion !== undefined && !exam.archived && ctx.db.examVersion.key.find(`${exam.id}:${exam.readyVersion}`)?.state === 'ready'
+    : exam.owner.isEqual(memberIdentityFor(ctx))
     ? raw.includeArchived === true || !exam.archived
-    : exam.visibility === 'group' && exam.readyVersion !== undefined && !exam.archived).map((exam) => examSummary(ctx, exam)).sort((a, b) => b.updatedAt - a.updatedAt);
+    : exam.visibility === 'group' && exam.readyVersion !== undefined && !exam.archived).map((exam) => examSummary(ctx, exam, raw.sharedOnly === true)).sort((a, b) => b.updatedAt - a.updatedAt);
   if (raw.action === 'getExam') return detail(ctx, readable(ctx, raw.examId));
   if (raw.action === 'getVersion') { const exam = own(ctx, raw.examId); return versionDto(ctx, exam, requireVersion(ctx, exam.id, raw.version)); }
   if (raw.action === 'listGenerations') return [...ctx.db.aiGeneration.actor.filter(memberIdentityFor(ctx))].filter((row) => {
@@ -317,22 +376,36 @@ export function examResponse(ctx: Ctx, payload: string): string {
 export function purgeExamSource(ctx: Ctx, kind: string, targetId: bigint): void {
   const refId = String(targetId);
   const matches = (source: { kind: string; refId: string }) => source.kind === kind && source.refId === refId;
-  for (const row of [...ctx.db.examVersion.iter()]) {
-    const value = data(row); const prep = value.preparation;
-    const affectedSources = new Set(prep.sources.filter((source) => matches(source) || source.origins.some(matches)).map((source) => `${source.kind}:${source.refId}`));
-    const removed = new Set(prep.fragments.filter((fragment) => fragment.origins.some((origin) => matches(origin) || affectedSources.has(`${origin.kind}:${origin.refId}`))).map((fragment) => fragment.id));
+  for (const row of [...ctx.db.examVersion.iter(), ...ctx.db.examBankVersion.iter()]) {
+    const value = JSON.parse(row.json) as StoredVersion; const prep = value.preparation;
+    const affectedSources = new Set(prep.sources.filter((source) => matches(source) || source.origins.some(matches)).map(examPreparedSourceKey));
+    const affectedFragments = new Set(prep.sources.filter((source) => affectedSources.has(examPreparedSourceKey(source))).flatMap((source) => source.fragmentIds));
+    const removed = new Set(prep.fragments.filter((fragment) => fragment.origins.some(matches) || affectedFragments.has(fragment.id)).map((fragment) => fragment.id));
     if (!removed.size && !affectedSources.size) continue;
     const purgedQuestionIds = new Set(value.purgedQuestionIds ?? []);
     for (const question of value.questions) if (question.citations.some((id) => removed.has(id))) purgedQuestionIds.add(question.id);
     const preparation: AiPreparation = { ...prep, canGenerate: false, omissions: [],
-      sources: prep.sources.map((source) => affectedSources.has(`${source.kind}:${source.refId}`)
+      sources: prep.sources.map((source) => affectedSources.has(examPreparedSourceKey(source))
         ? { ...source, title: 'Fuente eliminada', status: 'unauthorized', reason: 'El material original fue eliminado definitivamente.', fragmentIds: [], origins: [] }
         : { ...source, fragmentIds: source.fragmentIds.filter((id) => !removed.has(id)), origins: source.origins.filter((origin) => !matches(origin)) }),
       fragments: prep.fragments.filter((fragment) => !removed.has(fragment.id)),
-      coverage: prep.coverage.map((item) => ({ ...item, sourceIds: item.sourceIds.filter((id) => !affectedSources.has(id)) })) };
+      coverage: prep.coverage.map((item) => ({ ...item, sourceIds: item.sourceIds.filter((id) => !affectedSources.has(id) && prep.sources.some((source) => !affectedSources.has(examPreparedSourceKey(source)) && (id === `${source.kind}:${source.refId}` || id === examPreparedSourceKey(source)))) })) };
     const questions = value.questions.map((question) => purgedQuestionIds.has(question.id)
-      ? { ...question, text: '', explanation: '', options: question.options.map((option) => ({ id: option.id, text: '' })), citations: [], issue: undefined }
+      ? { ...question, text: '', explanation: '', referenceAnswer: undefined, rubric: undefined, options: question.options.map((option) => ({ id: option.id, text: '' })), citations: [], issue: undefined }
       : question);
-    ctx.db.examVersion.key.update({ ...row, json: JSON.stringify({ ...value, preparation, questions, purgedQuestionIds: [...purgedQuestionIds] }) });
+    if ('examId' in row) ctx.db.examVersion.key.update({ ...row, json: JSON.stringify({ ...value, preparation, questions, purgedQuestionIds: [...purgedQuestionIds] }) });
+    else ctx.db.examBankVersion.key.update({ ...row, json: JSON.stringify({ ...value, preparation, questions, purgedQuestionIds: [...purgedQuestionIds] }) });
   }
+  for (const row of [...ctx.db.examEvaluationDraft.iter()]) {
+    const value = JSON.parse(row.json) as import('../../core/src/examEvaluation').ExamEvaluationDraft;
+    const origins = value.snapshot.citations as { origins?: { kind: string; refId: string }[] }[];
+    if (!origins.some((citation) => citation.origins?.some(matches))) continue;
+    ctx.db.examEvaluationDraft.id.update({ ...row, json: JSON.stringify({ ...value, state: 'cancelled', result: undefined, acceptedAttempt: undefined, error: 'La fuente fue eliminada definitivamente.', snapshot: { ...value.snapshot, question: { ...value.snapshot.question, text: '', referenceAnswer: undefined, rubric: undefined, explanation: '', citations: [], options: [] }, citations: [] } }) });
+  }
+
+}
+
+/** Service operations still resolve every original with the student's identity. */
+export function getExamEvaluationSnapshot(ctx: Ctx, actor: import('spacetimedb').Identity, attemptId: unknown, questionId: unknown) {
+  const row = ctx.db.examAttempt.id.find(uuid(attemptId)); if (!row || !row.actor.isEqual(actor) || row.state !== 'closed') fail('unavailable', 'El intento concluido no está disponible.'); const exam = ctx.db.studyExam.id.find(row.examId); if (!exam || !(exam.owner.isEqual(actor) || exam.visibility === 'group')) fail('unavailable', 'El examen ya no está disponible.'); const value = attemptData(row); const version = data(requireVersion(ctx, row.examId, row.version)); const question = version.questions.find((question) => question.id === questionId); const issues = prepIssues(ctx, version.preparation, actor); if (!question || question.type !== 'open' || !questionAvailable(ctx, version, question, issues, actor)) fail('unavailable', 'La pregunta abierta ya no está disponible.'); const answer = Object.hasOwn(value.answers, question.id) ? value.answers[question.id]?.text ?? '' : ''; const citations = version.preparation.fragments.filter((fragment) => question.citations.includes(fragment.id)).map((fragment) => ({ ...fragment, origins: availableOrigins(ctx, version, fragment, issues, actor) })); const snapshot = { attemptId: row.id, questionId: question.id, revision: row.revision, question, answer, citations }; return { ...snapshot, fingerprint: aiHash(snapshot) };
 }

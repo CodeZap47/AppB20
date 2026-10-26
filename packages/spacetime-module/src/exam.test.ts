@@ -1,8 +1,12 @@
+import { purgeExamSpacedSource } from './examSpaced';
 import { describe, expect, it, vi } from 'vitest';
+import { AI_CONSENT_VERSION } from '../../core/src/ai';
+import type { ExamEvaluationDraft } from '../../core/src/examEvaluation';
+import { examEvaluationResponse } from './examEvaluationHandlers';
 import { Identity, Timestamp } from 'spacetimedb';
 import type { AiPreparation } from '../../core/src/ai';
 import type { AiQuestion } from '../../core/src/exam';
-import type { ExamAttempt, ExamDetail, ExamDraft, ExamGenerationSummary } from '../../core/src/exams';
+import type { ExamAttempt, ExamDetail, ExamDraft, ExamGenerationSummary, ExamSummary, ExamBankDetail, ExamBankSummary, ExamVariantPreview } from '../../core/src/exams';
 vi.mock('spacetimedb/server', () => {
   const builder: unknown = new Proxy({}, { get: () => () => builder }); const handler = (...args: unknown[]) => args.at(-1);
   return { SenderError: class SenderError extends Error {}, t: new Proxy({}, { get: () => () => builder }), table: () => ({ rowType: builder }),
@@ -33,7 +37,7 @@ function setup() {
       { id: 3n, subjectId: 1n, title: 'Copia compartida', topic: 'Ciclos', body: 'Un ciclo repite instrucciones mientras su condición sea verdadera.', version: 1, author: bob, visibility: 'group', source: 'student' }],
     noteDetail: [1n, 2n, 3n].map((noteId) => ({ noteId, termId: 11n })),
   };
-  const keys: Record<string, string> = { member: 'identity', noteDetail: 'noteId', contentStatus: 'key', resourceVersion: 'key', examVersion: 'key', examOperation: 'key', examGenerationImport: 'generationId' };
+  const keys: Record<string, string> = { aiKey: 'actor', aiConsent: 'actor', member: 'identity', noteDetail: 'noteId', contentStatus: 'key', resourceVersion: 'key', examVersion: 'key', examBankVersion: 'key', examOperation: 'key', examGenerationImport: 'generationId' };
   const tables = new Map<string, ReturnType<typeof store>>();
   const db = new Proxy({}, { get: (_target, name: string) => { if (!tables.has(name)) tables.set(name, store(keys[name] ?? 'id', initial[name])); return tables.get(name); } });
   const state = { db, sender: alice, timestamp, env: {}, senderAuth: { jwt: { issuer: 'https://issuer.test', audience: ['test'], fullPayload: { email: 'member@example.com', email_verified: true } } } };
@@ -65,6 +69,31 @@ function setup() {
   return { ctx, call, rows, as, tick, seed, imported, approve, shared, start };
 }
 describe('EX-2: permisos, borradores y versiones listas', () => {
+  it('el catálogo compartido excluye privados y archivados incluso para su autor', () => {
+    const s = setup(); const draft = s.imported(2); const personal = s.approve(s.imported(3)); let shared = s.shared();
+    expect(s.call<ExamSummary[]>('listExams').map((row) => row.id)).toEqual(expect.arrayContaining([draft.id, personal.id, shared.id]));
+    expect(s.call<ExamSummary[]>('listExams', { sharedOnly: true, includeArchived: true }).map((row) => row.id)).toEqual([shared.id]);
+    shared = s.call('setArchived', { examId: shared.id, expectedRevision: shared.revision, archived: true });
+    expect(s.call('listExams', { sharedOnly: true, includeArchived: true })).toEqual([]);
+    expect(s.call<ExamSummary[]>('listExams', { includeArchived: true }).map((row) => row.id)).toContain(shared.id);
+    s.as(bob); expect(s.call('listExams', { sharedOnly: true })).toEqual([]);
+  });
+  it('el feed del autor conserva solo la versión aprobada cuando el borrador cambia y usa fuentes personales', () => {
+    const s = setup(); let exam = s.shared();
+    const before = s.call<ExamSummary[]>('listExams', { sharedOnly: true })[0]!;
+    s.tick(5); exam = s.call('forkVersion', { examId: exam.id, version: 1, expectedRevision: exam.revision, requestId: uid(3000) });
+    const generated = s.seed(2, ['2']);
+    exam = s.call('replaceQuestions', { examId: exam.id, version: 2, expectedRevision: exam.revision, requestId: uid(3001), generationId: generated.generationId, questionIds: ['q1', 'q2'] });
+    exam = s.call('saveDraft', { examId: exam.id, version: 2, expectedRevision: exam.revision, title: 'Título solo del borrador', config: { ...exam.draft!.config, questionCount: 1 }, questions: exam.draft!.questions.slice(0, 1) });
+    s.ctx.db.contentStatus.insert({ key: 'note:2', kind: 'note', targetId: 2n, withdrawnAt: s.ctx.timestamp, withdrawnBy: alice, reason: 'Nota privada retirada' });
+    const summary = s.call<ExamSummary[]>('listExams', { sharedOnly: true })[0]!;
+    expect(summary).toEqual(before); expect(summary).not.toHaveProperty('draftVersion');
+    expect(summary).toMatchObject({ readyVersion: 1, questionCount: 2, topics: ['Ciclos'], canEdit: true, sourceIssues: [] });
+    const catalog = s.call<ExamSummary[]>('listExams')[0]!;
+    expect(catalog).toMatchObject({ title: 'Título solo del borrador', draftVersion: 2, questionCount: 1 }); expect(catalog.sourceIssues).not.toEqual([]);
+    s.as(bob); const peer = s.call<ExamSummary[]>('listExams', { sharedOnly: true })[0]!;
+    expect(peer).toEqual({ ...before, canEdit: false });
+  });
   it('separa las guías y explicaciones de las generaciones de preguntas y conserva errores recuperables', () => {
     const s = setup(); const legacy = s.seed(1); const questions = s.seed(2); const guide = s.seed(3); const explanation = s.seed(4);
     for (const [id, purpose] of [[questions.generationId, 'questions'], [guide.generationId, 'guide'], [explanation.generationId, 'explanation']] as const) {
@@ -199,4 +228,124 @@ describe('EX-2: intentos privados y soluciones por fase', () => {
     attempt = s.call<ExamAttempt>('getAttempt', { attemptId: attempt.id }); expect(attempt.answers.find((answer) => answer.questionId === '__proto__')!.optionId).toBe('b');
     expect(s.call<ExamAttempt>('finishAttempt', { attemptId: attempt.id, expectedRevision: attempt.revision, requestId: uid(4001) }).result!.correct).toBe(1);
   });
+});
+
+describe('EX-3: banco privado, variantes y abiertas', () => {
+  it('conserva versiones del banco, publica sin solucionario y copia sin modificar el original', () => {
+    const s = setup(); const exam = s.approve(s.imported()); const save = { examId: exam.id, version: 1, questionId: 'q1', requestId: uid(5000) };
+    let bank = s.call<ExamBankDetail>('saveToBank', save); expect(bank.visibility).toBe('personal'); expect(s.call<ExamBankDetail>('saveToBank', save).id).toBe(bank.id);
+    s.as(bob); expect(s.call('listBank')).toEqual([]); expect(() => s.call('getBankQuestion', { bankId: bank.id })).toThrow('disponible');
+    s.as(alice); bank = s.call('setBankVisibility', { bankId: bank.id, expectedVersion: 1, visibility: 'group' });
+    s.as(bob); const catalog = s.call<ExamBankSummary[]>('listBank'); expect(catalog).toHaveLength(1); expect(JSON.stringify(catalog)).not.toMatch(/correctOptionId|Explicación protegida|rubric/); expect(s.call<ExamBankDetail>('getBankQuestion', { bankId: bank.id }).question).toBeUndefined();
+    expect(() => s.call('setBankVisibility', { bankId: bank.id, expectedVersion: 1, visibility: 'personal' })).toThrow('editar');
+    const plan = { subjectId: '1', termId: '11', topics: ['Ciclos'], questionCount: 1, difficulty: 'basic', types: ['single'], seed: 'copia', bankIds: [bank.id] };
+    const copied = s.call('createVariant', { plan, title: 'Mi copia', requestId: uid(5001) }); expect(copied.ownerId).toBe(bob.toHexString()); expect(copied.draft!.questions[0]!.correctOptionId).toBe('b'); expect(copied.visibility).toBe('personal'); expect(copied.draftVersion).toBe(1);
+    s.as(alice); bank = s.call('saveToBank', { ...save, requestId: uid(5002), bankId: bank.id, expectedVersion: 1 }); expect(bank.version).toBe(2); expect(s.rows('examBankVersion')).toHaveLength(2); expect(s.call<ExamBankDetail>('getBankQuestion', { bankId: bank.id, version: 1 }).question!.text).toBe('Pregunta 1 sobre ciclos');
+    s.as(bob); expect(s.call<ExamDetail>('getExam', { examId: copied.id }).draft!.questions[0]!.text).toBe('Pregunta 1 sobre ciclos');
+  });
+  it('impide publicar fuente personal y presenta déficit antes de crear una variante', () => {
+    const s = setup(); const exam = s.approve(s.imported(1, ['2'])); const bank = s.call<ExamBankDetail>('saveToBank', { examId: exam.id, version: 1, questionId: 'q1', requestId: uid(5000) });
+    expect(() => s.call('setBankVisibility', { bankId: bank.id, expectedVersion: 1, visibility: 'group' })).toThrow('personal');
+    const plan = { subjectId: '1', topics: ['Ciclos'], questionCount: 2, difficulty: 'basic', types: ['single'], seed: 'semilla' }; expect(s.call<ExamVariantPreview>('previewVariant', { plan }).deficits).toEqual([{ topic: 'Ciclos', requested: 2, available: 1 }]); expect(() => s.call('createVariant', { plan, title: 'Faltan', requestId: uid(5001) })).toThrow('Faltan');
+    purgeExamSource(s.ctx, 'note', 2n); expect(JSON.stringify(s.rows('examBankVersion').map((row) => row.json))).not.toContain('Pregunta 1 sobre ciclos'); expect(s.call('listBank')).toEqual([]);
+  });
+  it('oculta referencia y rúbrica mientras se responde y mantiene puntuaciones abiertas separadas', () => {
+    const s = setup(); let exam = s.imported(); const draft = exam.draft!; exam = s.call('saveDraft', { examId: exam.id, expectedRevision: exam.revision, version: 1, title: exam.title, config: { ...draft.config, types: ['single', 'open'] }, questions: draft.questions.map((question, index) => index ? { ...question, type: 'open', options: [], correctOptionId: '', referenceAnswer: 'Referencia secreta', rubric: { version: 3, criteria: [{ id: 'logic', description: 'Razonamiento claro', maxPoints: 4 }] } } : question) }); exam = s.approve(exam); let attempt = s.start(exam);
+    expect(JSON.stringify(attempt)).not.toMatch(/Referencia secreta|Razonamiento claro|rubric/); attempt = s.call('saveAnswer', { attemptId: attempt.id, expectedRevision: attempt.revision, requestId: uid(5100), questionId: 'q2', text: 'Mi argumento' });
+    expect(() => s.call('evaluateOpenAnswer', { attemptId: attempt.id, expectedRevision: attempt.revision, requestId: uid(5101), questionId: 'q2', criteria: [{ criterionId: 'logic', points: 3, feedback: 'Bien' }], feedback: '' })).toThrow('Termina');
+    attempt = s.call('finishAttempt', { attemptId: attempt.id, expectedRevision: attempt.revision, requestId: uid(5102) }); expect(attempt.result).toMatchObject({ correct: 0, total: 1 }); expect(attempt.openResult).toMatchObject({ pending: 1, evaluated: 0, maxPoints: 0 }); expect(attempt.questions.find((question) => question.id === 'q2')!.solution!.referenceAnswer).toBe('Referencia secreta');
+    const evaluate = { attemptId: attempt.id, expectedRevision: attempt.revision, requestId: uid(5103), questionId: 'q2', criteria: [{ criterionId: 'logic', points: 3, feedback: 'Sustentado' }], feedback: 'Mejorar ejemplo' }; attempt = s.call('evaluateOpenAnswer', evaluate); expect(attempt.openResult).toEqual({ evaluated: 1, pending: 0, points: 3, maxPoints: 4, percentage: 75 }); expect(s.call<ExamAttempt>('evaluateOpenAnswer', evaluate).revision).toBe(attempt.revision); expect(attempt.result!.total).toBe(1);
+    expect(() => s.call('evaluateOpenAnswer', { ...evaluate, requestId: uid(5104), expectedRevision: attempt.revision, criteria: [{ criterionId: 'logic', points: 5, feedback: '' }] })).toThrow('criterio'); s.as(bob); expect(() => s.call('evaluateOpenAnswer', { ...evaluate, requestId: uid(5105) })).toThrow('disponible');
+  });
+});
+
+describe('EX-3: nuevas fuentes y tarjetas privadas derivadas', () => {
+  it('selecciona respuestas expresamente y conserva dependencias individuales', () => {
+    const s = setup();
+    s.ctx.db.question.insert({ id: 10n, subjectId: 1n, title: 'Pregunta sobre ciclos', topic: 'Ciclos', body: '¿Cuándo termina un ciclo?', status: 'answered', acceptedAnswerId: 11n, author: alice, createdAt: s.ctx.timestamp } as never);
+    s.ctx.db.answer.insert({ id: 11n, questionId: 10n, body: 'Termina cuando deja de cumplirse su condición.', author: bob, createdAt: s.ctx.timestamp } as never);
+    s.ctx.db.answer.insert({ id: 12n, questionId: 10n, body: 'Respuesta no elegida y sin sustento.', author: bob, createdAt: s.ctx.timestamp } as never);
+    const proc = { withTx: (fn: (ctx: Ctx) => unknown) => fn(s.ctx) } as unknown as Parameters<typeof ai_prepare>[0];
+    const preparation = JSON.parse(ai_prepare(proc, { payload: JSON.stringify({ id: uid(5500), model: 'gemini-test', subjectId: '1', topics: ['Ciclos'], sources: [{ kind: 'question', refId: '10', answerIds: ['11'], topics: ['Ciclos'], includeUnplaced: true }], config: { purpose: 'questions', questionCount: 1, types: ['open'], difficulty: 'basic' } }) })) as AiPreparation;
+    expect(preparation.canGenerate).toBe(true);
+    expect(JSON.stringify(preparation.fragments)).toContain('deja de cumplirse');
+    expect(JSON.stringify(preparation.fragments)).not.toContain('Respuesta no elegida');
+    expect(preparation.fragments.some((fragment) => fragment.origins.some((origin) => origin.kind === 'answer' && origin.refId === '11'))).toBe(true);
+  });
+
+  it('crea una sola tarjeta, no modifica progreso y rechaza intentos ajenos', () => {
+    const s = setup(); const exam = s.approve(s.imported()); const attempt = s.start(exam);
+    const closed = s.call<ExamAttempt>('finishAttempt', { attemptId: attempt.id, expectedRevision: attempt.revision, requestId: uid(5600) });
+    const input = { attemptId: closed.id, questionId: closed.questions[0]!.id, requestId: uid(5601), question: '¿Cómo termina el ciclo?', explanation: 'Revisa la condición antes de repetir.' };
+    const first = s.call<{ collectionId: string; cardId: string; created: boolean }>('sendToSpaced', input);
+    expect(first.created).toBe(true);
+    expect(s.rows('spacedCard')).toHaveLength(1);
+    expect(s.rows('spacedCollection')[0]).toMatchObject({ visibility: 'personal', ownerId: alice });
+    expect(s.rows('spacedProgress')).toHaveLength(0);
+    expect(s.call('sendToSpaced', { ...input, requestId: uid(5602) })).toMatchObject({ ...first, created: false });
+    expect(s.rows('spacedCard')).toHaveLength(1);
+    s.as(bob); expect(() => s.call('sendToSpaced', { ...input, requestId: uid(5603) })).toThrow('unavailable');
+  });
+});
+
+describe('EX-3: sugerencias persistentes y dependencias individuales', () => {
+  it('la retirada de una respuesta citada oculta también sus fragmentos con origen answer', () => {
+    const s = setup(); const ctx = s.ctx; ctx.db.question.insert({ id: 8n, subjectId: 1n, topic: 'Ciclos', title: 'Duda', body: 'Pregunta pública', author: alice, status: 'resolved', acceptedAnswerId: 9n, resolvedAt: undefined, createdAt: ctx.timestamp }); ctx.db.answer.insert({ id: 9n, questionId: 8n, author: bob, body: 'ANSWER_PRIVATE_AFTER_WITHDRAWAL', createdAt: ctx.timestamp });
+    const prep = JSON.parse(ai_prepare({ withTx: (fn: (ctx: Ctx) => unknown) => fn(ctx) } as Parameters<typeof ai_prepare>[0], { payload: JSON.stringify({ id: uid(6000), model: 'gemini-test', subjectId: '1', topics: ['Ciclos'], sources: [{ kind: 'question', refId: '8', answerIds: ['9'], topics: ['Ciclos'], includeUnplaced: true }], config: { questionCount: 1, types: ['single'], difficulty: 'basic' } }) })) as AiPreparation;
+    const generated = { ...s.seed(6001, ['1'], 1) }; const answerFragment = prep.fragments.find((fragment) => fragment.origins.some((origin) => origin.kind === 'answer'))!; const q = { ...generated.questions[0]!, citations: [answerFragment.id] }; const generation = ctx.db.aiGeneration.id.find(generated.generationId)!; ctx.db.aiGeneration.id.update({ ...generation, preparationId: prep.id, configJson: JSON.stringify(prep.config), resultJson: JSON.stringify({ questions: [q] }) }); let exam = s.call('importGeneration', { generationId: generated.generationId, requestId: uid(6002), title: 'Con respuesta' }); exam = s.approve(exam); exam = s.call('setVisibility', { examId: exam.id, expectedRevision: exam.revision, visibility: 'group' }); s.as(bob); let attempt = s.start(exam); attempt = s.call('finishAttempt', { attemptId: attempt.id, expectedRevision: attempt.revision, requestId: uid(6003) }); expect(JSON.stringify(attempt)).toContain('ANSWER_PRIVATE_AFTER_WITHDRAWAL'); ctx.db.contentStatus.insert({ key: 'answer:9', kind: 'answer', targetId: 9n, withdrawnAt: ctx.timestamp, withdrawnBy: bob, reason: 'Retirada' }); const reread = s.call<ExamAttempt>('getAttempt', { attemptId: attempt.id }); expect(reread.contentUnavailable).toBe(true); expect(JSON.stringify(reread)).not.toContain('ANSWER_PRIVATE_AFTER_WITHDRAWAL'); expect(reread.result).toEqual(attempt.result);
+  });
+  it('reserva una vez, acepta ajustes una vez, valida CAS y descarta resultados tardíos cancelados', () => {
+    const s = setup(); let exam = s.imported(); const draft = exam.draft!; exam = s.call('saveDraft', { examId: exam.id, version: 1, expectedRevision: exam.revision, title: exam.title, config: { ...draft.config, questionCount: 1, types: ['open'] }, questions: [{ ...draft.questions[0]!, type: 'open', options: [], correctOptionId: '', referenceAnswer: 'Referencia privada', rubric: { version: 1, criteria: [{ id: 'a', description: 'Argumenta', maxPoints: 4 }] } }] }); exam = s.approve(exam); let attempt = s.start(exam); attempt = s.call('finishAttempt', { attemptId: attempt.id, expectedRevision: attempt.revision, requestId: uid(6100) });
+    const technical = person('e'); s.ctx.db.aiServiceConfig.insert({ id: 0, identity: technical, enabled: true, dailyTokenBudget: 100000 }); s.ctx.db.aiKey.insert({ actor: alice, keyId: uid(6199), provider: 'gemini', ciphertext: 'encrypted', iv: 'iv', masterVersion: 'v1', updatedAt: s.ctx.timestamp }); s.ctx.db.aiConsent.insert({ actor: alice, version: AI_CONSENT_VERSION, accepted: true, updatedAt: s.ctx.timestamp });
+    const evaluate = <T = ExamEvaluationDraft>(raw: Record<string, unknown>): T => { const value = JSON.parse(examEvaluationResponse(s.ctx, JSON.stringify(raw))); if (value.ok === false) throw new Error(value.message); return value as T; };
+    let prepared = evaluate({ action: 'prepare', id: uid(6101), attemptId: attempt.id, questionId: 'q1', model: 'gemini-test' }); expect(prepared.state).toBe('prepared'); expect(s.rows('aiReservation')).toHaveLength(0); s.as(bob); expect(() => evaluate({ action: 'get', id: prepared.id })).toThrow('disponible'); s.as(alice);
+    evaluate({ action: 'authorize', id: prepared.id, generationId: uid(6102), confirmed: true, fingerprint: prepared.fingerprint, model: prepared.model, allowNew: true }); s.as(technical); expect(evaluate<{ claimed: boolean }>({ action: 'claim', id: prepared.id, generationId: uid(6102), actor: alice.toHexString() }).claimed).toBe(true); expect(evaluate<{ claimed: boolean }>({ action: 'claim', id: prepared.id, generationId: uid(6102), actor: alice.toHexString() }).claimed).toBe(false); expect(s.rows('aiReservation')).toHaveLength(1);
+    evaluate({ action: 'finish', id: prepared.id, generationId: uid(6102), actor: alice.toHexString(), state: 'succeeded', result: { criteria: [{ criterionId: 'a', points: 1, feedback: 'Sugerencia' }], feedback: 'Revisar' } }); s.as(alice); const accept = { action: 'accept', id: prepared.id, requestId: uid(6103), expectedRevision: attempt.revision, criteria: [{ criterionId: 'a', points: 3, feedback: 'Lo revisé' }], feedback: 'Ajustado' }; attempt = evaluate<ExamAttempt>(accept); expect(attempt.openResult!.points).toBe(3); expect(attempt.answers[0]!.evaluation!.origin).toBe('assisted'); expect(evaluate<ExamAttempt>(accept).revision).toBe(attempt.revision); expect(() => evaluate({ ...accept, criteria: [{ criterionId: 'a', points: 4, feedback: 'Otro' }] })).toThrow('pertenece');
+    prepared = evaluate({ action: 'prepare', id: uid(6104), attemptId: attempt.id, questionId: 'q1', model: 'gemini-test' }); evaluate({ action: 'authorize', id: prepared.id, generationId: uid(6105), confirmed: true, fingerprint: prepared.fingerprint, model: prepared.model, allowNew: true }); s.as(technical); evaluate({ action: 'claim', id: prepared.id, generationId: uid(6105), actor: alice.toHexString() }); s.as(alice); evaluate({ action: 'cancel', id: prepared.id }); s.as(technical); const late = evaluate({ action: 'finish', id: prepared.id, generationId: uid(6105), actor: alice.toHexString(), state: 'succeeded', result: { criteria: [{ criterionId: 'a', points: 0, feedback: '' }], feedback: '' } }); expect(late.state).toBe('cancelled'); expect(late.result).toBeUndefined(); expect(s.rows('aiReservation').every((row) => row.status === 'consumed')).toBe(true);
+  });
+});
+
+describe('EX-3: procedencia independiente al combinar el banco', () => {
+  it('conserva selecciones distintas de la misma pregunta y retira solo la respuesta citada', () => {
+    const s = setup(); const ctx = s.ctx;
+    ctx.db.question.insert({ id: 80n, subjectId: 1n, topic: 'Ciclos', title: 'Dos explicaciones', body: '¿Cómo justificas un ciclo?', author: alice, status: 'resolved', acceptedAnswerId: 81n, resolvedAt: undefined, createdAt: ctx.timestamp });
+    for (const [id, body] of [[81n, 'ANSWER_A_SOLO_ORIGEN_RETIRADO'], [82n, 'ANSWER_B_ORIGEN_DISPONIBLE']] as const) ctx.db.answer.insert({ id, questionId: 80n, author: alice, body, createdAt: ctx.timestamp });
+    const fromAnswer = (n: number, answerId: string, label: string) => {
+      const prep = JSON.parse(ai_prepare({ withTx: (fn: (tx: Ctx) => unknown) => fn(ctx) } as Parameters<typeof ai_prepare>[0], { payload: JSON.stringify({ id: uid(n), model: 'gemini-test', subjectId: '1', topics: ['Ciclos'], sources: [{ kind: 'question', refId: '80', answerIds: [answerId], topics: ['Ciclos'], includeUnplaced: true }], config: { questionCount: 1, types: ['single'], difficulty: 'basic' } }) })) as AiPreparation;
+      const seed = s.seed(n + 1, ['1'], 1); const generation = ctx.db.aiGeneration.id.find(seed.generationId)!;
+      const fragment = prep.fragments.find((entry) => entry.origins.some((origin) => origin.kind === 'answer' && origin.refId === answerId))!;
+      ctx.db.aiGeneration.id.update({ ...generation, preparationId: prep.id, configJson: JSON.stringify(prep.config), resultJson: JSON.stringify({ questions: [{ ...seed.questions[0]!, text: `Pregunta distinta ${label}`, citations: [fragment.id] }] }) });
+      const exam = s.approve(s.call<ExamDetail>('importGeneration', { generationId: generation.id, requestId: uid(n + 2), title: label }));
+      let bank = s.call<ExamBankDetail>('saveToBank', { examId: exam.id, version: 1, questionId: 'q1', requestId: uid(n + 3) });
+      bank = s.call<ExamBankDetail>('setBankVisibility', { bankId: bank.id, expectedVersion: bank.version, visibility: 'group' }); return bank;
+    };
+    const first = fromAnswer(6500, '81', 'A'); const second = fromAnswer(6520, '82', 'B');
+    s.as(bob);
+    let variant = s.call<ExamDetail>('createVariant', { requestId: uid(6540), title: 'Dos selecciones', plan: { subjectId: '1', topics: ['Ciclos'], questionCount: 2, types: ['single'], difficulty: 'basic', seed: 'selecciones', bankIds: [first.id, second.id] } });
+    expect(variant.draft!.preparation.sources).toHaveLength(2);
+    expect(variant.draft!.preparation.sources.map((source) => source.answerIds)).toEqual(expect.arrayContaining([['81'], ['82']]));
+    variant = s.approve(variant); let attempt = s.start(variant, 'simulation', 6541);
+    attempt = s.call<ExamAttempt>('finishAttempt', { attemptId: attempt.id, expectedRevision: attempt.revision, requestId: uid(6542) }); const score = attempt.result;
+    expect(JSON.stringify(attempt)).toContain('ANSWER_A_SOLO_ORIGEN_RETIRADO'); expect(JSON.stringify(attempt)).toContain('ANSWER_B_ORIGEN_DISPONIBLE');
+    ctx.db.contentStatus.insert({ key: 'answer:81', kind: 'answer', targetId: 81n, withdrawnAt: ctx.timestamp, withdrawnBy: alice, reason: 'Retirada' });
+    const reread = s.call<ExamAttempt>('getAttempt', { attemptId: attempt.id });
+    expect(reread.questions.find((question) => question.id === first.id)!.unavailable).toBe(true);
+    expect(reread.questions.find((question) => question.id === second.id)!.unavailable).not.toBe(true);
+    expect(JSON.stringify(reread)).not.toContain('ANSWER_A_SOLO_ORIGEN_RETIRADO'); expect(JSON.stringify(reread)).toContain('ANSWER_B_ORIGEN_DISPONIBLE'); expect(reread.result).toEqual(score);
+    purgeExamSource(ctx, 'answer', 81n);
+    const purged = s.call<ExamAttempt>('getAttempt', { attemptId: attempt.id });
+    expect(purged.questions.find((question) => question.id === second.id)!.unavailable).not.toBe(true); expect(JSON.stringify(purged)).toContain('ANSWER_B_ORIGEN_DISPONIBLE');
+  });
+});
+
+ it('purga el texto copiado a Repaso sin eliminar sus intervalos privados', () => {
+  const s = setup(); const exam = s.approve(s.imported()); const attempt = s.start(exam);
+  const closed = s.call<ExamAttempt>('finishAttempt', { attemptId: attempt.id, expectedRevision: attempt.revision, requestId: uid(5800) });
+  s.call('sendToSpaced', { attemptId: closed.id, questionId: closed.questions[0]!.id, requestId: uid(5801), question: 'Texto copiado', explanation: 'Explicación privada derivada' });
+  expect(s.rows('spacedExamOrigin')).toHaveLength(1);
+  const cardId = s.rows('spacedCard')[0]!.id as bigint;
+  s.ctx.db.spacedProgress.insert({ key: 'retained-progress', memberId: alice, cardId, cardVersion: 1, step: 3, revision: 2, dueAt: s.ctx.timestamp, reviewedAt: s.ctx.timestamp });
+  purgeExamSpacedSource(s.ctx, 'note', 1n);
+  expect(s.rows('spacedCard')[0]).toMatchObject({ question: '', explanation: '', hint: '', archived: true });
+  expect(s.rows('spacedExamOrigin')).toHaveLength(0); expect(s.rows('spacedProgress')[0]).toMatchObject({ step: 3, revision: 2, dueAt: s.ctx.timestamp });
 });

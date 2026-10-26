@@ -4,6 +4,10 @@ Fuente de alcance: [definicion-del-proyecto.md](definicion-del-proyecto.md).
 Actualizado tras la publicación conjunta del **21 de octubre de 2026**. Este documento
 separa implementación, publicación y aceptación con personas y dispositivos reales.
 
+## Ampliaciones locales del 26 de octubre de 2026
+
+Exámenes EX-3A/B/C/D y Exposiciones con Gemini y audio están implementados localmente. Incluyen nuevas fuentes, documentos/OCR, banco/variantes, respuestas abiertas y evaluación asistida; esquemas, preguntas, comentarios, transcripción y audio privado. [Alcance y preparación de publicación](examenes-exposiciones-ampliaciones.md). La publicación y la aceptación humana siguen pendientes; las tablas inferiores describen la versión publicada y las ampliaciones que todavía falta llevar a producción.
+
 ## Publicación comprobada
 
 La [web de B20](https://app-b20.pages.dev/) sirve la cuarta entrega, Guías, Exámenes EX-2,

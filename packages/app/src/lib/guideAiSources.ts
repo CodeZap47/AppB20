@@ -16,7 +16,7 @@ export const guideAiCandidateKey = (source: { kind: string; refId: string }) => 
 export function guideAiCandidates(data: Snapshot, subjectId: string, termId?: string): GuideAiCandidate[] {
   if (data.me?.status !== 'active') return [];
   const candidates: GuideAiCandidate[] = aiSourceCandidates(data, subjectId, termId)
-    .filter((source) => source.kind !== 'guide' && !source.personal)
+    .filter((source) => ['note', 'assignment', 'activity', 'work', 'evidence'].includes(source.kind) && !source.personal)
     .map((source) => ({ kind: source.kind as GuideAiCandidateKind, refId: source.refId,
       subjectId: source.subjectId, termId: source.termId, title: source.title,
       topics: source.topics, version: source.version, revision: source.revision,

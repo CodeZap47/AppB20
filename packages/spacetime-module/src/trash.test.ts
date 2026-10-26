@@ -7,11 +7,16 @@ vi.mock('spacetimedb/server', () => {
     schema: () => ({ reducer: handler, procedure: handler, init: handler, clientConnected: handler, view: handler }) };
 });
 import './index';
+import { channel_messages, group_messages, edit_message, toggle_reaction, get_file_download_access } from './index';
 import { withdrawContent } from './communityHandlers';
 import { canReadTarget } from './delivery2Handlers';
 import { readContributionOrigins } from './contributionOrigins';
 import { assertRetentionReadable, expireContent, purgeDue, readTrashEntries, setMaintenanceService, scheduleRetention } from './trashHandlers';
 import type { Ctx } from './moduleContext';
+import { moderateContentItem } from './adminContentHandlers';
+import { readAdminContentEntries } from './contentInventory';
+import { commentReadable, postReadable, toggleFeedReaction } from './feedHandlers';
+import { visibleStickerIds } from './nativeStickersHandlers';
 const identity = (digit: string) => Identity.fromString(digit.repeat(64));
 const admin = identity('a'), author = identity('b'), coauthor = identity('c'), other = identity('d'), moduleId = identity('e'), service = identity('f');
 const at = new Timestamp(1_700_000_000_000_000n);
@@ -24,7 +29,7 @@ function setup(extra: Record<string, Row[]> = {}) {
     appConfig: [{ id: 0, owner: admin }], authConfig: [{ id: 0, issuer: 'https://auth.spacetimedb.com/oidc', audiences: ['test'] }],
     subject: [{ id: 1n }], note: [note(1n), note(2n, 'personal')], ...extra,
   };
-  const keys: Record<string, string> = { member: 'identity', contentStatus: 'key', contentRetention: 'key', noteDetail: 'noteId', resourceVersion: 'key', evidenceDetail: 'evidenceId', workDetail: 'workId', contributionTombstone: 'fingerprint', roomSummary: 'roomId', teachingPersonal: 'practiceId', guideAiProvenance: 'key' };
+  const keys: Record<string, string> = { member: 'identity', memberEmail: 'email', memberAccess: 'memberIdentity', adminContentResult: 'key', contentStatus: 'key', contentRetention: 'key', noteDetail: 'noteId', resourceVersion: 'key', evidenceDetail: 'evidenceId', workDetail: 'workId', contributionTombstone: 'fingerprint', roomSummary: 'roomId', teachingPersonal: 'practiceId', guideAiProvenance: 'key' };
   const tables = new Map<string, Row[]>(); let next = 1000n;
   const rows = (name: string) => { if (!tables.has(name)) tables.set(name, [...(initial[name] ?? [])]); return tables.get(name)!; };
   const db = new Proxy({}, { get(_target, name: string) {
@@ -38,8 +43,9 @@ function setup(extra: Record<string, Row[]> = {}) {
   } });
   const mutable = { db, sender: author, identity: moduleId, timestamp: at, env: {}, senderAuth: { jwt: { issuer: 'https://auth.spacetimedb.com/oidc', audience: ['test'], fullPayload: { email: 'synthetic@example.test', email_verified: true } } } };
   const ctx = mutable as unknown as Ctx;
-  return { ctx, rows, note, as: (sender: Identity) => { mutable.sender = sender; }, time: (micros: bigint) => { mutable.timestamp = new Timestamp(micros); },
-    maintenance: () => { mutable.sender = admin; setMaintenanceService(ctx, { identity: service }); mutable.sender = service; } };
+  const as = (sender: Identity) => { mutable.sender = sender; mutable.senderAuth.jwt.fullPayload.email = `${sender.toHexString()}@example.test`; };
+  return { ctx, rows, note, as, time: (micros: bigint) => { mutable.timestamp = new Timestamp(micros); },
+    maintenance: () => { as(admin); setMaintenanceService(ctx, { identity: service }); as(service); } };
 }
 const withdraw = { kind: 'note', targetId: 1n, withdrawn: true, expectedVersion: 1, reason: '' };
 
@@ -203,4 +209,148 @@ describe('papelera de 30 días con reloj del servidor', () => {
     expect(s.rows('resourceUpload')).toEqual([]); expect(s.rows('resourceCapacity')[0]?.reservedBytes).toBe(0n);
   });
 
+});
+
+describe('moderación de aportes y mensajes grupales', () => {
+  const message = (id: bigint, sender = author) => ({ id, sender, text: 'Texto grupal confidencial', sentAt: at });
+  const post = (id: bigint) => ({ id, author, text: 'Texto del feed', requestId: String(id), createdAt: at });
+  const comment = (id: bigint, postId = 10n, person = other) => ({ id, postId, author: person, text: 'Comentario ajeno', requestId: String(id), createdAt: at });
+  const action = { operationId: 'review-1', kind: 'feed_post', targetId: 10n, expectedVersion: 1, withdrawn: true, reason: 'Retirada revisada', acknowledgeImpact: false };
+
+  it('conserva el feed y comentarios de integrantes dados de baja', () => {
+    const s = setup({ feedPost: [post(10n)], feedComment: [comment(11n)] });
+    s.rows('member').find((row) => row.identity === author)!.status = 'removed';
+    s.rows('member').find((row) => row.identity === other)!.status = 'removed';
+    expect(postReadable(s.ctx.db, admin, 10n)).toBe(true);
+    expect(commentReadable(s.ctx.db, admin, s.rows('feedComment')[0] as never)).toBe(true);
+    expect(postReadable(s.ctx.db, author, 10n)).toBe(false);
+  });
+
+  it('excluye datos privados y exige revisar coautores, dependencias y referencias antes de retirar', () => {
+    const s = setup({ feedPost: [post(10n)], feedComment: [comment(11n)],
+      work: [{ id: 12n, title: 'Trabajo conjunto', createdBy: author, version: 1 }], workAuthor: [{ id: 1n, workId: 12n, author }, { id: 2n, workId: 12n, author: coauthor }],
+      directMessage: [message(13n)], agentDraft: [{ id: 'private', text: 'Privado' }],
+      resourceFile: [{ id: 'shared', targetKind: 'feed_post', targetId: 10n }], messageReport: [{ id: 1n, attachmentIds: ['shared'] }],
+    });
+    expect(readAdminContentEntries(s.ctx.db, author)).toEqual([]);
+    s.as(admin); const entries = readAdminContentEntries(s.ctx.db, admin);
+    expect(entries.some((row) => row.kind === 'direct_message' || row.targetId === 2n)).toBe(false);
+    expect(entries.find((row) => row.kind === 'feed_post')).toMatchObject({ foreignDependencies: 1, reportReferences: 1, safeForBulk: false });
+    expect(entries.find((row) => row.kind === 'work')).toMatchObject({ collaborative: true, safeForBulk: false });
+    moderateContentItem(s.ctx, action);
+    expect(s.rows('adminContentResult')[0]).toMatchObject({ status: 'failed', version: 1 });
+    expect(s.rows('contentStatus')).toEqual([]);
+    moderateContentItem(s.ctx, { ...action, operationId: 'review-2', acknowledgeImpact: true, expectedImpact: '0:1:0:1' });
+    expect(s.rows('adminContentResult')[1]).toMatchObject({ status: 'completed', version: 2 });
+    moderateContentItem(s.ctx, { ...action, operationId: 'review-2', acknowledgeImpact: true, expectedImpact: '0:1:0:1' });
+    expect(s.rows('contentRetention')).toHaveLength(1);
+    expect(s.rows('adminContentResult')).toHaveLength(2);
+    expect(() => moderateContentItem(s.ctx, { ...action, operationId: 'review-2', acknowledgeImpact: true, expectedImpact: '0:1:0:1', reason: 'Otra decisión' })).toThrow('otra decisión');
+  });
+
+  it('restaura una publicación sin restaurar comentarios retirados independientemente ni borrados', () => {
+    const s = setup({ feedPost: [post(10n)], feedComment: [comment(11n), comment(12n), { ...comment(13n), text: '', deletedAt: at }] });
+    s.as(admin);
+    withdrawContent(s.ctx, { ...withdraw, kind: 'feed_comment', targetId: 11n, reason: 'Comentario moderado' });
+    moderateContentItem(s.ctx, { ...action, acknowledgeImpact: true, expectedImpact: '0:2:0:0' });
+    expect(postReadable(s.ctx.db, admin, 10n)).toBe(false);
+    expect(commentReadable(s.ctx.db, admin, s.rows('feedComment')[1] as never)).toBe(false);
+    expect(() => toggleFeedReaction(s.ctx, { targetKind: 'post', targetId: 10n, emoji: '👍' })).toThrow('disponible');
+    moderateContentItem(s.ctx, { ...action, operationId: 'restore', expectedVersion: 2, withdrawn: false });
+    expect(postReadable(s.ctx.db, admin, 10n)).toBe(true);
+    expect(s.rows('feedComment').map((row) => commentReadable(s.ctx.db, admin, row as never))).toEqual([false, true, false]);
+    expect(s.rows('notification')).toEqual([]);
+    expect(() => withdrawContent(s.ctx, { ...withdraw, kind: 'feed_comment', targetId: 13n, withdrawn: false })).toThrow('definitivamente');
+  });
+
+  it('redacta mensajes y citas en las vistas, impide interacciones y mantiene respuestas al purgar', () => {
+    const s = setup({ groupMessage: [message(10n), { ...message(11n, other), replyToId: 10n }],
+      channelMessage: [{ ...message(20n), channelId: 1n }, { ...message(21n, other), channelId: 1n, replyToId: 20n }],
+      chatChannel: [{ id: 1n, name: 'Materia' }], messageReaction: [{ id: 1n, scope: 'group', messageId: 10n, member: other, emoji: '👍' }],
+    });
+    s.as(admin);
+    for (const [kind, targetId] of [['group_message', 10n], ['channel_message', 20n]] as const) withdrawContent(s.ctx, { ...withdraw, kind, targetId, reason: 'Moderación', acknowledgeImpact: true });
+    const view = group_messages as unknown as (ctx: Ctx) => Row[];
+    const channelView = channel_messages as unknown as (ctx: Ctx) => Row[];
+    expect(view(s.ctx)[0]).toMatchObject({ id: 10n, text: '', deletedAt: at });
+    expect(channelView(s.ctx)[0]).toMatchObject({ id: 20n, text: '', deletedAt: at });
+    expect(canReadTarget(s.ctx.db, admin, 'group_message', 10n)).toBe(false);
+    const react = toggle_reaction as unknown as (ctx: Ctx, args: object) => void;
+    expect(() => react(s.ctx, { scope: 'group', messageId: 10n, emoji: '👍' })).toThrow('retirado');
+    s.as(author); const edit = edit_message as unknown as (ctx: Ctx, args: object) => void;
+    expect(() => edit(s.ctx, { scope: 'group', messageId: 10n, text: 'Evitar moderación' })).toThrow('retirado');
+    s.maintenance(); s.time(at.microsSinceUnixEpoch + RETENTION_MICROS); purgeDue(s.ctx, { batchSize: 20 });
+    expect(s.rows('groupMessage')[0]).toMatchObject({ id: 10n, text: '', deletedAt: s.ctx.timestamp });
+    expect(s.rows('groupMessage')[1]).toMatchObject({ id: 11n, replyToId: 10n, text: 'Texto grupal confidencial' });
+    expect(s.rows('channelMessage')[1]).toMatchObject({ id: 21n, replyToId: 20n });
+    expect(s.rows('messageReaction')).toEqual([]);
+    expect(s.rows('contentRetention').every((row) => row.state === 'purged')).toBe(true);
+  });
+
+  it('registra fallos por versiones concurrentes y no altera la membresía previamente retirada', () => {
+    const s = setup({ feedPost: [post(10n)] }); s.as(admin);
+    s.rows('member').find((row) => row.identity === author)!.status = 'removed';
+    moderateContentItem(s.ctx, { ...action, expectedVersion: 9 });
+    expect(s.rows('adminContentResult')[0]).toMatchObject({ status: 'failed', version: 1 });
+    expect(s.rows('member').find((row) => row.identity === author)?.status).toBe('removed');
+    moderateContentItem(s.ctx, { ...action, operationId: 'fresh-review' });
+    expect(s.rows('adminContentResult')[1]).toMatchObject({ status: 'completed' });
+  });
+
+  it('cierra descargas incluso administrativas salvo autorización independiente de un reporte', () => {
+    const s = setup({ groupMessage: [message(10n)], resourceFile: [{ id: 'group-file', targetKind: 'group_message', targetId: 10n,
+      name: 'Adjunto grupal', storageKey: 'external-safe-key', size: 4n, contentType: 'text/plain', etag: 'etag', uploadedBy: author, createdAt: at }] });
+    const download = get_file_download_access as unknown as (ctx: { withTx: (callback: (tx: Ctx) => string) => string }, input: { fileId: string }) => string;
+    const read = () => download({ withTx: (callback) => callback(s.ctx) }, { fileId: 'group-file' });
+    s.as(admin); expect(JSON.parse(read()).fileId).toBe('group-file');
+    withdrawContent(s.ctx, { ...withdraw, kind: 'group_message', targetId: 10n, reason: 'Retirada' });
+    expect(read).toThrow('retirado');
+    s.rows('messageReport').push({ id: 1n, scope: 'group', messageId: 10n, reporter: other, evidenceText: 'Evidencia autorizada', attachmentIds: ['group-file'] });
+    expect(JSON.parse(read()).fileId).toBe('group-file');
+    s.as(author); expect(read).toThrow('retirado');
+    s.maintenance(); s.time(at.microsSinceUnixEpoch + RETENTION_MICROS); purgeDue(s.ctx, { batchSize: 20 });
+    expect(s.rows('resourceFile')).toHaveLength(1);
+    s.as(admin); expect(JSON.parse(read()).fileId).toBe('group-file');
+    s.as(other); expect(JSON.parse(read()).fileId).toBe('group-file');
+  });
+
+  it('retirar un mensaje cierra el acceso a stickers privados compartidos únicamente en él', () => {
+    const s = setup({ groupMessage: [{ ...message(10n), text: '[[sticker:21]]' }],
+      sticker: [{ id: 21n, packId: 20n }], stickerPack: [{ id: 20n, owner: author, shared: false }] });
+    expect(visibleStickerIds(s.ctx.db, admin).has(21n)).toBe(true);
+    s.as(admin); withdrawContent(s.ctx, { ...withdraw, kind: 'group_message', targetId: 10n, reason: 'Retirada' });
+    expect(visibleStickerIds(s.ctx.db, admin).has(21n)).toBe(false);
+    expect(visibleStickerIds(s.ctx.db, author).has(21n)).toBe(true);
+  });
+
+  it('rechaza una aceptación de impacto obsoleta aunque la versión del aporte no cambie', () => {
+    const s = setup({ feedPost: [post(10n)], feedComment: [comment(11n)] }); s.as(admin);
+    s.rows('feedComment').push(comment(12n));
+    moderateContentItem(s.ctx, { ...action, acknowledgeImpact: true, expectedImpact: '0:1:0:0' });
+    expect(s.rows('adminContentResult')[0]).toMatchObject({ status: 'failed', error: expect.stringContaining('impacto') });
+    expect(s.rows('contentStatus')).toEqual([]);
+    moderateContentItem(s.ctx, { ...action, operationId: 'updated-review', acknowledgeImpact: true, expectedImpact: '0:2:0:0' });
+    expect(s.rows('adminContentResult')[1]).toMatchObject({ status: 'completed' });
+  });
+
+  it('un enlace de texto no concede archivos privados; las referencias tipadas conservan sus permisos propios', () => {
+    const s = setup({ resourceFile: [{ id: 'private-file', targetKind: 'note', targetId: 2n, name: 'Privado', storageKey: 'external-safe-key', size: 4n,
+      contentType: 'text/plain', etag: 'etag', uploadedBy: author, createdAt: at }] });
+    s.rows('note').find((row) => row.id === 1n)!.body = '(resource:private-file)';
+    const download = get_file_download_access as unknown as (ctx: { withTx: (callback: (tx: Ctx) => string) => string }, input: { fileId: string }) => string;
+    const read = () => download({ withTx: (callback) => callback(s.ctx) }, { fileId: 'private-file' });
+    s.as(admin); expect(read).toThrow('acceso');
+    s.rows('note').push({ ...s.note(3n, 'personal'), author: other });
+    s.rows('noteVersion').push({ id: 1n, noteId: 3n, version: 1, author: other, visibility: 'personal', attachmentIds: ['private-file'] });
+    expect(read).toThrow('acceso');
+    s.as(other); expect(JSON.parse(read()).fileId).toBe('private-file');
+    s.rows('note').push(s.note(4n));
+    s.rows('noteVersion').push({ id: 2n, noteId: 4n, version: 1, author, visibility: 'group', attachmentIds: ['private-file'] });
+    s.as(author); withdrawContent(s.ctx, { ...withdraw, targetId: 2n });
+    s.as(admin); expect(JSON.parse(read()).fileId).toBe('private-file');
+    s.maintenance(); s.time(at.microsSinceUnixEpoch + RETENTION_MICROS); purgeDue(s.ctx, { batchSize: 20 });
+    s.as(admin); expect(JSON.parse(read()).fileId).toBe('private-file');
+    s.rows('member').find((row) => row.identity === admin)!.status = 'removed';
+    expect(read).toThrow('activo');
+  });
 });

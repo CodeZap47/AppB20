@@ -63,6 +63,72 @@ export type ActivityLink = __Infer<typeof ActivityLink>;
 export const ActivityLinks = __t.object("ActivityLinks", {});
 export type ActivityLinks = __Infer<typeof ActivityLinks>;
 
+export const AdminAccessOperation = __t.object("AdminAccessOperation", {
+  id: __t.string(),
+  actor: __t.identity(),
+  request: __t.string(),
+  result: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type AdminAccessOperation = __Infer<typeof AdminAccessOperation>;
+
+export const AdminContentEntries = __t.object("AdminContentEntries", {});
+export type AdminContentEntries = __Infer<typeof AdminContentEntries>;
+
+export const AdminContentEntry = __t.object("AdminContentEntry", {
+  kind: __t.string(),
+  targetId: __t.u64(),
+  owners: __t.array(__t.identity()),
+  title: __t.string(),
+  version: __t.u32(),
+  withdrawn: __t.bool(),
+  collaborative: __t.bool(),
+  foreignDependencies: __t.u32(),
+  sharedFiles: __t.u32(),
+  reportReferences: __t.u32(),
+  safeForBulk: __t.bool(),
+});
+export type AdminContentEntry = __Infer<typeof AdminContentEntry>;
+
+export const AdminContentResult = __t.object("AdminContentResult", {
+  key: __t.string(),
+  operationId: __t.string(),
+  actor: __t.identity(),
+  kind: __t.string(),
+  targetId: __t.u64(),
+  expectedVersion: __t.u32(),
+  withdrawn: __t.bool(),
+  reason: __t.string(),
+  acknowledgeImpact: __t.bool(),
+  expectedImpact: __t.option(__t.string()),
+  status: __t.string(),
+  error: __t.string(),
+  version: __t.u32(),
+  completedAt: __t.timestamp(),
+});
+export type AdminContentResult = __Infer<typeof AdminContentResult>;
+
+export const AdminContentResults = __t.object("AdminContentResults", {});
+export type AdminContentResults = __Infer<typeof AdminContentResults>;
+
+export const AdminMember = __t.object("AdminMember", {
+  identity: __t.identity(),
+  displayName: __t.string(),
+  status: __t.string(),
+  isCreator: __t.bool(),
+  email: __t.option(__t.string()),
+  emails: __t.array(__t.string()),
+  generation: __t.u32(),
+  origin: __t.string(),
+  invitationLinkId: __t.option(__t.string()),
+  joinedAt: __t.timestamp(),
+  removedAt: __t.option(__t.timestamp()),
+});
+export type AdminMember = __Infer<typeof AdminMember>;
+
+export const AdminMembers = __t.object("AdminMembers", {});
+export type AdminMembers = __Infer<typeof AdminMembers>;
+
 export const AgentAiRun = __t.object("AgentAiRun", {
   id: __t.string(),
   owner: __t.identity(),
@@ -622,6 +688,47 @@ export const DirectMessage = __t.object("DirectMessage", {
 });
 export type DirectMessage = __Infer<typeof DirectMessage>;
 
+export const DocumentFileVerification = __t.object("DocumentFileVerification", {
+  fileId: __t.string(),
+  stamp: __t.string(),
+  sha256: __t.string(),
+  objectEtag: __t.string(),
+  verifiedAt: __t.timestamp(),
+});
+export type DocumentFileVerification = __Infer<typeof DocumentFileVerification>;
+
+export const DocumentOcrDraft = __t.object("DocumentOcrDraft", {
+  id: __t.string(),
+  actor: __t.identity(),
+  revision: __t.u32(),
+  json: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type DocumentOcrDraft = __Infer<typeof DocumentOcrDraft>;
+
+export const DocumentTranscription = __t.object("DocumentTranscription", {
+  id: __t.string(),
+  actor: __t.identity(),
+  fileId: __t.string(),
+  json: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type DocumentTranscription = __Infer<typeof DocumentTranscription>;
+
+export const EmailRestriction = __t.object("EmailRestriction", {
+  email: __t.string(),
+  blocked: __t.bool(),
+  removedAt: __t.option(__t.timestamp()),
+  blockedAt: __t.option(__t.timestamp()),
+  reason: __t.string(),
+  updatedBy: __t.identity(),
+  updatedAt: __t.timestamp(),
+});
+export type EmailRestriction = __Infer<typeof EmailRestriction>;
+
+export const EmailRestrictions = __t.object("EmailRestrictions", {});
+export type EmailRestrictions = __Infer<typeof EmailRestrictions>;
+
 export const Evidence = __t.object("Evidence", {
   id: __t.u64(),
   activityId: __t.u64(),
@@ -673,6 +780,36 @@ export const ExamAttempt = __t.object("ExamAttempt", {
   startedAt: __t.timestamp(),
 });
 export type ExamAttempt = __Infer<typeof ExamAttempt>;
+
+export const ExamBankQuestion = __t.object("ExamBankQuestion", {
+  id: __t.string(),
+  owner: __t.identity(),
+  subjectId: __t.u64(),
+  termId: __t.option(__t.u64()),
+  visibility: __t.string(),
+  version: __t.u32(),
+  updatedAt: __t.timestamp(),
+});
+export type ExamBankQuestion = __Infer<typeof ExamBankQuestion>;
+
+export const ExamBankVersion = __t.object("ExamBankVersion", {
+  key: __t.string(),
+  bankId: __t.string(),
+  version: __t.u32(),
+  json: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type ExamBankVersion = __Infer<typeof ExamBankVersion>;
+
+export const ExamEvaluationDraft = __t.object("ExamEvaluationDraft", {
+  id: __t.string(),
+  actor: __t.identity(),
+  attemptId: __t.string(),
+  questionId: __t.string(),
+  json: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type ExamEvaluationDraft = __Infer<typeof ExamEvaluationDraft>;
 
 export const ExamGenerationImport = __t.object("ExamGenerationImport", {
   generationId: __t.string(),
@@ -962,6 +1099,12 @@ export const HelpVersion = __t.object("HelpVersion", {
 });
 export type HelpVersion = __Infer<typeof HelpVersion>;
 
+export const IndividualInvitationGrant = __t.object("IndividualInvitationGrant", {
+  email: __t.string(),
+  issuedAt: __t.timestamp(),
+});
+export type IndividualInvitationGrant = __Infer<typeof IndividualInvitationGrant>;
+
 export const Invitation = __t.object("Invitation", {
   email: __t.string(),
   isCreator: __t.bool(),
@@ -986,8 +1129,50 @@ export type InvitationEmail = __Infer<typeof InvitationEmail>;
 export const InvitationEmailStatuses = __t.object("InvitationEmailStatuses", {});
 export type InvitationEmailStatuses = __Infer<typeof InvitationEmailStatuses>;
 
+export const InvitationLink = __t.object("InvitationLink", {
+  id: __t.string(),
+  name: __t.string(),
+  tokenHash: __t.string(),
+  ciphertext: __t.string(),
+  iv: __t.string(),
+  keyVersion: __t.string(),
+  active: __t.bool(),
+  createdBy: __t.identity(),
+  createdAt: __t.timestamp(),
+  expiresAt: __t.option(__t.timestamp()),
+  maxUses: __t.option(__t.u32()),
+  usedCount: __t.u32(),
+  version: __t.u32(),
+  deactivatedAt: __t.option(__t.timestamp()),
+  replacementId: __t.option(__t.string()),
+});
+export type InvitationLink = __Infer<typeof InvitationLink>;
+
 export const Invitations = __t.object("Invitations", {});
 export type Invitations = __Infer<typeof Invitations>;
+
+export const InviteLink = __t.object("InviteLink", {
+  id: __t.u64(),
+  tokenHash: __t.string(),
+  createdBy: __t.identity(),
+  createdAt: __t.timestamp(),
+  expiresAt: __t.timestamp(),
+  maxUses: __t.u32(),
+  uses: __t.u32(),
+  revokedAt: __t.option(__t.timestamp()),
+});
+export type InviteLink = __Infer<typeof InviteLink>;
+
+export const InviteLinkRedemption = __t.object("InviteLinkRedemption", {
+  key: __t.string(),
+  linkId: __t.u64(),
+  email: __t.string(),
+  redeemedAt: __t.timestamp(),
+});
+export type InviteLinkRedemption = __Infer<typeof InviteLinkRedemption>;
+
+export const InviteLinks = __t.object("InviteLinks", {});
+export type InviteLinks = __Infer<typeof InviteLinks>;
 
 export const LastSeen = __t.object("LastSeen", {
   identity: __t.identity(),
@@ -1011,6 +1196,26 @@ export const Member = __t.object("Member", {
 });
 export type Member = __Infer<typeof Member>;
 
+export const MemberAccess = __t.object("MemberAccess", {
+  memberIdentity: __t.identity(),
+  generation: __t.u32(),
+  origin: __t.string(),
+  sourceId: __t.option(__t.string()),
+  admittedAt: __t.timestamp(),
+  removedAt: __t.option(__t.timestamp()),
+});
+export type MemberAccess = __Infer<typeof MemberAccess>;
+
+export const MemberAdmission = __t.object("MemberAdmission", {
+  id: __t.string(),
+  memberIdentity: __t.identity(),
+  generation: __t.u32(),
+  origin: __t.string(),
+  sourceId: __t.option(__t.string()),
+  joinedAt: __t.timestamp(),
+});
+export type MemberAdmission = __Infer<typeof MemberAdmission>;
+
 export const MemberBlock = __t.object("MemberBlock", {
   key: __t.string(),
   owner: __t.identity(),
@@ -1018,6 +1223,13 @@ export const MemberBlock = __t.object("MemberBlock", {
   createdAt: __t.timestamp(),
 });
 export type MemberBlock = __Infer<typeof MemberBlock>;
+
+export const MemberEmail = __t.object("MemberEmail", {
+  email: __t.string(),
+  memberIdentity: __t.identity(),
+  verifiedAt: __t.timestamp(),
+});
+export type MemberEmail = __Infer<typeof MemberEmail>;
 
 export const MemberOnboarding = __t.object("MemberOnboarding", {
   memberId: __t.identity(),
@@ -1057,8 +1269,29 @@ export type MemberProfileCovers = __Infer<typeof MemberProfileCovers>;
 export const MemberProfiles = __t.object("MemberProfiles", {});
 export type MemberProfiles = __Infer<typeof MemberProfiles>;
 
+export const MemberUploadStat = __t.object("MemberUploadStat", {
+  memberId: __t.identity(),
+  bytes: __t.u64(),
+  fileCount: __t.u64(),
+});
+export type MemberUploadStat = __Infer<typeof MemberUploadStat>;
+
+export const MemberUploadStats = __t.object("MemberUploadStats", {});
+export type MemberUploadStats = __Infer<typeof MemberUploadStats>;
+
 export const Members = __t.object("Members", {});
 export type Members = __Infer<typeof Members>;
+
+export const MembershipEvent = __t.object("MembershipEvent", {
+  id: __t.u64(),
+  memberIdentity: __t.option(__t.identity()),
+  email: __t.option(__t.string()),
+  action: __t.string(),
+  reason: __t.string(),
+  actor: __t.identity(),
+  at: __t.timestamp(),
+});
+export type MembershipEvent = __Infer<typeof MembershipEvent>;
 
 export const MessageReaction = __t.object("MessageReaction", {
   id: __t.u64(),
@@ -1086,6 +1319,24 @@ export const MessageReport = __t.object("MessageReport", {
   resolvedAt: __t.option(__t.timestamp()),
 });
 export type MessageReport = __Infer<typeof MessageReport>;
+
+export const MoodleAssignmentLink = __t.object("MoodleAssignmentLink", {
+  moodleId: __t.string(),
+  assignmentId: __t.u64(),
+  lastTitle: __t.string(),
+  lastDueDate: __t.string(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type MoodleAssignmentLink = __Infer<typeof MoodleAssignmentLink>;
+
+export const MoodleSyncConfig = __t.object("MoodleSyncConfig", {
+  id: __t.u32(),
+  identity: __t.identity(),
+  actor: __t.identity(),
+  enabled: __t.bool(),
+});
+export type MoodleSyncConfig = __Infer<typeof MoodleSyncConfig>;
 
 export const MuseumEntries = __t.object("MuseumEntries", {});
 export type MuseumEntries = __Infer<typeof MuseumEntries>;
@@ -1526,6 +1777,14 @@ export type PollVotes = __Infer<typeof PollVotes>;
 export const Polls = __t.object("Polls", {});
 export type Polls = __Infer<typeof Polls>;
 
+export const PresentationAiDraft = __t.object("PresentationAiDraft", {
+  id: __t.string(),
+  actor: __t.identity(),
+  attemptId: __t.u64(),
+  json: __t.string(),
+});
+export type PresentationAiDraft = __Infer<typeof PresentationAiDraft>;
+
 export const PresentationAttempt = __t.object("PresentationAttempt", {
   id: __t.u64(),
   practiceId: __t.u64(),
@@ -1553,6 +1812,38 @@ export type PresentationAttempt = __Infer<typeof PresentationAttempt>;
 
 export const PresentationAttempts = __t.object("PresentationAttempts", {});
 export type PresentationAttempts = __Infer<typeof PresentationAttempts>;
+
+export const PresentationAudioChunk = __t.object("PresentationAudioChunk", {
+  key: __t.string(),
+  uploadId: __t.string(),
+  index: __t.u32(),
+  bytes: __t.byteArray(),
+  sha256: __t.string(),
+});
+export type PresentationAudioChunk = __Infer<typeof PresentationAudioChunk>;
+
+export const PresentationAudioGrant = __t.object("PresentationAudioGrant", {
+  uploadId: __t.string(),
+  reviewer: __t.identity(),
+  grantedAt: __t.timestamp(),
+});
+export type PresentationAudioGrant = __Infer<typeof PresentationAudioGrant>;
+
+export const PresentationAudioUpload = __t.object("PresentationAudioUpload", {
+  id: __t.string(),
+  actor: __t.identity(),
+  attemptId: __t.u64(),
+  name: __t.string(),
+  mime: __t.string(),
+  bytes: __t.u64(),
+  sha256: __t.string(),
+  chunkCount: __t.u32(),
+  state: __t.string(),
+  durationSeconds: __t.option(__t.f64()),
+  createdAt: __t.timestamp(),
+  expiresAt: __t.timestamp(),
+});
+export type PresentationAudioUpload = __Infer<typeof PresentationAudioUpload>;
 
 export const PresentationFeedback = __t.object("PresentationFeedback", {});
 export type PresentationFeedback = __Infer<typeof PresentationFeedback>;
@@ -1914,6 +2205,19 @@ export const SpacedEnrollment = __t.object("SpacedEnrollment", {
   updatedAt: __t.timestamp(),
 });
 export type SpacedEnrollment = __Infer<typeof SpacedEnrollment>;
+
+export const SpacedExamOrigin = __t.object("SpacedExamOrigin", {
+  id: __t.u64(),
+  key: __t.string(),
+  actor: __t.identity(),
+  examId: __t.string(),
+  examVersion: __t.u32(),
+  questionId: __t.string(),
+  collectionId: __t.u64(),
+  cardId: __t.u64(),
+  preparationJson: __t.string(),
+});
+export type SpacedExamOrigin = __Infer<typeof SpacedExamOrigin>;
 
 export const SpacedProgress = __t.object("SpacedProgress", {
   key: __t.string(),

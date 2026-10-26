@@ -13,10 +13,10 @@ function requestId(value: string) { if (!UUID.test(value)) throw new SenderError
 export function visibleStickerIds(db: ViewDb, sender: Ctx['sender']): Set<bigint> {
   const visible = new Set<bigint>();
   if (!isActive(db, sender)) return visible;
-  const collect = (messages: Iterable<{ text: string; deletedAt?: unknown }>) => {
-    for (const message of messages) if (!message.deletedAt) for (const match of message.text.matchAll(TOKEN)) visible.add(BigInt(match[1]));
+  const collect = (messages: Iterable<{ id: bigint; text: string; deletedAt?: unknown }>, kind?: string) => {
+    for (const message of messages) if (!message.deletedAt && (!kind || !db.contentStatus.key.find(`${kind}:${message.id}`)?.withdrawnAt)) for (const match of message.text.matchAll(TOKEN)) visible.add(BigInt(match[1]));
   };
-  collect(db.groupMessage.iter()); collect(db.channelMessage.iter());
+  collect(db.groupMessage.iter(), 'group_message'); collect(db.channelMessage.iter(), 'channel_message');
   for (const chat of [...db.directConversation.userA.filter(sender), ...db.directConversation.userB.filter(sender)]) collect(db.directMessage.conversationId.filter(chat.id));
   for (const sticker of db.sticker.iter()) {
     const pack = db.stickerPack.id.find(sticker.packId);

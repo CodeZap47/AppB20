@@ -1,3 +1,4 @@
+import { DemoPresentationFeatures } from './presentationFeatureDemo';
 import {
   emptyPresentationObservations, normalizePresentationAnswer, normalizePresentationBody,
   normalizePresentationConfiguration, normalizePresentationFeedback, normalizePresentationNextSteps,
@@ -29,7 +30,14 @@ const request = (value: string) => {
 
 /** Simula las mismas transacciones y vistas privadas del módulo real. */
 export class DemoPresentationStore implements PresentationActions {
-  constructor(private ctx: Context) {}
+  readonly features: DemoPresentationFeatures;
+  constructor(private ctx: Context) {
+    this.features = new DemoPresentationFeatures({ actor: () => ctx.active().id, now: () => ctx.now().getTime(),
+      attempt: (id, own) => { const { row, practice } = this.attempt(id, own); return { attempt: row, practice }; },
+      applyOutline: (id, body, expected) => { const { row } = this.attempt(id, true); version(row.version, expected); if (row.status !== 'draft') throw new Error('El intento ya está concluido.'); row.body = body; row.version++; row.updatedAt = ctx.now(); ctx.emit(); },
+      addQuestion: (id, text, requestId) => { this.askPresentationQuestion(id, text, requestId); },
+    });
+  }
   private active(id: Id) { return this.ctx.state().members.some((member) => member.id === id && member.status === 'active'); }
   private practice(id: Id, owner = false, allowArchived = false) {
     const me = this.ctx.active();
@@ -127,11 +135,11 @@ export class DemoPresentationStore implements PresentationActions {
   setPresentationReviewer(practiceId: Id, reviewerId: Id | undefined, expectedVersion: number) {
     const row = this.practice(practiceId, true); version(row.version, expectedVersion);
     if (reviewerId && (reviewerId === row.ownerId || !this.active(reviewerId))) throw new Error('Elige a otro integrante activo.');
-    row.reviewerId = reviewerId; this.mutatePractice(row); this.ctx.emit();
+    this.features.revoke(practiceId); row.reviewerId = reviewerId; this.mutatePractice(row); this.ctx.emit();
   }
   archivePresentationPractice(practiceId: Id, archived: boolean, expectedVersion: number) {
     const row = this.practice(practiceId, true, true); version(row.version, expectedVersion);
-    row.archived = archived; if (archived) row.reviewerId = undefined; this.mutatePractice(row); this.ctx.emit();
+    if (archived) this.features.revoke(practiceId); row.archived = archived; if (archived) row.reviewerId = undefined; this.mutatePractice(row); this.ctx.emit();
   }
   createPresentationAttempt(practiceId: Id, requestIdInput: string, expectedVersion: number): Id {
     const row = this.practice(practiceId, true); const requestId = request(requestIdInput);
@@ -164,7 +172,7 @@ export class DemoPresentationStore implements PresentationActions {
     const { row, practice } = this.attempt(attemptId, true);
     if (row.status === 'completed' && expectedVersion === row.version - 1) return;
     version(row.version, expectedVersion); if (row.status === 'completed') return;
-    normalizePresentationBody(row.body, true); const now = this.ctx.now();
+    normalizePresentationBody(row.body, !this.features.ready(attemptId)); const now = this.ctx.now();
     const questions = presentationGuidingQuestions(row);
     if (this.ctx.state().presentationQuestions.filter((item) => item.attemptId === attemptId).length + questions.length > 100) throw new Error('Puedes guardar hasta 100 preguntas por intento.');
     row.status = 'completed'; row.version += 1; row.updatedAt = now; row.completedAt = now;

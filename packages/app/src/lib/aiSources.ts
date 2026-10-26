@@ -4,7 +4,7 @@ import type { Snapshot } from '../data/types';
 export type AiCandidateKind = AiSourceKind;
 export const AI_SOURCE_LABELS: Record<AiCandidateKind, string> = {
   note: 'Nota de clase', assignment: 'Tarea', activity: 'Actividad de clase',
-  work: 'Trabajo', evidence: 'Evidencia', guide: 'Guía de estudio', teaching: 'Tu explicación guardada',
+  work: 'Trabajo', evidence: 'Evidencia', guide: 'Guía de estudio', teaching: 'Tu explicación guardada', question: 'Pregunta y respuestas', spaced_card: 'Tarjeta de repaso', answer: 'Respuesta',
 };
 
 /** Presentation candidates only. The server resolves permissions and actual content again. */
@@ -20,6 +20,7 @@ export interface AiCandidate {
   status?: string;
   /** In-memory invalidation token, never transmitted as an authoritative version. */
   revision: string;
+  answers?: { id: string; text: string; accepted: boolean }[];
 }
 export const aiCandidateKey = (source: Pick<AiCandidate, 'kind' | 'refId'>) => `${source.kind}:${source.refId}`;
 
@@ -57,6 +58,23 @@ export function aiSourceCandidates(data: Snapshot, subjectId: string, termId?: s
     if (guide.withdrawnAt) continue;
     add({ kind: 'guide', refId: guide.id, subjectId: guide.subjectId, termId: guide.termId,
       title: guide.title, topics: guide.topics, personal: false, version: guide.version }, [guide.sections, data.guideSources.filter((ref) => ref.guideId === guide.id)]);
+  }
+  for (const question of data.questions) {
+    if (question.withdrawnAt) continue;
+    const answers = data.answers.filter((answer) => answer.questionId === question.id && !answer.withdrawnAt);
+    add({ kind: 'question', refId: question.id, subjectId: question.subjectId, title: question.title, topics: question.topic ? [question.topic] : [], personal: false, version: question.version ?? 1,
+      answers: answers.map((answer) => ({ id: answer.id, text: answer.body, accepted: answer.id === question.acceptedAnswerId })) }, [question, answers]);
+  }
+  for (const card of data.spacedCards) {
+    const collection = data.spacedCollections.find((entry) => entry.id === card.collectionId);
+    if (card.archived || !collection || collection.archived || (collection.visibility !== 'group' && collection.ownerId !== data.me.id)) continue;
+    const original = card.sourceKind === 'note' ? data.notes.find((entry) => entry.id === card.sourceId) : data.guides.find((entry) => entry.id === card.sourceId);
+    if (card.sourceKind !== 'exam_question' && (!original || original.withdrawnAt)) continue;
+    add({ kind: 'spaced_card', refId: card.id, subjectId: collection.subjectId, termId: collection.termId, title: card.question, topics: [], personal: collection.visibility === 'personal', version: card.version }, [card.question,card.explanation,card.hint,card.version,collection.version,original?.version]);
+  }
+  for (const practice of data.teachingPractices) {
+    if (practice.ownerId !== data.me.id || !practice.initial.concept.trim() || !practice.initial.example.trim() || !practice.initial.limits.trim()) continue;
+    add({ kind: 'teaching', refId: practice.id, subjectId: practice.subjectId, title: practice.topic, topics: [practice.topic], personal: true, version: practice.version ?? 1 }, [practice.initial,practice.revised]);
   }
   return out;
 }

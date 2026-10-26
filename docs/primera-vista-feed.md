@@ -64,6 +64,52 @@ legibilidad del contenido. Reducers: `toggle_feed_reaction`, `create_feed_post`,
 Las reglas compartidas (emojis, tipos de contenido y límites) viven en
 `packages/core/src/feed.ts`. El modo demo replica las mismas reglas con datos de ejemplo.
 
+## Rediseño social académico — implementación local, 26 de octubre de 2026
+
+El feed utiliza tarjetas con etiquetas de tipo, materia y estado, visibles también en móvil.
+Cada familia presenta sus datos propios: entregas y cambios de fecha, documentos y archivos,
+preguntas y respuestas, temarios, votaciones, ayuda, repaso, código, bugs, oportunidades,
+salas y exámenes de estudio. Las consignas diferencian tarea, actividad académica,
+exposición y examen académico. Los textos y el código extensos permiten «Ver más».
+
+El catálogo incorpora retos, soluciones, revisiones y observaciones de código, Museo de bugs,
+oportunidades, salas abiertas al grupo y exámenes compartidos. Las publicaciones propias de
+todos los tipos aparecen en Feed; no suman novedades ajenas ni alteran la lectura de chats.
+Las notas publicadas desde Aprende enseñando o desde el resumen de una sala conservan una
+sola tarjeta con su origen. Museo conserva la identidad y las reacciones de su pregunta.
+
+Se puede votar, cambiar el voto cuando esté permitido, responder preguntas e inscribirse o
+salir de salas desde las tarjetas. Se reutilizan permisos, restricciones y acciones de sus
+módulos; los envíos simultáneos se bloquean y los errores conservan el borrador. La salida
+de una sala pide confirmación. La lectura ampliada sigue disponible en el recurso original.
+
+Los recursos nuevos no amplían la lista de objetivos de reacciones. Los comentarios siguen
+perteneciendo a las publicaciones libres; las observaciones de código y las soluciones de
+retos son aportes independientes, con enlace al elemento y versión correspondientes.
+
+### Exámenes compartidos
+
+`listExams` acepta `sharedOnly: true`. Servidor y demo devuelven solo exámenes compartidos,
+aprobados y no archivados, proyectando la versión aprobada incluso para su autor. Los datos
+del borrador, intentos y resultados no se incluyen. La petición normal del catálogo mantiene
+su comportamiento.
+
+El feed consulta estos resúmenes al abrirse, recuperar el foco y cada 15 segundos mientras
+la página esté visible. Las lecturas se coordinan por cuenta; cambiar de sesión, perder acceso
+o retirar fuentes invalida la información anterior. Un fallo de consulta permite reintentar
+sin bloquear las demás publicaciones. No se generan preguntas ni se llama a Gemini.
+
+Para publicar esta actualización, desplegar primero el módulo compatible con `sharedOnly`
+conservando los datos y después los clientes. Este registro describe la implementación
+local; no acredita una nueva publicación en producción.
+
+La entrada de diseño admite `design-preview.html?feed-review=1#/m/inicio?ver=todo` para
+revisar tipos nuevos con ejemplos ficticios. Esta entrada no forma parte del build normal.
+
+Validación local: 119 pruebas aprobadas de interfaz, catálogo y Exámenes; comprobación
+global de tipos y compilaciones de web/PWA y extensión correctas. Se revisaron capturas
+del feed a 1440 y 360 píxeles. No se utilizaron cuentas ni publicaciones reales.
+
 ## Pendiente
 
 - Publicar el módulo actualizado en SpacetimeDB (`npm run spacetime:publish`) y comprobarlo

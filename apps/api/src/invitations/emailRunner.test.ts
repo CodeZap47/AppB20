@@ -29,7 +29,7 @@ describe('cron de correos de invitación', () => {
     const state = fixture(['a@example.com']); const send = vi.fn(async (_message: InvitationEmailMessage) => ({ messageId: 'm1' }));
     expect(await runInvitationEmailCron(config, { call: state.call, send })).toEqual({ enabled: true, sent: 1 });
     const claim = state.calls[0]!; expect(claim.name).toBe('invitation_emails_claim'); expect(claim.input.limit).toBe(10);
-    expect(send.mock.calls[0]![0]).toMatchObject({ to: 'a@example.com', from: 'avisos@example.com', subject: 'Te invitaron a App B20' });
+    expect(send.mock.calls[0]![0]).toMatchObject({ to: 'a@example.com', from: 'avisos@example.com', subject: 'Te invitaron a B20' });
     expect(state.finishes()).toEqual([{ email: 'a@example.com', leaseId: claim.input.leaseId, outcome: 'sent' }]);
   });
 
@@ -49,10 +49,23 @@ describe('cron de correos de invitación', () => {
 describe('plantilla de invitación', () => {
   it('escapa el HTML e incluye el enlace y el rol', () => {
     const mail = buildInvitationEmail({ email: 'x"<y>@example.com', isCreator: true, inviterName: '<script>alert(1)</script> & co', appUrl: 'https://app-b20.pages.dev/?a=1&b="2"' });
-    expect(mail.subject).toBe('Te invitaron a App B20');
+    expect(mail.subject).toBe('Te invitaron a B20');
     expect(mail.html).not.toContain('<script>'); expect(mail.html).toContain('&lt;script&gt;alert(1)&lt;/script&gt; &amp; co');
     expect(mail.html).toContain('href="https://app-b20.pages.dev/?a=1&amp;b=&quot;2&quot;"'); expect(mail.html).toContain('x&quot;&lt;y&gt;@example.com');
     expect(mail.text).toContain('https://app-b20.pages.dev/?a=1&b="2"'); expect(mail.text).toContain('administración'); expect(mail.text).toContain('ignorar');
     expect(buildInvitationEmail({ email: 'a@example.com', isCreator: false, inviterName: 'Ana', appUrl: 'https://app-b20.pages.dev' }).text).toContain('integrante');
+  });
+
+  it('explica el acceso con código y contraseña, con el diseño de B20', () => {
+    const mail = buildInvitationEmail({ email: 'a@example.com', isCreator: false, inviterName: 'Ana', appUrl: 'https://b20.mx/#/m' });
+    for (const body of [mail.html, mail.text]) {
+      expect(body).not.toContain('SpacetimeAuth');
+      expect(body).toContain('código');
+      expect(body).toContain('contraseña');
+    }
+    expect(mail.html).toContain('href="https://b20.mx/#/m"');
+    expect(mail.html).toContain('src="https://b20.mx/email/estrella.png"');
+    expect(mail.html).toContain('#193657');
+    expect(new TextEncoder().encode(mail.html).length).toBeLessThan(100_000);
   });
 });

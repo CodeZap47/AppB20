@@ -6,18 +6,20 @@ import { Avatar } from './Avatar';
 import { useAction } from './useAction';
 import { DemoDataSource } from '../data/demo';
 import type { Invitation } from '../data/types';
+import { MembershipManagement } from './MembershipManagement';
 
 const RESEND_INTERVAL_MS = 10 * 60_000;
 
 /** Altas, bajas, invitaciones y plan de estudios. Solo lo ven los creadores de la app. */
 export function MembershipSettings() {
   const { me } = useSnapshot();
+  const source = useDataSource();
   if (me?.status !== 'active' || !me.isCreator) return null;
   return (
     <>
       <AdminSummary />
       <InvitationsSection />
-      <MembersSection />
+      {typeof source.getAdminMembership === 'function' ? <MembershipManagement /> : <MembersSection />}
       <CurriculumSection />
     </>
   );
@@ -67,7 +69,7 @@ function InvitationsSection() {
       <p className="muted">
         {simulated
           ? 'Este formulario modifica datos de prueba: no envía invitaciones ni controla quién puede iniciar sesión.'
-          : 'Le mandamos un correo con el enlace a la app. Solo entran los correos de esta lista, verificados por SpacetimeAuth.'}
+          : 'Invita un correo concreto o rehabilita a una persona dada de baja. El correo debe estar verificado; los enlaces reutilizables se administran por separado.'}
       </p>
       <form className="form" onSubmit={submit}>
         <label className="field">
@@ -126,7 +128,7 @@ function InvitationsSection() {
                   type="button"
                   className="link-button"
                   onClick={() =>
-                    window.confirm(`¿Retirar la invitación de ${i.email}? Ya no podrá unirse con ese correo.`) &&
+                    window.confirm(`¿Retirar la invitación de ${i.email}? Se cancela esta invitación. Para impedir también el ingreso mediante enlaces, bloquea su correo.`) &&
                     run(() => source.revokeInvitation(i.email))
                   }
                 >

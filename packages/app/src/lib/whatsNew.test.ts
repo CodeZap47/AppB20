@@ -138,3 +138,71 @@ describe('resumen y paneles de «¿Qué me perdí?»', () => {
     expect(today.map((b) => b.memberId)).toEqual(['a']);
   });
 });
+
+describe('catálogo compartido de todos los módulos', () => {
+  function fixture() {
+    const snapshot = new DemoDataSource(createDemoState(), 'demo-1').getSnapshot();
+    const at = new Date('2026-10-26T12:00:00Z');
+    const common = { authorId: 'demo-2', requestId: 'shared', version: 1, createdAt: at, updatedAt: at };
+    snapshot.codingChallenges = [{ ...common, id: 'challenge', subjectId: 's1', title: 'Reto compartido', topic: 'Listas', difficulty: 'basic', objective: 'Sumar', instructions: 'Sumar elementos', examples: '1+1=2', hintCount: 0, closed: false, closure: '' }];
+    snapshot.challengeSolutions = [{ ...common, id: 'solution', challengeId: 'challenge', body: 'sum()', explanation: 'Acumula' }, { ...common, id: 'orphan', challengeId: 'missing', body: 'Secreto huérfano', explanation: '' }];
+    snapshot.codeReviews = [{ ...common, id: 'review', subjectId: 's1', title: 'Revisar bucle', language: 'TS', currentVersion: 1, closed: false }];
+    snapshot.codeReviewComments = [{ ...common, id: 'comment', reviewId: 'review', versionNumber: 1, lineStart: 1, lineEnd: 1, kind: 'suggestion', body: 'Simplificar', status: 'pending', resolution: '' }];
+    const question = { id: 'museum-question', subjectId: 's1', topic: 'Listas', title: 'Bug compartido', body: 'Contexto', authorId: 'demo-2', status: 'open' as const, createdAt: at };
+    snapshot.questions.push(question);
+    snapshot.museumEntries = [{ ...common, questionId: question.id, updatedBy: 'demo-2', intention: 'Sumar', symptom: 'No termina', cause: 'Índice fijo', correction: '', learning: 'Incrementar', minimalCode: '', evidence: '', language: 'TS', topic: 'Listas', bugType: 'Bucle', noteIds: [], questionIds: [] }];
+    snapshot.opportunities = [{ ...common, id: 'opportunity', updatedBy: 'demo-2', kind: 'course', title: 'Curso compartido', topic: 'Listas', modality: 'online', sourceUrl: 'https://example.com/course', organizer: 'Escuela', requirements: 'Ninguno', costKnown: true, cost: 'Gratis', withdrawn: false, withdrawalReason: '' }];
+    snapshot.studyRooms = [{ id: 'room', title: 'Sala compartida', subjectId: 's1', topic: 'Listas', objective: 'Repasar', startsAt: at, endsAt: new Date(at.getTime() + 3_600_000), capacity: 2, visibility: 'group', organizerId: 'demo-2', status: 'scheduled', version: 1, createdAt: at, updatedAt: at, participantCount: 1, requestId: 'room' }];
+    const exam = { id: 'exam', revision: 1, title: 'Examen aprobado', subjectId: 's1', ownerId: 'demo-2', visibility: 'group' as const, archived: false, readyVersion: 1, questionCount: 3, topics: ['Listas'], createdAt: at.getTime(), updatedAt: at.getTime(), canEdit: false, sourceIssues: [] };
+    return { snapshot, exam, at };
+  }
+
+  it('incluye todos los módulos nuevos con recursos estables y conserva objetivos de reacciones', () => {
+    const { snapshot, exam, at } = fixture();
+    const news = buildNews(snapshot, at, [exam]);
+    for (const kind of ['reto', 'solucion', 'revision', 'observacion', 'museo', 'oportunidad', 'sala', 'examen']) expect(news.some((item) => item.kind === kind)).toBe(true);
+    const museum = news.filter((item) => item.key === 'qmuseum-question');
+    expect(museum).toHaveLength(1);
+    expect(museum[0]).toMatchObject({ kind: 'museo', target: { kind: 'question', id: 'museum-question' } });
+    expect(news.filter((item) => ['reto', 'solucion', 'revision', 'observacion', 'oportunidad', 'sala', 'examen'].includes(item.kind)).every((item) => item.resource && !item.target)).toBe(true);
+    expect(news.some((item) => item.resource?.id === 'orphan')).toBe(false);
+    expect(news.find((item) => item.kind === 'observacion')?.link).toBe('/m/revision-codigo/review?observacion=comment');
+    const updated = snapshot.codingChallenges[0]!; updated.version++; updated.title = 'Reto actualizado'; updated.updatedAt = new Date(at.getTime() + 1);
+    expect(buildNews(snapshot, at, [exam]).filter((item) => item.key === 'chchallenge')).toHaveLength(1);
+    expect(buildNews(snapshot, at, [exam]).find((item) => item.key === 'chchallenge')?.text).toContain('Reto actualizado');
+  });
+
+  it('todo aporte de la persona activa aparece una sola vez en lo propio y no cuenta como ajeno', () => {
+    const { snapshot, exam, at } = fixture();
+    snapshot.me = snapshot.members.find((entry) => entry.id === 'demo-2');
+    const own = ownFeedNews(snapshot, at, [exam]);
+    expect(new Set(own.map((item) => item.key)).size).toBe(own.length);
+    for (const kind of ['reto', 'solucion', 'revision', 'observacion', 'museo', 'oportunidad', 'sala', 'examen']) expect(own.some((item) => item.kind === kind)).toBe(true);
+    expect(own.every((item) => item.selfText && /^(cambiaste|quitaste|editaste|creaste|subiste|compartiste|actualizaste|registraste|preguntaste|respondiste|aceptaste|publicaste|abriste|organizaste|llegaste|empataste)/.test(item.selfText))).toBe(true);
+    expect(buildNews(snapshot, at, [exam]).every((item) => item.actorId !== 'demo-2')).toBe(true);
+    snapshot.me = { ...snapshot.me!, status: 'removed' };
+    expect(ownFeedNews(snapshot, at, [exam])).toEqual([]);
+  });
+
+  it('descarta salas privadas, oportunidades retiradas y exámenes privados, archivados o sin aprobar', () => {
+    const { snapshot, exam, at } = fixture();
+    snapshot.studyRooms.push({ ...snapshot.studyRooms[0]!, id: 'private-room', visibility: 'private', title: 'Sala privada' });
+    snapshot.opportunities.push({ ...snapshot.opportunities[0]!, id: 'withdrawn', withdrawn: true, title: 'Retirada' });
+    const exams = [exam, { ...exam, id: 'private', visibility: 'personal' as const }, { ...exam, id: 'archive', archived: true }, { ...exam, id: 'draft', readyVersion: undefined }];
+    const items = [...buildNews(snapshot, at, exams), ...ownFeedNews(snapshot, at, exams)];
+    expect(items.filter((item) => item.kind === 'sala').map((item) => item.resource?.id)).toEqual(['room']);
+    expect(items.filter((item) => item.kind === 'oportunidad').map((item) => item.resource?.id)).toEqual(['opportunity']);
+    expect(items.filter((item) => item.kind === 'examen').map((item) => item.resource?.id)).toEqual(['exam']);
+    snapshot.questions.find((entry) => entry.id === 'museum-question')!.withdrawnAt = at;
+    expect(buildNews(snapshot, at, exams).some((item) => item.kind === 'museo')).toBe(false);
+  });
+
+  it('las notas publicadas desde prácticas y salas aparecen una vez, sin exponer su origen privado', () => {
+    const { snapshot, at } = fixture();
+    const note = snapshot.notes.find((entry) => entry.visibility === 'group')!;
+    snapshot.notes = [{ ...note, id: 'teaching-note', authorId: 'demo-2', tags: ['aprende-ensenando'] }, { ...note, id: 'room-note', authorId: 'demo-2', tags: ['sala-de-estudio'] }, { ...note, id: 'private-note', authorId: 'demo-2', visibility: 'personal' }];
+    const news = buildNews(snapshot, at);
+    expect(news.filter((item) => item.kind === 'nota').map((item) => item.key).sort()).toEqual(['nroom-note', 'nteaching-note']);
+    expect(news.some((item) => /aprende-ensenando|practica-privada/.test(item.link))).toBe(false);
+  });
+});

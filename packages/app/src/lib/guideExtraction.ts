@@ -23,6 +23,8 @@ export interface GuideDocumentInput {
   mimeType?: string;
   blob: Blob;
   signal?: AbortSignal;
+  /** Shared extractor override; callers must select their own generation budget explicitly. */
+  maxCharacters?: number;
 }
 export interface GuideDocumentExtraction {
   fileId: string; fileVersion: number; fileHash: string; fileName: string;
@@ -56,9 +58,9 @@ function formatFor(fileName: string, mimeType = ''): GuideDocumentFormat {
 export function supportsGuideExtraction(fileName: string, mimeType?: string) {
   return formatFor(fileName, mimeType) !== 'unsupported';
 }
-function checkTextLength(length: number) {
-  if (length > GUIDE_EXTRACTION_LIMITS.maxCharacters) reject('text_limit',
-    'El texto supera los 120 000 caracteres admitidos por guía. Divide el documento antes de prepararlo; no se ha recortado.');
+function checkTextLength(length: number, limit = GUIDE_EXTRACTION_LIMITS.maxCharacters as number) {
+  if (length > limit) reject('text_limit',
+    `El texto supera los ${limit.toLocaleString("es")} caracteres admitidos para esta preparación. Divide el documento; no se ha recortado.`);
 }
 function segment(id: string, text: string, kind: GuideTextLocator['kind'], start: number, end = start): GuideExtractionSegment {
   return { id, text, locator: { kind, start, end } };
@@ -67,11 +69,11 @@ function decodeUtf8(bytes: Uint8Array): string {
   try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
   catch { return reject('unsupported_encoding', 'El documento no contiene texto UTF-8 válido. Guárdalo como UTF-8 y vuelve a prepararlo.'); }
 }
-function extractText(bytes: Uint8Array): GuideExtractionSegment[] {
+function extractText(bytes: Uint8Array, limit: number): GuideExtractionSegment[] {
   const text = decodeUtf8(bytes).replace(/\r\n?/g, '\n');
   if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/u.test(text)) reject('binary_text',
     'El archivo contiene datos binarios o caracteres de control incompatibles con un documento de texto.');
-  checkTextLength(text.length);
+  checkTextLength(text.length, limit);
   if (!text.trim()) return [];
   const lines = text.split('\n');
   const segments: GuideExtractionSegment[] = [];
@@ -182,7 +184,7 @@ function compactParagraphSegments(segments: GuideExtractionSegment[]) {
   return grouped;
 }
 
-async function extractDocx(bytes: Uint8Array, signal?: AbortSignal): Promise<{ segments: GuideExtractionSegment[]; omissions: GuideExtractionOmission[] }> {
+async function extractDocx(bytes: Uint8Array, signal: AbortSignal | undefined, limit: number): Promise<{ segments: GuideExtractionSegment[]; omissions: GuideExtractionOmission[] }> {
   const entries = zipEntries(bytes), xmlParts = new Map<string, string>();
   let expanded = 0, yieldedExpanded = 0;
   for (const entry of entries) {
@@ -243,17 +245,17 @@ async function extractDocx(bytes: Uint8Array, signal?: AbortSignal): Promise<{ s
     if (isWord(tag, 'p')) { paragraph += 1; active = { index: paragraph, text: '' }; }
     if (isWord(tag, 't')) textDepth = depth;
     if (active && (isWord(tag, 'tab') || isWord(tag, 'br') || isWord(tag, 'cr'))) {
-      active.text += isWord(tag, 'tab') ? '\t' : '\n'; totalText += 1; checkTextLength(totalText);
+      active.text += isWord(tag, 'tab') ? '\t' : '\n'; totalText += 1; checkTextLength(totalText, limit);
     }
   });
   const append = (value: string) => {
-    if (active && textDepth && !excluded) { active.text += value; totalText += value.length; checkTextLength(totalText); }
+    if (active && textDepth && !excluded) { active.text += value; totalText += value.length; checkTextLength(totalText, limit); }
   };
   parser.on('text', append); parser.on('cdata', append);
   parser.on('closetag', (tag) => {
     if (textDepth === depth) textDepth = 0;
     if (active && isWord(tag, 'p') && !excluded) {
-      if (active.text.trim()) { checkTextLength(totalText + segments.length); segments.push(segment(`paragraph-${active.index}`, active.text, 'paragraph', active.index)); }
+      if (active.text.trim()) { checkTextLength(totalText + segments.length, limit); segments.push(segment(`paragraph-${active.index}`, active.text, 'paragraph', active.index)); }
       active = undefined;
     }
     if (excluded === depth) excluded = 0;
@@ -274,7 +276,7 @@ async function extractDocx(bytes: Uint8Array, signal?: AbortSignal): Promise<{ s
 class LocalOnlyPdfAssets {
   async fetch(): Promise<Uint8Array> { throw new Error('Los recursos externos no se descargan al preparar una guía.'); }
 }
-async function extractPdf(bytes: Uint8Array, signal?: AbortSignal): Promise<{ segments: GuideExtractionSegment[]; omissions: GuideExtractionOmission[] }> {
+async function extractPdf(bytes: Uint8Array, signal: AbortSignal | undefined, limit: number): Promise<{ segments: GuideExtractionSegment[]; omissions: GuideExtractionOmission[] }> {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
   if (typeof window !== 'undefined') {
     const worker = await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url');
@@ -300,7 +302,7 @@ async function extractPdf(bytes: Uint8Array, signal?: AbortSignal): Promise<{ se
       const parts: string[] = [];
       const reader = page.streamTextContent().getReader();
       let pageLength = 0, previousItem: { transform: number[]; width: number; height: number } | undefined;
-      const add = (text: string) => { pageLength += text.length; checkTextLength(length + pageLength); parts.push(text); };
+      const add = (text: string) => { pageLength += text.length; checkTextLength(length + pageLength, limit); parts.push(text); };
       try {
         while (true) {
           abort(signal);
@@ -324,7 +326,7 @@ async function extractPdf(bytes: Uint8Array, signal?: AbortSignal): Promise<{ se
         await reader.cancel().catch(() => undefined);
       }
       const text = parts.join('').replace(/\n$/u, '');
-      length += text.length + (segments.length ? 2 : 0); checkTextLength(length);
+      length += text.length + (segments.length ? 2 : 0); checkTextLength(length, limit);
       if (text.trim()) segments.push(segment(`page-${pageNumber}`, text, 'page', pageNumber));
       else omissions.push({ code: 'pdf_no_text_page', reason: `La página ${pageNumber} no tiene texto extraíble; puede estar escaneada o contener solo imágenes.`, locator: { kind: 'page', start: pageNumber, end: pageNumber } });
       if (text.includes('\ufffd')) omissions.push({ code: 'pdf_unknown_characters', reason: `La página ${pageNumber} contiene caracteres que no se pudieron interpretar. Revisa y corrige la transcripción antes de utilizarla.`, locator: { kind: 'page', start: pageNumber, end: pageNumber } });
@@ -346,6 +348,7 @@ async function extractPdf(bytes: Uint8Array, signal?: AbortSignal): Promise<{ se
 /** No network upload is performed. Only reviewed text from this result may be sent to preparation. */
 export async function extractGuideDocument(input: GuideDocumentInput): Promise<GuideDocumentExtraction> {
   const format = formatFor(input.fileName, input.mimeType);
+  const limit = input.maxCharacters ?? GUIDE_EXTRACTION_LIMITS.maxCharacters;
   const result: GuideDocumentExtraction = { fileId: input.fileId, fileVersion: input.fileVersion,
     fileHash: input.fileHash.toLowerCase(), fileName: input.fileName, format, status: 'omitted',
     byteLength: input.blob.size, text: '', segments: [], omissions: [] };
@@ -360,8 +363,8 @@ export async function extractGuideDocument(input: GuideDocumentInput): Promise<G
     abort(input.signal);
     const hash = Array.from(sha256(bytes), (value) => value.toString(16).padStart(2, '0')).join('');
     if (hash !== result.fileHash) reject('hash_mismatch', 'La huella del archivo descargado no coincide con la del adjunto. Recarga la fuente antes de prepararla.');
-    const extracted = format === 'pdf' ? await extractPdf(bytes, input.signal) : format === 'docx'
-      ? await extractDocx(bytes, input.signal) : { segments: extractText(bytes), omissions: [] };
+    const extracted = format === 'pdf' ? await extractPdf(bytes, input.signal, limit) : format === 'docx'
+      ? await extractDocx(bytes, input.signal, limit) : { segments: extractText(bytes, limit), omissions: [] };
     abort(input.signal);
     if (!extracted.segments.length) {
       const reason = format === 'pdf' ? 'El PDF no contiene texto extraíble. Puede ser un escaneo; esta entrega no aplica OCR.' : 'El documento no contiene texto utilizable.';
@@ -369,7 +372,7 @@ export async function extractGuideDocument(input: GuideDocumentInput): Promise<G
       return result;
     }
     const text = extracted.segments.map((item) => item.text).join(format === 'text' || format === 'code' ? '\n' : '\n\n');
-    checkTextLength(text.length);
+    checkTextLength(text.length, limit);
     return { ...result, status: 'ready', text, ...extracted };
   } catch (error) {
     if (input.signal?.aborted || error instanceof DOMException && error.name === 'AbortError') throw new DOMException('Extracción cancelada.', 'AbortError');

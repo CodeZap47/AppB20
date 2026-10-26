@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createHashRouter, RouterProvider, type RouteObject } from 'react-router';
+import { displayNameError } from '@b20/core';
 import { ErrorPage } from './components/ErrorPage';
 import { Layout } from './components/Layout';
 import { HomePage } from './pages/HomePage';
@@ -51,7 +52,17 @@ import type { Platform } from './platform';
 import { ThemeProvider } from './design/Theme';
 import { AssignmentCalendarPage, SubjectsPage } from './pages/AcademicHubPages';
 import { useSupabaseAuth } from './auth/SupabaseAuthProvider';
-import { PasswordRecoveryPage } from './auth/SupabaseSignInForm';
+import { CreatePasswordPage, PasskeySuggestionPage } from './auth/SupabaseSignInForm';
+import { capturePendingInvitation, clearPendingInvitation, preparePendingInvitation } from './auth/pendingInvitation';
+import { captureInviteLink } from './auth/inviteLink';
+
+captureInviteLink();
+capturePendingInvitation();
+
+function InvitationAlreadyJoined() {
+  useEffect(() => { clearPendingInvitation(); }, []);
+  return <section className="panel"><h1>Ya eres integrante del grupo</h1><p>Este enlace no cambia tu acceso actual.</p><a href="#/modulos">Entrar al grupo</a></section>;
+}
 
 /**
  * Se usa hash routing porque funciona igual en la web, en las páginas empaquetadas de la
@@ -69,6 +80,7 @@ export const routes: RouteObject[] = [
         errorElement: <ErrorPage />,
         children: [
           { index: true, element: <WhatsNewPage /> },
+          { path: 'invitacion', element: <InvitationAlreadyJoined /> },
           { path: 'm/inicio', element: <WhatsNewPage /> },
           { path: 'modulos', element: <HomePage /> },
           { path: 'm/calendario', element: <AssignmentCalendarPage /> },
@@ -171,11 +183,14 @@ const router = createHashRouter(routes);
 
 /** La autenticación es obligatoria en ambos modos; la URL nunca permite omitirla. */
 export function App({ platform }: { platform: Platform }) {
+  const [invitationReady, setInvitationReady] = useState(false);
+  useEffect(() => { let alive = true; void preparePendingInvitation().finally(() => { if (alive) setInvitationReady(true); }); return () => { alive = false; }; }, []);
   const clientId = platform === 'android'
     ? config.spacetimeAuthAndroidClientId || config.spacetimeAuthClientId
     : platform.startsWith('extension')
       ? config.spacetimeAuthExtensionClientId || config.spacetimeAuthClientId
       : config.spacetimeAuthClientId;
+  if (!invitationReady) return <AuthFrame title="Preparando el acceso" busy><p role="status">Preparando el acceso…</p></AuthFrame>;
   return (
     <ThemeProvider><PlatformContext value={platform}>
       <AuthProvider clientId={clientId} platform={platform}>
@@ -189,7 +204,8 @@ export function App({ platform }: { platform: Platform }) {
 function SignedInGate() {
   const session = useSession();
   const supabase = useSupabaseAuth();
-  if (supabase?.recovery) return <PasswordRecoveryPage />;
+  if (supabase?.pending === 'password') return <CreatePasswordPage />;
+  if (supabase?.pending === 'passkey') return <PasskeySuggestionPage />;
   if (session?.status !== 'signedIn') return <SignInPage />;
   if (config.dataMode === 'demo') {
     return <DemoApp subject={session.profile.subject} key={session.profile.subject} />;
@@ -202,8 +218,7 @@ function SignedInGate() {
 }
 
 /**
- * Con sesión: mientras llegan los datos dice que está conectando; sin membresía activa pide
- * unirse. Solo después muestra la app.
+ * Con sesión: espera los datos y exige membresía activa y nombre válido antes de abrir la app.
  */
 function MembershipGate() {
   const { connection, connectionError, me } = useSnapshot();
@@ -230,7 +245,7 @@ function MembershipGate() {
       </AuthFrame>
     );
   }
-  if (me?.status !== 'active') return <JoinPage />;
+  if (me?.status !== 'active' || displayNameError(me.displayName)) return <JoinPage />;
   return <RouterProvider router={router} />;
 }
 

@@ -1,124 +1,107 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { FEED_LIMITS } from '@b20/core';
+import { FEED_LIMITS, type ExamSummary } from '@b20/core';
 import { useDataSource } from '../../data/DataContext';
-import type { FeedComment, FeedPost, FeedReaction, Member, Subject } from '../../data/types';
+import type { FeedComment, FeedPost, FeedReaction, Snapshot } from '../../data/types';
 import { formatClock, memberName } from '../../lib/format';
-import { NEWS_LABEL, type NewsItem } from '../../lib/whatsNew';
+import { getFeedPresentation } from '../../lib/feedPresentation';
+import type { NewsItem } from '../../lib/whatsNew';
 import { Avatar } from '../Avatar';
 import { Icon } from '../Icon';
 import { useAction } from '../useAction';
 import { CommentThread } from './CommentThread';
+import { FeedActions } from './FeedActions';
+import { FeedContent } from './FeedContent';
 import { ReactionBar } from './ReactionBar';
 import { relativeTime } from './shared';
 
 interface Props {
   item: NewsItem;
-  members: Member[];
-  subjects: Subject[];
-  me: Member | undefined;
+  snapshot: Snapshot;
+  sharedExams?: ExamSummary[];
   isNew: boolean;
   now: Date;
   reactions: FeedReaction[];
-  /** Solo si el aviso es una publicación del feed. */
   post?: FeedPost;
   comments: FeedComment[];
   highlighted?: boolean;
 }
 
-/** Una novedad como publicación: autor, vista previa, materia, reacciones y, si es un post, comentarios. */
-export function FeedCard({ item, members, subjects, me, isNew, now, reactions, post, comments, highlighted }: Props) {
+export function FeedCard({ item, snapshot, sharedExams, isNew, now, reactions, post, comments, highlighted }: Props) {
   const source = useDataSource();
   const { error, pending, run } = useAction();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
+  const lock = useRef(false);
+  const { members, subjects, me } = snapshot;
+  const presentation = getFeedPresentation(item, snapshot, sharedExams);
   const subject = subjects.find((s) => s.id === item.subjectId);
   const mine = item.actorId === me?.id;
+  const writable = snapshot.connection === 'ready' && me?.status === 'active';
   const when = relativeTime(item.at, now) ?? formatClock(item.at);
-  const ranking = item.kind === 'ranking';
   const target = item.target;
-  const classes = ['feed-card', 'panel', isNew && 'feed-card--pending', highlighted && 'feed-card--highlighted', ranking && 'feed-card--ranking'].filter(Boolean).join(' ');
-
+  const mutate = async (action: () => Promise<unknown> | unknown) => {
+    if (lock.current || !writable) return;
+    lock.current = true;
+    try { return await run(async () => { await action(); return true; }); }
+    finally { lock.current = false; }
+  };
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!post) return;
-    const ok = await run(async () => { await source.editFeedPost({ postId: post.id, text: draft }); return true; });
-    if (ok) setEditing(false);
+    if (post && draft.trim() && draft.trim().length <= FEED_LIMITS.post &&
+      await mutate(() => source.editFeedPost({ postId: post.id, text: draft }))) setEditing(false);
   };
+  const classes = ['feed-card', `feed-card--${presentation.layout}`, `feed-card--${presentation.tone}`,
+    isNew && 'feed-card--pending', highlighted && 'feed-card--highlighted', item.kind === 'ranking' && 'feed-card--ranking'].filter(Boolean).join(' ');
 
   return (
-    <article className={classes} id={post ? `publicacion-${post.id}` : undefined} aria-label={`${memberName(members, item.actorId)} ${item.text}`}>
+    <article className={classes} data-news-kind={item.kind} id={post ? `publicacion-${post.id}` : undefined}
+      aria-label={`${presentation.label}: ${presentation.title}`}>
       <header className="feed-card__head">
-        <span className="feed-card__avatar">
+        <Link to={`/perfil/${item.actorId}`} className="feed-card__avatar" aria-label={`Ver perfil de ${memberName(members, item.actorId)}`}>
           <Avatar member={members.find((m) => m.id === item.actorId)} size={40} />
-          {ranking && <span className="feed-card__trophy" aria-hidden="true">🏆</span>}
-        </span>
+        </Link>
         <div className="feed-card__who">
-          <span>
-            <strong>{mine ? 'Tú' : memberName(members, item.actorId)}</strong>{' '}
-            <span className="feed-card__action">{mine && item.selfText ? item.selfText : item.text}</span>
-          </span>
+          <Link to={`/perfil/${item.actorId}`} className="feed-card__author">{mine ? 'Tú' : memberName(members, item.actorId)}</Link>
           <span className="feed-card__meta">
-            <time dateTime={item.at.toISOString()}>{when}</time>
+            <time dateTime={item.at.toISOString()} title={item.at.toLocaleString('es-MX')}>{when}</time>
             {post?.editedAt && <span> · editada</span>}
-            <span> · {subject?.name ?? 'Grupo'}</span>
           </span>
         </div>
-        {isNew && <span className="news-item__dot" role="img" aria-label="Pendiente" />}
-        <span className={`badge news-kind news-kind--${item.kind}`}>{NEWS_LABEL[item.kind]}</span>
-      </header>
-
-      {editing && post ? (
-        <form className="feed-card__edit" onSubmit={save}>
-          <textarea aria-label="Editar publicación" rows={3} maxLength={FEED_LIMITS.post + 50} value={draft} onChange={(e) => setDraft(e.target.value)} />
-          <div className="row">
-            <button type="submit" disabled={pending || !draft.trim()}>Guardar</button>
-            <button type="button" className="secondary" onClick={() => setEditing(false)}>Cancelar</button>
-          </div>
-        </form>
-      ) : post ? (
-        <p className="feed-card__text">{post.text}</p>
-      ) : (
-        item.preview && <p className="feed-card__preview">{item.preview}</p>
-      )}
-
-      <footer className="feed-card__foot">
-        {target && (
-          <ReactionBar
-            reactions={reactions}
-            members={members}
-            meId={me?.id}
-            disabled={pending}
-            onReact={(emoji) => void run(() => source.toggleFeedReaction({ targetKind: target.kind, targetId: target.id, emoji }))}
-          />
-        )}
-        <div className="feed-card__tools">
-          {post && mine && !editing && (
-            <button type="button" className="icon-button" aria-label="Editar publicación" onClick={() => { setDraft(post.text); setEditing(true); }}>
-              <Icon name="edit" size={16} />
-            </button>
-          )}
-          {post && (mine || me?.isCreator) && (
-            <button
-              type="button"
-              className="icon-button"
-              aria-label="Eliminar publicación"
-              disabled={pending}
-              onClick={() => { if (confirm('¿Eliminar esta publicación? También se borran sus comentarios y reacciones.')) void run(() => source.deleteFeedPost({ postId: post.id })); }}
-            >
+        {isNew && <span className="feed-card__new"><span className="news-item__dot" aria-hidden="true" />Nuevo</span>}
+        {post && (mine || me?.isCreator) && (
+          <div className="feed-card__manage">
+            {mine && !editing && <button type="button" className="icon-button" disabled={!writable || pending}
+              aria-label="Editar publicación" onClick={() => { setDraft(post.text); setEditing(true); }}><Icon name="edit" size={16} /></button>}
+            <button type="button" className="icon-button" aria-label="Eliminar publicación" disabled={!writable || pending}
+              onClick={() => { if (confirm('¿Eliminar esta publicación? También se borran sus comentarios y reacciones.')) void mutate(() => source.deleteFeedPost({ postId: post.id })); }}>
               <Icon name="trash" size={16} />
             </button>
-          )}
-          {!post && (
-            <Link to={item.link} className="feed-card__open">
-              {ranking ? 'Ver ranking' : 'Abrir'} <Icon name="forward" size={14} />
-            </Link>
-          )}
-        </div>
+          </div>
+        )}
+      </header>
+      <div className="feed-card__labels">
+        <span className="feed-type"><Icon name={presentation.icon} size={14} />{presentation.label}</span>
+        <span className="feed-subject">{subject?.name ?? 'Grupo B20'}</span>
+        {presentation.status && <span className="feed-status">{presentation.status}</span>}
+      </div>
+      <span className="feed-card__action">{mine && item.selfText ? item.selfText : item.text}</span>
+      {editing && post ? (
+        <form className="feed-card__edit" onSubmit={save}>
+          <textarea aria-label="Editar publicación" rows={4} maxLength={FEED_LIMITS.post} disabled={pending || !writable} value={draft} onChange={(e) => setDraft(e.target.value)} />
+          <div className="row"><button type="submit" disabled={pending || !writable || !draft.trim()}>Guardar</button>
+            <button type="button" className="secondary" disabled={pending} onClick={() => setEditing(false)}>Cancelar</button></div>
+        </form>
+      ) : <FeedContent presentation={presentation} link={item.link} socialText={post?.text} />}
+      <FeedActions item={item} snapshot={snapshot} />
+      <footer className="feed-card__foot">
+        {target && <ReactionBar reactions={reactions} members={members} meId={me?.id} disabled={pending || !writable}
+          onReact={(emoji) => void mutate(() => source.toggleFeedReaction({ targetKind: target.kind, targetId: target.id, emoji }))} />}
+        {post ? <span className="feed-card__comment-count"><Icon name="chat" size={15} />{comments.length} {comments.length === 1 ? 'comentario' : 'comentarios'}</span>
+          : <Link to={item.link} className="feed-card__open">{presentation.cta}<Icon name="forward" size={15} /></Link>}
       </footer>
       {error && <p className="error" role="alert">{error}</p>}
-
-      {post && <CommentThread post={post} comments={comments} members={members} me={me} />}
+      {post && <CommentThread key={`${me?.id}:${post.id}`} post={post} comments={comments} members={members} me={me} />}
     </article>
   );
 }

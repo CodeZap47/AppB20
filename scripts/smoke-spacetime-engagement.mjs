@@ -9,7 +9,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const scenario = process.env.B20_SMOKE_SCENARIO === 'auth' ? 'auth' : 'engagement';
+const scenario = ['auth', 'membership'].includes(process.env.B20_SMOKE_SCENARIO) ? process.env.B20_SMOKE_SCENARIO : 'engagement';
 const port = Number(process.env.B20_SMOKE_ENGAGEMENT_PORT ?? '3361');
 if (!Number.isInteger(port) || port < 1024 || port > 65535)
   throw new Error('B20_SMOKE_PORT inválido.');

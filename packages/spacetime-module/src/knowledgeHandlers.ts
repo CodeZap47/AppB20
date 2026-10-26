@@ -1,7 +1,7 @@
 import { memberIdentityFor } from './authIdentity';
 import { SenderError } from 'spacetimedb/server';
 import { activeMember, attachmentIds, expectVersion, log, requireGuide, requireSubject, requireText, restoreAttachments, sourceVersion, type Ctx } from './moduleContext';
-import { bumpExtra, canReadTarget, captureGuide, captureNote, withdrawn } from './delivery2Handlers';
+import { bumpExtra, canReadTarget, captureGuide, captureNote, withdrawn, withdrawnIncludingParent } from './delivery2Handlers';
 
 /** Manual selection is explicit; an unplaced source is allowed, a different parcial is not. */
 export function validateGuideSourceClassification(ctx: Ctx, kind: string, refId: bigint, subjectId: bigint, termId?: bigint, includeUnplaced = true) {
@@ -203,7 +203,7 @@ export function commentQuestion(ctx: Ctx, input: { questionId: bigint; answerId?
 }
 export function toggleAnswerUsefulness(ctx: Ctx, input: { answerId: bigint }) {
   activeMember(ctx); const answer = ctx.db.answer.id.find(input.answerId);
-  if (!answer || !canReadTarget(ctx.db, memberIdentityFor(ctx), 'answer', answer.id) || withdrawn(ctx.db, 'answer', answer.id)) throw new SenderError('La respuesta no está disponible.');
+  if (!answer || !canReadTarget(ctx.db, memberIdentityFor(ctx), 'answer', answer.id) || withdrawnIncludingParent(ctx.db, 'answer', answer.id)) throw new SenderError('La respuesta no está disponible.');
   if (answer.author.isEqual(memberIdentityFor(ctx))) throw new SenderError('No puedes marcar tu propia respuesta como útil.');
   const key = `${answer.id}:${memberIdentityFor(ctx).toHexString()}`;
   if (ctx.db.answerUsefulness.key.find(key)) ctx.db.answerUsefulness.key.delete(key);

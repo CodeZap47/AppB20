@@ -17,6 +17,7 @@ import { emptyAgent } from './agentTypes';
 import { AGENT_VIEWS, readAgentSnapshot } from './agentSnapshot';
 import { emptyFeed } from './feedTypes';
 import { readFeedSnapshot } from './feedSnapshot';
+import type { WithdrawableKind } from './delivery2Types';
 
 /** Solo vistas públicas del módulo; nunca tablas privadas ni SELECT * de toda la base. */
 export const PUBLIC_VIEWS = [
@@ -27,9 +28,10 @@ export const PUBLIC_VIEWS = [
   'feed_reactions', 'feed_posts', 'feed_comments',
   'my_notifications', 'my_notification_preferences', 'my_push_installations',
   'my_trash_entries',
+  'admin_content_entries', 'admin_content_results',
   'help_post_versions',
   ...PRESENTATION_VIEWS,
-  'chat_channels', 'channel_messages', 'my_conversation_states', 'my_blocked_members', 'my_message_reports', 'member_profiles', 'member_profile_covers',
+  'chat_channels', 'channel_messages', 'my_conversation_states', 'my_blocked_members', 'my_message_reports', 'member_profiles', 'member_profile_covers', 'member_upload_stats',
   'note_details', 'note_versions', 'guide_versions', 'question_comments', 'answer_usefulness', 'question_links', 'resource_versions', 'content_statuses', 'contribution_origins',
   'my_member', 'my_auth_identity', 'members', 'invitations', 'invitation_email_statuses', 'subjects', 'terms', 'calendar',
   'assignments', 'page_revisions', 'works', 'work_authors', 'work_files',
@@ -49,6 +51,7 @@ export function emptySnapshot(connection: Snapshot['connection'], connectionErro
   return {
     ...emptyNotifications(),
     trashEntries: [],
+    adminContentEntries: [], adminContentResults: [],
     ...emptyPractice(),
     ...emptyCommunity4(),
     ...emptyAgent(),
@@ -173,6 +176,9 @@ export function readSnapshot(connection: Pick<DbConnection, 'db'>, identity: str
     connection: 'ready',
     me,
     members,
+    memberUploadStats: db.memberUploadStats ? [...db.memberUploadStats.iter()]
+      .filter((row) => activeMembers.has(row.memberId.toHexString()))
+      .map((row) => ({ memberId: row.memberId.toHexString(), bytes: fileSize(row.bytes), fileCount: fileSize(row.fileCount) })) : undefined,
     spacedCollections,
     spacedCards,
     spacedUnavailableCards: [...db.spacedUnavailableCards.iter()].filter((row) => visibleSpacedCollections.has(row.collectionId.toString()))
@@ -365,5 +371,7 @@ export function readSnapshot(connection: Pick<DbConnection, 'db'>, identity: str
     lastSeenAt: [...db.myLastSeen.iter()].find((row) => row.identity.toHexString() === identity)?.at.toDate(),
   }, identity), identity), identity);
   return { ...enrichNotificationsSnapshot(connection, snapshot, identity), trashEntries: readTrashEntries(connection),
+    adminContentEntries: me.isCreator ? [...(db.adminContentEntries?.iter() ?? [])].map((row) => ({ ...row, kind: row.kind as WithdrawableKind, targetId: row.targetId.toString(), ownerIds: row.owners.map((owner) => owner.toHexString()) })) : [],
+    adminContentResults: me.isCreator ? [...(db.adminContentResults?.iter() ?? [])].map((row) => ({ operationId: row.operationId, kind: row.kind, targetId: row.targetId.toString(), status: row.status, error: row.error })) : [],
     ...readPracticeSnapshot(connection, identity, members), ...readCommunity4Snapshot(connection, snapshot, identity), ...readAgentSnapshot(connection, snapshot, identity), ...readFeedSnapshot(connection, snapshot, identity) };
 }

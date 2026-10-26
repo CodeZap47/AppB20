@@ -14,7 +14,7 @@ export function AiSourceSelector({ candidates, topics, value, maxSources, disabl
     const rest = value.filter((ref) => aiCandidateKey(ref) !== aiCandidateKey(source));
     onChange(checked ? [...rest, { kind: source.kind, refId: source.refId,
       topics: topics.filter((topic) => source.topics.some((candidate) => candidate.toLocaleLowerCase('es') === topic.toLocaleLowerCase('es'))),
-      includeUnplaced: !source.termId }] : rest);
+      includeUnplaced: !source.termId, ...(source.answers ? { answerIds: source.answers.filter((answer) => answer.accepted).map((answer) => answer.id) } : {}) }] : rest);
   };
   return <fieldset className="ai-selector" disabled={disabled}>
     <legend>Material para preparar ({value.length} de {maxSources})</legend>
@@ -22,7 +22,7 @@ export function AiSourceSelector({ candidates, topics, value, maxSources, disabl
     <div className="ai-scope">
       <label className="field"><span>Buscar material</span><input type="search" value={filter} onChange={(e) => setFilter(e.target.value)} /></label>
       <label className="field"><span>Tipo de fuente</span><select value={kind} onChange={(e) => setKind(e.target.value as AiCandidateKind | '')}>
-        <option value="">Todos los tipos</option>{Object.entries(AI_SOURCE_LABELS).filter(([id]) => id !== 'teaching').map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+        <option value="">Todos los tipos</option>{Object.entries(AI_SOURCE_LABELS).filter(([id]) => id !== 'answer').map(([id, label]) => <option key={id} value={id}>{label}</option>)}
       </select></label>
     </div>
     {!visible.length && <p className="muted">No hay material visible para esta selección.</p>}
@@ -38,6 +38,7 @@ export function AiSourceSelector({ candidates, topics, value, maxSources, disabl
             <span className="field__hint">{selected ? 'Seleccionada · pendiente de preparar' : 'Excluida'}{source.topics.length ? ` · ${source.topics.join(', ')}` : ''}</span>
           </span>
         </label>
+        {selected && source.answers && <fieldset><legend>Respuestas seleccionadas</legend><p className="field__hint">La respuesta aceptada no garantiza exactitud. Revisa las demás antes de incluirlas.</p>{source.answers.map((answer) => <label className="check" key={answer.id}><input type="checkbox" checked={(selected.answerIds ?? []).includes(answer.id)} onChange={(event) => onChange(value.map((ref) => aiCandidateKey(ref) === aiCandidateKey(source) ? { ...ref, answerIds: event.target.checked ? [...(ref.answerIds ?? []), answer.id] : (ref.answerIds ?? []).filter((id) => id !== answer.id) } : ref))} />{answer.accepted ? 'Aceptada · ' : 'Requiere revisión · '}{answer.text.slice(0, 240)}</label>)}</fieldset>}
         {selected && <fieldset className="ai-source__topics"><legend>Temas que cubre esta fuente</legend>
           {!topics.length && <p className="field__hint">Escribe el temario para asignar temas a la fuente.</p>}
           {topics.map((topic) => <label key={topic}><input type="checkbox" checked={selected.topics.includes(topic)} onChange={(e) => onChange(value.map((ref) => aiCandidateKey(ref) === aiCandidateKey(source)

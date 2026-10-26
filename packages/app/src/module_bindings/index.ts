@@ -73,6 +73,7 @@ import CreateAssignmentV2Reducer from "./create_assignment_v_2_reducer";
 import CreateChatChannelReducer from "./create_chat_channel_reducer";
 import CreateFeedPostReducer from "./create_feed_post_reducer";
 import CreateGuideReducer from "./create_guide_reducer";
+import CreateInviteLinkReducer from "./create_invite_link_reducer";
 import CreateMuseumReducer from "./create_museum_reducer";
 import CreateOpportunityReducer from "./create_opportunity_reducer";
 import CreatePollReducer from "./create_poll_reducer";
@@ -103,6 +104,7 @@ import MarkAllNotificationsReadReducer from "./mark_all_notifications_read_reduc
 import MarkConversationReadReducer from "./mark_conversation_read_reducer";
 import MarkNotificationReadReducer from "./mark_notification_read_reducer";
 import MarkSeenReducer from "./mark_seen_reducer";
+import ModerateContentItemReducer from "./moderate_content_item_reducer";
 import OpenDirectConversationReducer from "./open_direct_conversation_reducer";
 import PracticeAddChallengeCommentReducer from "./practice_add_challenge_comment_reducer";
 import PracticeAddCodeCommentReducer from "./practice_add_code_comment_reducer";
@@ -156,6 +158,7 @@ import ReviewGuideV3Reducer from "./review_guide_v_3_reducer";
 import ReviewSpacedCardReducer from "./review_spaced_card_reducer";
 import ReviewWorkReducer from "./review_work_reducer";
 import RevokeInvitationReducer from "./revoke_invitation_reducer";
+import RevokeInviteLinkReducer from "./revoke_invite_link_reducer";
 import SaveActivityLinksReducer from "./save_activity_links_reducer";
 import SaveAgentDraftReducer from "./save_agent_draft_reducer";
 import SaveCalendarReducer from "./save_calendar_reducer";
@@ -190,6 +193,7 @@ import SetFileServiceReducer from "./set_file_service_reducer";
 import SetHelpPostStatusReducer from "./set_help_post_status_reducer";
 import SetMaintenanceServiceReducer from "./set_maintenance_service_reducer";
 import SetMemberBlockedReducer from "./set_member_blocked_reducer";
+import SetMoodleSyncReducer from "./set_moodle_sync_reducer";
 import SetNotificationServiceReducer from "./set_notification_service_reducer";
 import SetOpportunityInterestReducer from "./set_opportunity_interest_reducer";
 import SetPresentationReviewerReducer from "./set_presentation_reviewer_reducer";
@@ -230,6 +234,9 @@ import WithdrawOpportunityReducer from "./withdraw_opportunity_reducer";
 
 // Import all procedure arg schemas
 import * as AddStickerNativeProcedure from "./add_sticker_native_procedure";
+import * as AdminContentResultProcedure from "./admin_content_result_procedure";
+import * as AdminMemberAccessProcedure from "./admin_member_access_procedure";
+import * as AdminMembershipSnapshotProcedure from "./admin_membership_snapshot_procedure";
 import * as AgentAiProcedure from "./agent_ai_procedure";
 import * as AiAuthorizeGenerationProcedure from "./ai_authorize_generation_procedure";
 import * as AiAuthorizeKeyProcedure from "./ai_authorize_key_procedure";
@@ -244,9 +251,13 @@ import * as AiPrepareProcedure from "./ai_prepare_procedure";
 import * as AiPublishGenerationProcedure from "./ai_publish_generation_procedure";
 import * as AiSetConsentProcedure from "./ai_set_consent_procedure";
 import * as AiStatusProcedure from "./ai_status_procedure";
+import * as AuthActivationCheckProcedure from "./auth_activation_check_procedure";
 import * as AuthorizeFileUploadProcedure from "./authorize_file_upload_procedure";
+import * as BlockEmailProcedure from "./block_email_procedure";
 import * as CreateStickerPackNativeProcedure from "./create_sticker_pack_native_procedure";
+import * as DocumentPreparationProcedure from "./document_preparation_procedure";
 import * as ExamActionProcedure from "./exam_action_procedure";
+import * as ExamEvaluationAiProcedure from "./exam_evaluation_ai_procedure";
 import * as GetFileDownloadAccessProcedure from "./get_file_download_access_procedure";
 import * as GetFileUploadStatusProcedure from "./get_file_upload_status_procedure";
 import * as GetResourceManifestProcedure from "./get_resource_manifest_procedure";
@@ -257,23 +268,39 @@ import * as HelpMutateProcedure from "./help_mutate_procedure";
 import * as HelpReadHistoryProcedure from "./help_read_history_procedure";
 import * as InvitationEmailsClaimProcedure from "./invitation_emails_claim_procedure";
 import * as InvitationEmailsFinishProcedure from "./invitation_emails_finish_procedure";
+import * as InvitationLinkConfigureProcedure from "./invitation_link_configure_procedure";
+import * as InvitationLinkCopyProcedure from "./invitation_link_copy_procedure";
+import * as InvitationLinkCreateProcedure from "./invitation_link_create_procedure";
+import * as InvitationLinkReplaceProcedure from "./invitation_link_replace_procedure";
+import * as InvitationLinkRevokeProcedure from "./invitation_link_revoke_procedure";
+import * as InviteLinkRedeemProcedure from "./invite_link_redeem_procedure";
+import * as JoinWithInvitationLinkProcedure from "./join_with_invitation_link_procedure";
+import * as LegacyInvitationLinkRevokeProcedure from "./legacy_invitation_link_revoke_procedure";
+import * as MoodleIngestProcedure from "./moodle_ingest_procedure";
+import * as MyMembershipAccessProcedure from "./my_membership_access_procedure";
 import * as NotificationCommitRemindersProcedure from "./notification_commit_reminders_procedure";
 import * as NotificationReminderContextProcedure from "./notification_reminder_context_procedure";
 import * as NotificationsAuthorizeProcedure from "./notifications_authorize_procedure";
 import * as NotificationsClaimProcedure from "./notifications_claim_procedure";
 import * as NotificationsFinishProcedure from "./notifications_finish_procedure";
 import * as NotificationsSweepProcedure from "./notifications_sweep_procedure";
+import * as PresentationAiProcedure from "./presentation_ai_procedure";
+import * as PresentationMediaProcedure from "./presentation_media_procedure";
 import * as PurgeDueProcedure from "./purge_due_procedure";
 import * as ReadResourceChunkProcedure from "./read_resource_chunk_procedure";
 import * as ReadStickerBytesProcedure from "./read_sticker_bytes_procedure";
 import * as StudyRoomClockProcedure from "./study_room_clock_procedure";
 import * as TeachingReadHistoryProcedure from "./teaching_read_history_procedure";
 import * as TeachingSaveV2Procedure from "./teaching_save_v_2_procedure";
+import * as UnblockEmailProcedure from "./unblock_email_procedure";
 
 // Import all table schema definitions
 import AcademicCommentsRow from "./academic_comments_table";
 import ActivitiesRow from "./activities_table";
 import ActivityLinksRow from "./activity_links_table";
+import AdminContentEntriesRow from "./admin_content_entries_table";
+import AdminContentResultsRow from "./admin_content_results_table";
+import AdminMembersRow from "./admin_members_table";
 import AnswerUsefulnessRow from "./answer_usefulness_table";
 import AnswersRow from "./answers_table";
 import AssignmentDetailsRow from "./assignment_details_table";
@@ -292,6 +319,7 @@ import CodeReviewsRow from "./code_reviews_table";
 import CodingChallengesRow from "./coding_challenges_table";
 import ContentStatusesRow from "./content_statuses_table";
 import ContributionOriginsRow from "./contribution_origins_table";
+import EmailRestrictionsRow from "./email_restrictions_table";
 import EvidenceDetailsRow from "./evidence_details_table";
 import EvidencesRow from "./evidences_table";
 import FeedCommentsRow from "./feed_comments_table";
@@ -306,8 +334,10 @@ import HelpPostVersionsRow from "./help_post_versions_table";
 import HelpPostsRow from "./help_posts_table";
 import InvitationEmailStatusesRow from "./invitation_email_statuses_table";
 import InvitationsRow from "./invitations_table";
+import InviteLinksRow from "./invite_links_table";
 import MemberProfileCoversRow from "./member_profile_covers_table";
 import MemberProfilesRow from "./member_profiles_table";
+import MemberUploadStatsRow from "./member_upload_stats_table";
 import MembersRow from "./members_table";
 import MessageReactionsRow from "./message_reactions_table";
 import MuseumEntriesRow from "./museum_entries_table";
@@ -412,6 +442,27 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, ActivityLinksRow),
+  adminContentEntries: __table({
+    name: 'admin_content_entries',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AdminContentEntriesRow),
+  adminContentResults: __table({
+    name: 'admin_content_results',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AdminContentResultsRow),
+  adminMembers: __table({
+    name: 'admin_members',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AdminMembersRow),
   answerUsefulness: __table({
     name: 'answer_usefulness',
     indexes: [
@@ -538,6 +589,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, ContributionOriginsRow),
+  emailRestrictions: __table({
+    name: 'email_restrictions',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, EmailRestrictionsRow),
   evidenceDetails: __table({
     name: 'evidence_details',
     indexes: [
@@ -636,6 +694,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, InvitationsRow),
+  inviteLinks: __table({
+    name: 'invite_links',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, InviteLinksRow),
   memberProfileCovers: __table({
     name: 'member_profile_covers',
     indexes: [
@@ -650,6 +715,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MemberProfilesRow),
+  memberUploadStats: __table({
+    name: 'member_upload_stats',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MemberUploadStatsRow),
   members: __table({
     name: 'members',
     indexes: [
@@ -1239,6 +1311,7 @@ const reducersSchema = __reducers(
   __reducerSchema("create_chat_channel", CreateChatChannelReducer),
   __reducerSchema("create_feed_post", CreateFeedPostReducer),
   __reducerSchema("create_guide", CreateGuideReducer),
+  __reducerSchema("create_invite_link", CreateInviteLinkReducer),
   __reducerSchema("create_museum", CreateMuseumReducer),
   __reducerSchema("create_opportunity", CreateOpportunityReducer),
   __reducerSchema("create_poll", CreatePollReducer),
@@ -1269,6 +1342,7 @@ const reducersSchema = __reducers(
   __reducerSchema("mark_conversation_read", MarkConversationReadReducer),
   __reducerSchema("mark_notification_read", MarkNotificationReadReducer),
   __reducerSchema("mark_seen", MarkSeenReducer),
+  __reducerSchema("moderate_content_item", ModerateContentItemReducer),
   __reducerSchema("open_direct_conversation", OpenDirectConversationReducer),
   __reducerSchema("practice_add_challenge_comment", PracticeAddChallengeCommentReducer),
   __reducerSchema("practice_add_code_comment", PracticeAddCodeCommentReducer),
@@ -1322,6 +1396,7 @@ const reducersSchema = __reducers(
   __reducerSchema("review_spaced_card", ReviewSpacedCardReducer),
   __reducerSchema("review_work", ReviewWorkReducer),
   __reducerSchema("revoke_invitation", RevokeInvitationReducer),
+  __reducerSchema("revoke_invite_link", RevokeInviteLinkReducer),
   __reducerSchema("save_activity_links", SaveActivityLinksReducer),
   __reducerSchema("save_agent_draft", SaveAgentDraftReducer),
   __reducerSchema("save_calendar", SaveCalendarReducer),
@@ -1356,6 +1431,7 @@ const reducersSchema = __reducers(
   __reducerSchema("set_help_post_status", SetHelpPostStatusReducer),
   __reducerSchema("set_maintenance_service", SetMaintenanceServiceReducer),
   __reducerSchema("set_member_blocked", SetMemberBlockedReducer),
+  __reducerSchema("set_moodle_sync", SetMoodleSyncReducer),
   __reducerSchema("set_notification_service", SetNotificationServiceReducer),
   __reducerSchema("set_opportunity_interest", SetOpportunityInterestReducer),
   __reducerSchema("set_presentation_reviewer", SetPresentationReviewerReducer),
@@ -1398,6 +1474,9 @@ const reducersSchema = __reducers(
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
 const proceduresSchema = __procedures(
   __procedureSchema("add_sticker_native", AddStickerNativeProcedure.params, AddStickerNativeProcedure.returnType),
+  __procedureSchema("admin_content_result", AdminContentResultProcedure.params, AdminContentResultProcedure.returnType),
+  __procedureSchema("admin_member_access", AdminMemberAccessProcedure.params, AdminMemberAccessProcedure.returnType),
+  __procedureSchema("admin_membership_snapshot", AdminMembershipSnapshotProcedure.params, AdminMembershipSnapshotProcedure.returnType),
   __procedureSchema("agent_ai", AgentAiProcedure.params, AgentAiProcedure.returnType),
   __procedureSchema("ai_authorize_generation", AiAuthorizeGenerationProcedure.params, AiAuthorizeGenerationProcedure.returnType),
   __procedureSchema("ai_authorize_key", AiAuthorizeKeyProcedure.params, AiAuthorizeKeyProcedure.returnType),
@@ -1412,9 +1491,13 @@ const proceduresSchema = __procedures(
   __procedureSchema("ai_publish_generation", AiPublishGenerationProcedure.params, AiPublishGenerationProcedure.returnType),
   __procedureSchema("ai_set_consent", AiSetConsentProcedure.params, AiSetConsentProcedure.returnType),
   __procedureSchema("ai_status", AiStatusProcedure.params, AiStatusProcedure.returnType),
+  __procedureSchema("auth_activation_check", AuthActivationCheckProcedure.params, AuthActivationCheckProcedure.returnType),
   __procedureSchema("authorize_file_upload", AuthorizeFileUploadProcedure.params, AuthorizeFileUploadProcedure.returnType),
+  __procedureSchema("block_email", BlockEmailProcedure.params, BlockEmailProcedure.returnType),
   __procedureSchema("create_sticker_pack_native", CreateStickerPackNativeProcedure.params, CreateStickerPackNativeProcedure.returnType),
+  __procedureSchema("document_preparation", DocumentPreparationProcedure.params, DocumentPreparationProcedure.returnType),
   __procedureSchema("exam_action", ExamActionProcedure.params, ExamActionProcedure.returnType),
+  __procedureSchema("exam_evaluation_ai", ExamEvaluationAiProcedure.params, ExamEvaluationAiProcedure.returnType),
   __procedureSchema("get_file_download_access", GetFileDownloadAccessProcedure.params, GetFileDownloadAccessProcedure.returnType),
   __procedureSchema("get_file_upload_status", GetFileUploadStatusProcedure.params, GetFileUploadStatusProcedure.returnType),
   __procedureSchema("get_resource_manifest", GetResourceManifestProcedure.params, GetResourceManifestProcedure.returnType),
@@ -1425,18 +1508,31 @@ const proceduresSchema = __procedures(
   __procedureSchema("help_read_history", HelpReadHistoryProcedure.params, HelpReadHistoryProcedure.returnType),
   __procedureSchema("invitation_emails_claim", InvitationEmailsClaimProcedure.params, InvitationEmailsClaimProcedure.returnType),
   __procedureSchema("invitation_emails_finish", InvitationEmailsFinishProcedure.params, InvitationEmailsFinishProcedure.returnType),
+  __procedureSchema("invitation_link_configure", InvitationLinkConfigureProcedure.params, InvitationLinkConfigureProcedure.returnType),
+  __procedureSchema("invitation_link_copy", InvitationLinkCopyProcedure.params, InvitationLinkCopyProcedure.returnType),
+  __procedureSchema("invitation_link_create", InvitationLinkCreateProcedure.params, InvitationLinkCreateProcedure.returnType),
+  __procedureSchema("invitation_link_replace", InvitationLinkReplaceProcedure.params, InvitationLinkReplaceProcedure.returnType),
+  __procedureSchema("invitation_link_revoke", InvitationLinkRevokeProcedure.params, InvitationLinkRevokeProcedure.returnType),
+  __procedureSchema("invite_link_redeem", InviteLinkRedeemProcedure.params, InviteLinkRedeemProcedure.returnType),
+  __procedureSchema("join_with_invitation_link", JoinWithInvitationLinkProcedure.params, JoinWithInvitationLinkProcedure.returnType),
+  __procedureSchema("legacy_invitation_link_revoke", LegacyInvitationLinkRevokeProcedure.params, LegacyInvitationLinkRevokeProcedure.returnType),
+  __procedureSchema("moodle_ingest", MoodleIngestProcedure.params, MoodleIngestProcedure.returnType),
+  __procedureSchema("my_membership_access", MyMembershipAccessProcedure.params, MyMembershipAccessProcedure.returnType),
   __procedureSchema("notification_commit_reminders", NotificationCommitRemindersProcedure.params, NotificationCommitRemindersProcedure.returnType),
   __procedureSchema("notification_reminder_context", NotificationReminderContextProcedure.params, NotificationReminderContextProcedure.returnType),
   __procedureSchema("notifications_authorize", NotificationsAuthorizeProcedure.params, NotificationsAuthorizeProcedure.returnType),
   __procedureSchema("notifications_claim", NotificationsClaimProcedure.params, NotificationsClaimProcedure.returnType),
   __procedureSchema("notifications_finish", NotificationsFinishProcedure.params, NotificationsFinishProcedure.returnType),
   __procedureSchema("notifications_sweep", NotificationsSweepProcedure.params, NotificationsSweepProcedure.returnType),
+  __procedureSchema("presentation_ai", PresentationAiProcedure.params, PresentationAiProcedure.returnType),
+  __procedureSchema("presentation_media", PresentationMediaProcedure.params, PresentationMediaProcedure.returnType),
   __procedureSchema("purge_due", PurgeDueProcedure.params, PurgeDueProcedure.returnType),
   __procedureSchema("read_resource_chunk", ReadResourceChunkProcedure.params, ReadResourceChunkProcedure.returnType),
   __procedureSchema("read_sticker_bytes", ReadStickerBytesProcedure.params, ReadStickerBytesProcedure.returnType),
   __procedureSchema("study_room_clock", StudyRoomClockProcedure.params, StudyRoomClockProcedure.returnType),
   __procedureSchema("teaching_read_history", TeachingReadHistoryProcedure.params, TeachingReadHistoryProcedure.returnType),
   __procedureSchema("teaching_save_v_2", TeachingSaveV2Procedure.params, TeachingSaveV2Procedure.returnType),
+  __procedureSchema("unblock_email", UnblockEmailProcedure.params, UnblockEmailProcedure.returnType),
 );
 
 type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "tables"> & {
@@ -1445,6 +1541,12 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "academic_comments": Omit<typeof tablesSchema.schemaType.tables["academicComments"], "accessorName"> & { readonly accessorName: "academic_comments" };
     /** @deprecated Use `activityLinks` instead. This alias will be removed in the next major version. */
     readonly "activity_links": Omit<typeof tablesSchema.schemaType.tables["activityLinks"], "accessorName"> & { readonly accessorName: "activity_links" };
+    /** @deprecated Use `adminContentEntries` instead. This alias will be removed in the next major version. */
+    readonly "admin_content_entries": Omit<typeof tablesSchema.schemaType.tables["adminContentEntries"], "accessorName"> & { readonly accessorName: "admin_content_entries" };
+    /** @deprecated Use `adminContentResults` instead. This alias will be removed in the next major version. */
+    readonly "admin_content_results": Omit<typeof tablesSchema.schemaType.tables["adminContentResults"], "accessorName"> & { readonly accessorName: "admin_content_results" };
+    /** @deprecated Use `adminMembers` instead. This alias will be removed in the next major version. */
+    readonly "admin_members": Omit<typeof tablesSchema.schemaType.tables["adminMembers"], "accessorName"> & { readonly accessorName: "admin_members" };
     /** @deprecated Use `answerUsefulness` instead. This alias will be removed in the next major version. */
     readonly "answer_usefulness": Omit<typeof tablesSchema.schemaType.tables["answerUsefulness"], "accessorName"> & { readonly accessorName: "answer_usefulness" };
     /** @deprecated Use `assignmentDetails` instead. This alias will be removed in the next major version. */
@@ -1473,6 +1575,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "content_statuses": Omit<typeof tablesSchema.schemaType.tables["contentStatuses"], "accessorName"> & { readonly accessorName: "content_statuses" };
     /** @deprecated Use `contributionOrigins` instead. This alias will be removed in the next major version. */
     readonly "contribution_origins": Omit<typeof tablesSchema.schemaType.tables["contributionOrigins"], "accessorName"> & { readonly accessorName: "contribution_origins" };
+    /** @deprecated Use `emailRestrictions` instead. This alias will be removed in the next major version. */
+    readonly "email_restrictions": Omit<typeof tablesSchema.schemaType.tables["emailRestrictions"], "accessorName"> & { readonly accessorName: "email_restrictions" };
     /** @deprecated Use `evidenceDetails` instead. This alias will be removed in the next major version. */
     readonly "evidence_details": Omit<typeof tablesSchema.schemaType.tables["evidenceDetails"], "accessorName"> & { readonly accessorName: "evidence_details" };
     /** @deprecated Use `feedComments` instead. This alias will be removed in the next major version. */
@@ -1497,10 +1601,14 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "help_posts": Omit<typeof tablesSchema.schemaType.tables["helpPosts"], "accessorName"> & { readonly accessorName: "help_posts" };
     /** @deprecated Use `invitationEmailStatuses` instead. This alias will be removed in the next major version. */
     readonly "invitation_email_statuses": Omit<typeof tablesSchema.schemaType.tables["invitationEmailStatuses"], "accessorName"> & { readonly accessorName: "invitation_email_statuses" };
+    /** @deprecated Use `inviteLinks` instead. This alias will be removed in the next major version. */
+    readonly "invite_links": Omit<typeof tablesSchema.schemaType.tables["inviteLinks"], "accessorName"> & { readonly accessorName: "invite_links" };
     /** @deprecated Use `memberProfileCovers` instead. This alias will be removed in the next major version. */
     readonly "member_profile_covers": Omit<typeof tablesSchema.schemaType.tables["memberProfileCovers"], "accessorName"> & { readonly accessorName: "member_profile_covers" };
     /** @deprecated Use `memberProfiles` instead. This alias will be removed in the next major version. */
     readonly "member_profiles": Omit<typeof tablesSchema.schemaType.tables["memberProfiles"], "accessorName"> & { readonly accessorName: "member_profiles" };
+    /** @deprecated Use `memberUploadStats` instead. This alias will be removed in the next major version. */
+    readonly "member_upload_stats": Omit<typeof tablesSchema.schemaType.tables["memberUploadStats"], "accessorName"> & { readonly accessorName: "member_upload_stats" };
     /** @deprecated Use `messageReactions` instead. This alias will be removed in the next major version. */
     readonly "message_reactions": Omit<typeof tablesSchema.schemaType.tables["messageReactions"], "accessorName"> & { readonly accessorName: "message_reactions" };
     /** @deprecated Use `museumEntries` instead. This alias will be removed in the next major version. */
@@ -1659,6 +1767,9 @@ const REMOTE_MODULE = {
 const tableAccessorAliases = {
   "academic_comments": "academicComments",
   "activity_links": "activityLinks",
+  "admin_content_entries": "adminContentEntries",
+  "admin_content_results": "adminContentResults",
+  "admin_members": "adminMembers",
   "answer_usefulness": "answerUsefulness",
   "assignment_details": "assignmentDetails",
   "challenge_comments": "challengeComments",
@@ -1673,6 +1784,7 @@ const tableAccessorAliases = {
   "coding_challenges": "codingChallenges",
   "content_statuses": "contentStatuses",
   "contribution_origins": "contributionOrigins",
+  "email_restrictions": "emailRestrictions",
   "evidence_details": "evidenceDetails",
   "feed_comments": "feedComments",
   "feed_posts": "feedPosts",
@@ -1685,8 +1797,10 @@ const tableAccessorAliases = {
   "help_post_versions": "helpPostVersions",
   "help_posts": "helpPosts",
   "invitation_email_statuses": "invitationEmailStatuses",
+  "invite_links": "inviteLinks",
   "member_profile_covers": "memberProfileCovers",
   "member_profiles": "memberProfiles",
+  "member_upload_stats": "memberUploadStats",
   "message_reactions": "messageReactions",
   "museum_entries": "museumEntries",
   "museum_revisions": "museumRevisions",
@@ -1780,6 +1894,12 @@ export type DbView = __DbViewBase & {
   readonly "academic_comments": __DbViewBase["academicComments"];
   /** @deprecated Use `activityLinks` instead. This alias will be removed in the next major version. */
   readonly "activity_links": __DbViewBase["activityLinks"];
+  /** @deprecated Use `adminContentEntries` instead. This alias will be removed in the next major version. */
+  readonly "admin_content_entries": __DbViewBase["adminContentEntries"];
+  /** @deprecated Use `adminContentResults` instead. This alias will be removed in the next major version. */
+  readonly "admin_content_results": __DbViewBase["adminContentResults"];
+  /** @deprecated Use `adminMembers` instead. This alias will be removed in the next major version. */
+  readonly "admin_members": __DbViewBase["adminMembers"];
   /** @deprecated Use `answerUsefulness` instead. This alias will be removed in the next major version. */
   readonly "answer_usefulness": __DbViewBase["answerUsefulness"];
   /** @deprecated Use `assignmentDetails` instead. This alias will be removed in the next major version. */
@@ -1808,6 +1928,8 @@ export type DbView = __DbViewBase & {
   readonly "content_statuses": __DbViewBase["contentStatuses"];
   /** @deprecated Use `contributionOrigins` instead. This alias will be removed in the next major version. */
   readonly "contribution_origins": __DbViewBase["contributionOrigins"];
+  /** @deprecated Use `emailRestrictions` instead. This alias will be removed in the next major version. */
+  readonly "email_restrictions": __DbViewBase["emailRestrictions"];
   /** @deprecated Use `evidenceDetails` instead. This alias will be removed in the next major version. */
   readonly "evidence_details": __DbViewBase["evidenceDetails"];
   /** @deprecated Use `feedComments` instead. This alias will be removed in the next major version. */
@@ -1832,10 +1954,14 @@ export type DbView = __DbViewBase & {
   readonly "help_posts": __DbViewBase["helpPosts"];
   /** @deprecated Use `invitationEmailStatuses` instead. This alias will be removed in the next major version. */
   readonly "invitation_email_statuses": __DbViewBase["invitationEmailStatuses"];
+  /** @deprecated Use `inviteLinks` instead. This alias will be removed in the next major version. */
+  readonly "invite_links": __DbViewBase["inviteLinks"];
   /** @deprecated Use `memberProfileCovers` instead. This alias will be removed in the next major version. */
   readonly "member_profile_covers": __DbViewBase["memberProfileCovers"];
   /** @deprecated Use `memberProfiles` instead. This alias will be removed in the next major version. */
   readonly "member_profiles": __DbViewBase["memberProfiles"];
+  /** @deprecated Use `memberUploadStats` instead. This alias will be removed in the next major version. */
+  readonly "member_upload_stats": __DbViewBase["memberUploadStats"];
   /** @deprecated Use `messageReactions` instead. This alias will be removed in the next major version. */
   readonly "message_reactions": __DbViewBase["messageReactions"];
   /** @deprecated Use `museumEntries` instead. This alias will be removed in the next major version. */
@@ -1982,6 +2108,12 @@ export type Tables = __TablesBase & {
   readonly "academic_comments": __TablesBase["academicComments"];
   /** @deprecated Use `activityLinks` instead. This alias will be removed in the next major version. */
   readonly "activity_links": __TablesBase["activityLinks"];
+  /** @deprecated Use `adminContentEntries` instead. This alias will be removed in the next major version. */
+  readonly "admin_content_entries": __TablesBase["adminContentEntries"];
+  /** @deprecated Use `adminContentResults` instead. This alias will be removed in the next major version. */
+  readonly "admin_content_results": __TablesBase["adminContentResults"];
+  /** @deprecated Use `adminMembers` instead. This alias will be removed in the next major version. */
+  readonly "admin_members": __TablesBase["adminMembers"];
   /** @deprecated Use `answerUsefulness` instead. This alias will be removed in the next major version. */
   readonly "answer_usefulness": __TablesBase["answerUsefulness"];
   /** @deprecated Use `assignmentDetails` instead. This alias will be removed in the next major version. */
@@ -2010,6 +2142,8 @@ export type Tables = __TablesBase & {
   readonly "content_statuses": __TablesBase["contentStatuses"];
   /** @deprecated Use `contributionOrigins` instead. This alias will be removed in the next major version. */
   readonly "contribution_origins": __TablesBase["contributionOrigins"];
+  /** @deprecated Use `emailRestrictions` instead. This alias will be removed in the next major version. */
+  readonly "email_restrictions": __TablesBase["emailRestrictions"];
   /** @deprecated Use `evidenceDetails` instead. This alias will be removed in the next major version. */
   readonly "evidence_details": __TablesBase["evidenceDetails"];
   /** @deprecated Use `feedComments` instead. This alias will be removed in the next major version. */
@@ -2034,10 +2168,14 @@ export type Tables = __TablesBase & {
   readonly "help_posts": __TablesBase["helpPosts"];
   /** @deprecated Use `invitationEmailStatuses` instead. This alias will be removed in the next major version. */
   readonly "invitation_email_statuses": __TablesBase["invitationEmailStatuses"];
+  /** @deprecated Use `inviteLinks` instead. This alias will be removed in the next major version. */
+  readonly "invite_links": __TablesBase["inviteLinks"];
   /** @deprecated Use `memberProfileCovers` instead. This alias will be removed in the next major version. */
   readonly "member_profile_covers": __TablesBase["memberProfileCovers"];
   /** @deprecated Use `memberProfiles` instead. This alias will be removed in the next major version. */
   readonly "member_profiles": __TablesBase["memberProfiles"];
+  /** @deprecated Use `memberUploadStats` instead. This alias will be removed in the next major version. */
+  readonly "member_upload_stats": __TablesBase["memberUploadStats"];
   /** @deprecated Use `messageReactions` instead. This alias will be removed in the next major version. */
   readonly "message_reactions": __TablesBase["messageReactions"];
   /** @deprecated Use `museumEntries` instead. This alias will be removed in the next major version. */

@@ -64,6 +64,7 @@ el cambio a la rama de producción. No hace falta duplicarlas en el panel.
 | `VITE_SPACETIMEAUTH_POST_LOGOUT_REDIRECT_URI` | `""` |
 | `VITE_API_URL` | `https://app-b20-api.sucanasta1.workers.dev`, compatibilidad R2 anterior |
 | `VITE_AI_API_URL` | `https://app-b20-ai.aguaseero.workers.dev`, IA y Guías en el Worker dedicado |
+| `VITE_INVITATION_API_URL` | Opcional; vacío utiliza `VITE_AI_API_URL` y después `VITE_API_URL` para los enlaces |
 | `VITE_VAPID_PUBLIC_KEY` | Misma clave pública VAPID del Worker; valor completo en `wrangler.jsonc` |
 
 Esta tabla refleja la configuración preparada en `wrangler.jsonc`, no las variables del
@@ -84,6 +85,9 @@ un Client Secret, una clave de Gemini ni claves de administración. Vite incorpo
 al compilar; después de cambiarlos, comprobar un nuevo despliegue. `VITE_API_URL` permite
 descargar objetos heredados; `VITE_AI_API_URL` conecta con IA y Guías. Ninguna determina
 dónde se suben los archivos académicos nuevos. Ver [archivos-spacetime.md](archivos-spacetime.md).
+Los enlaces utilizan `VITE_INVITATION_API_URL` cuando se configura; de lo contrario, utilizan
+el Worker de IA y después el de compatibilidad. Así pueden gestionarse aunque `VITE_API_URL`
+esté vacío. El secreto de invitaciones se configura únicamente en el Worker elegido.
 
 `VITE_VAPID_PUBLIC_KEY` contiene una clave pública, compartida por Pages y el Worker para
 registrar instalaciones push. Su clave privada permanece en Cloudflare Secrets. Compilar

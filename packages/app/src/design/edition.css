@@ -858,5 +858,5 @@ html[data-brand] .profile-tabs button[aria-pressed='true'] .chip__count {
   }
 }
 
-.auth-email input[type="password"] { width: 100%; min-height: 48px; }
+.auth-email .password-field__input { width: 100%; min-height: 48px; }
 .auth-form + .auth-link { margin-top: 0.75rem; }

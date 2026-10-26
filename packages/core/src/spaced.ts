@@ -6,7 +6,7 @@ export const MAX_SPACED_QUESTION_LENGTH = 1000;
 export const MAX_SPACED_EXPLANATION_LENGTH = 20_000;
 export const MAX_SPACED_HINT_LENGTH = 2000;
 export type SpacedRating = 'remembered' | 'hint' | 'again';
-export type SpacedSourceKind = 'note' | 'guide';
+export type SpacedSourceKind = 'note' | 'guide' | 'exam_question';
 export type SpacedVisibility = 'personal' | 'group';
 
 export const SPACED_RATING_LABEL: Record<SpacedRating, string> = {
@@ -18,7 +18,7 @@ export function isSpacedRating(value: string): value is SpacedRating {
 }
 
 export function isSpacedSourceKind(value: string): value is SpacedSourceKind {
-  return value === 'note' || value === 'guide';
+  return value === 'note' || value === 'guide' || value === 'exam_question';
 }
 
 /** step cuenta aciertos consecutivos hasta el límite; now siempre lo determina el servidor. */

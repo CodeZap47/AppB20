@@ -43,14 +43,14 @@ function setup() {
     question: [{ id: 3n, author, subjectId: 1n, title: 'Pregunta', body: 'Texto', topic: '', createdAt: at, status: 'open' }],
     poll: [{ id: 5n, title: 'Votación', cancelledAt: undefined }, { id: 6n, title: 'Cancelada', cancelledAt: at }],
   };
-  const keys: Record<string, string> = { member: 'identity', contentStatus: 'key', feedReaction: 'key', noteDetail: 'noteId', resourceVersion: 'key' };
+  const keys: Record<string, string> = { member: 'identity', memberEmail: 'email', contentStatus: 'key', feedReaction: 'key', noteDetail: 'noteId', resourceVersion: 'key' };
   const tables = new Map<string, ReturnType<typeof store>>();
   const db = new Proxy({}, { get(_target, property: string) {
     if (!tables.has(property)) tables.set(property, store(keys[property] ?? 'id', initial[property]));
     return tables.get(property);
   } });
   const state = { db, sender: author, timestamp: at, env: {}, senderAuth: { jwt: { issuer: 'https://auth.spacetimedb.com/oidc', audience: ['test'], fullPayload: { email: 'alumno@example.com', email_verified: true } } } };
-  return { ctx: state as unknown as Ctx, as: (sender: Identity) => { state.sender = sender; },
+  return { ctx: state as unknown as Ctx, as: (sender: Identity) => { state.sender = sender; state.senderAuth.jwt.fullPayload.email = `${sender.toHexString()}@example.test`; },
     rows: (table: string) => [...(db as Record<string, ReturnType<typeof store>>)[table].rows.values()] };
 }
 

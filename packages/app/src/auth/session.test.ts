@@ -15,6 +15,32 @@ describe('perfil de SpacetimeAuth', () => {
     expect(decodeIdToken(token())).toEqual({ subject: 'user_123', email: 'ana@ejemplo.mx',
       name: 'Ana Pérez', picture: undefined, expiresAt: 3_600_000 });
   });
+  it('no usa el correo como nombre cuando el proveedor no entrega un nombre', () => {
+    expect(decodeIdToken(token({ name: undefined }))?.name).toBe('');
+  });
+  it.each([
+    { name: 'ana@ejemplo.mx' },
+    { name: undefined, preferred_username: 'ana@ejemplo.mx' },
+    { name: undefined, user_metadata: { full_name: 'ana@ejemplo.mx' } },
+    { name: undefined, user_metadata: { name: 'ana@ejemplo.mx' } },
+  ])('omite un correo entregado como nombre en cualquier campo del proveedor: %j', (claims) => {
+    expect(decodeIdToken(token(claims))?.name).toBe('');
+  });
+  it.each(['', '   ', 'a'.repeat(81), 'Nombre@dominio'])('omite nombres inválidos y continúa con el siguiente candidato: %j', (name) => {
+    expect(decodeIdToken(token({ name, preferred_username: '  Ana  ' }))?.name).toBe('Ana');
+  });
+  it('elige el primer nombre válido con prioridad de los campos de la cuenta sobre los metadatos', () => {
+    expect(decodeIdToken(token({ name: '  Ana Pérez  ', preferred_username: 'Ana',
+      user_metadata: { full_name: 'María', name: 'Luisa' } }))?.name).toBe('Ana Pérez');
+    expect(decodeIdToken(token({ name: undefined, preferred_username: 'Ana',
+      user_metadata: { full_name: 'María', name: 'Luisa' } }))?.name).toBe('Ana');
+    expect(decodeIdToken(token({ name: undefined,
+      user_metadata: { full_name: '  María  ', name: 'Luisa' } }))?.name).toBe('María');
+  });
+  it('lee los nombres Unicode de los metadatos y omite candidatos de otros tipos', () => {
+    expect(decodeIdToken(token({ name: 42, preferred_username: {},
+      user_metadata: { full_name: false, name: '  李明  ' } }))?.name).toBe('李明');
+  });
   it('rechaza datos corruptos y cuentas sin correo verificado', () => {
     for (const value of ['no-es-token', 'a.%%%.c', token({ email_verified: false }), token({ email: '' }),
       token({ sub: '' }), token({ exp: '3600' })]) expect(decodeIdToken(value)).toBeNull();
@@ -45,6 +71,13 @@ describe('estado de sesión OIDC', () => {
     expect(store.receiveToken(token({ email_verified: false }))).toBe(false);
     expect(store.token).toBeUndefined();
     expect(store.getSnapshot()).toMatchObject({ status: 'signedOut', error: expect.stringContaining('correo verificado') });
+  });
+
+  it('mantiene autenticada una cuenta sin nombre para que pueda completarlo al entrar al grupo', () => {
+    const { store } = setup();
+    expect(store.receiveToken(token({ name: undefined }))).toBe(true);
+    expect(store.getSnapshot()).toMatchObject({ status: 'signedIn',
+      profile: { name: '', email: 'ana@ejemplo.mx', subject: 'user_123' } });
   });
 
   it('no utiliza el token después de vencer aunque el proveedor no envíe ningún evento', () => {

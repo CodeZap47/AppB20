@@ -192,4 +192,20 @@ describe('Exposiciones en la demo', () => {
     const { data } = setup(); const before = data.getSnapshot(); const id = create(data); const first = start(data, id); finish(data, first);
     const after = data.getSnapshot(); for (const key of ['notes', 'questions', 'answers', 'activities', 'revisions', 'groupMessages', 'guides'] as const) expect(after[key]).toEqual(before[key]);
   });
+  it('purga la referencia de IA pendiente y conserva el esquema que el autor ya aceptó', async () => {
+    const { data } = setup(); const id = create(data, { source: { kind: 'note', id: 'n1' } }); const first = start(data, id);
+    const features = data.presentationFeatures;
+    const prepared = await features.prepare({ id: 'outline-accepted', attemptId: first, expectedVersion: 1, purpose: 'outline' });
+    const generated = await features.generate(prepared, 'generation-accepted');
+    const accepted = await features.accept(generated, { outline: 'Esquema propio revisado.', orientative: true });
+    const pending = await features.prepare({ id: 'outline-pending', attemptId: first, expectedVersion: attempt(data, first).version, purpose: 'outline' });
+    await features.generate(pending, 'generation-pending');
+    features.purgeSource('note', 'n1');
+    expect(await features.get(pending.id)).toMatchObject({ state: 'cancelled', result: undefined });
+    expect(await features.generate(pending, 'late-generation')).toMatchObject({ state: 'cancelled', result: undefined });
+    expect(await features.get(accepted.id)).toMatchObject({ state: 'accepted', result: { outline: 'Esquema propio revisado.' } });
+    expect(attempt(data, first).body).toBe('Esquema propio revisado.');
+    const revision = (await features.get(pending.id)).revision; features.purgeSource('note', 'n1');
+    expect((await features.get(pending.id)).revision).toBe(revision);
+  });
 });

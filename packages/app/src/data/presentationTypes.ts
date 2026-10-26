@@ -1,4 +1,5 @@
 import type { PresentationConfiguration, PresentationObservations, PresentationQuestionKind, PresentationSourceKind, PresentationStatus } from '@b20/core';
+import type { PresentationFeatureActions } from './presentationFeatureClient';
 import type { Id, MaybePromise } from './types';
 
 export interface PresentationPractice extends PresentationConfiguration {
@@ -34,6 +35,7 @@ export interface PresentationsSnapshot {
   presentationFeedback: PresentationFeedback[];
 }
 export interface PresentationActions {
+  readonly presentationFeatures?: PresentationFeatureActions;
   savePresentationPractice(input: PresentationPracticeInput): MaybePromise<Id>;
   setPresentationReviewer(practiceId: Id, reviewerId: Id | undefined, expectedVersion: number): MaybePromise<void>;
   archivePresentationPractice(practiceId: Id, archived: boolean, expectedVersion: number): MaybePromise<void>;

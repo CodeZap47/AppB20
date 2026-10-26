@@ -29,6 +29,7 @@ export function canReadSpacedCollection(collection: SpacedCollection, me: Member
 /** Usa exclusivamente las fuentes que ya puede consultar la persona actual. */
 export function spacedSource(card: Pick<SpacedCard, 'sourceKind' | 'sourceId'>, data: Snapshot): SpacedSourceInfo | undefined {
   if (data.me?.status !== 'active') return undefined;
+  if (card.sourceKind === 'exam_question') { const stored = data.spacedCards.find((entry) => entry.sourceKind === card.sourceKind && entry.sourceId === card.sourceId); const collection = stored && data.spacedCollections.find((entry) => entry.id === stored.collectionId); return stored && collection?.ownerId === data.me.id && collection.visibility === 'personal' ? { kind: 'exam_question', id: card.sourceId, title: 'Pregunta de examen', link: '/m/examenes', version: stored.sourceVersion, subjectId: collection.subjectId, termId: collection.termId, visibility: 'personal' } : undefined; }
   if (card.sourceKind === 'note') {
     const note = data.notes.find((n) => n.id === card.sourceId &&
       (n.visibility === 'group' || n.authorId === data.me!.id));

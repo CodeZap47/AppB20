@@ -19,6 +19,7 @@ const safeAttempt = { id: 'attempt', state: 'active', mode: 'simulation', questi
 const db: AiDatabase = {
   async user<T>(sessionToken: string, procedure: string, body: unknown) {
     calls.push({ token: sessionToken, procedure, body });
+    if (procedure === 'document_preparation') return [] as T;
     return safeAttempt as T;
   },
   async service<T>(): Promise<T> { throw new Error('Saved exams must not use the service credential'); },
@@ -42,9 +43,10 @@ beforeAll(async () => {
       if (url.hostname !== 'db.test') throw new Error('Saved exams cannot contact Gemini or another service');
       expect(incoming.headers.get('Authorization')).toBe(`Bearer ${token}`);
       if (url.pathname.endsWith('/assert_active_member')) return new MfResponse('', { status: 200 });
-      expect(url.pathname).toBe('/v1/database/exams-test/call/exam_action');
+      const procedure = url.pathname.split('/').at(-1)!;
+      expect(['exam_action', 'document_preparation']).toContain(procedure);
       const payload = JSON.parse(JSON.parse(await incoming.text())[0]);
-      return MfResponse.json(JSON.stringify(await db.user(token, 'exam_action', payload)));
+      return MfResponse.json(JSON.stringify(await db.user(token, procedure, payload)));
     },
   }));
 });
@@ -60,7 +62,10 @@ describe('Exámenes guardados en el Worker compartido', () => {
     expect(response.status).toBe(200); expect(await response.json()).toEqual(safeAttempt);
     expect(response.headers.get('cache-control')).toBe('private, no-store');
     expect(response.headers.get('access-control-allow-origin')).toBe('https://app.example.test');
-    expect(calls).toEqual([{ token, procedure: 'exam_action', body: { action: 'getAttempt', attemptId: 'attempt' } }]);
+    expect(calls).toEqual([
+      { token, procedure: 'document_preparation', body: { action: 'examFiles', request: { action: 'getAttempt', attemptId: 'attempt' } } },
+      { token, procedure: 'exam_action', body: { action: 'getAttempt', attemptId: 'attempt' } },
+    ]);
   }, 20_000);
 
   it('rechaza sesión ausente y baja antes de consultar preguntas o soluciones', async () => {

@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import type { ExamSummary } from '@b20/core';
 import type { Snapshot } from '../../data/types';
 import type { NewsItem } from '../../lib/whatsNew';
 import { FeedCard } from './FeedCard';
@@ -11,30 +12,30 @@ interface Props {
   now: Date;
   /** Publicación a la que se llegó desde un enlace (`?publicacion=`). */
   highlightPostId?: string;
+  sharedExams?: ExamSummary[];
 }
 
 /** La vista tipo red social: cada novedad es una tarjeta con vista previa y reacciones. */
-export function FeedView({ items, snapshot, isPending, now, highlightPostId }: Props) {
-  const { me, members, subjects, feedReactions, feedPosts, feedComments } = snapshot;
+export function FeedView({ items, snapshot, isPending, now, highlightPostId, sharedExams }: Props) {
+  const { feedReactions, feedPosts, feedComments } = snapshot;
 
   useEffect(() => {
-    if (highlightPostId) document.getElementById(`publicacion-${highlightPostId}`)?.scrollIntoView({ block: 'center' });
+    if (highlightPostId) document.getElementById(`publicacion-${highlightPostId}`)?.scrollIntoView?.({ block: 'center' });
   }, [highlightPostId]);
 
   return byDay(items).map((group) => (
     <section key={group.label} className="news-day feed-day">
-      <h2 className="label">{group.label}</h2>
-      <div className="feed">
+      <h2 className="feed-day__label">{group.label}<span>{group.items.length} {group.items.length === 1 ? 'publicación' : 'publicaciones'}</span></h2>
+      <div className="feed-stream">
         {group.items.map((item) => {
           const target = item.target;
           const post = target?.kind === 'post' ? feedPosts.find((p) => p.id === target.id) : undefined;
           return (
             <FeedCard
-              key={item.key}
+              key={`${snapshot.me?.id}:${item.key}`}
               item={item}
-              members={members}
-              subjects={subjects}
-              me={me}
+              snapshot={snapshot}
+              sharedExams={sharedExams}
               isNew={isPending(item)}
               now={now}
               reactions={target ? feedReactions.filter((r) => r.targetKind === target.kind && r.targetId === target.id) : []}

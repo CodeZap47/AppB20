@@ -29,7 +29,11 @@ beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   snapshot = { ...emptySnapshot('ready'), me: member, members: [member], memberProfiles: [profile] };
   source = { label: 'Prueba', getSnapshot: () => snapshot, subscribe: () => () => {},
-    saveMemberProfile: vi.fn().mockResolvedValue('profile-1'), downloadResourceFile: vi.fn().mockResolvedValue(new Blob(['photo'], { type: 'image/png' })),
+    saveMemberProfile: vi.fn<DataSource['saveMemberProfile']>(async (input) => {
+      snapshot.memberProfiles = snapshot.memberProfiles.map((entry) => entry.memberId === member.id
+        ? { ...entry, ...input, version: input.expectedVersion + 1 } : entry);
+      return 'profile-1';
+    }), downloadResourceFile: vi.fn().mockResolvedValue(new Blob(['photo'], { type: 'image/png' })),
   } as unknown as DataSource;
   vi.stubGlobal('URL', URL);
   URL.createObjectURL = vi.fn().mockReturnValue('blob:private-photo');
@@ -88,7 +92,10 @@ describe('perfiles y cumpleaños', () => {
   });
 
   it('el editor cambia la portada por un degradado y la guarda aparte del perfil', async () => {
-    source.saveProfileCover = vi.fn().mockResolvedValue(undefined);
+    source.saveProfileCover = vi.fn<DataSource['saveProfileCover']>(async (input) => {
+      expect(input.expectedVersion).toBe(snapshot.memberProfiles[0]!.version);
+      snapshot.memberProfiles = snapshot.memberProfiles.map((entry) => ({ ...entry, cover: input, version: input.expectedVersion + 1 }));
+    });
     await mount('/perfil/me'); await click('Editar presentación y foto');
     const dialog = container.querySelector('dialog.profile-editor')!;
     expect(dialog.textContent).toContain('Portada');
@@ -97,7 +104,7 @@ describe('perfiles y cumpleaños', () => {
     expect(dialog.querySelector<HTMLElement>('.profile-editor__preview-cover')?.style.backgroundImage).toContain('rgb(127, 179, 245)');
     await act(async () => dialog.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
     expect(source.saveMemberProfile).toHaveBeenCalled();
-    expect(source.saveProfileCover).toHaveBeenCalledWith({ preset: 'oceano', fileId: undefined, expectedVersion: 1 });
+    expect(source.saveProfileCover).toHaveBeenCalledWith({ preset: 'oceano', fileId: undefined, expectedVersion: 2 });
   });
 
   it('muestra la portada guardada en el perfil y rechaza imágenes de portada no permitidas', async () => {

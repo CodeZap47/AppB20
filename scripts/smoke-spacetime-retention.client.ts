@@ -22,11 +22,11 @@ export async function runSmoke(options: { address: string; database: string; tok
   }), 'conectar');
   const subscribe = (connection: DbConnection) => bounded(new Promise<void>((resolve, reject) => {
     connection.subscriptionBuilder().onApplied(() => resolve()).onError((_ctx, error) => reject(error)).subscribe(
-      ['subjects', 'notes', 'note_details', 'note_versions', 'resource_files', 'my_trash_entries', 'contribution_origins'].map((name) => `SELECT * FROM ${name}`));
+      ['subjects', 'notes', 'note_details', 'note_versions', 'resource_files', 'my_trash_entries', 'contribution_origins', 'feed_posts', 'feed_comments', 'group_messages', 'chat_channels', 'channel_messages', 'resource_versions', 'admin_content_entries'].map((name) => `SELECT * FROM ${name}`));
   }), 'suscribir');
-  const upload = async (connection: DbConnection, id: bigint, bytes: Uint8Array) => {
+  const upload = async (connection: DbConnection, id: bigint, bytes: Uint8Array, targetKind = 'note') => {
     const uploadId = randomUUID();
-    await connection.reducers.beginResourceUpload({ uploadId, targetKind: 'note', targetId: id, expectedVersion: 1,
+    await connection.reducers.beginResourceUpload({ uploadId, targetKind, targetId: id, expectedVersion: 1,
       name: 'synthetic-retention.txt', mime: 'text/plain', bytes: BigInt(bytes.length), sha256: hash(bytes) });
     await connection.reducers.putResourceChunk({ uploadId, index: 0, bytes, sha256: hash(bytes) });
     await connection.reducers.finalizeResourceUpload({ uploadId }); return uploadId;
@@ -95,6 +95,63 @@ export async function runSmoke(options: { address: string; database: string; tok
     const replacedOrigin = [...author.db.contributionOrigins.iter()].find((row) => row.refId === replacement.id)!;
     assert.equal(replacedOrigin.duplicateOf, first.id); assert.deepEqual(replacedOrigin.creditedAt, first.createdAt);
     checks.push('última referencia expira y la firma privada impide puntos nuevos por clonar un original purgado');
+    await author.reducers.createFeedPost({ text: 'Synthetic feed parent with foreign dependency', subjectId: undefined, requestId: randomUUID() });
+    const post = [...author.db.feedPosts.iter()].find(row => row.text === 'Synthetic feed parent with foreign dependency')!;
+    await peer.reducers.commentFeedPost({ postId: post.id, text: 'Synthetic foreign comment', requestId: randomUUID() });
+    await until(() => [...owner.db.feedComments.iter()].some(row => row.postId === post.id), 'comentario para revisión');
+    const comment = [...owner.db.feedComments.iter()].find(row => row.postId === post.id)!;
+    const postImpact = [...owner.db.adminContentEntries.iter()].find(row => row.kind === 'feed_post' && row.targetId === post.id)!;
+    assert.equal(postImpact.safeForBulk, false); assert.equal(postImpact.foreignDependencies, 1);
+    await assert.rejects(owner.reducers.withdrawContent({ kind: 'feed_post', targetId: post.id, withdrawn: true, expectedVersion: 1, reason: 'Synthetic moderation' }));
+    await owner.reducers.withdrawContent({ kind: 'feed_comment', targetId: comment.id, withdrawn: true, expectedVersion: 1, reason: 'Synthetic individual moderation' });
+    await owner.reducers.withdrawContent({ kind: 'feed_post', targetId: post.id, withdrawn: true, expectedVersion: 1, reason: 'Synthetic reviewed moderation', acknowledgeImpact: true });
+    await until(() => ![...peer.db.feedPosts.iter()].some(row => row.id === post.id), 'feed retirado oculto desde servidor');
+    assert.equal([...peer.db.feedComments.iter()].some(row => row.id === comment.id), false);
+    await owner.reducers.withdrawContent({ kind: 'feed_post', targetId: post.id, withdrawn: false, expectedVersion: 2, reason: '' });
+    await until(() => [...peer.db.feedPosts.iter()].some(row => row.id === post.id), 'feed restaurado');
+    assert.equal([...peer.db.feedComments.iter()].some(row => row.id === comment.id), false);
+    await owner.reducers.withdrawContent({ kind: 'feed_comment', targetId: comment.id, withdrawn: false, expectedVersion: 2, reason: '' });
+    await until(() => [...peer.db.feedComments.iter()].some(row => row.id === comment.id), 'comentario independiente restaurado');
+    checks.push('feed exige revisar dependencias ajenas y restaurar el padre conserva retiradas independientes de comentarios');
+
+    await author.reducers.sendGroupMessage({ text: 'Synthetic retained general message', replyToId: undefined });
+    const group = [...author.db.groupMessages.iter()].find(row => row.text === 'Synthetic retained general message')!;
+    await peer.reducers.sendGroupMessage({ text: 'Synthetic preserved general reply', replyToId: group.id });
+    const messageFile = await upload(author, group.id, new TextEncoder().encode('Synthetic private message attachment'), 'group_message');
+    await author.reducers.createChatChannel({ name: 'Synthetic retention channel', kind: 'topic', subjectId: undefined });
+    const channel = [...author.db.chatChannels.iter()].find(row => row.name === 'Synthetic retention channel')!;
+    await author.reducers.sendChannelMessage({ channelId: channel.id, text: 'Synthetic retained channel message', replyToId: undefined });
+    const channelMessage = [...author.db.channelMessages.iter()].find(row => row.text === 'Synthetic retained channel message')!;
+    await peer.reducers.sendChannelMessage({ channelId: channel.id, text: 'Synthetic preserved channel reply', replyToId: channelMessage.id });
+    await owner.reducers.withdrawContent({ kind: 'group_message', targetId: group.id, withdrawn: true, expectedVersion: 2, reason: 'Synthetic reviewed general moderation', acknowledgeImpact: true });
+    await owner.reducers.withdrawContent({ kind: 'channel_message', targetId: channelMessage.id, withdrawn: true, expectedVersion: 1, reason: 'Synthetic reviewed channel moderation', acknowledgeImpact: true });
+    await until(() => [...peer.db.groupMessages.iter()].find(row => row.id === group.id)?.text === '', 'marcador general sin texto');
+    await until(() => [...peer.db.channelMessages.iter()].find(row => row.id === channelMessage.id)?.text === '', 'marcador canal sin texto');
+    assert.ok([...peer.db.groupMessages.iter()].some(row => row.replyToId === group.id));
+    assert.ok([...peer.db.channelMessages.iter()].some(row => row.replyToId === channelMessage.id));
+    await assert.rejects(author.procedures.readResourceChunk({ fileId: messageFile, index: 0 }));
+    await assert.rejects(owner.procedures.readResourceChunk({ fileId: messageFile, index: 0 }));
+    await assert.rejects(peer.reducers.sendGroupMessage({ text: 'Cannot reply to withdrawn', replyToId: group.id }));
+    await assert.rejects(author.reducers.editMessage({ scope: 'channel', messageId: channelMessage.id, text: 'Cannot edit withdrawn' }));
+    await owner.reducers.withdrawContent({ kind: 'group_message', targetId: group.id, withdrawn: false, expectedVersion: 3, reason: '' });
+    await owner.reducers.withdrawContent({ kind: 'channel_message', targetId: channelMessage.id, withdrawn: false, expectedVersion: 2, reason: '' });
+    await until(() => [...peer.db.groupMessages.iter()].find(row => row.id === group.id)?.text === 'Synthetic retained general message', 'restauración general');
+    await until(() => [...peer.db.channelMessages.iter()].find(row => row.id === channelMessage.id)?.text === 'Synthetic retained channel message', 'restauración canal');
+    checks.push('clientes conectados reciben marcadores de ambos chats sin texto ni descargas; respuestas preservadas e interacciones bloqueadas');
+
+    await owner.reducers.withdrawContent({ kind: 'group_message', targetId: group.id, withdrawn: true, expectedVersion: 4, reason: 'Synthetic final general moderation', acknowledgeImpact: true });
+    await owner.reducers.withdrawContent({ kind: 'channel_message', targetId: channelMessage.id, withdrawn: true, expectedVersion: 3, reason: 'Synthetic final channel moderation', acknowledgeImpact: true });
+    await owner.reducers.withdrawContent({ kind: 'feed_post', targetId: post.id, withdrawn: true, expectedVersion: 3, reason: 'Synthetic final feed moderation', acknowledgeImpact: true });
+    await until(() => !![...peer.db.groupMessages.iter()].find(row => row.id === group.id)?.deletedAt, 'purga general deja marcador permanente');
+    await until(() => !![...peer.db.channelMessages.iter()].find(row => row.id === channelMessage.id)?.deletedAt, 'purga canal deja marcador permanente');
+    await until(() => ![...owner.db.myTrashEntries.iter()].some(row => row.kind === 'feed_post' && row.targetId === post.id), 'purga feed elimina padre y dependencias');
+    assert.equal([...peer.db.groupMessages.iter()].find(row => row.id === group.id)?.text, '');
+    assert.ok([...peer.db.groupMessages.iter()].some(row => row.replyToId === group.id));
+    assert.ok([...peer.db.channelMessages.iter()].some(row => row.replyToId === channelMessage.id));
+    assert.equal([...peer.db.feedComments.iter()].some(row => row.id === comment.id), false);
+    await assert.rejects(owner.reducers.withdrawContent({ kind: 'group_message', targetId: group.id, withdrawn: false, expectedVersion: 5, reason: '' }));
+    await assert.rejects(author.procedures.readResourceChunk({ fileId: messageFile, index: 0 }));
+    checks.push('scheduler purga feed y adjuntos sin referencias mientras conserva marcadores mínimos e hilos de ambos chats');
     return { database: options.database, checks, acceleratedSeconds: 4, productionRetentionDays: 30 };
   } finally { for (const connection of connections) connection.disconnect(); }
 }

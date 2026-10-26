@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   HELP_KIND_LABEL,
@@ -7,6 +7,9 @@ import {
   WORK_KIND_LABEL,
   workKindGroup,
   hasRoyalBanner,
+  DISPLAY_NAME_MAX_LENGTH,
+  displayNameError,
+  formatBytes,
 } from '@b20/core';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import type { Id, Member, Snapshot, Subject } from '../data/types';
@@ -22,6 +25,7 @@ import { previewText } from '../lib/messages';
 import { matches } from '../lib/search';
 import { authorsLabel, bySubject, NO_TERM } from '../lib/works';
 import { buildLeaderboard, standingSummary } from '../lib/contributions';
+import { buildProfileUploadStats } from '../lib/profileUploads';
 
 /** Lo que cada quien ha aportado al grupo, para las tarjetas y el encabezado del perfil. */
 function contributionsOf(memberId: Id, data: Snapshot) {
@@ -188,137 +192,187 @@ export function ProfilesPage() {
   const { me, members, birthdays } = data;
   const [params, setParams] = useSearchParams();
   const query = params.get('q') ?? '';
+  const withFiles = params.get('filtro') === 'con-archivos';
+  const order = params.get('orden') ?? 'nombre';
+  const uploads = buildProfileUploadStats(data);
+  const hasTotals = data.memberUploadStats !== undefined;
+  const uploadLabel = hasTotals ? 'Archivos subidos' : 'Archivos visibles';
+  const nameOf = (m: Member) => data.memberProfiles.find((entry) => entry.memberId === m.id)?.preferredName || m.displayName;
+  const contributionCounts = order === 'aportes'
+    ? new Map(members.map((m) => [m.id, profileFeed(m.id, data).length])) : new Map<Id, number>();
   const active = members
     .filter((m) => m.status === 'active')
-    .sort(
-      (a, b) =>
-        Number(b.id === me?.id) - Number(a.id === me?.id) ||
-        a.displayName.localeCompare(b.displayName, 'es'),
-    );
+    .sort((a, b) => {
+      const difference = order === 'archivos'
+        ? (uploads.get(b.id)?.bytes ?? 0) - (uploads.get(a.id)?.bytes ?? 0)
+        : order === 'aportes' ? (contributionCounts.get(b.id) ?? 0) - (contributionCounts.get(a.id) ?? 0)
+          : Number(b.id === me?.id) - Number(a.id === me?.id);
+      return difference || nameOf(a).localeCompare(nameOf(b), 'es');
+    });
   const shown = active.filter((m) => {
     const profile = data.memberProfiles.find((entry) => entry.memberId === m.id);
-    return matches(query, m.displayName, profile?.preferredName ?? '', profile?.bio ?? '', ...(profile?.interests ?? []), ...(profile?.skills ?? []));
+    return (!withFiles || (uploads.get(m.id)?.fileCount ?? 0) > 0) &&
+      matches(query, m.displayName, profile?.preferredName ?? '', profile?.bio ?? '', ...(profile?.interests ?? []), ...(profile?.skills ?? []));
   });
+  const total = active.reduce((sum, m) => ({
+    bytes: sum.bytes + (uploads.get(m.id)?.bytes ?? 0),
+    fileCount: sum.fileCount + (uploads.get(m.id)?.fileCount ?? 0),
+  }), { bytes: 0, fileCount: 0 });
+  const patchParams = (key: string, value: string) => setParams((previous) => {
+    const next = new URLSearchParams(previous);
+    if (value) next.set(key, value); else next.delete(key);
+    return next;
+  }, { replace: true });
 
   return (
-    <>
-      <header className="page-header">
-        <div>
-          <h1>Perfiles</h1>
-          <p className="muted">
-            Los {active.length} integrantes del grupo. En cada perfil están sus trabajos por materia
-            y parcial, y lo que ha aportado.
-          </p>
+    <section className="profiles-page" aria-labelledby="profiles-title">
+      <header className="profiles-intro">
+        <span className="profiles-intro__eyebrow">Comunidad B20 · Perfiles</span>
+        <h1 id="profiles-title">Conoce a tu grupo</h1>
+        <p>Detrás de cada aporte hay alguien como tú. Descubre lo que compartimos,
+          lo que sabemos y todo lo que podemos aprender juntos.</p>
+        <div className="profiles-intro__actions">
+          <Link to="/m/leaderboard" className="button secondary with-icon">
+            <Icon name="users" size={18} /> Ver contribuciones
+          </Link>
+          {me && <Link to={`/perfil/${me.id}`} className="button with-icon">
+            <Icon name="edit" size={17} /> Mi perfil
+          </Link>}
         </div>
-        {me && (
-          <div className="row">
-            <Link to={`/perfil/${me.id}`} className="button secondary with-icon">
-              <Avatar member={me} size={22} /> Mi perfil
-            </Link>
-          </div>
-        )}
       </header>
 
-      <div className="toolbar" role="search">
-        <label className="search toolbar__search">
-          <Icon name="search" size={18} />
-          <input
-            type="search"
-            placeholder="Buscar por nombre, intereses o conocimientos"
-            aria-label="Buscar integrantes"
-            value={query}
-            onChange={(e) =>
-              setParams(e.target.value ? { q: e.target.value } : {}, { replace: true })
-            }
-          />
-        </label>
+      <dl className="profiles-overview" aria-label="Resumen del grupo" aria-describedby="profiles-upload-scope">
+        <div><dt>Integrantes</dt><dd>{active.length}</dd></div>
+        <div><dt>{uploadLabel}</dt><dd>{total.fileCount}</dd></div>
+        <div><dt>{hasTotals ? 'Subido por el grupo' : 'Tamaño visible'}</dt><dd>{formatBytes(total.bytes)}</dd></div>
+      </dl>
+      <p id="profiles-upload-scope" className="profiles-scope">{hasTotals
+        ? 'Adjuntos y fotos vigentes. No incluye archivos eliminados ni stickers.'
+        : 'Se muestran los adjuntos y fotos que puedes ver. No incluye archivos eliminados ni stickers.'}</p>
+
+      <div className="profiles-toolbar">
+        <div className="profiles-filters" role="group" aria-label="Filtrar integrantes">
+          <button type="button" aria-pressed={!withFiles} onClick={() => patchParams('filtro', '')}>Todos <span>{active.length}</span></button>
+          <button type="button" aria-pressed={withFiles} onClick={() => patchParams('filtro', 'con-archivos')}>Con archivos</button>
+        </div>
+        <div className="profiles-toolbar__controls">
+          <div role="search">
+            <label className="search profiles-search">
+              <Icon name="search" size={18} />
+              <input type="search" placeholder="Buscar integrantes…" aria-label="Buscar integrantes"
+                value={query} onChange={(e) => patchParams('q', e.target.value)} />
+            </label>
+          </div>
+          <select aria-label="Ordenar integrantes" value={order} onChange={(e) => patchParams('orden', e.target.value)}>
+            <option value="nombre">Por nombre</option>
+            <option value="archivos">{hasTotals ? 'Mayor tamaño subido' : 'Mayor tamaño visible'}</option>
+            <option value="aportes">Más aportes</option>
+          </select>
+        </div>
       </div>
+      <p className="profiles-results" role="status">{shown.length} {shown.length === 1 ? 'integrante' : 'integrantes'}{query || withFiles ? ` de ${active.length}` : ' en el grupo'}</p>
 
       {shown.length === 0 ? (
-        <Empty icon="users" title="Nadie con ese nombre">
-          Revisa cómo lo escribiste. Solo aparecen quienes ya entraron al grupo.
+        <Empty icon="users" title="No encontramos integrantes">
+          Prueba con otro nombre, interés o conocimiento, o cambia el filtro de archivos.
+          {(query || withFiles) && <button type="button" className="secondary profiles-reset" onClick={() => setParams((previous) => {
+            const next = new URLSearchParams(previous); next.delete('q'); next.delete('filtro'); return next;
+          }, { replace: true })}>Limpiar filtros</button>}
         </Empty>
       ) : (
         <ul className="people-grid">
           {shown.map((m) => {
             const c = contributionsOf(m.id, data);
             const birthday = birthdays.find((b) => b.memberId === m.id);
+            const profile = data.memberProfiles.find((entry) => entry.memberId === m.id);
+            const uploaded = uploads.get(m.id) ?? { bytes: 0, fileCount: 0 };
+            const tags = [...new Set([...(profile?.skills ?? []), ...(profile?.interests ?? [])])].slice(0, 2);
             return (
               <li key={m.id}>
-                <Link to={`/perfil/${m.id}`} className="person-card">
-                  <Avatar member={m} size={56} />
-                  <span className="person-card__body">
-                    <strong className="person-card__name">
-                      {m.displayName}
-                      {m.id === me?.id && <span className="muted"> (tú)</span>}
-                    </strong>
-                    <span className="person-card__meta">
-                      {m.isCreator && <span className="badge badge--admin">Administra</span>}
-                      {birthday && (
-                        <span>Cumple el {formatDayMonth(birthday.day, birthday.month)}</span>
-                      )}
+                <article className="person-card" aria-label={`Perfil de ${nameOf(m)}`}>
+                  <div className="person-card__photo">{profile?.photoFileId
+                    ? <ProfilePhoto member={m} profile={profile} size={88} />
+                    : <Avatar member={m} size={88} />}</div>
+                  <div className="person-card__body">
+                    <h2 className="person-card__name"><Link to={`/perfil/${m.id}`}>
+                      {nameOf(m)}{m.id === me?.id && <span className="person-card__you">Tú</span>}
+                    </Link></h2>
+                    <p className="person-card__role">{m.isCreator ? 'Administra la app' : 'Integrante de B20'}</p>
+                    <p className={`person-card__bio${profile?.bio ? '' : ' person-card__bio--empty'}`}>
+                      {profile?.bio || 'Este perfil aún no tiene una presentación.'}
+                    </p>
+                    <div className="person-card__tags">{tags.map((tag) => <span key={tag}>{tag}</span>)}</div>
+                  </div>
+                  <dl className="person-card__stats">
+                    <div><dt>Trabajos</dt><dd>{c.works.length}</dd></div>
+                    <div><dt>Notas</dt><dd>{c.notes.length}</dd></div>
+                    <div><dt>Respuestas</dt><dd>{c.answers.length}</dd></div>
+                  </dl>
+                  <div className="person-card__uploads">
+                    <span className="person-card__upload-icon"><Icon name="upload" size={19} /></span>
+                    <span><span className="person-card__upload-label">{uploadLabel}</span>
+                      <span className="person-card__upload-value"><strong>{formatBytes(uploaded.bytes)}</strong><span>· {uploaded.fileCount} {uploaded.fileCount === 1 ? 'archivo' : 'archivos'}</span></span>
                     </span>
-                    <span className="person-card__stats">
-                      <span>
-                        <strong>{c.works.length}</strong>{' '}
-                        {c.works.length === 1 ? 'trabajo' : 'trabajos'}
-                      </span>
-                      <span>
-                        <strong>{c.notes.length}</strong> {c.notes.length === 1 ? 'nota' : 'notas'}
-                      </span>
-                      <span>
-                        <strong>{c.answers.length}</strong>{' '}
-                        {c.answers.length === 1 ? 'respuesta' : 'respuestas'}
-                      </span>
-                      {c.helpPosts.length > 0 && (
-                        <span>
-                          <strong>{c.helpPosts.length}</strong>{' '}
-                          {c.helpPosts.length === 1 ? 'publicación de ayuda' : 'publicaciones de ayuda'}
-                        </span>
-                      )}
-                    </span>
-                  </span>
-                </Link>
+                  </div>
+                  <div className="person-card__footer">
+                    {birthday && <span className="person-card__birthday" title={`Cumpleaños: ${formatDayMonth(birthday.day, birthday.month)}`}><Icon name="cake" size={14} />{formatDayMonth(birthday.day, birthday.month)}</span>}
+                    <Link to={`/perfil/${m.id}`} aria-label={`Ver perfil de ${nameOf(m)}`}>Ver perfil <Icon name="forward" size={15} /></Link>
+                  </div>
+                </article>
               </li>
             );
           })}
         </ul>
       )}
-    </>
+    </section>
   );
 }
 
 function EditName({ current, onDone }: { current: string; onDone: () => void }) {
   const source = useDataSource();
+  const { me } = useSnapshot();
   const [name, setName] = useState(current);
-  const { error, run } = useAction();
+  const { error, pending, run } = useAction();
+  const submitting = useRef(false);
+  const errorId = useId();
+  const validationError = displayNameError(name);
+  const message = validationError ?? error;
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (await run(async () => (await source.updateProfile(name.trim()), true))) onDone();
+    if (submitting.current || displayNameError(name) || name.trim() === current) return;
+    submitting.current = true;
+    try {
+      if (await run(async () => (await source.updateProfile(name.trim(), me?.photoUrl), true))) onDone();
+    } finally {
+      submitting.current = false;
+    }
   };
   return (
-    <form className="profile-edit" onSubmit={submit}>
+    <form className="profile-edit" onSubmit={submit} aria-busy={pending}>
       <label className="field">
         <span className="field__label">Nombre que verá el grupo</span>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          maxLength={80}
+          maxLength={DISPLAY_NAME_MAX_LENGTH}
+          disabled={pending}
+          aria-invalid={Boolean(validationError)}
+          aria-describedby={message ? errorId : undefined}
           required
           autoFocus
         />
       </label>
-      {error && (
-        <p className="error" role="alert">
-          {error}
+      {message && (
+        <p id={errorId} className="error" role="alert">
+          {message}
         </p>
       )}
       <div className="form__actions">
-        <button type="button" className="secondary" onClick={onDone}>
+        <button type="button" className="secondary" onClick={onDone} disabled={pending}>
           Cancelar
         </button>
-        <button type="submit" disabled={!name.trim() || name.trim() === current}>
-          Guardar
+        <button type="submit" disabled={pending || Boolean(validationError) || name.trim() === current}>
+          {pending ? 'Guardando…' : 'Guardar'}
         </button>
       </div>
     </form>
@@ -836,6 +890,7 @@ export function ProfilePage() {
   const setEditingBirthday = (open: boolean) => patchParams({ cumple: open ? 'editar' : '' });
   const birthday = birthdays.find((b) => b.memberId === member.id);
   const c = contributionsOf(member.id, data);
+  const uploaded = buildProfileUploadStats(data).get(member.id) ?? { bytes: 0, fileCount: 0 };
   const memberSubjects = subjects.filter((s) => c.subjectIds.has(s.id)).sort(bySubject);
   const counts: Record<Tab, number> = {
     '': profileFeed(member.id, data).length,
@@ -914,6 +969,10 @@ export function ProfilePage() {
             <div>
               <dt>Respuestas útiles</dt>
               <dd>{c.helpful.length}</dd>
+            </div>
+            <div className="profile-upload-summary" title="Adjuntos y fotos vigentes; no incluye archivos eliminados ni stickers.">
+              <dt><Icon name="upload" size={14} /> {data.memberUploadStats !== undefined ? 'Archivos subidos' : 'Archivos visibles'}</dt>
+              <dd>{formatBytes(uploaded.bytes)}<span>{uploaded.fileCount} {uploaded.fileCount === 1 ? 'archivo' : 'archivos'}</span></dd>
             </div>
           </dl>
           {!editing && (

@@ -4,14 +4,19 @@ import { secureHeaders } from 'hono/secure-headers';
 import { createRemoteJWKSet } from 'jose';
 import { createRequireAuth, type AuthOptions, type AuthVariables } from './lib/auth.ts';
 import { checkActiveMembership } from './lib/membership.ts';
+import { accountRoutes } from './auth/accountRoutes.ts';
 import { createFileDatabase, FileApiError, type FileDatabase, type TargetKind } from './files/database.ts';
 import { matchesMetadata, MAX_FILE_BYTES, metadata, objectKey, storeFile } from './files/storage.ts';
 import { createAiDatabase, type AiDatabase, type AiWorkerEnv } from './ai/database.ts';
 import { aiWorkerRoutes, aiPublicError } from './ai/routes.ts';
 import { guideAiRoutes } from './ai/guideRoutes.ts';
+import { documentRoutes } from './ai/documentRoutes.ts';
+import { presentationRoutes } from './ai/presentationRoutes.ts';
+import { examEvaluationRoutes } from './ai/examEvaluationRoutes.ts';
 import { examRoutes } from './ai/examRoutes.ts';
 import { agentAiRoutes } from './ai/agentRoutes.ts';
 import { moodleRoutes } from './integrations/moodleRoutes.ts';
+import { invitationLinkRoutes } from './invitations/linkRoutes.ts';
 import type { AgentProvider } from './ai/agentProvider.ts';
 import type { GuideProvider } from './ai/guideProvider.ts';
 import type { AiProvider } from './ai/provider.ts';
@@ -22,6 +27,7 @@ interface WorkerOptions {
   database?: (env: FileWorkerEnv) => FileDatabase;
   aiDatabase?: (env: AiWorkerEnv) => AiDatabase;
   moodleFetch?: typeof fetch;
+  invitationFetch?: typeof fetch;
   aiProvider?: AiProvider;
   guideProvider?: GuideProvider;
   agentProvider?: AgentProvider;
@@ -69,6 +75,8 @@ export function createWorkerApp(options: WorkerOptions = {}) {
     allowHeaders: ['Authorization', 'Content-Type', 'X-File-Name', 'X-File-Size'],
     exposeHeaders: ['Content-Disposition', 'Content-Length'] })(c, next));
   app.get('/health', (c) => c.json({ ok: true, files: c.env.FILES ? 'r2' : 'unconfigured', ai: c.env.AI_ENABLED === 'true' }));
+  // Pública: activa cuentas autorizadas antes del primer código de acceso.
+  app.route('/auth/account', accountRoutes());
   app.use('/ai/*', async (c, next) => {
     c.header('Cache-Control', 'private, no-store');
     let auth: AuthOptions;
@@ -82,10 +90,14 @@ export function createWorkerApp(options: WorkerOptions = {}) {
   });
   app.route('/ai/study-guides', guideAiRoutes({ provider: options.guideProvider }));
   app.route('/ai/exams', examRoutes());
+  app.route('/ai/documents', documentRoutes());
+  app.route('/ai/presentations', presentationRoutes());
+  app.route('/ai/exam-evaluations', examEvaluationRoutes());
   app.route('/ai/agent', agentAiRoutes({ provider: options.agentProvider }));
   app.route('/ai', aiWorkerRoutes({ provider: options.aiProvider }));
   // Autenticada con su propio secreto: la extensión de Moodle no tiene sesión de B20.
   app.route('/integrations/moodle', moodleRoutes({ fetchFn: options.moodleFetch }));
+  app.route('/admin/invitation-links', invitationLinkRoutes({ fetchFn: options.invitationFetch }));
   app.use('/files/*', async (c, next) => {
     if (!c.env.FILES) return c.json({ error: 'La compatibilidad con archivos anteriores no está configurada en este servicio.' }, 503);
     let auth: AuthOptions;

@@ -2,8 +2,8 @@ import { cleanFeedComment, cleanFeedPost, cleanFeedReaction, type FeedTargetKind
 import type { Member, Note, Snapshot, Subject } from './types';
 import { emptyFeed, type FeedActions, type FeedPost, type FeedSnapshot } from './feedTypes';
 interface DemoState { members: Member[]; notes: Note[]; subjects: Subject[]; }
-interface Context { state(): DemoState; active(): Member; current(): Snapshot; id(): string; now(): Date; emit(): void; }
-interface Store extends FeedSnapshot { postRequests: Map<string, string>; commentRequests: Map<string, string>; }
+interface Context { state(): DemoState; active(): Member; current(): Snapshot; id(): string; now(): Date; emit(): void; available?(kind: string, id: string): boolean; }
+interface Store extends FeedSnapshot { postRequests: Map<string, string>; commentRequests: Map<string, string>; versions: Map<string, number>; }
 const stores = new WeakMap<object, Store>();
 const token = (value: string) => { if (!value.trim() || value.trim().length > 128) throw new Error('La solicitud no es válida.'); return value.trim(); };
 
@@ -36,7 +36,7 @@ export class DemoFeedStore implements FeedActions {
   private seed(): Store {
     const { members, notes, subjects } = this.ctx.state(); const now = this.ctx.now().getTime();
     const ago = (minutes: number) => new Date(now - minutes * 60_000);
-    const store: Store = { ...emptyFeed(), postRequests: new Map(), commentRequests: new Map() };
+    const store: Store = { ...emptyFeed(), postRequests: new Map(), commentRequests: new Map(), versions: new Map() };
     if (members.length < 4) return store;
     const [a, b, c, d] = members.map((m) => m.id) as [string, string, string, string];
     store.feedPosts.push(
@@ -60,16 +60,25 @@ export class DemoFeedStore implements FeedActions {
   snapshot(base: Snapshot): FeedSnapshot {
     if (base.me?.status !== 'active') return emptyFeed();
     const active = new Set(base.members.filter((m) => m.status === 'active').map((m) => m.id));
-    const feedPosts = this.shared.feedPosts.filter((r) => active.has(r.authorId));
+    const feedPosts = this.shared.feedPosts.filter((r) => this.ctx.available?.('feed_post', r.id) !== false);
     const posts = new Set(feedPosts.map((r) => r.id));
     return structuredClone({ feedPosts,
       feedReactions: this.shared.feedReactions.filter((r) => active.has(r.memberId) && feedTargetReadable(base, feedPosts, r.targetKind, r.targetId)),
-      feedComments: this.shared.feedComments.filter((r) => posts.has(r.postId) && active.has(r.authorId)) });
+      feedComments: this.shared.feedComments.filter((r) => posts.has(r.postId) && this.ctx.available?.('feed_comment', r.id) !== false) });
   }
-  private post(id: string) { const row = this.shared.feedPosts.find((r) => r.id === id); if (!row) throw new Error('La publicación ya no está disponible.'); return row; }
+  raw(): FeedSnapshot { return this.shared; }
+  versionOf(kind: string, id: string) { return this.shared.versions.get(`${kind}:${id}`) ?? 1; }
+  bump(kind: string, id: string) { this.shared.versions.set(`${kind}:${id}`, this.versionOf(kind, id) + 1); }
+  purgeManaged(targets: ReadonlySet<string>) {
+    const posts = new Set(this.shared.feedPosts.filter((row) => targets.has(`feed_post:${row.id}`)).map((row) => row.id));
+    this.shared.feedPosts = this.shared.feedPosts.filter((row) => !posts.has(row.id));
+    this.shared.feedComments = this.shared.feedComments.filter((row) => !posts.has(row.postId) && !targets.has(`feed_comment:${row.id}`));
+    this.shared.feedReactions = this.shared.feedReactions.filter((row) => row.targetKind !== 'post' || !posts.has(row.targetId));
+  }
+  private post(id: string) { const row = this.shared.feedPosts.find((r) => r.id === id); if (!row || this.ctx.available?.('feed_post', id) === false) throw new Error('La publicación ya no está disponible.'); return row; }
   toggleFeedReaction(input: Parameters<FeedActions['toggleFeedReaction']>[0]) {
     const me = this.ctx.active(); const { kind, emoji } = cleanFeedReaction(input.targetKind, input.emoji);
-    if (!feedTargetReadable(this.ctx.current(), this.shared.feedPosts, kind, input.targetId)) throw new Error('Ese contenido ya no está disponible.');
+    if (!feedTargetReadable(this.ctx.current(), this.shared.feedPosts.filter((row) => this.ctx.available?.('feed_post', row.id) !== false), kind, input.targetId)) throw new Error('Ese contenido ya no está disponible.');
     const mine = (r: FeedSnapshot['feedReactions'][number]) => r.targetKind === kind && r.targetId === input.targetId && r.memberId === me.id;
     const current = this.shared.feedReactions.find(mine);
     this.shared.feedReactions = this.shared.feedReactions.filter((r) => !mine(r));
@@ -89,7 +98,7 @@ export class DemoFeedStore implements FeedActions {
     const me = this.ctx.active(); const post = this.post(input.postId);
     if (post.authorId !== me.id) throw new Error('Solo quien publicó puede editarla.');
     const text = cleanFeedPost(input.text);
-    if (text !== post.text) { post.text = text; post.editedAt = this.ctx.now(); this.ctx.emit(); }
+    if (text !== post.text) { post.text = text; post.editedAt = this.ctx.now(); this.bump('feed_post', post.id); this.ctx.emit(); }
   }
   deleteFeedPost(input: Parameters<FeedActions['deleteFeedPost']>[0]) {
     const me = this.ctx.active(); const post = this.post(input.postId);
@@ -109,8 +118,8 @@ export class DemoFeedStore implements FeedActions {
   }
   deleteFeedComment(input: Parameters<FeedActions['deleteFeedComment']>[0]) {
     const me = this.ctx.active(); const comment = this.shared.feedComments.find((r) => r.id === input.commentId);
-    if (!comment) throw new Error('El comentario ya no está disponible.');
-    const post = this.shared.feedPosts.find((r) => r.id === comment.postId);
+    if (!comment || this.ctx.available?.('feed_comment', comment.id) === false) throw new Error('El comentario ya no está disponible.');
+    const post = this.post(comment.postId);
     if (comment.authorId !== me.id && post?.authorId !== me.id && !me.isCreator) throw new Error('No puedes eliminar este comentario.');
     this.shared.feedComments = this.shared.feedComments.filter((r) => r.id !== comment.id);
     this.ctx.emit();

@@ -5,7 +5,7 @@
   "compatibility_date": "2026-10-21",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
-  "observability": { "enabled": true, "head_sampling_rate": 1 },
+  "observability": { "enabled": true, "head_sampling_rate": 1, "traces": { "enabled": true, "head_sampling_rate": 0.01 } },
   "vars": {
     "CORS_ORIGINS": "https://b20.mx,https://app-b20.pages.dev,http://localhost:5173,capacitor://localhost,https://localhost",
     "OIDC_ISSUER": "https://auth.spacetimedb.com/oidc",
@@ -13,6 +13,8 @@
     "OIDC_JWKS_URI": "https://auth.spacetimedb.com/oidc/jwks",
     "SPACETIMEDB_URI": "https://maincloud.spacetimedb.com",
     "SPACETIMEDB_MODULE": "app-b20-34245",
+    "APP_URL": "https://b20.mx",
+    "INVITATION_MASTER_VERSION": "v1",
     "AI_ENABLED": "false",
     "AI_MASTER_VERSION": "v1",
     "GEMINI_MODEL": "",

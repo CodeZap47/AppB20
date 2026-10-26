@@ -31,3 +31,11 @@ export * from './agentStyle';
 export * from './agentAi';
 export * from './profiles';
 export { hasRoyalBanner } from './royalAdmins';
+
+export * from './documentPreparation';
+
+export * from './presentationAi';
+
+export * from './presentationMedia';
+
+export * from './examEvaluation';

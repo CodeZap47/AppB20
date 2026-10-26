@@ -61,6 +61,26 @@ function birthdayReadable(db: ViewDb, sender: Identity, id: string) {
   if (!/^[a-f0-9]{64}$/i.test(id)) return false;
   const person = Identity.fromString(id); return isActive(db, sender) && isActive(db, person) && db.birthday.identity.find(person)?.remind === true;
 }
+/** Cancelación terminal: restaurar una fuente no reabre envíos pendientes anteriores. */
+export function suppressContentNotifications(ctx: Ctx, kind: string, targetId: bigint) {
+  const id = targetId.toString();
+  const matches = (sourceKind: string, sourceId: string, eventKey?: string) =>
+    (sourceKind === kind && sourceId === id) || (kind === 'answer' && eventKey === `answer:${id}`);
+  const cancelledKeys = new Set<string>();
+  for (const row of ctx.db.notificationEvent?.iter() ?? []) {
+    if (!matches(row.sourceKind, row.sourceId, row.key)) continue;
+    cancelledKeys.add(row.key);
+    if (!row.completed) ctx.db.notificationEvent.key.update({ ...row, cursor: row.recipientIds.length, completed: true });
+  }
+  const ids = new Set<string>();
+  for (const row of ctx.db.notification?.iter() ?? []) {
+    if (matches(row.sourceKind, row.sourceId) || [...cancelledKeys].some(key => row.dedupeKey.endsWith(`:${key}`))) ids.add(row.id.toString());
+  }
+  for (const row of ctx.db.notificationDelivery?.iter() ?? []) {
+    if (ids.has(row.notificationId.toString()) && row.status !== 'sent' && row.status !== 'cancelled')
+      ctx.db.notificationDelivery.id.update({ ...row, status: 'cancelled', leaseId: '', leaseUntil: undefined });
+  }
+}
 export function readableNotification(db: ViewDb, sender: Identity, row: Pick<InboxRow, 'memberId' | 'sourceKind' | 'sourceId'>): boolean {
   if (!row.memberId.isEqual(sender) || !isActive(db, sender)) return false;
   if (row.sourceKind === 'test') return row.sourceId === hex(sender);

@@ -35,9 +35,9 @@ afterEach(async () => {
   container.remove();
   vi.unstubAllGlobals();
 });
-async function show(mode?: ComposerMode) {
+async function show(mode?: ComposerMode, attachments = false, disabled = false) {
   await act(async () => root.render(<DataProvider source={source}><MemoryRouter>
-    <Composer key={draftKey} draftKey={draftKey} placeholder="Escribe al grupo" onSend={onSend} mode={mode} onCancelMode={cancel} mentionMemberIds={['peer']} />
+    <Composer key={draftKey} draftKey={draftKey} placeholder="Escribe al grupo" onSend={onSend} mode={mode} onCancelMode={cancel} mentionMemberIds={['peer']} attachments={attachments} disabled={disabled} />
   </MemoryRouter></DataProvider>));
 }
 const input = () => container.querySelector('textarea')!;
@@ -52,6 +52,43 @@ async function key(value: string, options: KeyboardEventInit = {}) {
 }
 
 describe('composición con la presentación de Untitled UI', () => {
+  it('abre el cargador desde el botón y conserva el archivo seleccionado hasta enviar', async () => {
+    await show(undefined, true);
+    expect(container.querySelector('input[type="file"]')).toBeNull();
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Elegir archivos adjuntos"]')!.click());
+    const picker = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const file = new File(['archivo'], 'apuntes.txt', { type: 'text/plain' });
+    Object.defineProperty(picker, 'files', { configurable: true, value: [file] });
+    await act(async () => picker.dispatchEvent(new Event('change', { bubbles: true })));
+    expect(container.querySelector('[data-upload-state="selected"]')?.textContent).toContain('apuntes.txt');
+    await key('Enter');
+    expect(onSend).toHaveBeenCalledExactlyOnceWith('', [file]);
+  });
+
+  it('revela el cargador al soltar sobre el editor y no altera el borrador', async () => {
+    await show(undefined, true);
+    await fill('Borrador con un archivo');
+    const file = new File(['archivo'], 'actividad.txt', { type: 'text/plain' });
+    const drop = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, 'dataTransfer', { value: { files: [file], types: ['Files'] } });
+    await act(async () => input().dispatchEvent(drop));
+    expect(input().value).toBe('Borrador con un archivo');
+    expect(container.querySelector('input[type="file"]')).not.toBeNull();
+    expect(container.querySelector('[data-upload-state="selected"]')?.textContent).toContain('actividad.txt');
+    await key('Enter');
+    expect(onSend).toHaveBeenCalledExactlyOnceWith('Borrador con un archivo', [file]);
+  });
+
+  it('ignora archivos soltados cuando el chat está bloqueado', async () => {
+    await show(undefined, true, true);
+    const drop = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, 'dataTransfer', { value: { files: [new File(['x'], 'a.txt')], types: ['Files'] } });
+    await act(async () => input().dispatchEvent(drop));
+    expect(drop.defaultPrevented).toBe(true);
+    expect(container.querySelector('[data-upload-state]')).toBeNull();
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
   it('espera la confirmación del servidor y conserva el texto si el envío falla', async () => {
     let finish!: (ok: boolean) => void;
     onSend.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));

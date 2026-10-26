@@ -19,8 +19,7 @@ import type { Assignment, Member, Work, WorkPublicationStatus } from '../data/ty
 import { Avatar } from '../components/Avatar';
 import { AvatarStack } from '../components/AvatarStack';
 import { Empty } from '../components/Empty';
-import { FileList } from '../components/FileList';
-import { FilePicker } from '../components/FilePicker';
+import { AttachmentUploader, useResourceUploadQueue } from '../components/uploads/ResourceUploader';
 import { Icon } from '../components/Icon';
 import { PostArchive, PostTimeline } from '../components/PostViews';
 import { AcademicComments, PageHistory, ProgressControl, ResourceSection, WorkHistoryAndReview } from '../components/AcademicTools';
@@ -43,9 +42,6 @@ import { bySubject, NO_TERM, submittersOf, worksOf } from '../lib/works';
 const NEW = '__nuevo__';
 
 const PERIODS = Array.from({ length: PERIOD_COUNT }, (_, i) => i + 1);
-
-const uploadError = (error: unknown, file: File) =>
-  error instanceof Error ? error.message : `No se pudo subir «${file.name}».`;
 
 /** Tipo de trabajo: tarea o actividad, exposición o examen. */
 function KindPicker({ value, onChange }: { value: WorkKind; onChange: (kind: WorkKind) => void }) {
@@ -371,7 +367,13 @@ export function AssignmentsPage() {
 
 function EditWorkForm({ work, onDone }: { work: Work; onDone: () => void }) {
   const source = useDataSource();
-  const { error, run } = useAction();
+  const { error, pending, run } = useAction();
+  const queue = useResourceUploadQueue();
+  const submitting = useRef(false);
+  const active = useRef(true);
+  const savedParent = useRef<{ id: string; version: number } | null>(null);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const [title, setTitle] = useState(work.title);
   const [description, setDescription] = useState(work.description);
   const [topic, setTopic] = useState(work.topic ?? '');
@@ -381,11 +383,26 @@ function EditWorkForm({ work, onDone }: { work: Work; onDone: () => void }) {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (await run(async () => (await source.saveWorkVersion(work.id, { title, description, topic, status }, baseVersion), true))) onDone();
+    if (submitting.current) return;
+    submitting.current = true;
+    try {
+      if (!savedParent.current) {
+        const result = await run(async () => {
+          if (changed) await source.saveWorkVersion(work.id, { title, description, topic, status }, baseVersion);
+          return { id: work.id, version: baseVersion + (changed ? 1 : 0) };
+        });
+        if (!active.current || !result) return;
+        savedParent.current = result;
+        setSaved(true);
+      }
+      const target = savedParent.current;
+      if (await queue.upload('work', target.id, target.version) && active.current) onDone();
+    } finally { submitting.current = false; }
   };
 
   return (
-    <form className="form" onSubmit={submit}>
+    <form className="form" onSubmit={submit} aria-busy={pending || queue.busy}>
+      <fieldset className="academic-publish-fields" disabled={pending || queue.busy || saved}>
       <label className="field">
         <span className="field__label">
           Tema o título <span className="field__optional">opcional</span>
@@ -401,6 +418,9 @@ function EditWorkForm({ work, onDone }: { work: Work; onDone: () => void }) {
         <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={6} autoFocus />
         <span className="field__hint">Para pegar código, enciérralo entre líneas con ```.</span>
       </label>
+      </fieldset>
+      {saved && <p role="status">Los cambios del trabajo ya están guardados. {queue.pendingCount ? 'Reintenta los archivos pendientes para terminar.' : 'Puedes continuar.'}</p>}
+      <AttachmentUploader queue={queue} disabled={pending} title="Archivos del trabajo" />
       {error && (
         <p className="error" role="alert">
           {error}
@@ -408,11 +428,11 @@ function EditWorkForm({ work, onDone }: { work: Work; onDone: () => void }) {
       )}
       <div className="form__actions">
         <span className="muted form__note">Se guardará como versión {work.version + 1}.</span>
-        <button type="button" className="secondary" onClick={onDone}>
+        <button type="button" className="secondary" onClick={onDone} disabled={pending || queue.busy}>
           Cancelar
         </button>
-        <button type="submit" disabled={!changed}>
-          Guardar cambios
+        <button type="submit" disabled={pending || queue.busy || (!saved && !changed && !queue.hasFiles)}>
+          {pending || queue.busy ? 'Guardando…' : saved ? queue.pendingCount ? 'Reintentar archivos pendientes' : 'Continuar' : 'Guardar cambios'}
         </button>
       </div>
     </form>
@@ -439,7 +459,7 @@ function SubmissionCard({ work, members, meId, highlighted, initialErrors }: {
       {work.topic && <p className="muted">Tema: {work.topic}</p>}
       <RichText text={work.description} />
     </>}
-    <ResourceSection kind="work" id={work.id} version={work.version} canEdit={canEdit} />
+    <ResourceSection kind="work" id={work.id} version={work.version} canEdit={canEdit && !editing} />
     {!work.withdrawnAt && <ExamMaterialLink kind="work" id={work.id} />}
     {initialErrors.length > 0 && <ul className="file-picker__errors error" role="alert">{initialErrors.map((problem) => <li key={problem}>{problem}</li>)}</ul>}
     <WorkHistoryAndReview work={work} />
@@ -713,7 +733,13 @@ function AssignmentForm({ assignment }: { assignment: Assignment | undefined }) 
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const { members, subjects, terms, calendar } = useSnapshot();
-  const { error, run } = useAction();
+  const { error, pending, run } = useAction();
+  const queue = useResourceUploadQueue();
+  const submitting = useRef(false);
+  const active = useRef(true);
+  const savedParent = useRef<{ id: string; version: number } | null>(null);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const backTo = assignment ? `/m/tareas/${assignment.id}` : '/m/tareas';
   // Al crear, el formulario abre en el cuatrimestre y parcial vigentes según Ajustes.
   const current = currentPlacement(calendar);
@@ -766,37 +792,38 @@ function AssignmentForm({ assignment }: { assignment: Assignment | undefined }) 
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const id = await run(async () => {
-      // Si la materia o el parcial nuevos se crean pero guardar falla, quedan elegidos para
-      // que un segundo intento no los duplique.
-      let sid = subjectId;
-      if (sid === NEW) {
-        sid = await source.createSubject(newSubject, period);
-        setSubjectId(sid);
-        setNewSubject('');
+    if (submitting.current) return;
+    submitting.current = true;
+    try {
+      if (!savedParent.current) {
+        const result = await run(async () => {
+          // Conserva las materias y parciales ya creados si falla la publicación.
+          let sid = subjectId;
+          if (sid === NEW) {
+            sid = await source.createSubject(newSubject, period);
+            setSubjectId(sid);
+            setNewSubject('');
+          }
+          let tid = termId;
+          if (tid === NEW) {
+            tid = await source.createTerm(sid, newTerm);
+            setTermId(tid);
+            setNewTerm('');
+          }
+          const input = { subjectId: sid, termId: tid || undefined, kind, title, instructions, topic, dueDate: dueDate || undefined };
+          if (!assignment) return { id: await source.createAssignment(input), version: 1 };
+          if (changed) await source.updateAssignment(assignment.id, input, baseVersion);
+          return { id: assignment.id, version: (baseVersion ?? assignment.version) + (changed ? 1 : 0) };
+        });
+        if (!active.current || !result) return;
+        savedParent.current = result;
+        setSaved(true);
       }
-      let tid = termId;
-      if (tid === NEW) {
-        tid = await source.createTerm(sid, newTerm);
-        setTermId(tid);
-        setNewTerm('');
-      }
-      const input = {
-        subjectId: sid,
-        termId: tid || undefined,
-        kind,
-        title,
-        instructions,
-        topic,
-        dueDate: dueDate || undefined,
-      };
-      if (!assignment) return source.createAssignment(input);
-      await source.updateAssignment(assignment.id, input, baseVersion);
-      return assignment.id;
-    });
-    if (!id) return;
-    rememberPeriod(period);
-    void navigate(`/m/tareas/${id}`);
+      const target = savedParent.current;
+      if (!await queue.upload('assignment', target.id, target.version) || !active.current) return;
+      rememberPeriod(period);
+      void navigate(`/m/tareas/${target.id}`);
+    } finally { submitting.current = false; }
   };
 
   return (
@@ -815,7 +842,8 @@ function AssignmentForm({ assignment }: { assignment: Assignment | undefined }) 
         </div>
       </header>
 
-      <form className="panel form form--wide" onSubmit={submit}>
+      <form className="panel form form--wide" onSubmit={submit} aria-busy={pending || queue.busy}>
+        <fieldset className="academic-publish-fields" disabled={pending || queue.busy || saved}>
         <section className="form__section">
           <h2>Qué es</h2>
           <KindPicker value={kind} onChange={setKind} />
@@ -931,6 +959,9 @@ function AssignmentForm({ assignment }: { assignment: Assignment | undefined }) 
           </label>
         </section>
 
+        </fieldset>
+        {saved && <p role="status">La página ya está guardada. {queue.pendingCount ? 'Reintenta los archivos pendientes para terminar.' : 'Puedes continuar.'} <Link to={`/m/tareas/${savedParent.current!.id}`}>Abrir la página</Link></p>}
+        <AttachmentUploader queue={queue} disabled={pending} title="Recursos de la consigna" />
         {error && (
           <p className="error" role="alert">
             {error}
@@ -945,8 +976,8 @@ function AssignmentForm({ assignment }: { assignment: Assignment | undefined }) 
           <Link to={backTo} className="button secondary">
             Cancelar
           </Link>
-          <button type="submit" disabled={!changed}>
-            {assignment ? 'Guardar versión nueva' : 'Crear página'}
+          <button type="submit" disabled={pending || queue.busy || (!saved && !changed && !queue.hasFiles)}>
+            {pending || queue.busy ? 'Guardando…' : saved ? queue.pendingCount ? 'Reintentar archivos pendientes' : 'Continuar' : assignment ? 'Guardar versión nueva' : 'Crear página'}
           </button>
         </div>
       </form>
@@ -964,24 +995,22 @@ function SubmitWorkForAssignment({ assignmentId }: { assignmentId: string }) {
   const source = useDataSource();
   const navigate = useNavigate();
   const { me, assignments, members } = useSnapshot();
-  const { error, run } = useAction();
+  const { error, pending, run } = useAction();
+  const queue = useResourceUploadQueue();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [topic, setTopic] = useState('');
   const [status, setStatus] = useState<WorkPublicationStatus>('draft');
   const [coauthorIds, setCoauthorIds] = useState<string[]>([]);
-  const [files, setFiles] = useState<File[]>([]);
-  const [busy, setBusy] = useState(false);
   const [createdId, setCreatedId] = useState<string | null>(null);
-  const [uploadVersion, setUploadVersion] = useState(1);
-  const [uploadErrors, setUploadErrors] = useState<string[]>([]);
-  const uploadController = useRef<AbortController | null>(null);
-  const [uploadProgress, setUploadProgress] = useState<{ name: string; done: number; total: number } | null>(null);
+  const savedParent = useRef<string | null>(null);
+  const submitting = useRef(false);
   const active = useRef(true);
   useEffect(() => {
     active.current = true;
-    return () => { active.current = false; uploadController.current?.abort(); };
+    return () => { active.current = false; };
   }, []);
+  const busy = pending || queue.busy;
   const assignment = assignments.find((a) => a.id === assignmentId);
 
   if (!assignment) {
@@ -1002,55 +1031,21 @@ function SubmitWorkForAssignment({ assignmentId }: { assignmentId: string }) {
 
   const backTo = `/m/tareas/${assignment.id}`;
   const others = members.filter((m) => m.id !== me?.id && m.status === 'active');
-  const fileKey = (f: File) => `${f.name}:${f.size}:${f.lastModified}`;
-  const addFiles = (list: File[]) =>
-    setFiles((current) => [
-      ...current,
-      ...list.filter((f) => !current.some((c) => fileKey(c) === fileKey(f))),
-    ]);
   const toggleCoauthor = (id: string) =>
     setCoauthorIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
-  const empty = !title.trim() && !description.trim() && files.length === 0;
+  const empty = !title.trim() && !description.trim() && !queue.hasFiles;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (busy) return;
-    setBusy(true);
-    const controller = new AbortController();
-    uploadController.current = controller;
+    if (submitting.current) return;
+    submitting.current = true;
     try {
-      const id = createdId ?? await run(() => source.publishWork({ assignmentId: assignment.id, title, description, coauthorIds, topic, status }));
+      const id = savedParent.current ?? await run(() => source.publishWork({ assignmentId: assignment.id, title, description, coauthorIds, topic, status }));
       if (!active.current || !id) return;
+      savedParent.current = id;
       setCreatedId(id);
-      if (controller.signal.aborted) return;
-      setUploadErrors([]);
-      // Recuperar un archivo ya confirmado no crea otra versión. Conserva la base del lote
-      // para avanzar una sola vez y para detectar cambios hechos por un coautor.
-      let expectedVersion = uploadVersion;
-      for (let index = 0; index < files.length; index++) {
-        const file = files[index]!;
-        try {
-          setUploadProgress({ name: file.name, done: 0, total: file.size });
-          await source.attachResourceFile('work', id, file, expectedVersion, { signal: controller.signal,
-            onProgress: (done, total) => { if (active.current) setUploadProgress({ name: file.name, done, total }); } });
-        } catch (failure) {
-          if (active.current) { setUploadErrors([uploadError(failure, file)]); setFiles(files.slice(index)); }
-          return;
-        }
-        if (!active.current) return;
-        expectedVersion++;
-        setUploadVersion(expectedVersion);
-        if (controller.signal.aborted) {
-          setFiles(files.slice(index + 1));
-          setUploadErrors(['Cancelaste la subida. Los archivos ya confirmados permanecen guardados.']);
-          return;
-        }
-      }
-      if (active.current && !controller.signal.aborted) void navigate(`${backTo}?trabajo=${id}`);
-    } finally {
-      if (uploadController.current === controller) uploadController.current = null;
-      if (active.current) { setUploadProgress(null); setBusy(false); }
-    }
+      if (await queue.upload('work', id, 1) && active.current) void navigate(`${backTo}?trabajo=${id}`);
+    } finally { submitting.current = false; }
   };
 
   return (
@@ -1069,8 +1064,8 @@ function SubmitWorkForAssignment({ assignmentId }: { assignmentId: string }) {
         </div>
       </header>
 
-      {createdId && <p className="panel" role="status">Tu trabajo ya está publicado. Reintentar solo confirma los archivos pendientes, sin crear otro trabajo. <Link to={`${backTo}?trabajo=${createdId}`}>Abrir el trabajo</Link></p>}
-      <form className="panel form form--wide" onSubmit={(e) => void submit(e)}>
+      {createdId && <p className="panel" role="status">Tu trabajo ya está publicado. {queue.pendingCount ? 'Reintentar solo confirma los archivos pendientes, sin crear otro trabajo.' : 'Puedes continuar.'} <Link to={`${backTo}?trabajo=${createdId}`}>Abrir el trabajo</Link></p>}
+      <form className="panel form form--wide" onSubmit={(e) => void submit(e)} aria-busy={busy}>
         <fieldset className="academic-publish-fields" disabled={busy || Boolean(createdId)}>
         <section className="form__section">
           <h2>Tu trabajo</h2>
@@ -1090,17 +1085,6 @@ function SubmitWorkForAssignment({ assignmentId }: { assignmentId: string }) {
               De qué trata y cómo lo resolviste. Para pegar código, enciérralo entre líneas con ```.
             </span>
           </label>
-        </section>
-
-        <section className="form__section">
-          <h2>
-            Archivos <span className="field__optional">opcional</span>
-          </h2>
-          <FilePicker onFiles={addFiles} disabled={busy} />
-          <FileList
-            items={files.map((f) => ({ key: fileKey(f), name: f.name, size: f.size }))}
-            onRemove={busy ? undefined : (key) => setFiles((list) => list.filter((f) => fileKey(f) !== key))}
-          />
         </section>
 
         {others.length > 0 && (
@@ -1131,8 +1115,7 @@ function SubmitWorkForAssignment({ assignmentId }: { assignmentId: string }) {
         )}
 
         </fieldset>
-        {uploadProgress && <p role="status">Subiendo {uploadProgress.name}: {Math.round(uploadProgress.done / uploadProgress.total * 100)} % <button type="button" className="link-button" onClick={() => uploadController.current?.abort()}>Cancelar subida</button></p>}
-        {uploadErrors.length > 0 && <ul className="error" role="alert">{uploadErrors.map((message) => <li key={message}>{message}</li>)}</ul>}
+        <AttachmentUploader queue={queue} disabled={pending} />
         {error && (
           <p className="error" role="alert">
             {error}
@@ -1143,8 +1126,8 @@ function SubmitWorkForAssignment({ assignmentId }: { assignmentId: string }) {
           <Link to={backTo} className="button secondary">
             Cancelar
           </Link>
-          <button type="submit" disabled={busy || empty}>
-            {busy ? 'Subiendo archivos…' : createdId ? 'Reintentar archivos pendientes' : 'Subir trabajo'}
+          <button type="submit" disabled={busy || (!createdId && empty)}>
+            {busy ? 'Subiendo archivos…' : createdId ? queue.pendingCount ? 'Reintentar archivos pendientes' : 'Continuar' : 'Subir trabajo'}
           </button>
         </div>
       </form>

@@ -4,7 +4,7 @@ import type { MemberProfileInput, ProfileCoverInput } from './communityTypes';
 export type { ChatChannel, ChannelMessage, ConversationState, BlockedMember, MessageReport, CreateChatChannelInput, ReportMessageInput } from './chatTypes';
 export type { MemberProfile, MemberProfileInput, ProfileCover, ProfileCoverInput } from './communityTypes';
 export type { NoteVersion, GuideVersion, GuideVersionSource, QuestionComment, AnswerUsefulness, QuestionLink } from './knowledgeTypes';
-export type WithdrawableKind = 'note' | 'guide' | 'question' | 'answer' | 'work' | 'evidence';
+export type WithdrawableKind = 'note' | 'guide' | 'question' | 'answer' | 'work' | 'evidence' | 'feed_post' | 'feed_comment' | 'group_message' | 'channel_message';
 export interface Delivery2Actions {
   downloadSticker(stickerId: Id): Promise<Blob>;
   createChatChannel(input: CreateChatChannelInput): MaybePromise<Id>;
@@ -23,5 +23,5 @@ export interface Delivery2Actions {
   commentQuestion(questionId: Id, text: string, answerId?: Id): MaybePromise<void>;
   toggleAnswerUsefulness(answerId: Id): MaybePromise<void>;
   saveQuestionLinks(questionId: Id, noteIds: Id[], guideIds: Id[]): MaybePromise<void>;
-  withdrawContent(kind: WithdrawableKind, targetId: Id, withdrawn: boolean, expectedVersion: number, reason?: string): MaybePromise<void>;
+  withdrawContent(kind: WithdrawableKind, targetId: Id, withdrawn: boolean, expectedVersion: number, reason?: string, acknowledgeImpact?: boolean): MaybePromise<void>;
 }

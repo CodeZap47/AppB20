@@ -1,11 +1,17 @@
-# Exposiciones por texto
+# Exposiciones: texto, Gemini y audio
 
 El simulador vive en `/m/exposiciones`. Permite preparar una explicación, recibir preguntas
 y mejorar otro intento, sin publicar el ensayo en el grupo. Esta versión funciona sin
 Gemini; las preguntas de apoyo son plantillas locales identificadas como tales. La
 retroalimentación es orientativa, no una calificación ni una evaluación del docente.
 
-## Recorrido
+## Ampliación local del 26 de octubre de 2026
+
+Esquemas, preguntas, comentarios y transcripción con Gemini; grabación/carga de audio de hasta 20 minutos y 10 MiB, conservación manual y acceso optativo del revisor están implementados localmente. No se han publicado ni validado con Gemini y dispositivos reales. Consulta [la entrega y preparación de publicación](examenes-exposiciones-ampliaciones.md).
+
+El recorrido siguiente conserva el alcance de la versión de texto publicada el 21 de octubre.
+
+## Recorrido de la versión publicada
 
 1. Crear una práctica con título, materia, parcial opcional, tema, público, duración deseada
    de 1 a 120 minutos y uno o más puntos a cubrir. Una nota o guía accesible de la misma

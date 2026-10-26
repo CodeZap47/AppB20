@@ -1,85 +1,37 @@
-import { useId, useState, type DragEvent } from 'react';
-import { fileSizeError, MAX_FILE_MB } from '@b20/core';
-import { Icon } from './Icon';
+import { useState } from 'react';
+import { fileSizeError, formatBytes, MAX_FILE_BYTES, MAX_FILE_MB } from '@b20/core';
+import { FileUpload } from '@b20-ui/components/application/file-upload/file-upload-base';
+import './uploads/uploads.css';
 
-/**
- * Zona para elegir o soltar archivos. Entrega solo los que caben en el límite de 50 MB y
- * explica por qué descartó los demás, antes de intentar subirlos.
- */
-export function FilePicker({
-  onFiles,
-  disabled = false,
-  busy = false,
-}: {
+export interface FilePickerProps {
   onFiles: (files: File[]) => void;
   disabled?: boolean;
-  /** Hay una subida en curso. */
   busy?: boolean;
-}) {
-  const hintId = useId();
-  const [over, setOver] = useState(false);
-  const [rejected, setRejected] = useState<string[]>([]);
-  const blocked = disabled || busy;
+  accept?: string;
+  multiple?: boolean;
+  maxSize?: number;
+  validate?: (file: File) => string | undefined;
+  label?: string;
+  hint?: string;
+}
 
-  const take = (list: FileList | null) => {
-    const accepted: File[] = [];
-    const problems: string[] = [];
-    for (const file of list ?? []) {
-      const problem = fileSizeError(file.name, file.size);
-      if (problem) problems.push(problem);
-      else accepted.push(file);
-    }
-    setRejected(problems);
-    if (accepted.length) onFiles(accepted);
+/** El selector y el arrastre usan la misma validación y conservan los archivos reales. */
+export function FilePicker({ onFiles, disabled = false, busy = false, accept, multiple = true,
+  maxSize = MAX_FILE_BYTES, validate, label = 'Adjuntar archivos', hint }: FilePickerProps) {
+  const [errors, setErrors] = useState<string[]>([]);
+  const check = (file: File) => {
+    const ownError = validate?.(file);
+    if (ownError) return ownError;
+    if (!file.size) return `«${file.name}» está vacío.`;
+    if (file.size > maxSize) return maxSize === MAX_FILE_BYTES ? fileSizeError(file.name, file.size)
+      : `«${file.name}» supera el límite de ${formatBytes(maxSize)}.`;
+    if (!file.name.trim() || file.name.length > 200) return 'El nombre del archivo debe tener entre 1 y 200 caracteres.';
+    return undefined;
   };
-
-  const onDrop = (e: DragEvent) => {
-    e.preventDefault();
-    setOver(false);
-    if (!blocked) take(e.dataTransfer.files);
-  };
-
-  return (
-    <div className="file-picker">
-      <label
-        className={['dropzone', over && 'dropzone--over', blocked && 'dropzone--disabled']
-          .filter(Boolean)
-          .join(' ')}
-        onDragOver={(e) => {
-          e.preventDefault();
-          if (!blocked) setOver(true);
-        }}
-        onDragLeave={() => setOver(false)}
-        onDrop={onDrop}
-      >
-        <input
-          type="file"
-          multiple
-          className="sr-only"
-          disabled={blocked}
-          aria-describedby={hintId}
-          onChange={(e) => {
-            take(e.target.files);
-            // Permite volver a elegir el mismo archivo después de quitarlo.
-            e.target.value = '';
-          }}
-        />
-        <Icon name="upload" size={22} />
-        <span>
-          <strong>{busy ? 'Subiendo…' : 'Elige archivos'}</strong>
-          {!busy && <span className="dropzone__drag"> o suéltalos aquí</span>}
-          <span className="dropzone__hint" id={hintId}>
-            Hasta {MAX_FILE_MB} MB por archivo
-          </span>
-        </span>
-      </label>
-      {rejected.length > 0 && (
-        <ul className="file-picker__errors error" role="alert">
-          {rejected.map((problem) => (
-            <li key={problem}>{problem}</li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
+  return <div className="b20-upload file-picker">
+    <FileUpload.DropZone className="dropzone" label={label} isDisabled={disabled || busy}
+      accept={accept} allowsMultiple={multiple} maxSize={maxSize} validate={check} onDropFiles={onFiles} onErrors={setErrors}
+      hint={hint ?? `Imágenes y documentos · Hasta ${maxSize === MAX_FILE_BYTES ? `${MAX_FILE_MB} MB` : formatBytes(maxSize)} por archivo`} />
+    {errors.length > 0 && <ul className="upload-errors" role="alert">{errors.map((error, index) => <li key={`${index}:${error}`}>{error}</li>)}</ul>}
+  </div>;
 }

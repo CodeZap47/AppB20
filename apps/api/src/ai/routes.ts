@@ -5,6 +5,7 @@ import { AiApiError, type AiDatabase, type AiWorkerEnv, type AiAuthorizedKey, ty
 import { canEncrypt, decryptAiKey, encryptAiKey } from './crypto.ts';
 import { readAiBody } from './body.ts';
 import { classifyProviderError, createGeminiProvider, AiProviderError, type AiProvider } from './provider.ts';
+import { revalidateDocumentOriginals } from './documentRoutes.ts';
 
 export type AiRouteContext = { Bindings: AiWorkerEnv; Variables: { sessionToken: string; ai: AiDatabase } };
 export interface AiRouteOptions { provider?: AiProvider }
@@ -72,6 +73,8 @@ export function aiWorkerRoutes(options: AiRouteOptions = {}) {
   });
   app.post('/preparations', async (c) => {
     const input = validateAiPrepareInput(await readAiBody(c.req.raw, AI_LIMITS.maxBodyBytes));
+    const transcriptionIds = [...new Set(input.sources.flatMap((source) => source.transcriptionIds ?? []))];
+    if (transcriptionIds.length) await revalidateDocumentOriginals(c.get('ai'), c.get('sessionToken'), c.env, { transcriptionIds });
     const preparation = await c.get('ai').user<AiPreparation>(c.get('sessionToken'), 'ai_prepare', { ...input, id: crypto.randomUUID(), model: model(c.env) });
     return c.json(preparation, 201);
   });
@@ -90,6 +93,9 @@ export function aiWorkerRoutes(options: AiRouteOptions = {}) {
     // A replay remains readable after disabling IA or rotating/removing its configuration.
     // The procedure validates ownership, request identity and current source access first.
     if (!status.enabled || generation.state !== 'prepared') return c.json(generation);
+    if (generation.preparation?.fragments.some((fragment) => fragment.origins.some((origin) => origin.fileId))) {
+      await revalidateDocumentOriginals(db, token, c.env, { examRequest: { generationId: id } });
+    }
     const claim = await db.service<ClaimedGeneration>('ai_claim_generation', { id, actor: status.actor });
     if (!claim.claimed) return c.json(claim.generation);
     if (!claim.key || !claim.preparation) throw new AiApiError(503, 'protocol', 'No se pudo confirmar la preparación. Consulta el estado de la operación.');

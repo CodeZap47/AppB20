@@ -27,6 +27,8 @@ import type { PresentationActions, PresentationsSnapshot } from './presentationT
 import type { PracticeActions, PracticeSnapshot } from './practiceTypes';
 import type { Community4Actions, Community4Snapshot } from './community4Types';
 import type { FeedActions, FeedSnapshot } from './feedTypes';
+import type { MembershipActions, AdminContentEntry, AdminContentResult } from './membershipTypes';
+export type * from './membershipTypes';
 import type { AgentActions, AgentAiActions, AgentSnapshot } from './agentTypes';
 export type * from './practiceTypes';
 export type * from './community4Types';
@@ -46,6 +48,7 @@ export type * from './notificationTypes';
 export type * from './roomTypes';
 import type { GuideAiActions } from './guideAiTypes';
 export type * from './guideAiTypes';
+import type { DocumentActions } from './documentTypes';
 import type { ExamActions } from './examTypes';
 export type * from './examTypes';
 
@@ -403,6 +406,8 @@ export interface AcademicComment {
 export interface ResourceTransferOptions {
   signal?: AbortSignal;
   onProgress?: (transferredBytes: number, totalBytes: number) => void;
+  /** Versión real del recibo confirmado, también al recuperar una respuesta perdida. */
+  onConfirmed?: (fileId: Id, resultingVersion: number) => void;
 }
 
 /** ID UUID para los nuevos; `legacy:<id>` conserva referencias a work_file existentes. */
@@ -726,6 +731,9 @@ export interface PollVote {
 
 /** Lo que el usuario actual puede ver, igual que las vistas del servidor. */
 export interface Snapshot extends StudyRoomsSnapshot, NotificationsSnapshot, PresentationsSnapshot, PracticeSnapshot, Community4Snapshot, FeedSnapshot, AgentSnapshot {
+  /** Vistas exclusivas de Administración; no incluyen datos personales privados. */
+  adminContentEntries?: AdminContentEntry[];
+  adminContentResults?: AdminContentResult[];
   typingPresence: { memberId: Id; scope: MessageScope; conversationId: Id; expiresAt: Date }[];
   onboardingCompleted: boolean;
   trashEntries: TrashEntry[];
@@ -736,6 +744,8 @@ export interface Snapshot extends StudyRoomsSnapshot, NotificationsSnapshot, Pre
   blockedMembers: BlockedMember[];
   messageReports: MessageReport[];
   memberProfiles: MemberProfile[];
+  /** Totales de adjuntos vigentes, incluidos los privados; la vista no expone sus metadatos. */
+  memberUploadStats?: { memberId: Id; bytes: number; fileCount: number }[];
   noteVersions: NoteVersion[];
   guideVersions: GuideVersion[];
   questionComments: QuestionComment[];
@@ -838,7 +848,7 @@ export interface PublishWorkInput {
 export type MaybePromise<T> = T | Promise<T>;
 
 /** Acciones: corresponden uno a uno con los reducers del módulo. */
-export interface Actions extends Delivery2Actions, StudyRoomActions, NotificationActions, TrashActions, PresentationActions, PracticeActions, Community4Actions, FeedActions, GuideAiActions, ExamActions, AgentActions, AgentAiActions {
+export interface Actions extends MembershipActions, Delivery2Actions, StudyRoomActions, NotificationActions, TrashActions, PresentationActions, PracticeActions, Community4Actions, FeedActions, GuideAiActions, ExamActions, DocumentActions, AgentActions, AgentAiActions {
   setTyping(scope: MessageScope, conversationId: Id, typing: boolean): MaybePromise<void>;
   completeOnboarding(): MaybePromise<void>;
   replaceSpacedCardSource(cardId: Id, expectedVersion: number, sourceKind: SpacedSourceKind, sourceId: Id): MaybePromise<void>;
@@ -903,6 +913,8 @@ export interface Actions extends Delivery2Actions, StudyRoomActions, Notificatio
   saveActivityLinks(activityId: Id, assignmentIds: Id[], noteIds: Id[], expectedVersion?: number): MaybePromise<void>;
   restorePageSnapshot(page: ProgressTargetKind, pageId: Id, version: number, expectedVersion: number): MaybePromise<void>;
   attachResourceFile(targetKind: ResourceTargetKind, targetId: Id, file: File, expectedVersion?: number, transfer?: ResourceTransferOptions): Promise<Id>;
+  /** Libera un intento pendiente; devuelve el archivo si ya se confirmó para poder retirarlo. */
+  discardResourceUpload(targetKind: ResourceTargetKind, targetId: Id, file: File): Promise<Id | undefined>;
   removeResourceFile(fileId: Id, expectedVersion?: number): MaybePromise<void>;
   restoreResourceFile(fileId: Id, expectedVersion: number): MaybePromise<void>;
   downloadResourceFile(fileId: Id, transfer?: ResourceTransferOptions): Promise<Blob>;

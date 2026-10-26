@@ -5,7 +5,7 @@ import { retentionBlocksRead } from './trashHandlers';
 import { activeMember, attachmentIds, isActive, messageText, readableMessage,
   requireGuide, requireSubject, requireText, type Ctx, type ViewDb } from './moduleContext';
 
-export const extraKinds = ['note', 'guide', 'question', 'answer', 'group_message', 'direct_message', 'channel_message', 'profile', 'profile_cover'] as const;
+export const extraKinds = ['note', 'guide', 'question', 'answer', 'feed_post', 'feed_comment', 'group_message', 'direct_message', 'channel_message', 'profile', 'profile_cover'] as const;
 /** Archivos de imagen de un perfil: la foto y la portada. Su destino es el id del perfil. */
 export const PROFILE_IMAGE_KINDS: readonly string[] = ['profile', 'profile_cover'];
 
@@ -21,6 +21,13 @@ export function profileImageVisible(db: ViewDb, sender: Ctx['sender'], file: { i
 export function withdrawn(db: ViewDb, kind: string, id: bigint) {
   return db.contentStatus.key.find(`${kind}:${id}`)?.withdrawnAt !== undefined;
 }
+/** Una dependencia retirada tampoco admite nuevas interacciones ni descargas. */
+export function withdrawnIncludingParent(db: ViewDb, kind: string, id: bigint): boolean {
+  if (withdrawn(db, kind, id)) return true;
+  if (kind === 'answer') { const row = db.answer.id.find(id); return !!row && withdrawn(db, 'question', row.questionId); }
+  if (kind === 'feed_comment') { const row = db.feedComment.id.find(id); const parent = row && db.feedPost.id.find(row.postId); return !!row && (!parent || !!parent.deletedAt || withdrawn(db, 'feed_post', row.postId)); }
+  return false;
+}
 export function contentOwner(db: ViewDb, kind: string, id: bigint) {
   if (kind === 'note') return db.note.id.find(id)?.author;
   if (kind === 'guide') return db.studyGuide.id.find(id)?.createdBy;
@@ -28,6 +35,10 @@ export function contentOwner(db: ViewDb, kind: string, id: bigint) {
   if (kind === 'answer') return db.answer.id.find(id)?.author;
   if (kind === 'work') return db.work.id.find(id)?.createdBy;
   if (kind === 'evidence') return db.evidence.id.find(id)?.author;
+  if (kind === 'feed_post') return db.feedPost.id.find(id)?.author;
+  if (kind === 'feed_comment') return db.feedComment.id.find(id)?.author;
+  if (kind === 'group_message') return db.groupMessage.id.find(id)?.sender;
+  if (kind === 'channel_message') return db.channelMessage.id.find(id)?.sender;
   return undefined;
 }
 function statusReadable(db: ViewDb, sender: Ctx['sender'], kind: string, id: bigint) {
@@ -51,10 +62,15 @@ export function canReadTarget(db: ViewDb, sender: Ctx['sender'], kind: string, i
     const row = db.memberProfile.id.find(id);
     return !!row && isActive(db, row.memberId);
   }
-  if (kind === 'group_message') return !!db.groupMessage.id.find(id) && !db.groupMessage.id.find(id)?.deletedAt;
+  if (kind === 'feed_post') { const row = db.feedPost.id.find(id); return !!row && !row.deletedAt && statusReadable(db, sender, kind, id); }
+  if (kind === 'feed_comment') {
+    const row = db.feedComment.id.find(id);
+    return !!row && !row.deletedAt && canReadTarget(db, sender, 'feed_post', row.postId) && statusReadable(db, sender, kind, id);
+  }
+  if (kind === 'group_message') return !!db.groupMessage.id.find(id) && !db.groupMessage.id.find(id)?.deletedAt && !withdrawn(db, kind, id);
   if (kind === 'channel_message') {
     const row = db.channelMessage.id.find(id);
-    return !!row && !row.deletedAt && !!db.chatChannel.id.find(row.channelId);
+    return !!row && !row.deletedAt && !!db.chatChannel.id.find(row.channelId) && !withdrawn(db, kind, id);
   }
   if (kind === 'direct_message') {
     const row = db.directMessage.id.find(id);
@@ -72,6 +88,17 @@ export function reportFileReadable(db: ViewDb, sender: Ctx['sender'], fileId: st
   const admin = db.member.identity.find(sender)?.isCreator === true;
   return [...db.messageReport.iter()].some((row) => row.attachmentIds.includes(fileId) && (admin || row.reporter.isEqual(sender)));
 }
+/** Una referencia vigente concede su propio acceso, aunque el destino original esté retirado. */
+export function referencedFileReadable(db: ViewDb, sender: Ctx['sender'], fileId: string) {
+  if (!isActive(db, sender)) return false;
+  const readable = (kind: string, id: bigint) => !withdrawnIncludingParent(db, kind, id) && canReadTarget(db, sender, kind, id);
+  // Solo listas de adjuntos escritas por el servidor. Escribir `(resource:id)` en
+  // un cuerpo libre nunca concede acceso a un archivo privado ni retirado.
+  if ([...db.noteVersion.iter()].some((row) => row.attachmentIds?.includes(fileId) && (row.visibility === 'group' || row.author.isEqual(sender)) && readable('note', row.noteId))) return true;
+  if ([...db.guideVersion.iter()].some((row) => row.attachmentIds?.includes(fileId) && readable('guide', row.guideId))) return true;
+  if ([...db.workRevision.iter()].some((row) => row.attachmentIds?.includes(fileId) && readable('work', row.workId))) return true;
+  return [...db.pageSnapshot.iter()].some((row) => row.attachmentIds?.includes(fileId) && readable(row.page, row.pageId));
+}
 export function extraVersion(ctx: Ctx, kind: string, id: bigint): number {
   if (kind === 'note') {
     const row = ctx.db.note.id.find(id); if (!row) throw new SenderError('La nota no existe.'); return row.version;
@@ -82,12 +109,13 @@ export function extraVersion(ctx: Ctx, kind: string, id: bigint): number {
   }
   const exists = kind === 'question' ? !!ctx.db.question.id.find(id) : kind === 'answer' ? !!ctx.db.answer.id.find(id)
     : kind === 'group_message' ? !!ctx.db.groupMessage.id.find(id) : kind === 'direct_message' ? !!ctx.db.directMessage.id.find(id)
-      : kind === 'channel_message' ? !!ctx.db.channelMessage.id.find(id) : false;
+      : kind === 'channel_message' ? !!ctx.db.channelMessage.id.find(id)
+      : kind === 'feed_post' ? !!ctx.db.feedPost.id.find(id) : kind === 'feed_comment' ? !!ctx.db.feedComment.id.find(id) : false;
   if (!exists) throw new SenderError('El recurso no existe.');
   return ctx.db.resourceVersion.key.find(`${kind}:${id}`)?.version ?? 1;
 }
 export function extraWriter(ctx: Ctx, kind: string, id: bigint, actor: Ctx['sender']) {
-  if (!canReadTarget(ctx.db, actor, kind, id) || withdrawn(ctx.db, kind, id)) throw new SenderError('El recurso no está disponible.');
+  if (!canReadTarget(ctx.db, actor, kind, id) || withdrawnIncludingParent(ctx.db, kind, id)) throw new SenderError('El recurso no está disponible.');
   let owner;
   if (kind === 'note') owner = ctx.db.note.id.find(id)?.author;
   else if (kind === 'question') owner = ctx.db.question.id.find(id)?.author;
@@ -211,7 +239,7 @@ export function sendChannelMessage(ctx: Ctx, input: { channelId: bigint; text: s
   channel(ctx, input.channelId, true); validateMentions(ctx, input.text);
   if (input.replyToId !== undefined) {
     const reply = ctx.db.channelMessage.id.find(input.replyToId);
-    if (!reply || reply.channelId !== input.channelId || reply.deletedAt) throw new SenderError('La respuesta no pertenece a este canal.');
+    if (!reply || reply.channelId !== input.channelId || reply.deletedAt || withdrawn(ctx.db, 'channel_message', reply.id)) throw new SenderError('La respuesta no pertenece a este canal.');
   }
   const message = ctx.db.channelMessage.insert({ id: 0n, ...input, replyToId: input.replyToId, text: messageText(ctx, input.text), sender: memberIdentityFor(ctx), sentAt: ctx.timestamp,
     editedAt: undefined, deletedAt: undefined, deletedBy: undefined });
@@ -233,6 +261,7 @@ export function reportMessage(ctx: Ctx, input: { scope: string; messageId: bigin
   activeMember(ctx);
   const found = readableMessage(ctx, input.scope, input.messageId);
   if (found.row.deletedAt) throw new SenderError('El mensaje ya se eliminó.');
+  if (input.scope !== 'direct' && withdrawn(ctx.db, `${input.scope}_message`, input.messageId)) throw new SenderError('El mensaje está retirado.');
   if (found.row.sender.isEqual(memberIdentityFor(ctx))) throw new SenderError('No puedes reportar tu propio mensaje.');
   const kind = `${input.scope}_message`;
   const ids = [...new Set(input.attachmentIds)];

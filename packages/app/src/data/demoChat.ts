@@ -18,6 +18,7 @@ interface Context {
   now(): Date;
   emit(): void;
   validateText(text: string, member: Member): string;
+  available?(kind: string, id: Id): boolean;
 }
 
 const clean = (value: string, label: string, limit: number) => {
@@ -27,20 +28,29 @@ const clean = (value: string, label: string, limit: number) => {
 };
 type Presence = Snapshot['typingPresence'][number];
 const sharedPresence = new WeakMap<object, Map<string, Presence>>();
+interface SharedChat {
+  channels: ChatChannel[]; messages: ChannelMessage[]; states: (ConversationState & { memberId: Id })[];
+  blocks: { ownerId: Id; memberId: Id }[]; reports: MessageReport[]; files: ResourceFile[];
+  blobs: Map<Id, Blob>; versions: Map<string, number>;
+}
+const sharedChats = new WeakMap<object, SharedChat>();
 
 /** Canales, convivencia y archivos de la simulación, con el mismo aislamiento por usuario. */
 export class DemoChatStore {
-  private channels: ChatChannel[] = [];
-  private messages: ChannelMessage[] = [];
-  private states: (ConversationState & { memberId: Id })[] = [];
-  private blocks: { ownerId: Id; memberId: Id }[] = [];
-  private reports: MessageReport[] = [];
-  private files: ResourceFile[] = [];
-  private blobs = new Map<Id, Blob>();
-  private versions = new Map<string, number>();
+  private shared: SharedChat;
+  private get channels() { return this.shared.channels; } private set channels(value: ChatChannel[]) { this.shared.channels = value; }
+  private get messages() { return this.shared.messages; } private set messages(value: ChannelMessage[]) { this.shared.messages = value; }
+  private get states() { return this.shared.states; } private set states(value: (ConversationState & { memberId: Id })[]) { this.shared.states = value; }
+  private get blocks() { return this.shared.blocks; } private set blocks(value: { ownerId: Id; memberId: Id }[]) { this.shared.blocks = value; }
+  private get reports() { return this.shared.reports; } private set reports(value: MessageReport[]) { this.shared.reports = value; }
+  private get files() { return this.shared.files; } private set files(value: ResourceFile[]) { this.shared.files = value; }
+  private get blobs() { return this.shared.blobs; }
+  private get versions() { return this.shared.versions; }
   private presence: Map<string, Presence>;
   constructor(private ctx: Context) {
     const state = ctx.state();
+    this.shared = sharedChats.get(state) ?? { channels: [], messages: [], states: [], blocks: [], reports: [], files: [], blobs: new Map(), versions: new Map() };
+    sharedChats.set(state, this.shared);
     this.presence = sharedPresence.get(state) ?? new Map();
     sharedPresence.set(state, this.presence);
   }
@@ -70,6 +80,21 @@ export class DemoChatStore {
   }
   versionOf(scope: MessageScope, id: Id): number { return this.versions.get(`${scope}:${id}`) ?? 1; }
   private bump(scope: MessageScope, id: Id) { this.versions.set(`${scope}:${id}`, this.versionOf(scope, id) + 1); }
+  bumpVersion(scope: MessageScope, id: Id) { this.bump(scope, id); }
+  resources(): ResourceFile[] { return this.files; }
+  moderationReports(): MessageReport[] { return this.reports; }
+  purgeManaged(targets: ReadonlySet<string>) {
+    const purge = <T extends MessageFields>(row: T, kind: string): T => targets.has(`${kind}:${row.id}`) ? { ...row, text: '', senderId: '', editedAt: undefined, deletedBy: undefined, deletedAt: this.ctx.now() } : row;
+    this.ctx.state().groupMessages = this.ctx.state().groupMessages.map((row) => purge(row, 'group_message'));
+    this.messages = this.messages.map((row) => purge(row, 'channel_message'));
+    this.ctx.state().reactions = this.ctx.state().reactions.filter((row) => !targets.has(`${row.scope}_message:${row.messageId}`));
+    const referenced = new Set(this.reports.flatMap((row) => row.attachmentIds));
+    this.files = this.files.filter((row) => {
+      if (!targets.has(`${row.targetKind}:${row.targetId}`)) return true;
+      if (referenced.has(row.id)) { row.name = 'Archivo conservado por referencia'; row.uploadedBy = ''; return true; }
+      this.blobs.delete(row.id); return false;
+    });
+  }
   private expect(scope: MessageScope, id: Id, expected?: number) {
     if (expected !== undefined && expected !== this.versionOf(scope, id)) throw new Error('Los archivos del mensaje cambiaron. Actualiza antes de continuar.');
   }
@@ -140,23 +165,27 @@ export class DemoChatStore {
     const me = this.ctx.active(); const channel = this.channel(channelId);
     if (channel.archivedAt) throw new Error('El canal está archivado.');
     const content = this.validateMentions(this.ctx.validateText(text, me));
-    if (replyToId && !this.messages.some((message) => message.id === replyToId && message.channelId === channelId && !message.deletedAt)) throw new Error('La respuesta debe pertenecer al mismo canal.');
+    if (replyToId && !this.messages.some((message) => message.id === replyToId && message.channelId === channelId && !message.deletedAt && this.ctx.available?.('channel_message', message.id) !== false)) throw new Error('La respuesta debe pertenecer al mismo canal.');
     const row: ChannelMessage = { id: this.ctx.id(), channelId, text: content, senderId: me.id, sentAt: this.ctx.now(), replyToId };
     this.messages.push(row); this.ctx.emit(); return row.id;
   }
   editMessage(scope: MessageScope, id: Id, text: string) {
     const me = this.ctx.active(); const row = this.message(scope, id);
+    if (this.ctx.available?.(`${scope}_message`, id) === false) throw new Error('El mensaje está retirado.');
     if (scope !== 'channel' || !canEditMessage(me.id, row, this.ctx.now())) throw new Error('No puedes editar este mensaje.');
-    row.text = this.validateMentions(this.ctx.validateText(text, me)); row.editedAt = this.ctx.now(); this.ctx.emit();
+    row.text = this.validateMentions(this.ctx.validateText(text, me)); row.editedAt = this.ctx.now(); this.bump(scope, id); this.ctx.emit();
   }
   deleteMessage(scope: MessageScope, id: Id) {
     const me = this.ctx.active(); const row = this.message(scope, id);
+    if (this.ctx.available?.(`${scope}_message`, id) === false) throw new Error('El mensaje está retirado.');
     if (scope !== 'channel' || !canDeleteMessage(me.id, row, 'group', me.isCreator)) throw new Error('No puedes eliminar este mensaje.');
     row.text = ''; row.deletedAt = this.ctx.now(); row.deletedBy = me.id;
+    this.bump(scope, id);
     this.ctx.state().reactions = this.ctx.state().reactions.filter((reaction) => reaction.scope !== scope || reaction.messageId !== id); this.ctx.emit();
   }
   toggleReaction(scope: MessageScope, id: Id, emoji: string) {
     const me = this.ctx.active(); const row = this.message(scope, id);
+    if (this.ctx.available?.(`${scope}_message`, id) === false) throw new Error('El mensaje está retirado.');
     if (scope !== 'channel' || row.deletedAt || !isReaction(emoji)) throw new Error('No puedes reaccionar a este mensaje.');
     const mine = (reaction: MessageReaction) => reaction.scope === scope && reaction.messageId === id && reaction.memberId === me.id;
     const previous = this.ctx.state().reactions.find(mine);
@@ -187,6 +216,7 @@ export class DemoChatStore {
   }
   reportMessage(input: ReportMessageInput): Id {
     const me = this.ctx.active(); const message = this.message(input.scope, input.messageId);
+    if (this.ctx.available?.(`${input.scope}_message`, input.messageId) === false) throw new Error('El mensaje está retirado.');
     if (message.deletedAt || message.senderId === me.id) throw new Error('Elige un mensaje recibido que siga disponible.');
     const ids = [...new Set(input.attachmentIds)];
     for (const id of ids) if (!this.files.some((file) => file.id === id && file.targetKind === chatTarget(input.scope) && file.targetId === message.id && !file.removedAt)) throw new Error('Uno de los adjuntos elegidos no pertenece al mensaje.');
@@ -201,10 +231,12 @@ export class DemoChatStore {
   private readableFile(file: ResourceFile): boolean {
     const me = this.ctx.active();
     if (this.reports.some((report) => report.attachmentIds.includes(file.id) && (report.reporterId === me.id || me.isCreator))) return true;
+    if (this.ctx.available?.(file.targetKind, file.targetId) === false) return false;
     try { return !this.message(this.scope(file.targetKind), file.targetId).deletedAt && !file.removedAt; } catch { return false; }
   }
   private writable(scope: MessageScope, id: Id) {
     const me = this.ctx.active(); const row = this.message(scope, id);
+    if (this.ctx.available?.(`${scope}_message`, id) === false) throw new Error('El mensaje está retirado.');
     if (row.senderId !== me.id || row.deletedAt) throw new Error('Solo el autor adjunta o retira archivos de su mensaje.');
     if (scope === 'channel' && this.channel((row as ChannelMessage).channelId).archivedAt) throw new Error('El canal está archivado.');
     if (scope === 'direct') {
@@ -251,9 +283,9 @@ export class DemoChatStore {
       conversationStates: this.states.filter((row) => row.memberId === me.id).map(({ memberId: _owner, ...row }) => ({ ...row })),
       blockedMembers: this.blocks.filter((row) => row.ownerId === me.id).map(({ memberId }) => ({ memberId })),
       messageReports: this.reports.filter((row) => row.reporterId === me.id || me.isCreator).map((row) => ({ ...row, attachmentIds: [...row.attachmentIds] })),
-      resourceFiles: [...base.resourceFiles, ...this.files.filter((file) => this.readableFile(file)).map((file) => ({ ...file }))],
-      reactions: [...base.reactions, ...this.ctx.state().reactions.filter((row) => row.scope === 'channel')],
+      resourceFiles: [...new Map([...base.resourceFiles, ...this.files.filter((file) => this.readableFile(file)).map((file) => ({ ...file }))].map((file) => [file.id, file])).values()],
+      reactions: [...new Map([...base.reactions, ...this.ctx.state().reactions.filter((row) => row.scope === 'channel')].map((row) => [`${row.scope}:${row.messageId}:${row.memberId}`, row])).values()],
     };
   }
-  dispose() { this.channels = []; this.messages = []; this.states = []; this.blocks = []; this.reports = []; this.files = []; this.blobs.clear(); this.versions.clear(); }
+  dispose() { /* El estado compartido pertenece al grupo, no a la sesión que se cierra. */ }
 }

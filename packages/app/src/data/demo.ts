@@ -1,5 +1,10 @@
+import { DemoDocumentStore } from './demoDocuments';
+import type { DocumentActions } from './documentTypes';
+import type { ExamActionRequest, AiFragmentOrigin } from '@b20/core';
 import { DemoGuideAiStore } from './demoGuideAi';
 import { DemoExamStore } from './demoExams';
+import { DemoMembershipStore, seedDemoMembership } from './demoMembership';
+import type { MembershipActions } from './membershipTypes';
 import type { ExamActions } from './examTypes';
 import type { GuideAiActions } from './guideAiTypes';
 import {
@@ -57,6 +62,7 @@ import {
   MAX_SPACED_EXPLANATION_LENGTH,
   MAX_SPACED_HINT_LENGTH,
   DEFAULT_PROFILE_COVER,
+  displayNameError,
 } from '@b20/core';
 import type {
   HelpPost,
@@ -147,6 +153,9 @@ import { DemoCommunity4Store } from './community4Demo';
 import { DemoAgentStore } from './agentStore';
 import { emptyAgent, type AgentActions, type AgentAiActions } from './agentTypes';
 import { DemoFeedStore } from './feedDemo';
+import { demoContentInventory, demoReferencedFileReadable } from './demoContentInventory';
+import type { AdminContentResult, ModerateContentInput } from './membershipTypes';
+import { contentImpactSignature } from './membershipTypes';
 import { DemoHelpVersions } from './demoHelpVersions';
 import { DemoTeachingVersions } from './demoTeachingVersions';
 import { emptyCommunity4, type Community4Actions } from './community4Types';
@@ -210,6 +219,7 @@ const sharedDemoListeners = new WeakMap<State, Set<() => void>>();
 const sharedDemoIds = new WeakMap<State, number>();
 type DemoWithdrawal = { withdrawnAt?: Date; withdrawnBy?: Id; reason: string };
 const sharedDemoWithdrawals = new WeakMap<State, Map<string, DemoWithdrawal>>();
+const sharedDemoContentResults = new WeakMap<State, Map<string, { request: string; actor: Id; result: AdminContentResult }>>();
 
 function emptyState(): State {
   return {
@@ -242,6 +252,12 @@ function requireText(value: string, field: string, max = MAX_TEXT): string {
   if (!trimmed) throw new Error(`${field} no puede estar vacío.`);
   if (trimmed.length > max) throw new Error(`${field} excede ${max} caracteres.`);
   return trimmed;
+}
+
+function requireDisplayName(value: string): string {
+  const error = displayNameError(value);
+  if (error) throw new Error(error);
+  return value.trim();
 }
 
 function toBase64(bytes: Uint8Array): string {
@@ -279,6 +295,9 @@ export class DemoDataSource implements DataSource {
   #batchChanged = false;
   #guideAi: DemoGuideAiStore;
   #exams: DemoExamStore;
+  #documents: DemoDocumentStore;
+  #examSpaced = new Map<string, {actor: string; collectionId: string; cardId: string; sourceId: string; examVersion: number; origins: AiFragmentOrigin[]}>();
+  #membership: DemoMembershipStore;
   #profiles: MemberProfile[] = [];
   #withdrawals: Map<string, DemoWithdrawal>;
   #invalidate = () => { this.#snapshot = undefined; for (const listener of this.#listeners) listener(); };
@@ -303,19 +322,28 @@ export class DemoDataSource implements DataSource {
       extraTarget: (kind, id, editable) => this.#extraTarget(kind, id, editable),
       captureExtra: (kind, id) => this.#captureExtra(kind, id),
       changedExtra: (kind, id) => this.#changedExtra(kind, id) });
-    this.#chat = new DemoChatStore({ state: () => this.#state, active: () => this.#activeMember(), id: () => this.#id(), now: () => this.#now(), emit: () => this.#emit(), validateText: (text, me) => this.#messageText(text, me) });
+    this.#chat = new DemoChatStore({ state: () => this.#state, active: () => this.#activeMember(), id: () => this.#id(), now: () => this.#now(), emit: () => this.#emit(), validateText: (text, me) => this.#messageText(text, me), available: (kind, id) => !this.#withdrawals.get(`${kind}:${id}`)?.withdrawnAt && !this.#trash?.blocksRead(kind, id) });
     this.#knowledge = new DemoKnowledgeStore({ state: () => this.#state, active: () => this.#activeMember(), id: () => this.#id(), now: () => this.#now(), emit: () => this.#emit(),
       files: () => this.#academic.resources(), restoreFiles: (kind, id, ids) => this.#academic.restoreFiles(kind, id, ids), copyFiles: (from, to) => this.#academic.copyFiles(from, to) });
     this.#practice = new DemoPracticeStore({ state: () => this.#state, active: () => this.#activeMember(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit() });
     this.#community4 = new DemoCommunity4Store({ state: () => this.#state, active: () => this.#activeMember(), current: () => this.getSnapshot(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit(), createQuestion: (input) => this.askQuestion(input) });
     this.#agent = new DemoAgentStore({ state: () => this.#state, active: () => this.#activeMember(), current: () => this.getSnapshot(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit() });
-    this.#feed = new DemoFeedStore({ state: () => this.#state, active: () => this.#activeMember(), current: () => this.getSnapshot(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit() });
+    this.#feed = new DemoFeedStore({ state: () => this.#state, active: () => this.#activeMember(), current: () => this.getSnapshot(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit(), available: (kind, id) => !this.#withdrawals.get(`${kind}:${id}`)?.withdrawnAt && !this.#trash?.blocksRead(kind, id) });
     this.#trash = new DemoTrashStore({ state: () => this.#state, active: () => this.#activeMember(), now: () => this.#now(), emit: () => this.#emit(), resources: () => this.#academic.resources(),
-      purgePrivate: (targets) => { const references = this.#knowledge.purgeTargets(targets); this.#academic.purgeTargets(targets, references); this.#exams?.purgeTargets(targets); for (const key of targets) { const separator = key.indexOf(':'); this.#community4.purgeMuseum(key.slice(0, separator), key.slice(separator + 1)); this.#agent.purgeSource(key.slice(0, separator), key.slice(separator + 1)); } } });
+      extraContent: (kind, id) => { const row = this.#contentRow(kind, id); return row ? { ownerIds: this.#contentAuthors(kind, id), version: row.version ?? 1, personal: kind === 'note' && (row as Note).visibility === 'personal' } : undefined; },
+      extraTargets: (targets) => { for (const row of this.#feed.raw().feedComments) if (targets.has(`feed_post:${row.postId}`)) targets.add(`feed_comment:${row.id}`); },
+      purgePrivate: (targets) => { const references = this.#knowledge.purgeTargets(targets); this.#academic.purgeTargets(targets, references); this.#feed.purgeManaged(targets); this.#chat.purgeManaged(targets); this.#exams?.purgeTargets(targets); this.#purgeExamSpaced(targets); for (const key of targets) { const separator = key.indexOf(':'); this.#community4.purgeMuseum(key.slice(0, separator), key.slice(separator + 1)); this.#agent.purgeSource(key.slice(0, separator), key.slice(separator + 1)); this.#presentations.features.purgeSource(key.slice(0, separator), key.slice(separator + 1)); } } });
     this.#notifications = new DemoNotificationsStore({ state: () => this.#state, active: () => this.#activeMember(), current: () => this.getSnapshot(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit() });
     this.#rooms = new DemoRoomsStore({ state: () => this.#state, active: () => this.#activeMember(), id: () => this.#id(), now: () => this.#now(), emit: () => this.#emit(),
       sourceAvailable: (kind, sourceId) => !this.#withdrawals.get(`${kind}:${sourceId}`)?.withdrawnAt });
-    this.#exams = new DemoExamStore({ snapshot: () => this.getSnapshot(), now: () => this.#now() }, this.#state);
+    this.#membership = new DemoMembershipStore({ state: () => this.#state, viewer: () => this.#viewerId,
+      active: () => this.#activeMember(), alive: () => this.#assertAlive(), now: () => this.#now(), emit: () => this.#emit(),
+      removed: (identity) => {
+        this.#rooms.memberRemoved(identity);
+        delete this.#state.lastSeen[identity];
+      } });
+    this.#documents = new DemoDocumentStore({ snapshot: () => this.getSnapshot(), now: () => this.#now(), download: (id) => this.downloadResourceFile(id) }, this.#state);
+    this.#exams = new DemoExamStore({ snapshot: () => this.getSnapshot(), now: () => this.#now(), getDocumentTranscription: (id) => this.#documents.getDocumentTranscription(id), resolveReviewedTranscription: (id) => this.#documents.resolveReviewedTranscription(id), sendToSpaced: (request) => this.#sendExamToSpaced(request) }, this.#state);
     this.#guideAi = new DemoGuideAiStore({ snapshot: () => this.getSnapshot(), now: () => this.#now(), changed: () => this.#emit(),
       publish: (input, refs, target) => {
         const me = this.#activeMember(); const checked = this.#checkGuide(input); const now = this.#now();
@@ -334,6 +362,19 @@ export class DemoDataSource implements DataSource {
   get viewerId(): Id {
     return this.#viewerId;
   }
+
+  getAdminMembership = (...args: Parameters<MembershipActions['getAdminMembership']>) => this.#membership.getAdminMembership(...args);
+  createInvitationLink = (...args: Parameters<MembershipActions['createInvitationLink']>) => this.#membership.createInvitationLink(...args);
+  copyInvitationLink = (...args: Parameters<MembershipActions['copyInvitationLink']>) => this.#membership.copyInvitationLink(...args);
+  replaceInvitationLink = (...args: Parameters<MembershipActions['replaceInvitationLink']>) => this.#membership.replaceInvitationLink(...args);
+  configureInvitationLink = (...args: Parameters<MembershipActions['configureInvitationLink']>) => this.#membership.configureInvitationLink(...args);
+  revokeInvitationLink = (...args: Parameters<MembershipActions['revokeInvitationLink']>) => this.#membership.revokeInvitationLink(...args);
+  revokeLegacyInvitationLink = (...args: Parameters<MembershipActions['revokeLegacyInvitationLink']>) => this.#membership.revokeLegacyInvitationLink(...args);
+  joinWithInvitationLink = (...args: Parameters<MembershipActions['joinWithInvitationLink']>) => this.#membership.joinWithInvitationLink(...args);
+  manageMemberAccess = (...args: Parameters<MembershipActions['manageMemberAccess']>) => this.#membership.manageMemberAccess(...args);
+  blockEmail = (...args: Parameters<MembershipActions['blockEmail']>) => this.#membership.blockEmail(...args);
+  unblockEmail = (...args: Parameters<MembershipActions['unblockEmail']>) => this.#membership.unblockEmail(...args);
+  getMyMembershipAccess = (...args: Parameters<MembershipActions['getMyMembershipAccess']>) => this.#membership.getMyMembershipAccess(...args);
 
   createCodingChallenge = (...args: Parameters<PracticeActions['createCodingChallenge']>) => this.#practice.createCodingChallenge(...args);
   unlockChallengeHint = (...args: Parameters<PracticeActions['unlockChallengeHint']>) => this.#practice.unlockChallengeHint(...args);
@@ -386,6 +427,41 @@ export class DemoDataSource implements DataSource {
     return this.#now();
   }
   getGuideAiStatus = () => this.#guideAi.getGuideAiStatus();
+  getDocumentFile = (...args: Parameters<DocumentActions['getDocumentFile']>) => this.#documents.getDocumentFile(...args);
+  saveDocumentTranscription = (...args: Parameters<DocumentActions['saveDocumentTranscription']>) => this.#documents.saveDocumentTranscription(...args);
+  getDocumentTranscription = (...args: Parameters<DocumentActions['getDocumentTranscription']>) => this.#documents.getDocumentTranscription(...args);
+  listDocumentTranscriptions = (...args: Parameters<DocumentActions['listDocumentTranscriptions']>) => this.#documents.listDocumentTranscriptions(...args);
+  prepareDocumentOcr = (...args: Parameters<DocumentActions['prepareDocumentOcr']>) => this.#documents.prepareDocumentOcr(...args);
+  getDocumentOcr = (...args: Parameters<DocumentActions['getDocumentOcr']>) => this.#documents.getDocumentOcr(...args);
+  runDocumentOcr = (...args: Parameters<DocumentActions['runDocumentOcr']>) => this.#documents.runDocumentOcr(...args);
+  cancelDocumentOcr = (...args: Parameters<DocumentActions['cancelDocumentOcr']>) => this.#documents.cancelDocumentOcr(...args);
+  examEvaluationAction: ExamActions['examEvaluationAction'] = (request) => this.#exams.examEvaluationAction(request);
+  #purgeExamSpaced(targets: ReadonlySet<string>) {
+    for (const [key, origin] of this.#examSpaced) {
+      if (!origin.origins.some((source) => targets.has(`${source.kind}:${source.refId}`))) continue;
+      this.#state.spacedCards = this.#state.spacedCards.map((card) => card.id === origin.cardId
+        ? { ...card, question: '', explanation: '', hint: '', archived: true, version: card.version + 1 } : card);
+      this.#examSpaced.delete(key);
+    }
+  }
+  async #sendExamToSpaced(request: Extract<ExamActionRequest, { action: 'sendToSpaced' }>): Promise<{collectionId:string;cardId:string;created:boolean}> {
+    const me = this.#activeMember(); const attempt = await this.#exams.examAction({ action: 'getAttempt', attemptId: request.attemptId });
+    const question = attempt.questions.find((row) => row.id === request.questionId);
+    if (attempt.state !== 'closed' || attempt.contentUnavailable || !question?.solution || question.unavailable) throw new Error('Termina el intento y revisa sus fuentes antes de crear tarjetas.');
+    const key = JSON.stringify([me.id, attempt.examId, attempt.examVersion, question.id]); const previous = this.#examSpaced.get(key);
+    if (previous) return { collectionId: previous.collectionId, cardId: previous.cardId, created: false };
+    const text = requireText(request.question, 'La pregunta', 1000); const explanation = requireText(request.explanation, 'La explicación', 20000);
+    if ((request.hint ?? '').length > 2000) throw new Error('La pista supera 2000 caracteres.');
+    const exam = await this.#exams.examAction({ action: 'getExam', examId: attempt.examId });
+    const related = [...this.#examSpaced.values()].find((row) => row.actor === me.id && this.#state.spacedCollections.find((collection) => collection.id === row.collectionId)?.title === `Repaso: ${exam.title}`);
+    const collectionId = related?.collectionId ?? this.saveSpacedCollection({ title: `Repaso: ${exam.title}`.slice(0,200), subjectId: exam.subjectId, termId: exam.termId, visibility: 'personal' });
+    const now = this.#now(); const cardId = this.#id(); const sourceId = this.#id();
+    this.#state.spacedCards.push({ id: cardId, collectionId, question: text, explanation, hint: request.hint ?? '', sourceKind: 'exam_question', sourceId, sourceVersion: attempt.examVersion,
+      version: 1, archived: false, createdBy: me.id, updatedBy: me.id, createdAt: now, updatedAt: now });
+    this.#examSpaced.set(key, { actor: me.id, collectionId, cardId, sourceId, examVersion: attempt.examVersion, origins: question.solution.citations.flatMap((citation) => citation.origins) });
+    this.#emit(); return { collectionId, cardId, created: true };
+  }
+  get presentationFeatures() { return this.#presentations.features; }
   examAction: ExamActions['examAction'] = (request) => this.#exams.examAction(request);
   prepareExamMaterial = (...args: Parameters<ExamActions['prepareExamMaterial']>) => this.#exams.prepareExamMaterial(...args);
   generateExamQuestions = (...args: Parameters<ExamActions['generateExamQuestions']>) => this.#exams.generateExamQuestions(...args);
@@ -547,7 +623,8 @@ export class DemoDataSource implements DataSource {
     const packIds = new Set(stickerPacks.map((p) => p.id));
     // Los stickers que ya se enviaron se siguen viendo aunque su paquete se quite o deje de compartirse.
     const sent = new Set(
-      [...s.groupMessages, ...directMessages, ...this.#chat.channelMessages()].flatMap((m) =>
+      [...s.groupMessages.filter((row) => !this.#withdrawals.get(`group_message:${row.id}`)?.withdrawnAt), ...directMessages,
+        ...this.#chat.channelMessages().filter((row) => !this.#withdrawals.get(`channel_message:${row.id}`)?.withdrawnAt)].filter((row) => !row.deletedAt).flatMap((m) =>
         referencesIn(m.text)
           .filter((r) => r.kind === 'sticker')
           .map((r) => r.id),
@@ -625,8 +702,10 @@ export class DemoDataSource implements DataSource {
     combined.workRevisions = combined.workRevisions.filter((row) => workIds.has(row.workId)); combined.workReviews = combined.workReviews.filter((row) => workIds.has(row.workId)); combined.workFiles = combined.workFiles.filter((row) => workIds.has(row.workId));
     const evidenceIds = new Set(combined.evidences.map((row) => row.id));
     combined.academicComments = combined.academicComments.filter((row) => row.targetKind === 'work' ? workIds.has(row.targetId) : evidenceIds.has(row.targetId));
-    combined.resourceFiles = combined.resourceFiles.filter((file) => {
-      if (this.#chat.handles(file.targetKind)) return true;
+    combined.resourceFiles = [...new Map([...combined.resourceFiles, ...this.#academic.resources().filter((file) => demoReferencedFileReadable(combined, file.id))].map((file) => [file.id, file])).values()].filter((file) => {
+      if (demoReferencedFileReadable(combined, file.id)) return true;
+      if (this.#chat.handles(file.targetKind)) return true; // La tienda de chat filtra retiradas y excepciones de reportes.
+      if (this.#withdrawnForInteraction(file.targetKind, file.targetId)) return false;
       if (!this.#canReadResource(file.targetKind, file.targetId)) return false;
       if (file.targetKind === 'profile' || file.targetKind === 'profile_cover') {
         const profile = this.#profiles.find((row) => row.id === file.targetId);
@@ -638,6 +717,26 @@ export class DemoDataSource implements DataSource {
     combined.trashEntries = this.#trash.snapshot(me.id);
     combined.guideAiSourceAvailability = this.#guideAi.sourceAvailability(combined);
     const result = { ...combined, ...this.#rooms.snapshot(me.id) };
+    const uploadTotals = new Map(s.members.filter((member) => member.status === 'active')
+      .map((member) => [member.id, { memberId: member.id, bytes: 0, fileCount: 0 }]));
+    // Calcula antes del filtro de visibilidad: solo salen cantidades, nunca los adjuntos privados.
+    const uploads = new Map([...this.#academic.resources(), ...this.#chat.resources()].map((file) => [file.id, file]));
+    for (const file of uploads.values()) {
+      const total = uploadTotals.get(file.uploadedBy);
+      if (total && !file.removedAt) { total.bytes += file.size; total.fileCount += 1; }
+    }
+    result.memberUploadStats = [...uploadTotals.values()];
+    if (me.isCreator) {
+      result.adminContentEntries = demoContentInventory({ ...result, notes: s.notes, groupMessages: s.groupMessages, channelMessages: this.#chat.channelMessages(), ...this.#feed.raw(),
+        resourceFiles: [...this.#academic.resources(), ...this.#chat.resources()], messageReports: this.#chat.moderationReports() },
+        (kind, id) => this.#contentRow(kind, id)?.version ?? 1, (kind, id) => Boolean(this.#withdrawals.get(`${kind}:${id}`)?.withdrawnAt))
+        .filter((row) => !this.#trash.blocksRead(row.kind, row.targetId));
+      result.adminContentResults = [...(sharedDemoContentResults.get(s)?.values() ?? [])].filter((row) => row.actor === me.id).map((row) => row.result);
+    }
+    const redact = <T extends MessageFields>(row: T, kind: string): T => { const status = this.#withdrawals.get(`${kind}:${row.id}`); return status?.withdrawnAt ? { ...row, text: '', deletedAt: status.withdrawnAt, deletedBy: undefined } : row; };
+    result.groupMessages = result.groupMessages.map((row) => redact(row, 'group_message'));
+    result.channelMessages = result.channelMessages.map((row) => redact(row, 'channel_message'));
+    result.reactions = result.reactions.filter((row) => row.scope === 'direct' || !this.#withdrawals.get(`${row.scope}_message:${row.messageId}`)?.withdrawnAt);
     return { ...result, ...this.#notifications.snapshot(result), ...this.#practice.snapshot(), ...this.#community4.snapshot(result), ...this.#agent.snapshot(result), ...this.#feed.snapshot(result) };
   }
 
@@ -684,13 +783,17 @@ export class DemoDataSource implements DataSource {
           : kind === 'answer' ? this.#state.answers.find((row) => row.id === id)
             : kind === 'work' ? this.#state.works.find((row) => row.id === id)
               : kind === 'evidence' ? this.#state.evidences.find((row) => row.id === id)
+                : kind === 'feed_post' ? (() => { const row = this.#feed.raw().feedPosts.find((item) => item.id === id); return row ? { ...row, version: this.#feed.versionOf(kind, id) } : undefined; })()
+                : kind === 'feed_comment' ? (() => { const row = this.#feed.raw().feedComments.find((item) => item.id === id); return row ? { ...row, version: this.#feed.versionOf(kind, id) } : undefined; })()
+                : kind === 'group_message' ? (() => { const row = this.#state.groupMessages.find((item) => item.id === id); return row ? { ...row, version: this.#chat.versionOf('group', id) } : undefined; })()
+                : kind === 'channel_message' ? (() => { const row = this.#chat.channelMessages().find((item) => item.id === id); return row ? { ...row, version: this.#chat.versionOf('channel', id) } : undefined; })()
                 : kind === 'profile' || kind === 'profile_cover' ? this.#profiles.find((row) => row.id === id) : undefined;
   }
   #contentAuthors(kind: string, id: Id): Id[] {
     const row = this.#contentRow(kind, id);
     if (!row) return [];
     if (kind === 'work') return [...(row as Work).authorIds];
-    return ['authorId' in row ? row.authorId : 'createdBy' in row ? row.createdBy : 'memberId' in row ? row.memberId : ''];
+    return ['authorId' in row ? row.authorId : 'senderId' in row ? row.senderId : 'createdBy' in row ? row.createdBy : 'memberId' in row ? row.memberId : ''];
   }
   #canReadResource(kind: string, id: Id): boolean {
     const me = this.#state.members.find((member) => member.id === this.#viewerId);
@@ -699,29 +802,38 @@ export class DemoDataSource implements DataSource {
     if (kind === 'assignment') return this.#state.assignments.some((row) => row.id === id);
     if (kind === 'activity') return this.#state.activities.some((row) => row.id === id);
     const row = this.#contentRow(kind, id); if (!row) return false;
+    if ('deletedAt' in row && row.deletedAt) return false;
     if (kind === 'note' && (row as Note).visibility === 'personal' && (row as Note).authorId !== me.id) return false;
     if ((kind === 'profile' || kind === 'profile_cover') && !this.#isActive((row as MemberProfile).memberId)) return false;
     if (kind === 'answer' && !this.#canReadResource('question', (row as Answer).questionId)) return false;
     const withdrawn = this.#withdrawals.get(`${kind}:${id}`)?.withdrawnAt ?? ('withdrawnAt' in row ? row.withdrawnAt : undefined);
     return !withdrawn || this.#contentAuthors(kind, id).includes(me.id) || me.isCreator;
   }
+  #withdrawnForInteraction(kind: string, id: Id): boolean {
+    if (this.#withdrawals.get(`${kind}:${id}`)?.withdrawnAt || this.#trash.blocksRead(kind, id)) return true;
+    if (kind === 'answer') { const row = this.#state.answers.find((item) => item.id === id); return !!row && this.#withdrawnForInteraction('question', row.questionId); }
+    if (kind === 'feed_comment') { const row = this.#feed.raw().feedComments.find((item) => item.id === id); return !!row && this.#withdrawnForInteraction('feed_post', row.postId); }
+    return false;
+  }
   #extraTarget(kind: ResourceTargetKind, id: Id, editable = false) {
     const me = this.#activeMember(); const row = this.#contentRow(kind, id);
     if (!row || !this.#canReadResource(kind, id)) throw new Error('El recurso no existe o no tienes acceso.');
-    if (editable && ((this.#withdrawals.get(`${kind}:${id}`)?.withdrawnAt ?? ('withdrawnAt' in row ? row.withdrawnAt : undefined)) || (kind !== 'guide' && !this.#contentAuthors(kind, id).includes(me.id)))) throw new Error('Solo su autor modifica un recurso activo.');
+    if (editable && (this.#withdrawnForInteraction(kind, id) || (kind !== 'guide' && !this.#contentAuthors(kind, id).includes(me.id)))) throw new Error('Solo su autor modifica un recurso activo.');
     return { ...row, version: row.version ?? 1 };
   }
-  #captureExtra(kind: ResourceTargetKind, id: Id) {
+  #captureExtra(kind: ResourceTargetKind | WithdrawableKind, id: Id) {
     if (kind === 'note') this.#knowledge.captureNote(id);
     else if (kind === 'guide') this.#knowledge.captureGuide(id);
   }
-  #changedExtra(kind: ResourceTargetKind, id: Id) {
+  #changedExtra(kind: ResourceTargetKind | WithdrawableKind, id: Id) {
     const me = this.#activeMember(); const now = this.#now();
     const previousGuide = kind === 'guide' ? this.#state.guides.find((row) => row.id === id) : undefined;
     if (kind === 'note') this.#state.notes = this.#state.notes.map((row) => row.id === id ? { ...row, version: row.version + 1, updatedAt: now } : row);
     else if (kind === 'guide') this.#state.guides = this.#state.guides.map((row) => row.id === id ? { ...row, version: row.version + 1, updatedBy: me.id, updatedAt: now } : row);
     else if (kind === 'question') this.#state.questions = this.#state.questions.map((row) => row.id === id ? { ...row, version: (row.version ?? 1) + 1 } : row);
     else if (kind === 'answer') this.#state.answers = this.#state.answers.map((row) => row.id === id ? { ...row, version: (row.version ?? 1) + 1 } : row);
+    else if (kind === 'feed_post' || kind === 'feed_comment') this.#feed.bump(kind, id);
+    else if (kind === 'group_message' || kind === 'channel_message') this.#chat.bumpVersion(kind === 'group_message' ? 'group' : 'channel', id);
     else if (kind === 'profile') {
       const latest = this.#academic.resources().filter((file) => file.targetKind === 'profile' && file.targetId === id && !file.removedAt).at(-1);
       this.#profiles = this.#profiles.map((row) => row.id === id ? { ...row, photoFileId: latest?.id, version: row.version + 1, updatedAt: now } : row);
@@ -745,12 +857,14 @@ export class DemoDataSource implements DataSource {
     const next = saveDemoProfileCover(input, { memberId: me.id, profiles: this.#profiles, resourceFiles: this.#academic.resources(), now: this.#now() });
     this.#profiles = this.#profiles.map((profile) => profile.id === next.id ? next : profile); this.#emit();
   }
-  withdrawContent(kind: WithdrawableKind, targetId: Id, withdrawn: boolean, expectedVersion: number, reason = '') {
+  withdrawContent(kind: WithdrawableKind, targetId: Id, withdrawn: boolean, expectedVersion: number, reason = '', acknowledgeImpact = false) {
     if (!withdrawn) this.#trash.assertRestorable(kind, targetId);
     const me = this.#activeMember(); const row = this.#contentRow(kind, targetId);
     const authors = this.#contentAuthors(kind, targetId); const own = authors.includes(me.id);
     if (!row || !authors.length || !this.#canReadResource(kind, targetId) || (!own && !me.isCreator)) throw new Error('Solo sus autores o un administrador pueden retirar este contenido.');
     if (kind === 'note' && (row as Note).visibility === 'personal' && !own) throw new Error('Solo su autor puede retirar o restaurar un apunte personal.');
+    if ('deletedAt' in row && row.deletedAt) throw new Error('El contenido se eliminó definitivamente y no se puede recuperar.');
+    if (withdrawn && !own && me.isCreator && !acknowledgeImpact && !this.getSnapshot().adminContentEntries?.find((entry) => entry.kind === kind && entry.targetId === targetId)?.safeForBulk) throw new Error('Revisa y acepta el impacto en coautores, dependencias o archivos conservados.');
     if ((row.version ?? 1) !== expectedVersion) throw new Error('El contenido cambió. Actualiza antes de guardar.');
     const previous = this.#withdrawals.get(`${kind}:${targetId}`);
     if (Boolean(previous?.withdrawnAt) === withdrawn) return;
@@ -768,6 +882,28 @@ export class DemoDataSource implements DataSource {
     if (kind === 'work') { this.#state.works = this.#state.works.map((work) => work.id === targetId ? { ...work, version: work.version + 1, updatedAt: this.#now() } : work); this.#academic.captureWork(targetId); this.#emit(); }
     else if (kind === 'evidence') { this.#state.evidences = this.#state.evidences.map((evidence) => evidence.id === targetId ? { ...evidence, version: (evidence.version ?? 1) + 1 } : evidence); this.#academic.evidenceChanged((row as Evidence).activityId); }
     else this.#changedExtra(kind, targetId);
+  }
+
+  moderateContentItem(input: ModerateContentInput) {
+    const me = this.#activeMember(); if (!me.isCreator) throw new Error('Solo un administrador puede gestionar el contenido.');
+    requireText(input.operationId, 'La operación', 128);
+    if (input.reason.length > 1000) throw new Error('El motivo excede 1000 caracteres.');
+    const results = sharedDemoContentResults.get(this.#state) ?? new Map(); sharedDemoContentResults.set(this.#state, results);
+    const key = `${me.id}:${input.operationId}:${input.kind}:${input.targetId}`;
+    const request = JSON.stringify([input.expectedVersion, input.withdrawn, input.reason, input.acknowledgeImpact, input.expectedImpact]);
+    const previous = results.get(key);
+    if (previous) { if (previous.request !== request) throw new Error('Esta operación ya se utilizó con otra decisión.'); if (previous.result.status === 'failed') throw new Error(previous.result.error); return; }
+    let failure: Error | undefined;
+    try {
+      const entry = this.getSnapshot().adminContentEntries?.find((row) => row.kind === input.kind && row.targetId === input.targetId);
+      if (!entry) throw new Error('El aporte grupal ya no está disponible.');
+      if (input.withdrawn && !entry.safeForBulk && !input.acknowledgeImpact) throw new Error('Revisa y acepta el impacto en coautores, dependencias o archivos conservados.');
+      if (input.withdrawn && !entry.safeForBulk && input.expectedImpact !== contentImpactSignature(entry)) throw new Error('El impacto en otros aportes cambió. Actualiza y vuelve a revisar la selección.');
+      if (input.withdrawn && !input.reason.trim()) throw new Error('Indica el motivo de la retirada por moderación.');
+      this.withdrawContent(input.kind, input.targetId, input.withdrawn, input.expectedVersion, input.reason, input.acknowledgeImpact);
+    } catch (error) { failure = error instanceof Error ? error : new Error('No se pudo gestionar el aporte.'); }
+    results.set(key, { request, actor: me.id, result: { operationId: input.operationId, kind: input.kind, targetId: input.targetId, status: failure ? 'failed' : 'completed', error: failure?.message } });
+    this.#emit(); if (failure) throw failure;
   }
 
   #helpPost(postId: Id): HelpPost {
@@ -900,34 +1036,11 @@ export class DemoDataSource implements DataSource {
   }
 
   joinGroup(displayName: string) {
-    this.#assertAlive();
-    const me = this.#state.members.find((m) => m.id === this.#viewerId);
-    if (me?.status === 'removed') throw new Error('Tu acceso fue dado de baja.');
-    if (me) return;
-    requireText(displayName, 'El nombre', 80);
-    // La demo no tiene correos: quien no es miembro nunca está en la lista.
-    throw new Error('Tu correo no está en la lista autorizada del grupo.');
+    return this.#membership.joinGroup(displayName);
   }
 
   inviteMember(email: string, isCreator: boolean) {
-    this.#requireCreator();
-    const normalized = requireText(email, 'El correo', 320).toLowerCase();
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(normalized)) throw new Error('Ese correo no es válido.');
-    const existing = this.#state.invitations.find((i) => i.email === normalized);
-    if (existing) {
-      // Reinvitar con otro rol lo corrige antes de que la persona se una.
-      if (existing.isCreator === isCreator) return;
-      this.#state.invitations = this.#state.invitations.map((i) =>
-        i.email === normalized ? { ...i, isCreator } : i,
-      );
-      this.#emit();
-      return;
-    }
-    this.#state.invitations = [
-      ...this.#state.invitations,
-      { email: normalized, isCreator, invitedBy: this.#viewerId, createdAt: this.#now() },
-    ];
-    this.#emit();
+    return this.#membership.inviteMember(email, isCreator);
   }
 
   resendInvitationEmail(email: string) {
@@ -938,22 +1051,11 @@ export class DemoDataSource implements DataSource {
   }
 
   revokeInvitation(email: string) {
-    this.#requireCreator();
-    const normalized = email.trim().toLowerCase();
-    this.#state.invitations = this.#state.invitations.filter((i) => i.email !== normalized);
-    this.#emit();
+    return this.#membership.revokeInvitation(email);
   }
 
   removeMember(memberId: Id) {
-    const me = this.#requireCreator();
-    if (memberId === me.id) throw new Error('No puedes darte de baja a ti mismo.');
-    if (!this.#state.members.some((m) => m.id === memberId)) throw new Error('Ese miembro no existe.');
-    this.#state.members = this.#state.members.map((m) =>
-      m.id === memberId ? { ...m, status: 'removed' as const } : m,
-    );
-    this.#rooms.memberRemoved(memberId);
-    this.#agent.purgeOwner(memberId);
-    this.#emit();
+    return this.#membership.removeMember(memberId);
   }
 
   importCurriculum() {
@@ -983,7 +1085,7 @@ export class DemoDataSource implements DataSource {
 
   updateProfile(displayName: string, photoUrl?: string) {
     const me = this.#activeMember();
-    const name = requireText(displayName, 'El nombre', 80);
+    const name = requireDisplayName(displayName);
     this.#state.members = this.#state.members.map((m) =>
       m.id === me.id ? { ...m, displayName: name, photoUrl } : m,
     );
@@ -1162,7 +1264,7 @@ export class DemoDataSource implements DataSource {
   attachResourceFile(kind: ResourceTargetKind, id: Id, file: File, expectedVersion?: number, transfer?: ResourceTransferOptions) {
     this.#activeMember();
     if (this.#chat.handles(kind)) return this.#chat.attachResourceFile(kind, id, file, expectedVersion, transfer);
-    if (!this.#canReadResource(kind, id) || this.#withdrawals.get(`${kind}:${id}`)?.withdrawnAt) return Promise.reject(new Error('El recurso no está disponible.'));
+    if (!this.#canReadResource(kind, id) || this.#withdrawnForInteraction(kind, id)) return Promise.reject(new Error('El recurso no está disponible.'));
     if ((kind === 'profile' || kind === 'profile_cover') && (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size <= 0 || file.size > 5 * 1024 * 1024)) return Promise.reject(new Error(kind === 'profile' ? 'La foto debe ser PNG, JPEG o WebP de hasta 5 MB.' : 'La portada debe ser PNG, JPEG o WebP de hasta 5 MB.'));
     return this.#academic.attachResourceFile(kind, id, file, expectedVersion, transfer);
   }
@@ -1173,6 +1275,11 @@ export class DemoDataSource implements DataSource {
   }
   removeResourceFile(id: Id, expectedVersion?: number) { const file = this.#resourceFile(id); return this.#chat.handles(file.targetKind) ? this.#chat.removeResourceFile(id, expectedVersion) : this.#academic.removeResourceFile(id, expectedVersion); }
   restoreResourceFile(id: Id, expectedVersion: number) { const file = this.#resourceFile(id); return this.#chat.handles(file.targetKind) ? this.#chat.restoreResourceFile(id, expectedVersion) : this.#academic.restoreResourceFile(id, expectedVersion); }
+  async discardResourceUpload(_kind: ResourceTargetKind, _id: Id, _file: File): Promise<Id | undefined> {
+    this.#activeMember();
+    // La demo confirma de forma atómica: no reserva fragmentos remotos pendientes.
+    return undefined;
+  }
   async downloadResourceFile(id: Id, transfer?: ResourceTransferOptions) { const file = this.#resourceFile(id); return this.#chat.handles(file.targetKind) ? this.#chat.downloadResourceFile(id, transfer) : this.#academic.downloadResourceFile(id, transfer); }
 
   createChatChannel(input: CreateChatChannelInput) { return this.#chat.createChatChannel(input); }
@@ -1229,7 +1336,7 @@ export class DemoDataSource implements DataSource {
   #replyTo(scope: MessageScope, me: Member, replyToId: Id | undefined, conversationId?: Id): Id | undefined {
     if (!replyToId) return undefined;
     const target = this.#thread(scope, me, conversationId).find((m) => m.id === replyToId);
-    if (!target || target.deletedAt) throw new Error('El mensaje al que respondes ya no está.');
+    if (!target || target.deletedAt || scope !== 'direct' && this.#withdrawals.get(`${scope}_message:${replyToId}`)?.withdrawnAt) throw new Error('El mensaje al que respondes ya no está.');
     return replyToId;
   }
 
@@ -1297,6 +1404,7 @@ export class DemoDataSource implements DataSource {
   }
 
   editMessage(scope: MessageScope, messageId: Id, text: string) {
+    if (scope !== 'direct' && this.#withdrawals.get(`${scope}_message:${messageId}`)?.withdrawnAt) throw new Error('El mensaje está retirado.');
     if (scope === 'channel') return this.#chat.editMessage(scope, messageId, text);
     const me = this.#activeMember();
     const message = this.#message(scope, messageId, me);
@@ -1308,10 +1416,12 @@ export class DemoDataSource implements DataSource {
     const clean = this.#chat.validateMentions(this.#messageText(text, me), participants);
     if (clean === message.text) return;
     this.#updateMessage(scope, messageId, { text: clean, editedAt: this.#now() });
+    this.#chat.bumpVersion(scope, messageId);
     this.#emit();
   }
 
   deleteMessage(scope: MessageScope, messageId: Id) {
+    if (scope !== 'direct' && this.#withdrawals.get(`${scope}_message:${messageId}`)?.withdrawnAt) throw new Error('El mensaje está retirado.');
     if (scope === 'channel') return this.#chat.deleteMessage(scope, messageId);
     const me = this.#activeMember();
     const message = this.#message(scope, messageId, me);
@@ -1323,11 +1433,13 @@ export class DemoDataSource implements DataSource {
       );
     }
     this.#updateMessage(scope, messageId, { text: '', deletedAt: this.#now(), deletedBy: me.id });
+    this.#chat.bumpVersion(scope, messageId);
     this.#state.reactions = this.#state.reactions.filter((r) => !(r.scope === scope && r.messageId === messageId));
     this.#emit();
   }
 
   toggleReaction(scope: MessageScope, messageId: Id, emoji: string) {
+    if (scope !== 'direct' && this.#withdrawals.get(`${scope}_message:${messageId}`)?.withdrawnAt) throw new Error('El mensaje está retirado.');
     if (scope === 'channel') return this.#chat.toggleReaction(scope, messageId, emoji);
     const me = this.#activeMember();
     if (!isReaction(emoji)) throw new Error('Esa reacción no está disponible.');
@@ -1790,6 +1902,18 @@ export class DemoDataSource implements DataSource {
   }
 
   #readableSpacedSource(kind: SpacedCard['sourceKind'], sourceId: Id, collection: SpacedCollection) {
+    if (kind === 'exam_question') {
+      const origin = [...this.#examSpaced.values()].find((entry) => entry.sourceId === sourceId && entry.actor === this.#viewerId);
+      if (!origin || collection.visibility !== 'personal' || collection.ownerId !== this.#viewerId) return undefined;
+      for (const ref of origin.origins) {
+        if (ref.kind === 'note' && !this.#state.notes.some((row) => row.id === ref.refId && !row.withdrawnAt && (row.visibility === 'group' || row.authorId === this.#viewerId))) return undefined;
+        if (ref.kind === 'guide' && !this.#state.guides.some((row) => row.id === ref.refId && !row.withdrawnAt)) return undefined;
+        if (ref.kind === 'question' && !this.#state.questions.some((row) => row.id === ref.refId && !row.withdrawnAt)) return undefined;
+        if (ref.kind === 'answer' && !this.#state.answers.some((row) => row.id === ref.refId && !row.withdrawnAt)) return undefined;
+      }
+      return { id: sourceId, version: origin.examVersion, subjectId: collection.subjectId, visibility: 'personal' as const };
+    }
+
     if (this.#withdrawals.get(`${kind}:${sourceId}`)?.withdrawnAt) return undefined;
     const source = kind === 'note'
       ? this.#state.notes.find((note) => note.id === sourceId &&
@@ -2604,7 +2728,7 @@ export function createDemoState(now = new Date()): State {
       body: a.instructions,
     })),
   ];
-  return {
+  const state: State = {
     ...emptyState(),
     ...demoRoomExamples(now, LOGICA),
     invitations: [
@@ -3300,4 +3424,10 @@ export function createDemoState(now = new Date()): State {
     ],
     lastSeen: { 'demo-1': minutesAgo(180) },
   };
+  seedDemoMembership(state, {
+    'demo-1': 'demo-1@ejemplo.mx', 'demo-2': 'demo-2@ejemplo.mx', 'demo-3': 'demo-3@ejemplo.mx', 'demo-4': 'demo-4@ejemplo.mx',
+    'demo-5': 'demo-5@ejemplo.mx', 'demo-6': 'demo-6@ejemplo.mx', 'demo-7': 'demo-7@ejemplo.mx', 'demo-8': 'demo-8@ejemplo.mx',
+    'demo-invitado': 'invitado@ejemplo.mx', 'demo-invitado-2': 'invitado-2@ejemplo.mx',
+  }, 'demo-1');
+  return state;
 }

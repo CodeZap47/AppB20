@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ExamMaterialLink } from '../components/ExamMaterialLink';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useDataSource, useSnapshot } from '../data/DataContext';
@@ -12,6 +12,7 @@ import { ResourceDownloads, ResourceSection } from '../components/AcademicTools'
 import { StructuredEditor, StructuredText } from '../components/StructuredText';
 import { ContentWithdrawal } from '../components/ContentWithdrawal';
 import { useAction } from '../components/useAction';
+import { AttachmentUploader, useResourceUploadQueue } from '../components/uploads/ResourceUploader';
 import { formatDate, formatListTime, formatTime, memberName } from '../lib/format';
 import { previewText } from '../lib/messages';
 import { matches } from '../lib/search';
@@ -295,12 +296,23 @@ export function NotesPage() {
 
 export function NoteFormPage() {
   const { noteId } = useParams();
+  return <NoteForm key={noteId ?? 'nueva'} />;
+}
+
+function NoteForm() {
+  const { noteId } = useParams();
   const [params] = useSearchParams();
   const source = useDataSource();
   const navigate = useNavigate();
   const { notes, subjects, terms, assignments, activities, questions, resourceFiles } = useSnapshot();
   const existing = notes.find((n) => n.id === noteId);
   const { error, pending, run } = useAction();
+  const queue = useResourceUploadQueue();
+  const saved = useRef<{ id: string; version: number } | null>(null);
+  const submitting = useRef(false);
+  const active = useRef(true);
+  const [contentSaved, setContentSaved] = useState(false);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const preset = subjects.find((s) => s.id === params.get('materia'))?.id;
   const [subjectId, setSubjectId] = useState(existing?.subjectId ?? preset ?? subjects[0]?.id ?? '');
   const [topic, setTopic] = useState(existing?.topic ?? '');
@@ -315,6 +327,8 @@ export function NoteFormPage() {
   const [activityIds, setActivityIds] = useState(existing?.activityIds ?? []);
   const [questionIds, setQuestionIds] = useState(existing?.questionIds ?? []);
   const [baseVersion] = useState(existing?.version);
+  const locked = pending || queue.busy || contentSaved;
+  const conflict = Boolean(existing && !contentSaved && baseVersion !== existing.version);
   const toggle = (ids: string[], id: string) => ids.includes(id) ? ids.filter((value) => value !== id) : [...ids, id];
 
   if (noteId && !existing) return <NoteMissing />;
@@ -329,25 +343,26 @@ export function NoteFormPage() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const id = await run(() =>
-      source.saveNote({
-        id: existing?.id,
-        subjectId,
-        topic,
-        title,
-        body,
-        tags: tags.split(','),
-        visibility,
-        source: noteSource,
-        termId: termId || undefined,
-        session: session || undefined,
-        assignmentIds,
-        activityIds,
-        questionIds,
-        expectedVersion: baseVersion,
-      }),
-    );
-    if (id) void navigate(`/m/notas/${id}`);
+    if (submitting.current || queue.busy || conflict) return;
+    submitting.current = true;
+    try {
+      await run(async () => {
+        if (!saved.current) {
+          const id = await source.saveNote({
+            id: existing?.id, subjectId, topic, title, body, tags: tags.split(','), visibility,
+            source: noteSource, termId: termId || undefined, session: session || undefined,
+            assignmentIds, activityIds, questionIds, expectedVersion: baseVersion,
+          });
+          if (!active.current) return;
+          saved.current = { id, version: existing ? baseVersion! + 1 : 1 };
+          setContentSaved(true);
+        }
+        const target = saved.current;
+        if (await queue.upload('note', target.id, target.version) && active.current) {
+          void navigate(`/m/notas/${target.id}`);
+        }
+      });
+    } finally { submitting.current = false; }
   };
 
   const linkable = {
@@ -373,6 +388,7 @@ export function NoteFormPage() {
         </div>
       </header>
       <form className="form panel form--wide" onSubmit={submit}>
+        <fieldset className="upload-form-fields" disabled={locked}>
         <section className="form__section">
           <h2>Clasificación</h2>
           <div className="form__grid">
@@ -439,13 +455,16 @@ export function NoteFormPage() {
           </details>
         </section>
 
-        {existing && baseVersion !== existing.version && <p className="error" role="alert">La nota cambió mientras la editabas. Conserva tu borrador y vuelve a abrir la edición antes de guardar.</p>}
+        </fieldset>
+        <AttachmentUploader queue={queue} disabled={pending || contentSaved} title="Archivos de la nota" />
+        {contentSaved && <p className="field__hint">La nota ya está guardada. Termina o retira los archivos pendientes para continuar.</p>}
+        {conflict && <p className="error" role="alert">La nota cambió mientras la editabas. Conserva tu borrador y vuelve a abrir la edición antes de guardar.</p>}
         {error && <p className="error">{error}</p>}
         <div className="form__actions">
           <button type="button" className="secondary" onClick={() => void navigate(-1)}>
             Cancelar
           </button>
-          <button type="submit" disabled={pending || Boolean(existing && baseVersion !== existing.version)}>Guardar</button>
+          <button type="submit" disabled={pending || queue.busy || conflict}>{contentSaved ? queue.pendingCount ? 'Reintentar archivos pendientes' : 'Continuar' : 'Guardar'}</button>
         </div>
       </form>
     </>

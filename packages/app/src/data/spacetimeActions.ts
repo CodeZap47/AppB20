@@ -1,3 +1,4 @@
+import type { DocumentActions } from './documentTypes';
 import { CURRICULUM } from '@b20/core';
 import { createPresentationActions } from './presentationActions';
 import { createStudyRoomActions } from './roomsActions';
@@ -14,6 +15,7 @@ import type { ResourceTargetKind } from './types';
 import type { GuideAiActions } from './guideAiTypes';
 import type { AgentAiActions } from './agentTypes';
 import type { ExamActions } from './examTypes';
+import type { MembershipActions } from './membershipTypes';
 import type { ResourceTransport } from './resourceTransport';
 import { StickerTransport } from './stickerTransport';
 import type { TeachingRevision, HelpPostInput, HelpPostHistory } from './types';
@@ -40,7 +42,7 @@ const teachingUpdate = (input: SaveTeachingPracticeInput) => ({
 });
 
 /** Los reducers confirman los permisos en el servidor; nunca se modifica la caché de forma optimista. */
-export function createSpacetimeActions(getConnection: () => DbConnection, identity: () => string, files?: ResourceTransport): Omit<Actions, keyof GuideAiActions | keyof ExamActions | keyof AgentAiActions> {
+export function createSpacetimeActions(getConnection: () => DbConnection, identity: () => string, files?: ResourceTransport): Omit<Actions, keyof DocumentActions | keyof GuideAiActions | keyof ExamActions | keyof AgentAiActions | keyof MembershipActions> {
   const stickers = new StickerTransport(getConnection, identity);
   let queue = Promise.resolve();
   function serial<T>(task: () => Promise<T>): Promise<T> {
@@ -152,7 +154,7 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
     commentQuestion: (questionId, text, answerId) => getConnection().reducers.commentQuestion({ questionId: id(questionId), text, answerId: optionalId(answerId) }),
     toggleAnswerUsefulness: (answerId) => getConnection().reducers.toggleAnswerUsefulness({ answerId: id(answerId) }),
     saveQuestionLinks: (questionId, noteIds, guideIds) => getConnection().reducers.saveQuestionLinks({ questionId: id(questionId), noteIds: noteIds.map(id), guideIds: guideIds.map(id) }),
-    withdrawContent: (kind, targetId, withdrawn, expectedVersion, reason = '') => getConnection().reducers.withdrawContent({ kind, targetId: id(targetId), withdrawn, expectedVersion, reason }),
+    withdrawContent: (kind, targetId, withdrawn, expectedVersion, reason = '', acknowledgeImpact) => getConnection().reducers.withdrawContent({ kind, targetId: id(targetId), withdrawn, expectedVersion, reason, acknowledgeImpact }),
     saveSpacedCollection: (input) => {
       const fields = { collectionId: optionalId(input.id), subjectId: id(input.subjectId), termId: optionalId(input.termId),
         title: input.title, visibility: input.visibility, expectedVersion: input.expectedVersion };
@@ -271,6 +273,7 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
     }),
     restorePageSnapshot: (page, pageId, version, expectedVersion) => getConnection().reducers.restorePageSnapshot({ page, pageId: id(pageId), version, expectedVersion }),
     attachResourceFile, removeResourceFile,
+    discardResourceUpload: (kind, targetId, file) => transfer().discardUpload(kind, targetId, file),
     restoreResourceFile: (fileId, expectedVersion) => getConnection().reducers.restoreResourceFile({ fileId, expectedVersion }),
     downloadResourceFile: async (fileId, options) => transfer().download(fileId, options),
     attachWorkFile: (workId, file) => attachResourceFile('work', workId, file),

@@ -24,12 +24,12 @@ export function AiSourcePreview({ preparation }: { preparation: AiPreparation })
     <ul>{preparation.sources.map((source) => <li key={`${source.kind}:${source.refId}`}>{source.title} · {AI_SOURCE_LABELS[source.kind]} · v{source.version} · {STATUS_LABEL[source.status]}
       {source.visibility === 'personal' ? ' · Personal propia' : ''}{source.reason ? ` · ${source.reason}` : ''}</li>)}</ul>
     <h4>Omisiones y revisión</h4>
-    <p className="field__hint">Se leen adjuntos UTF8 compatibles de hasta 256 KiB. Los formatos omitidos se indican abajo. Se excluyen comentarios, chats, progreso, metadatos personales y contenido de enlaces externos. Revisa los fragmentos: los patrones automáticos no detectan todos los datos sensibles.</p>
+    <p className="field__hint">Los adjuntos UTF8 pequeños se preparan directamente; los documentos y el OCR solo se incorporan después de revisar y seleccionar su texto. Los formatos omitidos se indican abajo. Se excluyen comentarios, chats, progreso, metadatos personales y contenido de enlaces externos. Revisa los fragmentos: los patrones automáticos no detectan todos los datos sensibles.</p>
     {preparation.omissions.length ? <ul>{preparation.omissions.map((omission, index) => <li key={index}>{omission}</li>)}</ul> : <p>No se registraron otras omisiones.</p>}
     <h4>Texto exacto preparado</h4>
     {preparation.fragments.map((fragment) => <details key={fragment.id} className="ai-fragment" open>
       <summary>Fragmento {fragment.id}</summary>
-      <ul className="field__hint">{fragment.origins.map((origin, index) => <li key={index}>{AI_SOURCE_LABELS[origin.kind]} {origin.refId}, v{origin.version} · {origin.field} · líneas {origin.startLine}–{origin.endLine}</li>)}</ul>
+      <ul className="field__hint">{fragment.origins.map((origin, index) => <li key={index}>{AI_SOURCE_LABELS[origin.kind]} {origin.refId}, v{origin.version} · {origin.field} · {origin.locator ? `${origin.locator.kind === 'page' ? 'páginas' : origin.locator.kind === 'paragraph' ? 'párrafos' : 'líneas'} ${origin.locator.start}–${origin.locator.end}` : `líneas ${origin.startLine}–${origin.endLine}`}</li>)}</ul>
       <pre>{fragment.text}</pre>
     </details>)}
     {!preparation.fragments.length && <p>No hay fragmentos preparados.</p>}

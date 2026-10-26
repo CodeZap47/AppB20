@@ -8,6 +8,12 @@ export function browserPushInstallationId(memberId: string): string | undefined 
   try { return localStorage.getItem(storageKey(memberId)) || undefined; } catch { return undefined; }
 }
 
+/** La suscripción del navegador solo puede pertenecer a una cuenta a la vez. */
+export function currentBrowserPushInstallationId(memberId: string): string | undefined {
+  try { return localStorage.getItem(ownerKey) === memberId ? browserPushInstallationId(memberId) : undefined; }
+  catch { return undefined; }
+}
+
 function applicationKey(value: string): Uint8Array<ArrayBuffer> {
   if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new Error('Las notificaciones todavía no están configuradas.');
   let decoded: string;

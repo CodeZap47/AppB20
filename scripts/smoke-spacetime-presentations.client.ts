@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { setGlobalLogLevel } from 'spacetimedb';
+import { AI_CONSENT_VERSION, type PresentationAiDraft, type PresentationAudio } from '../packages/core/src/index';
 import { DbConnection } from '../packages/app/src/module_bindings';
 
 const bounded = <T>(promise: Promise<T>, label: string) => new Promise<T>((resolve, reject) => {
@@ -54,6 +55,13 @@ export async function runSmoke(options: { address: string; database: string; tok
     await reviewer.reducers.joinGroup({ displayName: 'Local reviewer' });
     await assert.rejects(outsider.reducers.joinGroup({ displayName: 'Local outsider' }));
     await Promise.all([admin, author, reviewer, outsider].map(observe));
+    await admin.reducers.setAiService({ identity: outsider.identity!, enabled: true, dailyTokenBudget: 100_000 });
+    await author.procedures.aiSetConsent({ payload: JSON.stringify({ version: AI_CONSENT_VERSION, accepted: true }) });
+    const keyId = randomUUID(); const intentId = randomUUID();
+    await author.procedures.aiAuthorizeKey({ payload: JSON.stringify({ intentId, keyId, provider: 'gemini' }) });
+    await outsider.procedures.aiCommitKey({ payload: JSON.stringify({ actor: author.identity!.toHexString(), intentId, keyId, provider: 'gemini', ciphertext: 'dGVzdA==', iv: 'AAAAAAAAAAAAAAAA', masterVersion: 'local' }) });
+    const media = async <T = PresentationAudio>(connection: DbConnection, action: string, values: Record<string, unknown>) => JSON.parse(await connection.procedures.presentationMedia({ payload: JSON.stringify({ action, ...values }) })) as T;
+    const presentationAi = async <T = PresentationAiDraft>(connection: DbConnection, action: string, values: Record<string, unknown>) => JSON.parse(await connection.procedures.presentationAi({ payload: JSON.stringify({ action, ...values }) })) as T;
     await author.reducers.createSubject({ name: 'Local presentations', period: 1 });
     const subjectId = [...author.db.subjects.iter()].find((row) => row.name === 'Local presentations')!.id;
     await author.reducers.saveNote({ noteId: undefined, subjectId, topic: 'TCP', title: 'Local private source',
@@ -122,7 +130,27 @@ export async function runSmoke(options: { address: string; database: string; tok
     const improvedBody = `${firstBody} Si se pierde un paquete, TCP solicita o espera su retransmisión; no garantiza latencia baja.`;
     await author.reducers.savePresentationAttempt({ attemptId: secondId, body: improvedBody, ...observations,
       limitations: 'Explicar latencia', nextSteps: 'Second private plan', expectedVersion: second.version });
+    const audioId = randomUUID(); const audioBytes = Uint8Array.from([1, 2, 3, 4]); const audioHash = createHash('sha256').update(audioBytes).digest('hex');
+    await media(author, 'begin', { id: audioId, attemptId: String(secondId), expectedVersion: second.version + 1, name: 'local-audio.wav', mime: 'audio/wav', bytes: audioBytes.length, sha256: audioHash });
+    await media(author, 'putChunk', { id: audioId, index: 0, bytes: Array.from(audioBytes), sha256: audioHash });
+    // The Worker parser is covered by real-container API tests; this tests the restricted database confirmation.
+    await assert.rejects(media(author, 'serviceValidate', { id: audioId, sha256: audioHash, mime: 'audio/wav', durationSeconds: 10 }));
+    await media(outsider, 'serviceValidate', { id: audioId, sha256: audioHash, mime: 'audio/wav', durationSeconds: 10 });
     await author.reducers.completePresentationAttempt({ attemptId: secondId, expectedVersion: second.version + 1 });
+    await assert.rejects(media(reviewer, 'get', { id: audioId })); await assert.rejects(media(admin, 'get', { id: audioId }));
+    await media(author, 'share', { id: audioId, shared: true }); assert.equal((await media(reviewer, 'get', { id: audioId })).state, 'ready');
+    const aiDraftId = randomUUID(); const generationId = randomUUID();
+    const aiDraft = await presentationAi(author, 'prepare', { id: aiDraftId, attemptId: String(secondId), expectedVersion: second.version + 2, purpose: 'transcription', model: 'gemini-local-test' });
+    assert.ok(!JSON.stringify(aiDraft).includes('Second private plan'));
+    await assert.rejects(presentationAi(reviewer, 'get', { id: aiDraftId }));
+    await presentationAi(author, 'authorize', { id: aiDraftId, generationId, expectedRevision: aiDraft.revision, fingerprint: aiDraft.fingerprint, model: aiDraft.model, confirmed: true, allowNew: true });
+    const serviceInput = { actor: author.identity!.toHexString(), id: aiDraftId, generationId };
+    assert.equal((await presentationAi<{ claimed: boolean }>(outsider, 'claim', serviceInput)).claimed, true);
+    assert.equal((await presentationAi<{ claimed: boolean }>(outsider, 'claim', serviceInput)).claimed, false);
+    const transcriptResult = { segments: [{ startSeconds: 0, endSeconds: 10, text: 'Transcripción sintética para verificar persistencia.' }] };
+    const finished = await presentationAi(outsider, 'finish', { ...serviceInput, state: 'succeeded', result: transcriptResult });
+    await presentationAi(author, 'accept', { id: aiDraftId, expectedRevision: finished.revision, reviewed: true, result: transcriptResult });
+    checks.push('audio privado con integridad y autorización expresa; IA sin autoobservaciones, idempotencia y transcripción revisada');
     assert.equal(attempts(author).find((row) => row.id === firstId)!.body, firstBody);
     await author.reducers.savePresentationPractice({ ...input, practiceId, requestId: randomUUID(),
       title: 'Private future configuration', expectedVersion: practices(author)[0].version });
@@ -135,6 +163,8 @@ export async function runSmoke(options: { address: string; database: string; tok
     admin = await connect(options.tokens[0]); author = await connect(options.tokens[1]);
     reviewer = await connect(options.tokens[2]); outsider = await connect(options.tokens[3]);
     await Promise.all([admin, author, reviewer, outsider].map(observe));
+    assert.equal((await media(author, 'get', { id: audioId })).state, 'ready');
+    assert.equal((await presentationAi(author, 'get', { id: aiDraftId })).state, 'accepted');
     assert.equal(attempts(author).length, 2);
     assert.equal(feedback(author).length, 1);
     assert.equal(personal(author).length, 2);
@@ -145,6 +175,11 @@ export async function runSmoke(options: { address: string; database: string; tok
     await author.reducers.setPresentationReviewer({ practiceId, reviewerId: admin.identity!, expectedVersion: practices(author)[0].version });
     await waitFor(() => practices(reviewer).length === 0 && attempts(reviewer).length === 0, 'revocación del revisor anterior');
     await waitFor(() => attempts(admin).length === 2, 'nuevo revisor expresamente invitado');
+    await assert.rejects(media(reviewer, 'get', { id: audioId })); await assert.rejects(media(admin, 'get', { id: audioId }));
+    await media(author, 'delete', { id: audioId }); assert.equal((await media(author, 'get', { id: audioId })).state, 'deleted');
+    assert.equal((await presentationAi(author, 'get', { id: aiDraftId })).state, 'accepted');
+    await assert.rejects(media(author, 'chunk', { id: audioId, index: 0 }));
+    checks.push('audio y transcripción persisten tras reinicio; cambio de revisor revoca audio y borrado conserva transcripción aceptada');
     assert.equal(personal(admin).length, 0);
     assert.equal(feedback(admin).length, 0);
     assert.equal(feedback(author).length, 1);
@@ -159,7 +194,7 @@ export async function runSmoke(options: { address: string; database: string; tok
     await waitFor(() => attempts(admin).length === 2, 'restauración conserva historial');
     checks.push('cambio de revisor, archivo y restauración sin perder historial privado');
 
-    for (const name of ['presentation_practice', 'presentation_attempt', 'presentation_personal', 'presentation_question', 'presentation_feedback_entry']) {
+    for (const name of ['presentation_practice', 'presentation_attempt', 'presentation_personal', 'presentation_question', 'presentation_feedback_entry', 'presentation_audio_upload', 'presentation_audio_chunk', 'presentation_audio_grant', 'presentation_ai_draft']) {
       await assert.rejects(subscribe(author, [`SELECT * FROM ${name}`]));
     }
     await admin.reducers.removeMember({ identity: author.identity! });

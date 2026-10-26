@@ -1,5 +1,7 @@
 # Despliegue
 
+El despliegue de Administración del 24 de octubre de 2026 está registrado en [Publicación y conservación de datos](administracion-produccion-2026-10-24.md), con configuración, versiones y comprobaciones actuales.
+
 Cómo subir App B20 a internet. Nada de esto crea cuentas ni cobra por sí solo: cada paso
 que necesita una cuenta lo hace una persona del grupo.
 
@@ -8,23 +10,22 @@ que necesita una cuenta lo hace una persona del grupo.
 | Pieza | Dónde | Requisito de esta entrega |
 | --- | --- | --- |
 | Datos y archivos (`packages/spacetime-module`) | **SpacetimeDB Maincloud** | Tablas privadas, fragmentos de 1 MiB, permisos y operaciones del grupo. |
-| Autenticación | **SpacetimeAuth** | Cliente OIDC e invitaciones; la identidad de CLI no es la del alumno. |
+| Autenticación | **Supabase Auth** (`pypdkigeywdughdhxlcm`) | Solo cuentas, código, contraseña y sesión; la membresía vive en SpacetimeDB. La identidad de CLI no es la del alumno. |
 | Web/PWA (`apps/web`) | **Cloudflare Pages** | Compilación estática con HTTPS en `*.pages.dev`. |
-| IA, Exámenes y recordatorios (`app-b20-ai`, `apps/api/wrangler.ai.jsonc`) | **Cloudflare Workers** | Gemini BYOK, Guías, operaciones privadas de Exámenes y cron de avisos; sin R2. |
+| Acceso, IA, Exámenes y recordatorios (`b20-api` en `api.b20.mx`, `apps/api/wrangler.ai.jsonc`) | **Cloudflare Workers** | Gemini BYOK, Guías, operaciones privadas de Exámenes y cron de avisos; sin R2. |
 | Archivos anteriores (`app-b20-api`) | **Cloudflare Workers** y su R2 existente | Compatibilidad conservada; los archivos nuevos siguen en SpacetimeDB. |
 | Extensión (`apps/extension`) | Paquete local/controlado | Panel lateral y vista completa; publicación en tienda fuera del presupuesto inicial. |
 | Android (`apps/android`) | APK firmado, descarga controlada | Sin Firebase como requisito nuevo; push nativo con la app cerrada permanece pendiente. |
 
-La instalación nueva usa solo SpacetimeDB y Cloudflare, sin Supabase, D1, R2, Cloud Run ni
-Secret Manager como dependencias. No se habilitan planes de pago automáticamente. OpenMAIC y
+La instalación nueva usa SpacetimeDB y Cloudflare, y Supabase únicamente para Auth; sin D1, R2,
+Cloud Run ni Secret Manager como dependencias. No se habilitan planes de pago automáticamente. OpenMAIC y
 sus instrucciones antiguas no forman parte de esta entrega ni justifican añadir otro proveedor.
 
 ## Base de datos elegida
 
 Los comandos de Maincloud de esta guía apuntan a **`app-b20-34245`**, la base indicada para
 B20. Su identidad indicada es `c2006d3bbe49dc8cabbfa144282ee0af8edb84292d74f2e48128a0e0f4f626ba`. El nombre e
-identidad de base son distintos al Client ID del cliente de SpacetimeAuth; este último se
-obtiene en **SpacetimeAuth → Clients**.
+identidad de base son distintos al proyecto de Supabase Auth (`pypdkigeywdughdhxlcm`).
 
 En desarrollo local se puede conservar `app-b20` con el servidor `http://localhost:3000`.
 No ejecutes una creación con `--template chat-react-ts` en este repositorio: la aplicación y el
@@ -56,17 +57,12 @@ requisitos implementados de las comprobaciones pendientes.
   antes de publicar. Cliente y módulo usan el SDK fijado en `2.12.0`; los bindings se generan
   con esa misma versión.
 
-### 1. Proyecto SpacetimeAuth
+### 1. Supabase Auth
 
-El proyecto y el cliente `client_034jL0AHYYQ1bps8SupHU0` ya existen. Ya están guardados los
-retornos locales, `https://app-b20.pages.dev/auth/callback` y
-`https://app-b20.pages.dev/auth/logout`, más los del enlace anterior `af0dd1ec.app-b20.pages.dev`
-para conservar su acceso. Usa la URL estable; no registres cada hash nuevo ni comodines. El
-correo debe estar verificado para la fase `demo`; la invitación solo se exige al activar
-`spacetime`. Google es opcional para este piloto.
-
-Sigue los detalles de [`spacetimeauth.md`](spacetimeauth.md). Si vas a distribuir la extensión o
-Android, registra también sus retornos y client IDs correspondientes.
+B20 usa únicamente Supabase Auth, en el proyecto `pypdkigeywdughdhxlcm`. Nadie se registra por su cuenta:
+invitar a alguien en B20 activa su cuenta, y el primer acceso pide un código enviado al correo
+y una contraseña. La configuración completa (hook `email_verified`, `b20_account_state`,
+plantilla del código, SMTP y secreto del Worker) está en [`supabase-auth.md`](supabase-auth.md).
 
 ### 2. SpacetimeDB en Maincloud: preparado para la fase de datos reales
 
@@ -76,24 +72,24 @@ npm run spacetime:generate
 
 # Ejecutar con la misma identidad de CLI que publicó la base:
 spacetime call -s maincloud app-b20-34245 set_auth_config \
-  '"https://auth.spacetimedb.com/oidc"' '["<client-id-web>","<client-id-extension>","<client-id-android>"]'
+  '"https://pypdkigeywdughdhxlcm.supabase.co/auth/v1"' '["authenticated"]'
 spacetime call -s maincloud app-b20-34245 invite_member '"tu-correo@gmail.com"' true
 ```
 
 El script de Maincloud usa `--delete-data=never`; el script `spacetime:publish` sigue apuntando
 a la base local `app-b20`. El módulo, `auth_config` y la primera invitación ya están preparados:
 los comandos con placeholders se conservan como referencia para otra instalación. El caso de
-adopción de una base vacía existente se explica en [SpacetimeAuth](spacetimeauth.md#actualizar-una-base-vacía-que-ya-existía);
-la identidad propietaria de CLI es distinta a la identidad de base y al Client ID de auth.
+adopción de una base vacía existente usa `B20_BOOTSTRAP_OWNER_IDENTITY` al publicar; la identidad
+propietaria de CLI es distinta a la identidad de base y a las cuentas de Supabase.
 
 Estos pasos no son necesarios para entrar a la simulación actual. Al activar
-`VITE_DATA_MODE=spacetime`, la lista debe contener los client IDs usados y la persona debe
-unirse con su correo invitado. Las demás invitaciones se administrarán desde Ajustes. La
-identidad OIDC no es la identidad de la CLI que administra la base.
+`VITE_DATA_MODE=spacetime`, la audiencia es `authenticated` y la persona debe unirse con su
+correo invitado. Las demás invitaciones se administran desde Ajustes. La identidad de la sesión
+de Supabase no es la identidad de la CLI que administra la base.
 
 Variables del cliente: `VITE_SPACETIME_URI=wss://maincloud.spacetimedb.com` y
 `VITE_SPACETIME_DB=app-b20-34245`. Las audiencias del módulo deben coincidir con `OIDC_AUDIENCE` del
-backend. No se aceptan sesiones de otros proyectos aunque compartan el emisor de SpacetimeAuth.
+backend. No se aceptan sesiones de otros proyectos de Supabase ni de otros proveedores.
 
 ### 3. Archivos directos y compatibilidad opcional
 
@@ -108,13 +104,22 @@ usa como depósito de archivos nuevos. No retirar credenciales o buckets hasta c
 los IDs y versiones. La guía anterior de [Workers/R2](archivos-cloudflare.md) se conserva para
 operación de esa compatibilidad, no como requisito de una instalación nueva.
 
-### 3.1. Worker de IA y recordatorios
+### 3.1. Worker de la API: acceso, IA y recordatorios
 
-El servicio actual se llama **`app-b20-ai`** y se configura con
-`apps/api/wrangler.ai.jsonc`, con entrada `src/guideWorker.ts`. Está separado del Worker
-heredado `app-b20-api` y no requiere un bucket R2. Usa la misma base Maincloud y el mismo
-cliente de autenticación que Pages. `VITE_AI_API_URL=https://app-b20-ai.aguaseero.workers.dev`
-selecciona este servicio; `VITE_API_URL` conserva las descargas anteriores.
+El servicio se llama **`b20-api`** y responde en el dominio propio **`https://api.b20.mx`**,
+dentro de la zona de `b20.mx`. Se configura con `apps/api/wrangler.ai.jsonc`, con entrada
+`src/guideWorker.ts`, y no requiere un bucket R2. Usa la misma base Maincloud y el mismo
+proyecto de Supabase Auth que Pages. `VITE_AI_API_URL=https://api.b20.mx` selecciona este
+servicio. Sustituye al Worker `app-b20-ai`, que se eliminó el 24 de octubre de 2026 junto con
+sus secretos.
+
+Para crearlo de nuevo con secretos nuevos, ejecutar `node scripts/recrear-api-worker.mjs`
+con Node 22 y la CLI de SpacetimeDB en la sesión propietaria. El script pide la clave
+`sb_secret_` sin mostrarla (o la lee del portapapeles con `pbpaste | node scripts/recrear-api-worker.mjs`), genera la clave maestra (versión `v2`), el par VAPID y dos
+identidades técnicas, las registra con `set_ai_service` y `set_notification_service`, guarda
+la clave VAPID pública en la configuración y despliega con `--secrets-file` temporal. Al
+cambiar la clave maestra, cada persona vuelve a guardar su clave de Gemini; al cambiar el par
+VAPID, vuelve a activar las notificaciones en su dispositivo.
 
 Los secretos `AI_SERVICE_TOKEN` y `AI_MASTER_KEYS_JSON` pertenecen al servicio IA y deben
 conservarse al publicar. Los avisos añaden `NOTIFICATION_SERVICE_TOKEN` y
@@ -144,7 +149,7 @@ necesario ejecutar una purga ni adelantar el vencimiento para desplegar la entre
 
 ### 4. Web en Cloudflare Pages
 
-Guías y Exámenes reutilizan el servicio `app-b20-ai` con `VITE_AI_API_URL=https://app-b20-ai.aguaseero.workers.dev`. Las claves cifradas y el consentimiento permanecen en SpacetimeDB; las maestras y el token técnico exclusivo permanecen en Cloudflare Secrets. La entrega de Exámenes no crea credenciales nuevas ni sustituye el Worker de archivos anteriores. Primero se publica el módulo aditivo con `--delete-data=never`, después `apps/api/wrangler.ai.jsonc` conservando los secretos y la política vigente, y por último Pages. Resolver exámenes guardados usa `/ai/exams` autenticado y funciona sin clave ni llamadas al proveedor. Consultar el [registro de Exámenes](examenes-entrega.md) para separar pruebas locales, publicación y aceptación humana.
+Guías y Exámenes reutilizan el servicio `b20-api` con `VITE_AI_API_URL=https://api.b20.mx`. Las claves cifradas y el consentimiento permanecen en SpacetimeDB; las maestras y el token técnico exclusivo permanecen en Cloudflare Secrets. La entrega de Exámenes no crea credenciales nuevas ni sustituye el Worker de archivos anteriores. Primero se publica el módulo aditivo con `--delete-data=never`, después `apps/api/wrangler.ai.jsonc` conservando los secretos y la política vigente, y por último Pages. Resolver exámenes guardados usa `/ai/exams` autenticado y funciona sin clave ni llamadas al proveedor. Consultar el [registro de Exámenes](examenes-entrega.md) para separar pruebas locales, publicación y aceptación humana.
 
 El registro anterior de Pages apunta a **https://app-b20.pages.dev** con integración Git:
 el commit `59d17a7` terminó en **Success** y se comprobó entonces la pantalla de acceso.
@@ -164,8 +169,8 @@ resultado. Los detalles previos están en [`cloudflare-pages.md`](cloudflare-pag
   únicamente la clave pública del envío push, igual a la configurada en el Worker. Ningún
   token técnico ni clave privada se incluye en las variables de Pages.
 - `VITE_WEB_ORIGIN=https://app-b20.pages.dev` fija el dominio estable en modo `pages`; las
-  nuevas compilaciones llevan los alias allí antes del login. Los callbacks permanecen vacíos
-  y sus URLs exactas ya están guardadas en SpacetimeAuth. Los despliegues anteriores son
+  nuevas compilaciones llevan los alias allí antes del login. El acceso con código y contraseña
+  no necesita direcciones de retorno registradas. Los despliegues anteriores son
   inmutables. El acceso al almacenamiento directo no depende de `VITE_API_URL`.
 - Para compilar localmente, `.env.pages` se crea desde `.env.pages.example`; está ignorado por
   Git y no llega a Cloudflare.
@@ -210,8 +215,8 @@ requiriendo las acciones y credenciales de sus titulares.
 ### 5. Dominio (opcional)
 
 El subdominio gratuito `*.pages.dev` sirve la web sin comprar dominio. Si más adelante se usa
-un dominio propio, conectarlo a Pages, actualizar `VITE_WEB_ORIGIN` y registrar sus retornos
-exactos en SpacetimeAuth. Un Worker opcional puede usar su propio subdominio de Cloudflare;
+un dominio propio, conectarlo a Pages, actualizar `VITE_WEB_ORIGIN` y la Site URL de Supabase
+Auth. Un Worker opcional puede usar su propio subdominio de Cloudflare;
 no necesita Cloud Run ni otro proveedor.
 
 ### 6. Verificación antes de cerrar la entrega

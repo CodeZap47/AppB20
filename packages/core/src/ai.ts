@@ -1,7 +1,7 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 
 export const AI_CONSENT_VERSION = '2026-10-21.2';
-export const AI_SOURCE_KINDS = ['note', 'assignment', 'activity', 'work', 'evidence', 'guide', 'teaching'] as const;
+export const AI_SOURCE_KINDS = ['note', 'assignment', 'activity', 'work', 'evidence', 'guide', 'teaching', 'question', 'spaced_card', 'answer'] as const;
 export type AiSourceKind = typeof AI_SOURCE_KINDS[number];
 export const AI_LIMITS = Object.freeze({ maxSources: 10, maxCharacters: 40_000, maxQuestions: 20,
   maxOutputTokens: 8_000, maxConcurrent: 1, requestsPerHour: 5, requestsPerDay: 10,
@@ -13,20 +13,20 @@ export type AiErrorCode = 'invalid' | 'unauthorized' | 'unavailable' | 'conflict
 export class AiError extends Error {
   constructor(public readonly code: AiErrorCode, message: string) { super(message); this.name = 'AiError'; }
 }
-export interface AiSourceRef { kind: AiSourceKind; refId: string; topics: string[]; includeUnplaced: boolean }
+export interface AiSourceRef { kind: AiSourceKind; refId: string; topics: string[]; includeUnplaced: boolean; answerIds?: string[]; transcriptionIds?: string[]; segmentIds?: string[] }
 export interface AiPrepareInput { subjectId: string; termId?: string; topics: string[]; sources: AiSourceRef[]; config?: AiGenerationConfig }
 export interface AiSourceOrigin { kind: AiSourceKind; refId: string; version: number }
 export interface AiSourceSnapshot extends AiSourceOrigin {
   subjectId: string; termId?: string; title: string; topic?: string; visibility: 'group' | 'personal';
-  fields: { name: string; text: string }[]; context?: string; origins?: AiSourceOrigin[]; omissions?: string[];
+  fields: { name: string; text: string; origin?: Partial<AiFragmentOrigin> }[]; context?: string; origins?: AiSourceOrigin[]; omissions?: string[];
 }
-export interface AiFragmentOrigin extends AiSourceOrigin { field: string; startLine: number; endLine: number }
+export interface AiFragmentOrigin extends AiSourceOrigin { field: string; startLine: number; endLine: number; fileId?: string; fileHash?: string; transcriptionId?: string; locator?: { kind: 'page' | 'paragraph' | 'lines'; start: number; end: number } }
 export interface AiFragment { id: string; text: string; origins: AiFragmentOrigin[] }
 export type AiSourceStatus = 'prepared' | 'pending' | 'failed' | 'outdated' | 'unauthorized';
 export interface AiPreparedSource extends AiSourceOrigin {
   title: string; subjectId: string; termId?: string; visibility: 'group' | 'personal';
   fingerprint: string; topics: string[]; status: AiSourceStatus; reason?: string; fragmentIds: string[];
-  origins: AiSourceOrigin[];
+  origins: AiSourceOrigin[]; answerIds?: string[]; transcriptionIds?: string[]; segmentIds?: string[];
 }
 export interface AiPreparation {
   id: string; subjectId: string; termId?: string; topics: string[]; sources: AiPreparedSource[];
@@ -40,7 +40,7 @@ export interface AiStatus {
   limits: AiLimits; consentVersion: string; consented: boolean; serviceConfigured?: boolean;
 }
 export type AiGenerationState = 'prepared' | 'running' | 'succeeded' | 'failed' | 'unknown';
-export interface AiGenerationConfig { purpose?: 'guide' | 'explanation' | 'questions' | 'teaching_questions' | 'spaced_cards'; questionCount: number; types: ('single' | 'boolean')[]; difficulty: 'basic' | 'intermediate' | 'advanced'; topicWeights?: { topic: string; weight: number }[] }
+export interface AiGenerationConfig { purpose?: 'guide' | 'explanation' | 'questions' | 'teaching_questions' | 'spaced_cards'; questionCount: number; types: ('single' | 'boolean' | 'open')[]; difficulty: 'basic' | 'intermediate' | 'advanced'; topicWeights?: { topic: string; weight: number }[] }
 export const AI_DEFAULT_GENERATION_CONFIG: AiGenerationConfig = { questionCount: 10, types: ['single', 'boolean'], difficulty: 'intermediate' };
 export interface AiGenerationRequest { id: string; preparationId: string; fingerprint: string; config: AiGenerationConfig; confirmed: boolean; acknowledgeUnknown?: boolean }
 export interface AiGeneration {
@@ -80,13 +80,15 @@ export function validateAiPrepareInput(value: unknown): AiPrepareInput {
     if (!aiRecord(source) || !AI_SOURCE_KINDS.includes(source.kind as AiSourceKind) || !aiDecimalId(source.refId) ||
       !Array.isArray(source.topics) || source.topics.some((t) => typeof t !== 'string' || !topics.includes(t)) ||
       typeof source.includeUnplaced !== 'boolean') throw new AiError('invalid', 'La selección de fuentes no es válida.');
-    return { kind: source.kind as AiSourceKind, refId: source.refId, topics: [...new Set(source.topics as string[])], includeUnplaced: source.includeUnplaced };
+    for (const key of ['answerIds', 'transcriptionIds', 'segmentIds'] as const) if (source[key] !== undefined && (!Array.isArray(source[key]) || source[key].length > 512 || source[key].some((id) => typeof id !== 'string' || !id || id.length > 200 || (key === 'answerIds' && !aiDecimalId(id)) || (key === 'transcriptionIds' && !aiUuid(id))))) throw new AiError('invalid', 'La selección de respuestas o documentos no es válida.');
+    return { ...(source.answerIds ? { answerIds: [...new Set(source.answerIds as string[])] } : {}), ...(source.transcriptionIds ? { transcriptionIds: [...new Set(source.transcriptionIds as string[])] } : {}), ...(source.segmentIds ? { segmentIds: [...new Set(source.segmentIds as string[])] } : {}), kind: source.kind as AiSourceKind, refId: source.refId, topics: [...new Set(source.topics as string[])], includeUnplaced: source.includeUnplaced };
   });
   if (new Set(sources.map(aiSourceKey)).size !== sources.length) throw new AiError('invalid', 'No repitas fuentes.');
   const config = validateAiGenerationConfig(value.config ?? AI_DEFAULT_GENERATION_CONFIG);
   if (config.purpose === 'teaching_questions' && (sources.filter((source) => source.kind === 'teaching').length !== 1 || sources.some((source) => !['teaching', 'note', 'guide'].includes(source.kind)))) throw new AiError('invalid', 'Elige una explicación guardada y, opcionalmente, notas o guías de contexto.');
   if (config.purpose === 'spaced_cards' && sources.some((source) => !['note', 'guide'].includes(source.kind))) throw new AiError('invalid', 'Las tarjetas solo se generan desde notas y guías.');
-  if (config.purpose !== 'teaching_questions' && sources.some((source) => source.kind === 'teaching')) throw new AiError('invalid', 'La explicación privada solo se usa para preguntas de tu práctica.');
+  if (config.purpose !== 'teaching_questions' && config.purpose !== 'questions' && config.purpose !== undefined && sources.some((source) => source.kind === 'teaching')) throw new AiError('invalid', 'La explicación privada solo se usa para preguntas de tu práctica.');
+  if (config.purpose !== 'questions' && config.purpose !== undefined && sources.some((source) => source.kind === 'question' || source.kind === 'spaced_card' || source.kind === 'answer')) throw new AiError('invalid', 'Estas fuentes solo se usan en Exámenes.');
   if (config.topicWeights) aiTopicDistribution(topics, config.questionCount, config.topicWeights);
   return { subjectId: value.subjectId, ...(value.termId ? { termId: value.termId } : {}), topics, sources, config };
 }
@@ -112,7 +114,7 @@ export function buildAiPreparation(rawInput: unknown, snapshots: AiSourceSnapsho
     const prepared: AiPreparedSource = { kind: source.kind, refId: source.refId, version: source.version,
       subjectId: source.subjectId, ...(source.termId ? { termId: source.termId } : {}), title: sanitizeAiText(source.title),
       visibility: source.visibility, fingerprint: aiSourceFingerprint(source), topics: ref.topics,
-      status: 'prepared', fragmentIds: [], origins: source.origins ?? [] };
+      status: 'prepared', fragmentIds: [], origins: source.origins ?? [], ...(ref.answerIds ? { answerIds: ref.answerIds } : {}), ...(ref.transcriptionIds ? { transcriptionIds: ref.transcriptionIds } : {}), ...(ref.segmentIds ? { segmentIds: ref.segmentIds } : {}) };
     if (!source.termId && !ref.includeUnplaced) {
       prepared.status = 'pending'; prepared.reason = 'Incluye expresamente el material sin parcial.'; return prepared;
     }
@@ -127,7 +129,7 @@ export function buildAiPreparation(rawInput: unknown, snapshots: AiSourceSnapsho
         let text = lines[start]!;
         while (end < lines.length && text.length + lines[end]!.length + 1 <= 4000) text += `\n${lines[end++]!}`;
         const origin: AiFragmentOrigin = { kind: ref.kind, refId: ref.refId, version: source.version,
-          field: field.name, startLine: start + 1, endLine: end };
+          field: field.name, startLine: start + 1, endLine: end, ...field.origin };
         const key = aiHash(text);
         let fragment = byText.get(key);
         if (!fragment) {
@@ -156,7 +158,7 @@ export function buildAiPreparation(rawInput: unknown, snapshots: AiSourceSnapsho
 }
 export function validateAiGenerationConfig(value: unknown): AiGenerationConfig {
   if (!aiRecord(value) || !Number.isInteger(value.questionCount) || Number(value.questionCount) < 1 || Number(value.questionCount) > AI_LIMITS.maxQuestions ||
-    !Array.isArray(value.types) || !value.types.length || value.types.length > 2 || value.types.some((t) => t !== 'single' && t !== 'boolean') ||
+    !Array.isArray(value.types) || !value.types.length || value.types.length > 3 || value.types.some((t) => t !== 'single' && t !== 'boolean' && t !== 'open') ||
     !['basic', 'intermediate', 'advanced'].includes(String(value.difficulty))) throw new AiError('invalid', 'La configuración de preguntas no es válida.');
   if (value.purpose !== undefined && !['guide', 'explanation', 'questions', 'teaching_questions', 'spaced_cards'].includes(String(value.purpose))) throw new AiError('invalid', 'El tipo de borrador no es válido.');
   let topicWeights: AiGenerationConfig['topicWeights'];
@@ -168,7 +170,7 @@ export function validateAiGenerationConfig(value: unknown): AiGenerationConfig {
     });
     if (new Set(topicWeights.map((item) => item.topic)).size !== topicWeights.length || !topicWeights.some((item) => item.weight > 0)) throw new AiError('invalid', 'Los pesos no pueden repetirse ni ser todos cero.');
   }
-  return { ...(value.purpose ? { purpose: value.purpose as AiGenerationConfig['purpose'] } : {}), questionCount: Number(value.questionCount), types: [...new Set(value.types as ('single' | 'boolean')[])], difficulty: value.difficulty as AiGenerationConfig['difficulty'], ...(topicWeights ? { topicWeights } : {}) };
+  return { ...(value.purpose ? { purpose: value.purpose as AiGenerationConfig['purpose'] } : {}), questionCount: Number(value.questionCount), types: [...new Set(value.types as ('single' | 'boolean' | 'open')[])], difficulty: value.difficulty as AiGenerationConfig['difficulty'], ...(topicWeights ? { topicWeights } : {}) };
 }
 
 export function aiTopicDistribution(topics: readonly string[], count: number, weights?: readonly { topic: string; weight: number }[]) {

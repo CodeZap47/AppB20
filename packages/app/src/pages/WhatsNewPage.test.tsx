@@ -29,6 +29,44 @@ const type = async (label: string, value: string) => {
 const submit = async (text: string) => { await act(async () => button(text)!.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))); };
 
 describe('primera vista: Feed y Clásica', () => {
+  it('refleja una exposición propia creada desde Tareas sin contarla como novedad ajena', async () => {
+    await show('/m/inicio?ver=todo');
+    const before = container.querySelector('[aria-label="Qué mostrar"]')?.textContent;
+    let id = '';
+    await act(async () => { id = await source.createAssignment({
+      subjectId: source.getSnapshot().subjects[0]!.id, kind: 'exposicion',
+      title: 'Exposición propia de interfaces', instructions: 'Presentar las decisiones de diseño', dueDate: '2026-11-02',
+    }); });
+    const cards = [...container.querySelectorAll('.feed-card')].filter((node) => node.querySelector(`h3 a[href="/m/tareas/${id}"]`));
+    expect(cards).toHaveLength(1);
+    const card = cards[0];
+    expect(card?.querySelector('.feed-type')?.textContent).toBe('Exposición');
+    expect(card?.textContent).toContain('Presentar las decisiones de diseño');
+    expect(card?.querySelector('.feed-card__author')?.textContent).toBe('Tú');
+    expect(card?.querySelector('.feed-card__new')).toBeNull();
+    expect(container.querySelector('[aria-label="Qué mostrar"]')?.textContent).toBe(before);
+    await click('Clásica');
+    expect([...container.querySelectorAll('.news-item')].some((node) => node.textContent?.includes('Exposición propia de interfaces'))).toBe(false);
+  });
+
+  it('reinicia el borrador del compositor al cambiar de perfil', async () => {
+    await show('/m/inicio?ver=todo');
+    await type('Escribe una publicación para el grupo', 'Borrador privado del primer perfil');
+    await act(async () => { source.setViewer('demo-2'); });
+    expect(container.querySelector<HTMLTextAreaElement>('[aria-label="Escribe una publicación para el grupo"]')?.value).toBe('');
+    expect(source.getSnapshot().feedPosts.some((post) => post.text === 'Borrador privado del primer perfil')).toBe(false);
+  });
+
+  it('un enlace a una publicación propia anterior sigue visible después de marcar novedades', async () => {
+    await source.createFeedPost({ text: 'Publicación propia enlazada', requestId: crypto.randomUUID() });
+    const postId = source.getSnapshot().feedPosts.find((post) => post.text === 'Publicación propia enlazada')!.id;
+    await source.markSeen();
+    await show(`/m/inicio?vista=feed&publicacion=${postId}`);
+    const card = container.querySelector(`#publicacion-${postId}`);
+    expect(card?.textContent).toContain('Publicación propia enlazada');
+    expect(card?.classList.contains('feed-card--highlighted')).toBe(true);
+  });
+
   it('abre en el feed con tarjetas y conserva filtros y pendientes al cambiar a la clásica', async () => {
     await show();
     expect(button('Feed')?.getAttribute('aria-pressed')).toBe('true');

@@ -7,12 +7,14 @@ import { canReadTarget, withdrawn } from './delivery2Handlers';
 import { GUIDE_SECTIONS } from '../../core/src/guides';
 import {
   AI_CONSENT_VERSION, AI_LIMITS, AI_SOURCE_KINDS, buildAiPreparation, validateAiGenerationConfig,
-  aiHash, aiSourceFingerprint, estimateAiQuestionTokens, sanitizeAiText, validateAiPrepareInput, type AiPreparation, type AiPrepareInput, type AiSourceSnapshot,
+  aiHash, aiSourceFingerprint, estimateAiQuestionTokens, sanitizeAiText, validateAiPrepareInput, type AiPreparation, type AiPrepareInput, type AiSourceSnapshot, type AiSourceRef,
 } from '../../core/src/ai';
 import { validateAiQuestionDraft } from '../../core/src/exam';
 import { validateAiModuleDraft } from '../../core/src/aiStudyModules';
 import { validateAiStudyDraft } from '../../core/src/aiStudyDraft';
-import { captureGuide, captureNote } from './delivery2Handlers';
+import { captureGuide, captureNote, extraVersion } from './delivery2Handlers';
+import { spacedExamSourceVersion } from './examSpaced';
+import { appendDocumentTranscriptions } from './documentHandlers';
 
 const HOUR = 60n * 60n * 1_000_000n;
 const DAY = 24n * HOUR;
@@ -143,7 +145,7 @@ export function aiDeleteKey(ctx: Ctx) {
 /** Only the owner's saved explanation is sent. Personal notes, answers, peer identity and reflection are never read. */
 function resolveTeachingSource(ctx: Ctx, id: bigint, actor: Identity): AiSourceSnapshot {
   const row = ctx.db.teachingPractice.id.find(id);
-  if (!row?.owner.isEqual(actor) || row.status !== 'practicing') fail('source_unavailable', 'Solo el autor puede usar la explicación guardada de una práctica en curso.');
+  if (!row?.owner.isEqual(actor)) fail('source_unavailable', 'Solo el autor puede usar la explicación guardada de una práctica en curso.');
   const revised = [row.revisedConcept, row.revisedExample, row.revisedLimits].every((field) => field.trim());
   const fields = [{ name: 'Concepto guardado', text: revised ? row.revisedConcept : row.concept },
     { name: 'Ejemplo guardado', text: revised ? row.revisedExample : row.example },
@@ -162,13 +164,51 @@ function resolveTeachingSource(ctx: Ctx, id: bigint, actor: Identity): AiSourceS
     omissions: ['Solo se envía la explicación guardada; se excluyen reflexión, temas personales, respuestas, historial y datos del compañero.'] };
 }
 /** Resolve only academic record fields. No client-supplied text reaches the provider. */
-export function resolveAiSource(ctx: Ctx, kind: string, refId: string, actor = memberIdentityFor(ctx)): AiSourceSnapshot {
+export function resolveAiSource(ctx: Ctx, kind: string, refId: string, actor = memberIdentityFor(ctx), selection?: Pick<AiSourceRef, 'answerIds'>): AiSourceSnapshot {
   if (!/^[1-9][0-9]*$/.test(refId) || BigInt(refId) > 18_446_744_073_709_551_615n) fail('invalid_request', 'Referencia inválida.');
   const id = BigInt(refId);
   if (kind === 'teaching') return resolveTeachingSource(ctx, id, actor);
+  if (kind === 'spaced_card') {
+    const card = ctx.db.spacedCard.id.find(id); const collection = card && ctx.db.spacedCollection.id.find(card.collectionId);
+    if (!card || card.archived || !collection || collection.archived || (collection.visibility !== 'group' && !collection.ownerId.isEqual(actor))) fail('source_unavailable', 'La tarjeta no está disponible.');
+    if (card.sourceKind === 'exam_question') {
+      if (!spacedExamSourceVersion(ctx.db, actor, collection, card.sourceId)) fail('source_unavailable', 'Las fuentes de la tarjeta ya no están disponibles.');
+      const origin = ctx.db.spacedExamOrigin.id.find(card.sourceId)!;
+      const prep = JSON.parse(origin.preparationJson) as AiPreparation;
+      return { kind, refId, subjectId: String(collection.subjectId), termId: collection.termId?.toString(), version: card.version,
+        title: card.question, visibility: 'personal', fields: [{ name: 'Pregunta de repaso', text: card.question }, { name: 'Explicación', text: card.explanation }, { name: 'Pista', text: card.hint }],
+        origins: [...prep.sources.map(({ kind, refId, version }) => ({ kind, refId, version })), ...prep.sources.flatMap((source) => source.origins)].filter((source) => !(source.kind === kind && source.refId === refId)),
+        context: aiHash([origin.examId, origin.examVersion, origin.questionId, prep.fingerprint]), omissions: ['Tarjeta propia derivada de un examen; se excluyeron respuestas, evaluaciones y progreso.'] };
+    }
+    if (!['note', 'guide'].includes(card.sourceKind)) fail('source_unavailable', 'El origen de la tarjeta no está disponible.');
+    const original = resolveAiSource(ctx, card.sourceKind, String(card.sourceId), actor);
+    return { kind, refId, subjectId: String(collection.subjectId), termId: collection.termId?.toString(), version: card.version,
+      title: card.question, visibility: collection.visibility === 'group' && original.visibility === 'group' ? 'group' : 'personal',
+      fields: [{ name: 'Pregunta de repaso', text: card.question }, { name: 'Explicación de repaso', text: card.explanation }, { name: 'Pista', text: card.hint }],
+      origins: [{ kind: original.kind, refId: original.refId, version: original.version }, ...(original.origins ?? [])], context: aiHash({ collection: [collection.version, collection.visibility], original }),
+      omissions: ['Se excluyeron avance, respuestas e historial personal de repaso.'] };
+  }
   if (!canReadTarget(ctx.db, actor, kind, id) || withdrawn(ctx.db, kind, id)) fail('source_unavailable', 'Una fuente no existe o ya no está disponible.');
   let snapshot: AiSourceSnapshot;
-  if (kind === 'note') {
+  if (kind === 'question') {
+    const row = ctx.db.question.id.find(id)!;
+    const selectedIds = selection?.answerIds ?? (row.acceptedAnswerId !== undefined ? [String(row.acceptedAnswerId)] : []);
+    const answers = selectedIds.map((answerId) => {
+      const answer = ctx.db.answer.id.find(BigInt(answerId));
+      if (!answer || answer.questionId !== id || !canReadTarget(ctx.db, actor, 'answer', answer.id) || withdrawn(ctx.db, 'answer', answer.id)) fail('source_unavailable', 'Una respuesta seleccionada ya no está disponible.');
+      return answer;
+    });
+    snapshot = { kind, refId, subjectId: String(row.subjectId), version: extraVersion(ctx, 'question', id), title: row.title,
+      topic: row.topic, visibility: 'group', fields: [{ name: 'Pregunta', text: row.body }, ...answers.map((answer) => ({ name: `Respuesta ${answer.id}`, text: answer.body,
+        origin: { kind: 'answer' as const, refId: String(answer.id), version: extraVersion(ctx, 'answer', answer.id) } }))],
+      origins: answers.map((answer) => ({ kind: 'answer' as const, refId: String(answer.id), version: extraVersion(ctx, 'answer', answer.id) })),
+      context: aiHash({ accepted: row.acceptedAnswerId?.toString(), status: row.status, selectedIds, answers: answers.map((answer) => [String(answer.id), answer.body, extraVersion(ctx, 'answer', answer.id)]) }),
+      omissions: ['La aceptación de una respuesta no garantiza su exactitud; revisa las contradicciones y el sustento.', ...(!answers.length ? ['No seleccionaste respuestas; solo se preparó la pregunta.'] : [])] };
+  } else if (kind === 'answer') {
+    const row = ctx.db.answer.id.find(id)!; const parent = ctx.db.question.id.find(row.questionId);
+    if (!parent || withdrawn(ctx.db, 'question', row.questionId) || !canReadTarget(ctx.db, actor, 'question', row.questionId)) fail('source_unavailable', 'La pregunta original ya no está disponible.');
+    snapshot = { kind, refId, subjectId: String(parent.subjectId), version: extraVersion(ctx, 'answer', id), title: parent.title, visibility: 'group', fields: [{ name: 'Respuesta', text: row.body }], context: aiHash({ parent: extraVersion(ctx, 'question', parent.id), status: parent.status }) };
+  } else   if (kind === 'note') {
     const row = ctx.db.note.id.find(id)!; const detail = ctx.db.noteDetail.noteId.find(id);
     snapshot = { kind, refId, subjectId: String(row.subjectId), termId: detail?.termId?.toString(), version: row.version,
       title: row.title, topic: row.topic, visibility: row.visibility === 'personal' ? 'personal' : 'group',
@@ -270,12 +310,17 @@ export function resolveAiSource(ctx: Ctx, kind: string, refId: string, actor = m
   return snapshot;
 }
 
+/** A selection is persisted with its fingerprint and revalidated before every use. */
+export function resolveAiSelection(ctx: Ctx, source: AiSourceRef | AiPreparation['sources'][number], actor = memberIdentityFor(ctx), options: { reuseReviewed?: boolean } = {}): AiSourceSnapshot {
+  return appendDocumentTranscriptions(ctx, source, resolveAiSource(ctx, source.kind, source.refId, actor, source), actor, options);
+}
+
 export function aiPrepare(ctx: Ctx, raw: Record<string, unknown>) {
   activeMember(ctx);
   const input = validateAiPrepareInput(raw); const id = uuid(raw.id, 'La preparación'); const model = text(raw.model, 'El modelo');
   if (!ctx.db.subject.id.find(BigInt(input.subjectId))) fail('source_unavailable', 'La materia no está disponible.');
   if (input.termId && ctx.db.term.id.find(BigInt(input.termId))?.subjectId !== BigInt(input.subjectId)) fail('invalid_request', 'El parcial no pertenece a esta materia.');
-  const snapshots = input.sources.map((source) => resolveAiSource(ctx, source.kind, source.refId));
+  const snapshots = input.sources.map((source) => resolveAiSelection(ctx, source));
   const preparation = buildAiPreparation(input, snapshots, { id, model, now: date(ctx.timestamp) });
   const requestJson = JSON.stringify(input);
   if (JSON.stringify(preparation).length > 256_000) fail('quota', 'La vista previa excede el límite. Reduce el alcance.');
@@ -296,7 +341,7 @@ function validPreparation(ctx: Ctx, id: string, actor: Identity, checkExpiry: bo
   const prep = JSON.parse(row.json) as AiPreparation;
   const input = JSON.parse(row.requestJson) as AiPrepareInput;
   for (const ref of input.sources) {
-    const current = resolveAiSource(ctx, ref.kind, ref.refId, actor);
+    const current = resolveAiSelection(ctx, ref, actor);
     const recorded = prep.sources.find((source) => source.kind === ref.kind && source.refId === ref.refId);
     if (!recorded || aiSourceFingerprint(current) !== recorded.fingerprint) fail('source_changed', 'Una fuente cambió. Prepara el material nuevamente.');
   }

@@ -17,6 +17,7 @@ import { schema, SenderError, t, table, type ReducerCtx } from 'spacetimedb/serv
 import { ScheduleAt, Timestamp } from 'spacetimedb';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { nextSpacedSchedule, type SpacedRating } from '../../core/src/spaced';
+import { displayNameError } from '../../core/src/profiles';
 import { normalizePresentationConfiguration, normalizePresentationBody, normalizePresentationObservations,
   normalizePresentationNextSteps, normalizePresentationQuestion, normalizePresentationAnswer,
   normalizePresentationFeedback, presentationGuidingQuestions } from '../../core/src/presentations';
@@ -27,9 +28,18 @@ import { saveMemberProfile, saveProfileCover, withdrawContent } from './communit
 import * as knowledge from './knowledgeHandlers';
 import { configureModuleHelpers } from './moduleContext';
 import { readContributionOrigins } from './contributionOrigins';
+import { readMemberUploadStats } from './profileUploadStats';
 import { roomsTables, studyRoom, roomMember, roomMaterial, roomEntry, roomTimer, roomSummary, helpRoomLink } from './roomsTables';
 import * as rooms from './roomsHandlers';
 import * as nativeStickers from './nativeStickersHandlers';
+import { documentTables } from './documentTables';
+import { documentPreparationResponse } from './documentHandlers';
+import { presentationFeatureTables } from './presentationFeatureTables';
+import { presentationAiResponse } from './presentationAiHandlers';
+import { presentationMediaResponse, revokePresentationAudio, presentationHasReadyAudio } from './presentationMediaHandlers';
+import { examSpacedTables, spacedExamSourceVersion } from './examSpaced';
+import { examEvaluationTables } from './examEvaluationTables';
+import { examEvaluationResponse } from './examEvaluationHandlers';
 import { aiTables } from './aiTables';
 import * as ai from './aiHandlers';
 import { moodleTables } from './moodleTables';
@@ -37,6 +47,11 @@ import * as moodle from './moodleHandlers';
 import { notificationTables, notification, notificationPreference } from './notificationTables';
 import * as notifications from './notificationHandlers';
 import { invitationEmailTables, invitationEmail } from './invitationEmailTables';
+import { membershipTables, adminMemberType, emailRestriction } from './membershipTables';
+import * as membership from './membershipHandlers';
+import { inviteLinkTables, inviteLink } from './inviteLinkTables';
+import * as inviteLinks from './inviteLinkHandlers';
+import { adminContentTables } from './adminContentTables';
 import * as invitationEmails from './invitationEmailHandlers';
 import { trashTables } from './trashTables';
 import * as trash from './trashHandlers';
@@ -45,6 +60,9 @@ import * as practice from './practiceHandlers';
 import { community4Tables, museumEntry, museumRevision, opportunity, opportunityRevision, opportunityInterest, opportunityFeedback } from './community4Tables';
 import * as community4 from './community4Handlers';
 import { feedTables, feedReaction, feedPost, feedComment } from './feedTables';
+import { adminContentEntryType, adminContentResult } from './adminContentTables';
+import { readAdminContentEntries } from './contentInventory';
+import { moderateContentItem, readAdminContentResult } from './adminContentHandlers';
 import * as feed from './feedHandlers';
 import { teachingVersionTables, teachingHead } from './teachingVersioning';
 import * as teachingVersions from './teachingVersioning';
@@ -812,10 +830,13 @@ const spacetimedb = schema({
   ...feedTables,
   ...helpVersionTables,
   ...teachingVersionTables,
-  ...aiTables,
+  ...aiTables, ...examEvaluationTables, ...examSpacedTables, ...documentTables, ...presentationFeatureTables,
   ...moodleTables,
   ...notificationTables,
   ...invitationEmailTables,
+  ...membershipTables,
+  ...inviteLinkTables,
+  ...adminContentTables,
   ...trashTables,
   presentationPractice, presentationAttempt, presentationPersonal, presentationQuestion, presentationFeedback,
   ...examTables,
@@ -879,6 +900,7 @@ const spacetimedb = schema({
 export default spacetimedb;
 
 export type Ctx = ReducerCtx<typeof spacetimedb.schemaType>;
+membership.configureMembershipHelpers({ requireCreator, verifiedEmail, requireDisplayName });
 configureModuleHelpers({ activeMember, attachmentIds, expectVersion, isActive, log, messageText, readableMessage, requireGuide, requireSubject, requireText, restoreAttachments, sourceVersion, targetVersion, saveTargetBaseline, bumpMaterial });
 
 // ---------------------------------------------------------------------------
@@ -923,7 +945,8 @@ function trustedSession(ctx: Ctx) {
 
 function activeMember(ctx: Ctx) {
   // Cada operación vuelve a validar sesión y membresía; conectar no concede acceso a datos.
-  verifiedEmail(ctx);
+  const email = verifiedEmail(ctx);
+  membership.assertVerifiedMembershipEmail(ctx, email);
   const row = ctx.db.member.identity.find(memberIdentityFor(ctx));
   if (!row || row.status !== 'active') throw new SenderError('No eres miembro activo del grupo.');
   return row;
@@ -955,6 +978,12 @@ function requireText(value: string, field: string, max = MAX_MESSAGE_LENGTH): st
   if (!trimmed) throw new SenderError(`${field} no puede estar vacío.`);
   if (trimmed.length > max) throw new SenderError(`${field} excede ${max} caracteres.`);
   return trimmed;
+}
+
+function requireDisplayName(value: string): string {
+  const error = displayNameError(value);
+  if (error) throw new SenderError(error);
+  return value.trim();
 }
 
 function log(ctx: Ctx, action: string, entity: string, entityId: string | bigint) {
@@ -1005,9 +1034,14 @@ export const on_connect = spacetimedb.clientConnected((ctx) => {
   // handlers que la aceptan expresamente; no adquiere membresía ni puede leer vistas del grupo.
   if (isOwner(ctx) || isAuthSetup(ctx) || isFileService(ctx) || ai.isAiService(ctx) || notifications.isNotificationService(ctx) || trash.isMaintenanceService(ctx)) return;
   const email = verifiedEmail(ctx);
+  // Una cuenta bloqueada puede consultar únicamente su estado para mostrar la baja.
+  // Un histórico activo aún sin vínculo comprobado no obtiene una conexión de lectura.
+  if (membership.isVerifiedMembershipBlocked(ctx, email) && ctx.db.member.identity.find(memberIdentityFor(ctx))?.status !== 'active') return;
+  membership.recordVerifiedEmail(ctx, email);
   // Limpia invitaciones aceptadas antes de que join_group las borrara al unirse.
-  if (ctx.db.member.identity.find(memberIdentityFor(ctx))) {
+  if (ctx.db.member.identity.find(memberIdentityFor(ctx))?.status === 'active') {
     ctx.db.invitation.email.delete(email);
+    membership.cancelIndividualInvitation(ctx, email);
     invitationEmails.cancelInvitationEmail(ctx, email);
   }
 });
@@ -1069,7 +1103,7 @@ export const link_auth_identity = spacetimedb.reducer(
   (ctx, { sessionIdentity, memberIdentity }) => {
     if (!isOwner(ctx)) throw new SenderError('Solo el propietario puede vincular cuentas.');
     const target = ctx.db.member.identity.find(memberIdentity);
-    if (!target || target.status !== 'active') throw new SenderError('La membresía de destino debe estar activa.');
+    if (!target || !['active', 'removed'].includes(target.status)) throw new SenderError('La membresía de destino debe existir.');
     const owner = ctx.db.appConfig.id.find(0)?.owner;
     if (owner?.isEqual(memberIdentity) || owner?.isEqual(sessionIdentity) || sessionIdentity.isEqual(memberIdentity)) {
       throw new SenderError('Las credenciales técnicas del propietario no se vinculan como cuentas de usuario.');
@@ -1101,8 +1135,9 @@ export const invite_member = spacetimedb.reducer(
   { email: t.string(), isCreator: t.bool() },
   (ctx, { email, isCreator }) => {
     requireCreator(ctx);
-    const normalized = requireText(email, 'El correo', 320).toLowerCase();
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(normalized)) throw new SenderError('Ese correo no es válido.');
+    const normalized = membership.normalizeEmail(email);
+    membership.assertEmailNotBlocked(ctx, normalized);
+    membership.markIndividualInvitation(ctx, normalized);
     const existing = ctx.db.invitation.email.find(normalized);
     if (existing) {
       // Reinvitar con otro rol lo corrige antes de que la persona se una.
@@ -1126,31 +1161,7 @@ export const invite_member = spacetimedb.reducer(
 
 export const join_group = spacetimedb.reducer(
   { displayName: t.string() },
-  (ctx, { displayName }) => {
-    const email = verifiedEmail(ctx);
-    const existing = ctx.db.member.identity.find(memberIdentityFor(ctx));
-    if (existing?.status === 'removed') throw new SenderError('Tu acceso fue dado de baja.');
-    if (existing) {
-      // Una reinvitación a quien ya es miembro no debe quedar como pendiente.
-      ctx.db.invitation.email.delete(email);
-      invitationEmails.cancelInvitationEmail(ctx, email);
-      return;
-    }
-    const invite = ctx.db.invitation.email.find(email);
-    if (!invite) throw new SenderError('Tu correo no está en la lista autorizada del grupo.');
-    // Al aceptarla deja de estar pendiente: la lista muestra solo a quien falta por unirse.
-    ctx.db.invitation.email.delete(email);
-    invitationEmails.cancelInvitationEmail(ctx, email);
-    ctx.db.member.insert({
-      identity: memberIdentityFor(ctx),
-      displayName: requireText(displayName, 'El nombre', 80),
-      photoUrl: undefined,
-      status: 'active',
-      isCreator: invite.isCreator,
-      joinedAt: ctx.timestamp,
-    });
-    log(ctx, 'join', 'member', memberIdentityFor(ctx).toHexString());
-  },
+  (ctx, { displayName }) => membership.joinIndividual(ctx, displayName),
 );
 
 /** Retira la invitación de alguien que todavía no se une; quien ya es miembro se da de baja aparte. */
@@ -1159,6 +1170,8 @@ export const revoke_invitation = spacetimedb.reducer({ email: t.string() }, (ctx
   const normalized = email.trim().toLowerCase();
   if (!ctx.db.invitation.email.find(normalized)) return;
   ctx.db.invitation.email.delete(normalized);
+  membership.cancelIndividualInvitation(ctx, normalized);
+  membership.recordInvitationRevoked(ctx, normalized);
   invitationEmails.cancelInvitationEmail(ctx, normalized);
   log(ctx, 'revoke', 'invitation', normalized);
 });
@@ -1173,17 +1186,46 @@ export const resend_invitation_email = spacetimedb.reducer({ email: t.string() }
 
 export const remove_member = spacetimedb.reducer(
   { identity: t.identity() },
-  (ctx, { identity }) => {
-    requireCreator(ctx);
-    if (identity.isEqual(memberIdentityFor(ctx))) throw new SenderError('No puedes darte de baja a ti mismo.');
-    const row = ctx.db.member.identity.find(identity);
-    if (!row) throw new SenderError('Ese miembro no existe.');
-    ctx.db.member.identity.update({ ...row, status: 'removed' });
-    rooms.removeGroupMember(ctx, identity);
-    agent.purgeAgentOwner(ctx.db, identity);
-    log(ctx, 'remove', 'member', identity.toHexString());
-  },
+  (ctx, { identity }) => membership.removeMember(ctx, identity),
 );
+
+/** Compatibilidad aditiva: los clientes anteriores conservan sus enlaces e historial. */
+export const create_invite_link = spacetimedb.reducer(
+  { tokenHash: t.string(), expiresInDays: t.u32(), maxUses: t.u32() },
+  (ctx, input) => { requireCreator(ctx); inviteLinks.createInviteLink(ctx, memberIdentityFor(ctx), input); },
+);
+export const revoke_invite_link = spacetimedb.reducer({ id: t.u64() }, (ctx, { id }) => {
+  requireCreator(ctx); inviteLinks.revokeInviteLink(ctx, id);
+});
+export const legacy_invitation_link_revoke = spacetimedb.procedure({ payload: t.string() }, t.string(),
+  (ctx, { payload }) => ctx.withTx(tx => {
+    requireCreator(tx);
+    return JSON.stringify(inviteLinks.revokeLegacyInvitationLink(tx, membership.parseMembershipPayload(payload)));
+  }));
+
+// Las operaciones de enlaces y correos exponen JSON sin publicar secretos ni correos.
+export const invitation_link_create = spacetimedb.procedure({ payload: t.string() }, t.string(),
+  (ctx, { payload }) => ctx.withTx(tx => JSON.stringify(membership.createInvitationLink(tx, membership.parseMembershipPayload(payload)))));
+export const invitation_link_copy = spacetimedb.procedure({ payload: t.string() }, t.string(),
+  (ctx, { payload }) => ctx.withTx(tx => JSON.stringify(membership.copyInvitationLink(tx, membership.parseMembershipPayload(payload)))));
+export const invitation_link_configure = spacetimedb.procedure({ payload: t.string() }, t.string(),
+  (ctx, { payload }) => ctx.withTx(tx => JSON.stringify(membership.configureInvitationLink(tx, membership.parseMembershipPayload(payload)))));
+export const invitation_link_revoke = spacetimedb.procedure({ payload: t.string() }, t.string(),
+  (ctx, { payload }) => ctx.withTx(tx => JSON.stringify(membership.revokeInvitationLink(tx, membership.parseMembershipPayload(payload)))));
+export const invitation_link_replace = spacetimedb.procedure({ payload: t.string() }, t.string(),
+  (ctx, { payload }) => ctx.withTx(tx => JSON.stringify(membership.replaceInvitationLink(tx, membership.parseMembershipPayload(payload)))));
+export const join_with_invitation_link = spacetimedb.procedure({ token: t.string(), displayName: t.string() }, t.string(),
+  (ctx, { token, displayName }) => ctx.withTx(tx => JSON.stringify(membership.joinWithInvitationLink(tx, token, displayName))));
+export const admin_membership_snapshot = spacetimedb.procedure({}, t.string(),
+  (ctx) => ctx.withTx(tx => JSON.stringify(membership.adminMembershipSnapshot(tx))));
+export const my_membership_access = spacetimedb.procedure({}, t.string(),
+  (ctx) => ctx.withTx(tx => JSON.stringify(membership.myMembershipAccess(tx))));
+export const admin_member_access = spacetimedb.procedure({ payload: t.string() }, t.string(),
+  (ctx, { payload }) => ctx.withTx(tx => JSON.stringify(membership.adminMemberAccess(tx, membership.parseMembershipPayload(payload)))));
+export const block_email = spacetimedb.procedure({ payload: t.string() }, t.string(),
+  (ctx, { payload }) => ctx.withTx(tx => JSON.stringify(membership.blockEmail(tx, membership.parseMembershipPayload(payload)))));
+export const unblock_email = spacetimedb.procedure({ payload: t.string() }, t.string(),
+  (ctx, { payload }) => ctx.withTx(tx => JSON.stringify(membership.unblockEmail(tx, membership.parseMembershipPayload(payload)))));
 
 export const update_profile = spacetimedb.reducer(
   { displayName: t.string(), photoUrl: t.string().optional() },
@@ -1191,7 +1233,7 @@ export const update_profile = spacetimedb.reducer(
     const row = activeMember(ctx);
     ctx.db.member.identity.update({
       ...row,
-      displayName: requireText(displayName, 'El nombre', 80),
+      displayName: requireDisplayName(displayName),
       photoUrl,
     });
   },
@@ -1564,7 +1606,7 @@ export const send_group_message = spacetimedb.reducer(
     delivery2.validateMentions(ctx, text);
     if (replyToId !== undefined) {
       const target = ctx.db.groupMessage.id.find(replyToId);
-      if (!target || target.deletedAt)
+      if (!target || target.deletedAt || delivery2.withdrawn(ctx.db, 'group_message', target.id))
         throw new SenderError('El mensaje al que respondes ya no está.');
     }
     const message = ctx.db.groupMessage.insert({
@@ -1599,12 +1641,19 @@ function readableMessage(ctx: Ctx, scope: string, messageId: bigint) {
   throw new SenderError('El mensaje no existe o no participas en esa conversación.');
 }
 
+/** Los mensajes retirados conservan su posición y sus respuestas sin distribuir texto. */
+function visibleGroupMessage<T extends { id: bigint; text: string; deletedAt?: Timestamp; deletedBy?: Ctx['sender'] }>(db: ViewDb, kind: string, row: T): T {
+  const status = db.contentStatus.key.find(`${kind}:${row.id}`);
+  return status?.withdrawnAt ? { ...row, text: '', deletedAt: status.withdrawnAt, deletedBy: undefined } : row;
+}
+
 export const edit_message = spacetimedb.reducer(
   { scope: t.string(), messageId: t.u64(), text: t.string() },
   (ctx, { scope, messageId, text }) => {
     activeMember(ctx);
     const found = readableMessage(ctx, scope, messageId);
     const { row } = found;
+    if (scope !== 'direct' && delivery2.withdrawn(ctx.db, `${scope}_message`, messageId)) throw new SenderError('El mensaje está retirado.');
     if (!row.sender.isEqual(memberIdentityFor(ctx))) throw new SenderError('Solo puedes editar tus mensajes.');
     if (
       row.deletedAt ||
@@ -1623,6 +1672,7 @@ export const edit_message = spacetimedb.reducer(
     } else {
       ctx.db.directMessage.id.update({ ...found.row, text: clean, editedAt: ctx.timestamp });
     }
+    delivery2.bumpExtra(ctx, `${scope}_message`, messageId);
   },
 );
 
@@ -1636,6 +1686,7 @@ export const delete_message = spacetimedb.reducer(
     const me = activeMember(ctx);
     const found = readableMessage(ctx, scope, messageId);
     const { row } = found;
+    if (scope !== 'direct' && delivery2.withdrawn(ctx.db, `${scope}_message`, messageId)) throw new SenderError('El mensaje está retirado.');
     if (row.deletedAt) throw new SenderError('Ese mensaje ya se eliminó.');
     const own = row.sender.isEqual(memberIdentityFor(ctx));
     if (!own && !(found.scope !== 'direct' && me.isCreator)) {
@@ -1647,6 +1698,7 @@ export const delete_message = spacetimedb.reducer(
     if (found.scope === 'group') ctx.db.groupMessage.id.update({ ...found.row, ...change });
     else if (found.scope === 'channel') ctx.db.channelMessage.id.update({ ...found.row, ...change });
     else ctx.db.directMessage.id.update({ ...found.row, ...change });
+    delivery2.bumpExtra(ctx, `${scope}_message`, messageId);
     for (const reaction of [...ctx.db.messageReaction.messageId.filter(messageId)]) {
       if (reaction.scope === scope) ctx.db.messageReaction.id.delete(reaction.id);
     }
@@ -1661,6 +1713,7 @@ export const toggle_reaction = spacetimedb.reducer(
     activeMember(ctx);
     if (!REACTIONS.includes(emoji)) throw new SenderError('Esa reacción no está disponible.');
     const { row } = readableMessage(ctx, scope, messageId);
+    if (scope !== 'direct' && delivery2.withdrawn(ctx.db, `${scope}_message`, messageId)) throw new SenderError('El mensaje está retirado.');
     if (row.deletedAt) throw new SenderError('No se puede reaccionar a un mensaje eliminado.');
     const current = [...ctx.db.messageReaction.messageId.filter(messageId)].find(
       (r) => r.scope === scope && r.member.isEqual(memberIdentityFor(ctx)),
@@ -3387,8 +3440,9 @@ function readableResource(tx: Ctx, fileId: string) {
     }
     const file = tx.db.resourceFile.id.find(fileId);
     if (!file) throw new SenderError('El archivo no existe.');
+    if (delivery2.reportFileReadable(tx.db, memberIdentityFor(tx), fileId) || delivery2.referencedFileReadable(tx.db, memberIdentityFor(tx), fileId)) return file;
     trash.assertRetentionReadable(tx, file.targetKind, file.targetId);
-    if (delivery2.reportFileReadable(tx.db, memberIdentityFor(tx), fileId)) return file;
+    if (delivery2.withdrawnIncludingParent(tx.db, file.targetKind, file.targetId)) throw new SenderError('El contenido está retirado y sus archivos no se pueden descargar.');
     if (!delivery2.canReadTarget(tx.db, memberIdentityFor(tx), file.targetKind, file.targetId)) throw new SenderError('No tienes acceso a este archivo.');
     if (delivery2.PROFILE_IMAGE_KINDS.includes(file.targetKind) && !delivery2.profileImageVisible(tx.db, memberIdentityFor(tx), file)) {
       throw new SenderError(file.targetKind === 'profile' ? 'Esta foto ya no está compartida.' : 'Esta portada ya no está compartida.');
@@ -3701,11 +3755,13 @@ export const set_presentation_reviewer = spacetimedb.reducer({ practiceId: t.u64
   (ctx, { practiceId, reviewerId, expectedVersion }) => {
     const row = ownPresentation(ctx, practiceId); presentationVersion(row.version, expectedVersion);
     if (reviewerId && (reviewerId.isEqual(memberIdentityFor(ctx)) || !isActive(ctx.db, reviewerId))) throw new SenderError('Elige a otro integrante activo como revisor.');
+    revokePresentationAudio(ctx, practiceId);
     ctx.db.presentationPractice.id.update({ ...row, reviewerId, version: row.version + 1, updatedAt: ctx.timestamp });
   });
 export const archive_presentation_practice = spacetimedb.reducer({ practiceId: t.u64(), archived: t.bool(), expectedVersion: t.u32() },
   (ctx, { practiceId, archived, expectedVersion }) => {
     const row = ownPresentation(ctx, practiceId, true); presentationVersion(row.version, expectedVersion);
+    if (archived) revokePresentationAudio(ctx, practiceId);
     ctx.db.presentationPractice.id.update({ ...row, archived, reviewerId: archived ? undefined : row.reviewerId,
       version: row.version + 1, updatedAt: ctx.timestamp });
   });
@@ -3746,7 +3802,7 @@ export const complete_presentation_attempt = spacetimedb.reducer({ attemptId: t.
     if (row.status === 'completed' && (row.version === expectedVersion + 1 || row.version === expectedVersion)) return;
     presentationVersion(row.version, expectedVersion);
     if (row.status !== 'draft') throw new SenderError('El intento ya está completado.');
-    const body = presentationValue(() => normalizePresentationBody(row.body, true));
+    const body = presentationValue(() => normalizePresentationBody(row.body, !presentationHasReadyAudio(ctx, row.id)));
     const questions = presentationValue(() => presentationGuidingQuestions(row));
     if ([...ctx.db.presentationQuestion.attemptId.filter(attemptId)].length + questions.length > 100) throw new SenderError('El intento admite hasta 100 preguntas, incluidas las cinco orientadoras.');
     ctx.db.presentationAttempt.id.update({ ...row, body, status: 'completed', version: row.version + 1,
@@ -3798,6 +3854,7 @@ const spacedKey = (id: bigint, sender: Ctx['sender']) => `${id}:${sender.toHexSt
 
 function spacedSourceVersion(db: ViewDb, sender: Ctx['sender'], collection: SpacedCollectionRow,
   kind: string, id: bigint): number | undefined {
+  if (kind === 'exam_question') return spacedExamSourceVersion(db, sender, collection, id);
   if ((kind !== 'note' && kind !== 'guide') || delivery2.withdrawn(db, kind, id)) return undefined;
   if (kind === 'guide') {
     const row = db.studyGuide.id.find(id);
@@ -4325,7 +4382,8 @@ const resourceFileInfo = t.object('ResourceFileInfo', {
 export const resource_files = spacetimedb.view(
   { name: 'resource_files', public: true }, t.array(resourceFileInfo),
   (ctx) => isActive(ctx.db, memberIdentityFor(ctx)) ? [...ctx.db.resourceFile.iter()].filter((file) => {
-    if (delivery2.reportFileReadable(ctx.db, memberIdentityFor(ctx), file.id)) return true;
+    if (delivery2.reportFileReadable(ctx.db, memberIdentityFor(ctx), file.id) || delivery2.referencedFileReadable(ctx.db, memberIdentityFor(ctx), file.id)) return true;
+    if (delivery2.withdrawn(ctx.db, file.targetKind, file.targetId)) return false;
     if (!delivery2.canReadTarget(ctx.db, memberIdentityFor(ctx), file.targetKind, file.targetId)) return false;
     if (delivery2.PROFILE_IMAGE_KINDS.includes(file.targetKind)) return delivery2.profileImageVisible(ctx.db, memberIdentityFor(ctx), file);
     return true;
@@ -4470,6 +4528,18 @@ export const invitations = spacetimedb.view(
   },
 );
 
+/** El formato histórico permanece privado para Administración y oculta su huella. */
+export const invite_links = spacetimedb.view(
+  { name: 'invite_links', public: true }, t.array(inviteLink.rowType),
+  (ctx) => inviteLinks.inviteLinks(ctx.db, memberIdentityFor(ctx)),
+);
+
+/** Solo Administración puede consultar los correos verificados de integrantes. */
+export const admin_members = spacetimedb.view({ name: 'admin_members', public: true }, t.array(adminMemberType),
+  (ctx) => { const me = ctx.db.member.identity.find(memberIdentityFor(ctx)); return me?.status === 'active' && me.isCreator ? membership.adminMembers(ctx.db) : []; });
+export const email_restrictions = spacetimedb.view({ name: 'email_restrictions', public: true }, t.array(emailRestriction.rowType),
+  (ctx) => { const me = ctx.db.member.identity.find(memberIdentityFor(ctx)); return me?.status === 'active' && me.isCreator ? [...ctx.db.emailRestriction.iter()] : []; });
+
 export const invitation_email_statuses = spacetimedb.view(
   { name: 'invitation_email_statuses', public: true },
   t.array(invitationEmail.rowType),
@@ -4533,7 +4603,7 @@ export const work_files = spacetimedb.view(
 export const group_messages = spacetimedb.view(
   { name: 'group_messages', public: true },
   t.array(groupMessage.rowType),
-  (ctx) => (isActive(ctx.db, memberIdentityFor(ctx)) ? [...ctx.db.groupMessage.iter()] : []),
+  (ctx) => (isActive(ctx.db, memberIdentityFor(ctx)) ? [...ctx.db.groupMessage.iter()].map((row) => visibleGroupMessage(ctx.db, 'group_message', row)) : []),
 );
 
 export const birthdays = spacetimedb.view(
@@ -4613,8 +4683,8 @@ export const message_reactions = spacetimedb.view(
       ].map((c) => c.id),
     );
     return [...ctx.db.messageReaction.iter()].filter((r) => {
-      if (r.scope === 'group') return true;
-      if (r.scope === 'channel') return !!ctx.db.channelMessage.id.find(r.messageId);
+      if (r.scope === 'group') return delivery2.canReadTarget(ctx.db, memberIdentityFor(ctx), 'group_message', r.messageId);
+      if (r.scope === 'channel') return delivery2.canReadTarget(ctx.db, memberIdentityFor(ctx), 'channel_message', r.messageId);
       const message = ctx.db.directMessage.id.find(r.messageId);
       return message != null && mine.has(message.conversationId);
     });
@@ -4804,7 +4874,14 @@ export const save_member_profile = spacetimedb.reducer({ expectedVersion: t.u32(
   learningGoals: t.string(), skills: t.array(t.string()), helpTopics: t.array(t.string()), portfolioLinks: t.array(t.string()),
   subjectIds: t.array(t.u64()), photoFileId: t.string().optional() }, saveMemberProfile);
 export const save_profile_cover = spacetimedb.reducer({ expectedVersion: t.u32(), preset: t.string(), fileId: t.string().optional() }, saveProfileCover);
-export const withdraw_content = spacetimedb.reducer({ kind: t.string(), targetId: t.u64(), withdrawn: t.bool(), expectedVersion: t.u32(), reason: t.string() }, withdrawContent);
+export const withdraw_content = spacetimedb.reducer({ kind: t.string(), targetId: t.u64(), withdrawn: t.bool(), expectedVersion: t.u32(), reason: t.string(), acknowledgeImpact: t.bool().optional() }, withdrawContent);
+export const moderate_content_item = spacetimedb.reducer({ operationId: t.string(), kind: t.string(), targetId: t.u64(), expectedVersion: t.u32(), withdrawn: t.bool(), reason: t.string(), acknowledgeImpact: t.bool(), expectedImpact: t.string().optional() }, moderateContentItem);
+export const admin_content_result = spacetimedb.procedure({ operationId: t.string(), kind: t.string(), targetId: t.u64() }, t.string(),
+  (ctx, input) => ctx.withTx((tx) => readAdminContentResult(tx, input)));
+export const admin_content_entries = spacetimedb.view({ name: 'admin_content_entries', public: true }, t.array(adminContentEntryType),
+  (ctx) => readAdminContentEntries(ctx.db, memberIdentityFor(ctx)));
+export const admin_content_results = spacetimedb.view({ name: 'admin_content_results', public: true }, t.array(adminContentResult.rowType),
+  (ctx) => isActive(ctx.db, memberIdentityFor(ctx)) && ctx.db.member.identity.find(memberIdentityFor(ctx))?.isCreator ? [...ctx.db.adminContentResult.iter()].filter((row) => row.actor.isEqual(memberIdentityFor(ctx))) : []);
 export const save_note_v2 = spacetimedb.reducer({ noteId: t.u64().optional(), expectedVersion: t.u32().optional(), subjectId: t.u64(), termId: t.u64().optional(),
   session: t.string(), topic: t.string(), title: t.string(), body: t.string(), tags: t.array(t.string()), visibility: t.string(), source: t.string(),
   assignmentIds: t.array(t.u64()), activityIds: t.array(t.u64()), questionIds: t.array(t.u64()) }, knowledge.saveNoteV2);
@@ -4822,7 +4899,7 @@ export const save_question_links = spacetimedb.reducer({ questionId: t.u64(), no
 export const chat_channels = spacetimedb.view({ name: 'chat_channels', public: true }, t.array(chatChannel.rowType),
   (ctx) => isActive(ctx.db, memberIdentityFor(ctx)) ? [...ctx.db.chatChannel.iter()] : []);
 export const channel_messages = spacetimedb.view({ name: 'channel_messages', public: true }, t.array(channelMessage.rowType),
-  (ctx) => isActive(ctx.db, memberIdentityFor(ctx)) ? [...ctx.db.channelMessage.iter()] : []);
+  (ctx) => isActive(ctx.db, memberIdentityFor(ctx)) ? [...ctx.db.channelMessage.iter()].map((row) => visibleGroupMessage(ctx.db, 'channel_message', row)) : []);
 export const my_conversation_states = spacetimedb.view({ name: 'my_conversation_states', public: true }, t.array(conversationState.rowType),
   (ctx) => isActive(ctx.db, memberIdentityFor(ctx)) ? [...ctx.db.conversationState.memberId.filter(memberIdentityFor(ctx))] : []);
 export const my_blocked_members = spacetimedb.view({ name: 'my_blocked_members', public: true }, t.array(memberBlock.rowType),
@@ -4831,6 +4908,10 @@ export const my_message_reports = spacetimedb.view({ name: 'my_message_reports',
   (ctx) => isActive(ctx.db, memberIdentityFor(ctx)) ? [...ctx.db.messageReport.iter()].filter((r) => r.reporter.isEqual(memberIdentityFor(ctx)) || ctx.db.member.identity.find(memberIdentityFor(ctx))?.isCreator) : []);
 export const member_profiles = spacetimedb.view({ name: 'member_profiles', public: true }, t.array(memberProfile.rowType),
   (ctx) => isActive(ctx.db, memberIdentityFor(ctx)) ? [...ctx.db.memberProfile.iter()].filter((r) => isActive(ctx.db, r.memberId)) : []);
+/** Las cantidades incluyen archivos personales, sin publicar su existencia individual ni sus metadatos. */
+const memberUploadStatsType = t.object('MemberUploadStat', { memberId: t.identity(), bytes: t.u64(), fileCount: t.u64() });
+export const member_upload_stats = spacetimedb.view({ name: 'member_upload_stats', public: true }, t.array(memberUploadStatsType),
+  (ctx) => readMemberUploadStats(ctx.db, memberIdentityFor(ctx)));
 export const member_profile_covers = spacetimedb.view({ name: 'member_profile_covers', public: true }, t.array(memberProfileCover.rowType),
   (ctx) => isActive(ctx.db, memberIdentityFor(ctx)) ? [...ctx.db.memberProfileCover.iter()].filter((r) => {
     const profile = ctx.db.memberProfile.id.find(r.profileId);
@@ -4935,6 +5016,13 @@ export const invitation_emails_finish = spacetimedb.procedure({ payload: t.strin
   const input = notificationPayload(payload);
   invitationEmails.finishInvitationEmail(tx, { email: notificationText(input, 'email'), leaseId: notificationText(input, 'leaseId'), outcome: notificationText(input, 'outcome'), error: input.error === undefined ? undefined : notificationText(input, 'error') }); return '{}';
 }));
+/** Preflight de activación Supabase: no crea membresías ni consume plazas. */
+export const auth_activation_check = spacetimedb.procedure({ payload: t.string() }, t.bool(), (ctx, { payload }) => ctx.withTx((tx) =>
+  membership.activationAllowed(tx, membership.parseMembershipPayload(payload))));
+export const invite_link_redeem = spacetimedb.procedure({ payload: t.string() }, t.bool(), (ctx, { payload }) => ctx.withTx((tx) => {
+  const input = notificationPayload(payload);
+  return inviteLinks.redeemInviteLink(tx, { tokenHash: notificationText(input, 'tokenHash'), email: notificationText(input, 'email') });
+}));
 export const notification_reminder_context = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => {
   const input = notificationPayload(payload); return JSON.stringify(notifications.reminderContext(tx, notificationNumber(input, 'limit', 1, 10, 4)));
 }));
@@ -5018,3 +5106,9 @@ export const help_post_versions = spacetimedb.view({ name: 'help_post_versions',
 export const teaching_save_v2 = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => teachingVersions.teachingResponse(() => ctx.withTx(tx => teachingVersions.saveTeachingVersion(tx, payload))));
 export const teaching_read_history = spacetimedb.procedure({ practiceId: t.u64() }, t.string(), (ctx, { practiceId }) => teachingVersions.teachingResponse(() => ctx.withTx(tx => teachingVersions.readTeachingHistory(tx, practiceId))));
 export const my_teaching_versions = spacetimedb.view({ name: 'my_teaching_versions', public: true }, t.array(teachingHead.rowType), (ctx) => teachingVersions.myTeachingVersions(ctx.db, memberIdentityFor(ctx)));
+
+export const document_preparation = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => documentPreparationResponse(tx, payload)));
+export const presentation_ai = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => presentationAiResponse(tx, payload)));
+export const presentation_media = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => presentationMediaResponse(tx, payload)));
+
+export const exam_evaluation_ai = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => examEvaluationResponse(tx, payload)));

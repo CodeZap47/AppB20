@@ -3,10 +3,13 @@ import { DEFAULT_PROFILE_COVER, PROFILE_COVER_PRESETS, profileCoverGradient } fr
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import type { MemberProfile, MemberProfileInput, ProfileCover as Cover } from '../data/communityTypes';
 import type { Id, Member } from '../data/types';
-import { cleanMemberProfile, profileImageError, profileList } from '../lib/profiles';
+import { cleanMemberProfile, profileImageError, profileList, PROFILE_PHOTO_MAX_BYTES } from '../lib/profiles';
 import { Avatar } from './Avatar';
 import { Icon } from './Icon';
 import { useAction } from './useAction';
+import { FilePicker } from './FilePicker';
+import { UploadFileList, type UploadFileItem } from './uploads/UploadFileList';
+import './uploads/consumers.css';
 
 /** La foto no es una URL pública ni se descarga al recibir los metadatos del perfil. */
 export function ProfilePhoto({ member, profile, size = 88 }: { member: Member; profile?: MemberProfile; size?: number }) {
@@ -27,7 +30,7 @@ export function ProfilePhoto({ member, profile, size = 88 }: { member: Member; p
     {loaded?.key === key
       ? <img className="avatar" src={loaded.url} alt={`Foto de ${member.displayName}`} width={size} height={size} />
       : <Avatar member={{ ...member, photoUrl: undefined }} size={size} />}
-    {profile?.photoFileId && loaded?.key !== key && <button className="link-button" type="button" disabled={pending} onClick={load}>{pending ? 'Cargando foto…' : 'Ver foto'}</button>}
+    {profile?.photoFileId && loaded?.key !== key && <button className="link-button" type="button" aria-label={`${pending ? 'Cargando' : 'Ver'} foto de ${member.displayName}`} disabled={pending} onClick={load}>{pending ? 'Cargando foto…' : 'Ver foto'}</button>}
     {error && <p className="error" role="alert">{error}</p>}
   </div>;
 }
@@ -144,8 +147,11 @@ export function ProfileEditor({ member, profile, onDone }: { member: Member; pro
   const { subjects } = useSnapshot();
   const { error, pending, run } = useAction();
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const photoInput = useRef<HTMLInputElement>(null);
-  const coverInput = useRef<HTMLInputElement>(null);
+  const submitting = useRef(false);
+  const uploadController = useRef<AbortController | null>(null);
+  const saved = useRef<{ id: Id; version: number; metadataKey: string; photoFile?: File; photoId?: Id;
+    coverFile?: File; coverId?: Id; coverKey?: string;
+    photoAttempt?: { file: File; expectedVersion: number }; coverAttempt?: { file: File; expectedVersion: number } } | null>(null);
   const nameId = useId();
   const bioId = useId();
   const goalsId = useId();
@@ -174,8 +180,8 @@ export function ProfileEditor({ member, profile, onDone }: { member: Member; pro
   const [removePhoto, setRemovePhoto] = useState(false);
   const [coverFile, setCoverFile] = useState<File>();
   const [removeCoverImage, setRemoveCoverImage] = useState(false);
-  const [fileError, setFileError] = useState<string>();
-  const [progress, setProgress] = useState<{ label: string; percent: number }>();
+  const [uploads, setUploads] = useState<Partial<Record<'photo' | 'cover', UploadFileItem>>>({});
+  const [notice, setNotice] = useState<string>();
 
   const currentPhotoUrl = useResourceImage(removePhoto || photo ? undefined : profile?.photoFileId);
   const newPhotoUrl = useFileUrl(photo);
@@ -193,51 +199,139 @@ export function ProfileEditor({ member, profile, onDone }: { member: Member; pro
     else dialog.setAttribute('open', '');
     return () => { if (typeof dialog.close === 'function' && dialog.open) dialog.close(); };
   }, []);
+  useEffect(() => () => uploadController.current?.abort(), []);
 
-  const requestClose = () => {
+  const requestClose = async () => {
     if (pending) return;
     if (dirty && !window.confirm('¿Descartar los cambios sin guardar?')) return;
+    if (!await clearImage('photo') || !await clearImage('cover')) return;
     onDone();
   };
 
-  const pickImage = (file: File | undefined, kind: 'foto' | 'portada') => {
-    if (!file) return undefined;
-    const problem = profileImageError(file, kind);
-    setFileError(problem);
-    return problem ? undefined : file;
+  const clearImage = async (key: 'photo' | 'cover') => {
+    if (submitting.current) return false;
+    const record = saved.current;
+    const attempt = key === 'photo' ? record?.photoAttempt : record?.coverAttempt;
+    const confirmed = key === 'photo' ? record?.photoFile : record?.coverFile;
+    if (record && attempt && attempt.file !== confirmed) {
+      submitting.current = true;
+      try {
+        const discarded = await run(async () => {
+          const ready = await source.discardResourceUpload(key === 'photo' ? 'profile' : 'profile_cover', record.id, attempt.file);
+          if (ready) {
+            setNotice(`La ${key === 'photo' ? 'foto' : 'portada'} ya estaba guardada y se conservó en tu perfil.`);
+            record.version = Math.max(record.version, attempt.expectedVersion + 1);
+            if (key === 'photo') { record.photoFile = attempt.file; record.photoId = ready; }
+            else { record.coverFile = attempt.file; record.coverId = ready; }
+          }
+          if (key === 'photo') record.photoAttempt = undefined; else record.coverAttempt = undefined;
+          return true;
+        });
+        if (!discarded) return false;
+      } finally { submitting.current = false; }
+    }
+    if (key === 'photo') setPhoto(undefined); else setCoverFile(undefined);
+    setUploads((current) => ({ ...current, [key]: undefined }));
+    return true;
   };
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    const result = await run(async () => {
-      const input: MemberProfileInput = cleanMemberProfile({
-        preferredName, bio, interests, learningGoals, skills, helpTopics,
-        portfolioLinks: portfolio.map((link) => link.trim()).filter(Boolean), subjectIds,
-        photoFileId: removePhoto ? undefined : profile?.photoFileId,
-        expectedVersion: profile?.version ?? 0,
+  const selectImage = async (key: 'photo' | 'cover', file: File) => {
+    if (!await clearImage(key)) return;
+    setNotice(undefined);
+    if (key === 'photo') { setPhoto(file); setRemovePhoto(false); }
+    else { setCoverFile(file); setRemoveCoverImage(false); }
+    setUploads((current) => ({ ...current, [key]: { id: key, name: file.name, size: file.size,
+      type: file.type, progress: 0, state: 'selected' } }));
+  };
+
+  const submit = async (event?: FormEvent) => {
+    event?.preventDefault();
+    if (submitting.current) return;
+    submitting.current = true;
+    const controller = new AbortController();
+    uploadController.current = controller;
+    let currentKey: 'photo' | 'cover' | undefined;
+    const updateUpload = (key: 'photo' | 'cover', change: Partial<UploadFileItem>) => {
+      setUploads((current) => ({ ...current, [key]: current[key] ? { ...current[key]!, ...change } : undefined }));
+    };
+    try {
+      const result = await run(async () => {
+        const currentProfile = source.getSnapshot().memberProfiles.find((entry) => entry.memberId === member.id) ?? profile;
+        const input: MemberProfileInput = cleanMemberProfile({
+          preferredName, bio, interests, learningGoals, skills, helpTopics,
+          portfolioLinks: portfolio.map((link) => link.trim()).filter(Boolean), subjectIds,
+          photoFileId: removePhoto ? undefined : saved.current?.photoId ?? currentProfile?.photoFileId,
+          expectedVersion: saved.current?.version ?? currentProfile?.version ?? 0,
       });
-      const id = await source.saveMemberProfile(input);
-      const latest = () => source.getSnapshot().memberProfiles.find((entry) => entry.id === id);
-      const upload = async (kind: 'profile' | 'profile_cover', file: File, label: string) => {
-        setProgress({ label, percent: 0 });
-        await source.attachResourceFile(kind, id, file, latest()?.version ?? input.expectedVersion + 1, {
-          onProgress: (transferred, total) => setProgress({ label, percent: total ? Math.round(transferred / total * 100) : 0 }),
-        });
-      };
-      if (photo) await upload('profile', photo, 'foto');
-      if (coverChanged) {
-        if (coverFile) await upload('profile_cover', coverFile, 'portada');
-        const saved = latest();
-        await source.saveProfileCover({
-          preset: coverPreset,
-          fileId: coverFile || !removeCoverImage ? saved?.cover?.fileId : undefined,
-          expectedVersion: saved?.version ?? input.expectedVersion + 1,
-        });
+      const metadataKey = JSON.stringify({ ...input, expectedVersion: undefined, photoFileId: undefined, removePhoto });
+        const unresolved = saved.current && (
+          (saved.current.photoAttempt && saved.current.photoAttempt.file !== saved.current.photoFile) ||
+          (saved.current.coverAttempt && saved.current.coverAttempt.file !== saved.current.coverFile)
+        );
+        const deferMetadata = Boolean(unresolved && saved.current?.metadataKey !== metadataKey);
+        if (!saved.current || (!deferMetadata && saved.current.metadataKey !== metadataKey)) {
+        const id = await source.saveMemberProfile(input);
+        saved.current = { ...saved.current, id, metadataKey, version: input.expectedVersion + 1 };
       }
+      const record = saved.current;
+      const latest = () => source.getSnapshot().memberProfiles.find((entry) => entry.id === record.id);
+      const version = () => Math.max(record.version, latest()?.version ?? 0);
+      const upload = async (kind: 'profile' | 'profile_cover', key: 'photo' | 'cover', file: File) => {
+        if ((key === 'photo' ? record.photoFile : record.coverFile) === file) return;
+        currentKey = key;
+        updateUpload(key, { state: 'preparing', progress: 0, error: undefined });
+        const previous = key === 'photo' ? record.photoAttempt : record.coverAttempt;
+        const expectedVersion = previous?.file === file ? previous.expectedVersion : version();
+        if (key === 'photo') record.photoAttempt = { file, expectedVersion };
+        else record.coverAttempt = { file, expectedVersion };
+        let resultingVersion: number | undefined;
+        const fileId = await source.attachResourceFile(kind, record.id, file, expectedVersion, {
+          signal: controller.signal,
+          onConfirmed: (_fileId, confirmedVersion) => { resultingVersion = confirmedVersion; },
+          onProgress: (transferred, total) => updateUpload(key, {
+            state: total > 0 && transferred >= total ? 'confirming' : 'uploading',
+            progress: total > 0 ? Math.min(99, Math.round(transferred / total * 100)) : 0,
+          }),
+        });
+        record.version = Math.max(record.version, resultingVersion ?? expectedVersion + 1);
+        if (key === 'photo') { record.photoFile = file; record.photoId = fileId; }
+        else { record.coverFile = file; record.coverId = fileId; }
+        updateUpload(key, { state: 'complete', progress: 100 });
+        currentKey = undefined;
+      };
+      if (photo) await upload('profile', 'photo', photo);
+      if (controller.signal.aborted) throw new DOMException('Cancelaste la subida. Puedes guardar de nuevo para continuar.', 'AbortError');
+      if (coverChanged) {
+        if (coverFile) await upload('profile_cover', 'cover', coverFile);
+        if (controller.signal.aborted) throw new DOMException('Cancelaste la subida. Puedes guardar de nuevo para continuar.', 'AbortError');
+        const fileId = removeCoverImage ? undefined : coverFile ? record.coverId : latest()?.cover?.fileId ?? profile?.cover?.fileId;
+        const coverKey = JSON.stringify({ preset: coverPreset, fileId });
+        if (record.coverKey !== coverKey) {
+          currentKey = coverFile ? 'cover' : undefined;
+          if (currentKey) updateUpload(currentKey, { state: 'confirming', progress: 99 });
+          const expectedVersion = version();
+          await source.saveProfileCover({ preset: coverPreset, fileId, expectedVersion });
+          record.version = expectedVersion + 1;
+          record.coverKey = coverKey;
+          if (currentKey) updateUpload(currentKey, { state: 'complete', progress: 100 });
+        }
+      }
+        if (deferMetadata) {
+          const expectedVersion = version();
+          await source.saveMemberProfile({ ...input, expectedVersion,
+            photoFileId: removePhoto ? undefined : record.photoId ?? latest()?.photoFileId ?? profile?.photoFileId });
+          record.version = expectedVersion + 1;
+          record.metadataKey = metadataKey;
+        }
       return true;
-    });
-    setProgress(undefined);
-    if (result) onDone();
+      });
+      if (result) onDone();
+      else if (currentKey) updateUpload(currentKey, { state: controller.signal.aborted ? 'cancelled' : 'failed',
+        error: controller.signal.aborted ? 'Subida cancelada. Puedes reintentar.' : 'No se pudo confirmar este archivo. Vuelve a guardar para reintentar.' });
+    } finally {
+      if (uploadController.current === controller) uploadController.current = null;
+      submitting.current = false;
+    }
   };
 
   const previewName = preferredName.trim() || member.displayName;
@@ -259,6 +353,7 @@ export function ProfileEditor({ member, profile, onDone }: { member: Member; pro
           </button>
         </header>
 
+        <fieldset className="profile-editor__upload-fields" disabled={pending}>
         <div className="profile-editor__body">
           <div className="profile-editor__preview" aria-label="Vista previa">
             <ProfileCover
@@ -283,10 +378,10 @@ export function ProfileEditor({ member, profile, onDone }: { member: Member; pro
                     name="cover-preset"
                     value={preset.id}
                     checked={!hasCoverImage && coverPreset === preset.id}
-                    onChange={() => {
+                    onChange={async () => {
+                      if (!await clearImage('cover')) return;
                       setCoverPreset(preset.id);
-                      setCoverFile(undefined);
-                      if (profile?.cover?.fileId) setRemoveCoverImage(true);
+                      if (profile?.cover?.fileId || saved.current?.coverId) setRemoveCoverImage(true);
                     }}
                   />
                   <span className="cover-swatch__color" style={{ backgroundImage: profileCoverGradient(preset.id) }} />
@@ -294,56 +389,35 @@ export function ProfileEditor({ member, profile, onDone }: { member: Member; pro
                 </label>
               ))}
             </div>
-            <div className="row">
-              <button type="button" className="secondary with-icon" onClick={() => coverInput.current?.click()}>
-                <Icon name="upload" size={16} /> {hasCoverImage ? 'Cambiar imagen' : 'Subir imagen'}
-              </button>
+            <div className="b20-upload b20-upload--profile">
+              <FilePicker multiple={false} accept="image/png,image/jpeg,image/webp" maxSize={PROFILE_PHOTO_MAX_BYTES}
+                label="Imagen de portada" hint="PNG, JPEG o WebP, máximo 5 MiB." disabled={pending}
+                validate={(file) => profileImageError(file, 'portada')} onFiles={(files) => { if (files[0]) selectImage('cover', files[0]); }} />
+              <UploadFileList items={uploads.cover ? [uploads.cover] : []}
+                onRemove={!pending && uploads.cover?.state !== 'complete' ? () => { void clearImage('cover'); } : undefined}
+                onRetry={!pending ? () => { void submit(); } : undefined} />
               {hasCoverImage && (
-                <button type="button" className="secondary" onClick={() => { setCoverFile(undefined); setRemoveCoverImage(Boolean(profile?.cover?.fileId)); }}>
+                <button type="button" className="secondary" onClick={async () => { if (await clearImage('cover')) setRemoveCoverImage(Boolean(profile?.cover?.fileId || saved.current?.coverId)); }}>
                   Quitar imagen
                 </button>
               )}
-              <span className="muted profile-editor__hint">PNG, JPEG o WebP, máximo 5 MiB.</span>
             </div>
-            <input
-              ref={coverInput}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              hidden
-              aria-label="Imagen de portada"
-              onChange={(event) => {
-                const file = pickImage(event.target.files?.[0], 'portada');
-                if (file) { setCoverFile(file); setRemoveCoverImage(false); }
-                event.target.value = '';
-              }}
-            />
           </Section>
 
           <Section title="Foto de perfil" description="Se guarda de forma privada y solo la ve el grupo.">
-            <div className="row">
-              <button type="button" className="secondary with-icon" onClick={() => photoInput.current?.click()}>
-                <Icon name="upload" size={16} /> {profile?.photoFileId || photo ? 'Cambiar foto' : 'Subir foto'}
-              </button>
+            <div className="b20-upload b20-upload--profile">
+              <FilePicker multiple={false} accept="image/png,image/jpeg,image/webp" maxSize={PROFILE_PHOTO_MAX_BYTES}
+                label="Foto de perfil" hint="PNG, JPEG o WebP, máximo 5 MiB." disabled={pending}
+                validate={(file) => profileImageError(file, 'foto')} onFiles={(files) => { if (files[0]) selectImage('photo', files[0]); }} />
+              <UploadFileList items={uploads.photo ? [uploads.photo] : []}
+                onRemove={!pending && uploads.photo?.state !== 'complete' ? () => { void clearImage('photo'); } : undefined}
+                onRetry={!pending ? () => { void submit(); } : undefined} />
               {(photo || (profile?.photoFileId && !removePhoto)) && (
-                <button type="button" className="secondary" onClick={() => { setPhoto(undefined); setRemovePhoto(Boolean(profile?.photoFileId)); }}>
+                <button type="button" className="secondary" onClick={async () => { if (await clearImage('photo')) setRemovePhoto(Boolean(profile?.photoFileId || saved.current?.photoId)); }}>
                   Quitar foto
                 </button>
               )}
-              <span className="muted profile-editor__hint">PNG, JPEG o WebP, máximo 5 MiB.</span>
             </div>
-            <input
-              ref={photoInput}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              hidden
-              aria-label="Foto de perfil"
-              onChange={(event) => {
-                const file = pickImage(event.target.files?.[0], 'foto');
-                if (file) { setPhoto(file); setRemovePhoto(false); }
-                event.target.value = '';
-              }}
-            />
-            {fileError && <p className="error" role="alert">{fileError}</p>}
           </Section>
 
           <Section title="Sobre ti">
@@ -416,15 +490,16 @@ export function ProfileEditor({ member, profile, onDone }: { member: Member; pro
             </div>
           </Section>
         </div>
+        </fieldset>
 
         <footer className="profile-editor__footer">
           <p className="muted profile-editor__privacy">
-            {progress && pending
-              ? <span role="status">Subiendo {progress.label}: {progress.percent} %</span>
-              : 'Todo es voluntario y solo lo verá el grupo. Nada de esto se envía a Gemini.'}
+            Todo es voluntario y solo lo verá el grupo. Nada de esto se envía a Gemini.
           </p>
           {error && <p className="error" role="alert">{error}</p>}
+          {notice && <p role="status">{notice}</p>}
           <div className="profile-editor__actions">
+            {pending && (uploads.photo || uploads.cover) && <button type="button" className="secondary" onClick={() => uploadController.current?.abort()}>Cancelar subida</button>}
             <button type="button" className="secondary" disabled={pending} onClick={requestClose}>Cancelar</button>
             <button type="submit" disabled={pending}>{pending ? 'Guardando…' : 'Guardar cambios'}</button>
           </div>

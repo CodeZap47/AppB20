@@ -1,4 +1,4 @@
-import { Fragment, useMemo, type CSSProperties } from 'react';
+import { Fragment, useMemo, useState, type CSSProperties } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import {
   breakdown,
@@ -6,6 +6,7 @@ import {
   CONTRIBUTION_RULES,
   NOT_SCORED,
   RECOGNITIONS,
+  type ContributionKind,
   type RecognitionId,
 } from '@b20/core';
 import { useSnapshot } from '../data/DataContext';
@@ -14,6 +15,7 @@ import { Avatar } from '../components/Avatar';
 import { Empty } from '../components/Empty';
 import { Icon } from '../components/Icon';
 import { formatTime } from '../lib/format';
+import { matches } from '../lib/search';
 import {
   buildLeaderboard,
   leaderboardPeriods,
@@ -345,28 +347,152 @@ function MySummary({
   );
 }
 
+const RULE_CATEGORIES = {
+  materiales: 'Materiales de estudio',
+  trabajos: 'Trabajos y actividades',
+  preguntas: 'Preguntas y respuestas',
+  revision: 'Revisión y mejoras',
+} as const;
+
+type RuleCategory = keyof typeof RULE_CATEGORIES;
+
+const RULE_CATEGORY: Record<ContributionKind, RuleCategory> = {
+  guia: 'materiales',
+  apunte: 'materiales',
+  fuente: 'materiales',
+  trabajo: 'trabajos',
+  evidencia: 'trabajos',
+  pagina: 'trabajos',
+  respuesta: 'preguntas',
+  'respuesta-aceptada': 'preguntas',
+  'revision-guia': 'revision',
+  correccion: 'revision',
+  comentario: 'revision',
+};
+
+const RANKING_RULES = CONTRIBUTION_KINDS.map((kind, index) => ({
+  ...CONTRIBUTION_RULES[kind],
+  kind,
+  category: RULE_CATEGORY[kind],
+  index,
+}));
+const RULE_POINTS = [...new Set(RANKING_RULES.map((rule) => rule.points))].sort((a, b) => a - b);
+
 function RulesPanel() {
+  const [search, setSearch] = useState('');
+  const [order, setOrder] = useState<'asc' | 'desc'>('asc');
+  const [category, setCategory] = useState<RuleCategory | 'all'>('all');
+  const [pointFilter, setPointFilter] = useState('all');
+  const shown = RANKING_RULES.filter((rule) =>
+    (category === 'all' || rule.category === category)
+    && (pointFilter === 'all' || rule.points === Number(pointFilter))
+    && matches(search, rule.label, rule.rule, rule.limit ?? ''),
+  ).sort((a, b) => (order === 'asc' ? a.points - b.points : b.points - a.points) || a.index - b.index);
+
+  function clearFilters() {
+    setSearch('');
+    setOrder('asc');
+    setCategory('all');
+    setPointFilter('all');
+  }
+
   return (
-    <section className="panel rules">
-      <h2 className="label">Cómo se cuentan los puntos</h2>
-      <ul className="rules__list">
-        {CONTRIBUTION_KINDS.map((kind) => {
-          const rule = CONTRIBUTION_RULES[kind];
-          return (
-            <li key={kind}>
-              <span className="rules__points">+{rule.points}</span>
-              <span>
-                <strong>{rule.label}.</strong> {rule.rule}
-                {rule.limit && <span className="muted"> {rule.limit}</span>}
-              </span>
+    <section className="panel ranking-rules" aria-label="Reglas del ranking">
+      <header className="ranking-rules__header">
+        <div>
+          <p className="eyebrow">Contribuciones</p>
+          <h2>Reglas del ranking</h2>
+          <p className="muted">Explora qué acciones suman puntos y las condiciones de cada aporte.</p>
+        </div>
+        <span className="ranking-rules__icon"><Icon name="book" size={24} /></span>
+      </header>
+
+      <div className="ranking-rules__toolbar">
+        <label className="field ranking-rules__search">
+          <span className="field__label">Buscar regla</span>
+          <span className="ranking-rules__search-input">
+            <Icon name="search" size={20} />
+            <input type="search" placeholder="Busca una acción o condición…" value={search}
+              onChange={(event) => setSearch(event.target.value)} />
+          </span>
+        </label>
+        <div className="ranking-rules__filters">
+          <label className="field">
+            <span className="field__label">Orden</span>
+            <select value={order} onChange={(event) => setOrder(event.target.value as 'asc' | 'desc')}>
+              <option value="asc">Menor a mayor</option>
+              <option value="desc">Mayor a menor</option>
+            </select>
+          </label>
+          <label className="field">
+            <span className="field__label">Categoría</span>
+            <select value={category} onChange={(event) => setCategory(event.target.value as RuleCategory | 'all')}>
+              <option value="all">Todas</option>
+              {Object.entries(RULE_CATEGORIES).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span className="field__label">Puntos</span>
+            <select value={pointFilter} onChange={(event) => setPointFilter(event.target.value)}>
+              <option value="all">Todos</option>
+              {RULE_POINTS.map((value) => <option key={value} value={value}>{points(value)}</option>)}
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div className="ranking-rules__results">
+        <p className="ranking-rules__count" role="status" aria-live="polite" aria-atomic="true">
+          {shown.length} de {RANKING_RULES.length} reglas
+        </p>
+        <button type="button" className="secondary ranking-rules__reset" onClick={clearFilters}>
+          Limpiar filtros
+        </button>
+      </div>
+
+      {shown.length ? (
+        <ul className="ranking-rules__list">
+          {shown.map((rule) => (
+            <li key={rule.kind} className="ranking-rules__row">
+              <div className="ranking-rules__points">
+                <strong>+{pointsFormat.format(rule.points)}</strong>
+                <span>{rule.points === 1 ? 'punto' : 'puntos'}</span>
+              </div>
+              <div className="ranking-rules__body">
+                <div className="ranking-rules__row-heading">
+                  <h3>{rule.label}</h3>
+                  <span className="ranking-rules__category">{RULE_CATEGORIES[rule.category]}</span>
+                </div>
+                <p className="ranking-rules__description">{rule.rule}</p>
+                {rule.limit && <p className="ranking-rules__limit"><strong>Condición: </strong>{rule.limit}</p>}
+              </div>
             </li>
-          );
-        })}
-      </ul>
-      <p className="muted">
-        No suman: {NOT_SCORED.join(', ')}. Los borradores y los aportes retirados no cuentan. Las copias idénticas del mismo autor y contexto no vuelven a sumar; se conserva el primer aporte y su fecha. Se comparan texto y referencias de archivos, sin interpretar el código ni suponer que dos archivos distintos contienen los mismos bytes. Restaurar un aporte recupera su puntuación original sin duplicarla. Los límites se conservan al cambiar de periodo. Son puntos de prueba: se
-        ajustarán después de probarlos con el grupo.
-      </p>
+          ))}
+        </ul>
+      ) : (
+        <div className="ranking-rules__empty">
+          <Icon name="search" size={28} />
+          <h3>No hay reglas con estos filtros</h3>
+          <p className="muted">Prueba otra búsqueda o limpia los filtros para ver todas las acciones.</p>
+          <button type="button" className="secondary" onClick={clearFilters}>Limpiar filtros</button>
+        </div>
+      )}
+
+      <footer className="ranking-rules__notes">
+        <section>
+          <h3>Qué no suma</h3>
+          <ul className="ranking-rules__excluded">{NOT_SCORED.map((label) => <li key={label}>{label}</li>)}</ul>
+          <p>Los borradores y los aportes retirados tampoco cuentan.</p>
+        </section>
+        <section>
+          <h3>Cómo se aplican las reglas</h3>
+          <p>Las copias idénticas del mismo autor y contexto no vuelven a sumar; se conserva el primer aporte y su fecha. Se comparan texto y referencias de archivos, sin interpretar el código ni suponer que dos archivos distintos contienen los mismos bytes.</p>
+          <p>Restaurar un aporte recupera su puntuación original sin duplicarla. Los límites se conservan al cambiar de periodo.</p>
+        </section>
+        <p className="ranking-rules__notice">Son puntos de prueba: se ajustarán después de probarlos con el grupo.</p>
+      </footer>
     </section>
   );
 }

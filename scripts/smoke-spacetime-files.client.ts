@@ -34,8 +34,10 @@ export async function runSmoke(options: {
   }), 'suscripción');
   const close = () => { for (const connection of connections) connection.disconnect(); connections.clear(); };
   const groupViews = ['subjects', 'assignments', 'works', 'resource_files', 'work_revisions', 'work_details',
-    'activities', 'evidences', 'evidence_details'];
+    'activities', 'evidences', 'evidence_details', 'member_upload_stats'];
   const observe = (connection: DbConnection) => subscribe(connection, groupViews.map((name) => `SELECT * FROM ${name}`));
+  const uploadStats = (connection: DbConnection, memberId: string) => [...connection.db.memberUploadStats.iter()]
+    .find((row) => row.memberId.toHexString() === memberId);
   try {
     let owner = await connect(options.tokens[0]);
     await owner.reducers.setAuthConfig({ issuer: 'https://auth.spacetimedb.com/oidc', audiences: ['b20-local-smoke'] });
@@ -48,6 +50,9 @@ export async function runSmoke(options: {
     await assert.rejects(outsider.reducers.joinGroup({ displayName: 'Local outsider' }), /autorizada/);
     await observe(owner); await observe(author); await observe(outsider);
     assert.equal([...outsider.db.subjects.iter()].length, 0);
+    assert.equal([...outsider.db.memberUploadStats.iter()].length, 0);
+    const authorId = author.identity!.toHexString();
+    assert.deepEqual(uploadStats(owner, authorId), { memberId: author.identity, bytes: 0n, fileCount: 0n });
     await author.reducers.createSubject({ name: 'Local smoke', period: 1 });
     const subjectId = [...author.db.subjects.iter()][0].id;
     await author.reducers.createAssignmentV2({ subjectId, termId: undefined, kind: 'tarea', title: 'Local assignment',
@@ -72,6 +77,7 @@ export async function runSmoke(options: {
     const first = { uploadId, index: 0, bytes: bytes.slice(0, CHUNK_BYTES), sha256: hash(bytes.slice(0, CHUNK_BYTES)) };
     await author.reducers.putResourceChunk(first);
     await author.reducers.putResourceChunk(first);
+    assert.equal(uploadStats(owner, authorId)?.bytes, 0n);
     assert.deepEqual(JSON.parse(await author.procedures.getResourceUploadStatus({ uploadId })).receivedIndexes, [0]);
     const mutated = first.bytes.slice(); mutated[0] ^= 1;
     await assert.rejects(author.reducers.putResourceChunk({ ...first, bytes: mutated, sha256: hash(mutated) }), /sustituirse/);
@@ -94,6 +100,10 @@ export async function runSmoke(options: {
     // El acuse de autor no es una barrera para las suscripciones de otras sesiones.
     await waitForSubscription(() => [...owner.db.resourceFiles.iter()].some((row) => row.id === uploadId), 'archivo visible para el propietario');
     assert.equal([...owner.db.resourceFiles.iter()].filter((row) => row.id === uploadId).length, 1);
+    await waitForSubscription(() => uploadStats(owner, authorId)?.bytes === BigInt(bytes.length), 'totales al confirmar adjunto');
+    assert.equal(uploadStats(owner, authorId)?.fileCount, 1n);
+    assert.deepEqual(Object.keys(uploadStats(owner, authorId)!).sort(), ['bytes', 'fileCount', 'memberId']);
+    checks.push('totales de perfiles actualizados en otra sesión sin exponer metadatos ni contar cargas incompletas');
     checks.push('subida reanudada después de reiniciar el servidor y confirmada una sola vez');
 
     const manifest = JSON.parse(await owner.procedures.getResourceManifest({ fileId: uploadId }));
@@ -112,8 +122,11 @@ export async function runSmoke(options: {
     checks.push('descarga binaria íntegra y rechazo de una cuenta ajena al grupo');
 
     await author.reducers.removeResourceFile({ fileId: uploadId, expectedVersion: 2 });
+    await waitForSubscription(() => uploadStats(owner, authorId)?.fileCount === 0n, 'totales al quitar adjunto');
+    assert.equal(uploadStats(owner, authorId)?.bytes, 0n);
     assert.equal(JSON.parse(await author.procedures.getResourceManifest({ fileId: uploadId })).sha256, hash(bytes));
     await author.reducers.restoreWorkVersion({ workId, version: 2, expectedVersion: 3 });
+    await waitForSubscription(() => uploadStats(owner, authorId)?.fileCount === 1n, 'totales al restaurar adjunto');
     assert.equal([...author.db.works.iter()][0].version, 4);
     const cancelledId = randomUUID();
     await author.reducers.beginResourceUpload({ ...input, uploadId: cancelledId, expectedVersion: 4 });
@@ -167,11 +180,14 @@ export async function runSmoke(options: {
 
     close(); await options.restart();
     owner = await connect(options.tokens[0]); author = await connect(options.tokens[1]);
+    await observe(owner); await observe(author);
     assert.equal(JSON.parse(await author.procedures.getResourceManifest({ fileId: maximumId })).chunkCount, 50);
     const recovered = await author.procedures.readResourceChunk({ fileId: uploadId, index: 0 });
     assert.equal(hash(recovered.bytes), first.sha256);
     assert.equal(hash((await author.procedures.readResourceChunk({ fileId: evidenceFileId, index: 0 })).bytes), hash(evidenceBytes));
     await owner.reducers.removeMember({ identity: author.identity! });
+    await waitForSubscription(() => uploadStats(owner, authorId) === undefined && [...author.db.memberUploadStats.iter()].length === 0,
+      'totales revocados al dar de baja al miembro');
     await assert.rejects(author.procedures.readResourceChunk({ fileId: uploadId, index: 0 }), /activo/);
     checks.push('archivos confirmados persistentes tras reinicio y acceso revocado inmediatamente');
     return { checks, maximumFileBytes: maximum.length, maximumUploadSeconds: maximumSeconds };

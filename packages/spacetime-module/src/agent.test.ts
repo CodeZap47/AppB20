@@ -157,14 +157,16 @@ describe('retención y purga', () => {
     agent.expireAgentSession(ctx, { sessionId, generation: rows('agentSession')[0]!.generation as number });
     expect(rows('agentSession')).toHaveLength(0); expect(rows('agentExpiry')).toHaveLength(0);
   });
-  it('desactivar o dar de baja borra todo lo del agente de esa persona', () => {
+  it('dar de baja conserva los datos privados y desactivar borra solo el agente propio', () => {
     const { ctx, as, rows, sessionId } = ready();
     agent.trainAgent(ctx, { sources: sources(['work', '10']), expectedStyleVersion: 0 });
     agent.saveAgentDraft(ctx, { sessionId, expectedDraftVersion: 0, stage: 'review', draft: essay }); agent.checkAgentOriginality(ctx, { sessionId, draftVersion: 1 });
     as(peer); agent.enableAgent(ctx, { premisesVersion: 1 });
+    const retained = Object.fromEntries(['agentStyleSource', 'agentStyleSnapshot', 'agentSession', 'agentOriginalityCheck', 'agentExpiry'].map(table => [table, [...rows(table)]]));
     as(admin); remove_member(ctx, { identity: owner });
-    for (const table of ['agentStyleSource', 'agentStyleSnapshot', 'agentSession', 'agentOriginalityCheck', 'agentExpiry']) expect(rows(table), table).toHaveLength(0);
-    expect(rows('agentProfile').map((r) => keyOf(r.owner))).toEqual([peer.toHexString()]);
-    as(peer); agent.disableAgent(ctx); expect(rows('agentProfile')).toHaveLength(0);
+    for (const [table, records] of Object.entries(retained)) expect(rows(table), table).toEqual(records);
+    expect(rows('agentProfile').map((r) => keyOf(r.owner))).toEqual([owner.toHexString(), peer.toHexString()]);
+    as(owner); expect(() => agent.saveAgentDraft(ctx, { sessionId, expectedDraftVersion: 1, stage: 'review', draft: 'No autorizado' })).toThrow('activo');
+    as(peer); agent.disableAgent(ctx); expect(rows('agentProfile').map((r) => keyOf(r.owner))).toEqual([owner.toHexString()]);
   });
 });

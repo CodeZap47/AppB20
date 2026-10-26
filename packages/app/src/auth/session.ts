@@ -1,3 +1,7 @@
+import { displayNameError } from '@b20/core';
+import { clearPendingInvitation } from './pendingInvitation';
+import { clearInviteLink } from './inviteLink';
+
 /** Estado de presentación de la sesión OIDC. La biblioteca OIDC administra las credenciales. */
 export interface SessionProfile {
   /** `sub` estable del proveedor de autenticación. */
@@ -38,12 +42,13 @@ export function decodeIdToken(token: string): (SessionProfile & { expiresAt: num
   if (!claims || typeof claims.sub !== 'string' || !claims.sub ||
       typeof claims.email !== 'string' || !claims.email.trim() || claims.email_verified !== true ||
       typeof claims.exp !== 'number' || !Number.isFinite(claims.exp)) return null;
+  const name = [claims.name, claims.preferred_username, claims.user_metadata?.full_name, claims.user_metadata?.name]
+    .find((candidate): candidate is string => typeof candidate === 'string' && displayNameError(candidate) === undefined)
+    ?.trim() ?? '';
   return {
     subject: claims.sub,
     email: claims.email.trim().toLowerCase(),
-    name: typeof claims.name === 'string' ? claims.name :
-      typeof claims.preferred_username === 'string' ? claims.preferred_username :
-      typeof claims.user_metadata?.full_name === 'string' ? claims.user_metadata.full_name : claims.email,
+    name,
     picture: typeof claims.picture === 'string' ? claims.picture :
       typeof claims.user_metadata?.avatar_url === 'string' ? claims.user_metadata.avatar_url : undefined,
     expiresAt: claims.exp * 1000,
@@ -109,6 +114,8 @@ export class SessionStore {
   }
 
   signOut(): void {
+    clearPendingInvitation();
+    clearInviteLink();
     this.signedOut();
     void this.#deps.onSignOut().catch(() => {
       this.signedOut('Saliste de B20, pero no se pudo cerrar la sesión con el proveedor. Vuelve a intentarlo.');

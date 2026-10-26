@@ -17,6 +17,7 @@
     "@capacitor/app": "^8.1.2",
     "@capacitor/browser": "^8.0.5",
     "@supabase/supabase-js": "2.118.0",
+    "@untitledui/file-icons": "^0.0.9",
     "@untitledui/icons": "^0.0.23",
     "fflate": "0.8.3",
     "motion": "^14.5.0",

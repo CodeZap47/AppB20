@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   canReviewGuide,
@@ -21,6 +21,7 @@ import { GuideAiPanel } from '../components/GuideAiPanel';
 import { GuideAiProvenance } from '../components/GuideAiProvenance';
 import { ExamMaterialLink } from '../components/ExamMaterialLink';
 import { useAction } from '../components/useAction';
+import { AttachmentUploader, useResourceUploadQueue } from '../components/uploads/ResourceUploader';
 import { formatTime, memberName } from '../lib/format';
 import { candidateSources, describeSource, guideStatus, isOutdated, type SourceInfo } from '../lib/guides';
 import { currentPlacement, lastPeriod, rememberPeriod, termAt } from '../lib/period';
@@ -911,7 +912,13 @@ function GuideForm({ guide }: { guide: StudyGuide | undefined }) {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const { subjects, terms, calendar } = data;
-  const { error, run } = useAction();
+  const { error, pending, run } = useAction();
+  const queue = useResourceUploadQueue();
+  const saved = useRef<{ id: string; version: number } | null>(null);
+  const submitting = useRef(false);
+  const active = useRef(true);
+  const [contentSaved, setContentSaved] = useState(false);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const current = currentPlacement(calendar);
   const backTo = guide ? `/m/guias/${guide.id}` : '/m/guias';
 
@@ -931,6 +938,8 @@ function GuideForm({ guide }: { guide: StudyGuide | undefined }) {
     GUIDE_SECTIONS.map((_, i) => guide?.sections[i] ?? ''),
   );
   const [baseVersion] = useState(guide?.version);
+  const locked = pending || queue.busy || contentSaved;
+  const conflict = Boolean(guide && !contentSaved && baseVersion !== guide.version);
 
   const candidates = guide
     ? { matched: [], unplaced: [] }
@@ -953,20 +962,33 @@ function GuideForm({ guide }: { guide: StudyGuide | undefined }) {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const input = { subjectId, termId: termId || undefined, title, topicsText, sections };
-    const id = await run(async () => {
-      if (guide) {
-        await source.updateGuide(guide.id, input, baseVersion);
-        return guide.id;
-      }
-      const refs = [...candidates.matched, ...candidates.unplaced]
-        .filter((i) => picked.has(refKey(i)))
-        .map(({ kind, refId }) => ({ kind, refId }));
-      return source.createGuide(input, refs);
-    });
-    if (!id) return;
-    rememberPeriod(period);
-    void navigate(`/m/guias/${id}${guide ? '' : '?pestana=fuentes'}`);
+    if (submitting.current || queue.busy || conflict) return;
+    submitting.current = true;
+    try {
+      await run(async () => {
+        if (!saved.current) {
+          const input = { subjectId, termId: termId || undefined, title, topicsText, sections };
+          let id: string;
+          if (guide) {
+            await source.updateGuide(guide.id, input, baseVersion);
+            id = guide.id;
+          } else {
+            const refs = [...candidates.matched, ...candidates.unplaced]
+              .filter((i) => picked.has(refKey(i)))
+              .map(({ kind, refId }) => ({ kind, refId }));
+            id = await source.createGuide(input, refs);
+          }
+          if (!active.current) return;
+          saved.current = { id, version: guide ? baseVersion! + 1 : 1 };
+          setContentSaved(true);
+        }
+        const target = saved.current;
+        if (await queue.upload('guide', target.id, target.version) && active.current) {
+          rememberPeriod(period);
+          void navigate(`/m/guias/${target.id}${guide ? '' : '?pestana=fuentes'}`);
+        }
+      });
+    } finally { submitting.current = false; }
   };
 
   return (
@@ -986,6 +1008,7 @@ function GuideForm({ guide }: { guide: StudyGuide | undefined }) {
       </header>
 
       <form className="panel form form--wide" onSubmit={submit}>
+        <fieldset className="upload-form-fields" disabled={locked}>
         <section className="form__section">
           <h2>De qué materia y parcial</h2>
           <div className="form__grid">
@@ -1102,7 +1125,10 @@ function GuideForm({ guide }: { guide: StudyGuide | undefined }) {
           </div>)}
         </section>
 
-        {guide && baseVersion !== guide.version && <p className="error" role="alert">La guía cambió mientras la editabas. Conserva tu borrador y abre de nuevo la edición para evitar sobrescribir el trabajo del grupo.</p>}
+        </fieldset>
+        <AttachmentUploader queue={queue} disabled={pending || contentSaved} title="Archivos de la guía" />
+        {contentSaved && <p className="field__hint">La guía ya está guardada. Termina o retira los archivos pendientes para continuar.</p>}
+        {conflict && <p className="error" role="alert">La guía cambió mientras la editabas. Conserva tu borrador y abre de nuevo la edición para evitar sobrescribir el trabajo del grupo.</p>}
 
         {error && (
           <p className="error" role="alert">
@@ -1113,8 +1139,8 @@ function GuideForm({ guide }: { guide: StudyGuide | undefined }) {
           <Link to={backTo} className="button secondary">
             Cancelar
           </Link>
-          <button type="submit" disabled={!subjectId || Boolean(guide && baseVersion !== guide.version)}>
-            {guide ? 'Guardar versión nueva' : 'Crear guía'}
+          <button type="submit" disabled={pending || queue.busy || !subjectId || conflict}>
+            {contentSaved ? queue.pendingCount ? 'Reintentar archivos pendientes' : 'Continuar' : guide ? 'Guardar versión nueva' : 'Crear guía'}
           </button>
         </div>
       </form>

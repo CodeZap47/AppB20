@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import { Empty } from '../components/Empty';
@@ -9,6 +9,7 @@ import { FeedComposer } from '../components/whatsNew/FeedComposer';
 import { FeedView } from '../components/whatsNew/FeedView';
 import { NewsSidebar } from '../components/whatsNew/NewsSidebar';
 import { StoriesBar } from '../components/whatsNew/StoriesBar';
+import { useSharedFeedExams } from '../components/whatsNew/useSharedFeedExams';
 import { formatClock, formatDayLabel } from '../lib/format';
 import {
   birthdaysToday,
@@ -27,7 +28,7 @@ import './whatsNew.css';
 type View = 'feed' | 'clasica';
 const VIEW_KEY = 'b20:inicio:vista';
 
-const isKind = (value: string | null): value is NewsKind => Boolean(value && value in NEWS_LABEL);
+const isKind = (value: string | null): value is NewsKind => Boolean(value && Object.hasOwn(NEWS_LABEL, value));
 const isView = (value: string | null | undefined): value is View => value === 'feed' || value === 'clasica';
 
 /** La vista elegida se recuerda en este dispositivo; sin almacenamiento se usa el feed. */
@@ -57,9 +58,16 @@ export function WhatsNewPage() {
   const snapshot = useSnapshot();
   const { me, members, subjects, lastSeenAt, assignments, birthdays } = snapshot;
   const [params, setParams] = useSearchParams();
-  const news = useMemo(() => buildNews(snapshot), [snapshot]);
-  const mine = useMemo(() => ownFeedNews(snapshot), [snapshot]);
-  const now = new Date();
+  const [now, setNow] = useState(() => new Date());
+  const sharedExams = useSharedFeedExams(true);
+  const news = useMemo(() => buildNews(snapshot, now, sharedExams.exams), [snapshot, now, sharedExams.exams]);
+  const mine = useMemo(() => ownFeedNews(snapshot, now, sharedExams.exams), [snapshot, now, sharedExams.exams]);
+  useEffect(() => {
+    const tick = () => { if (document.visibilityState !== 'hidden') setNow(new Date()); };
+    const interval = window.setInterval(tick, 30_000);
+    document.addEventListener('visibilitychange', tick);
+    return () => { window.clearInterval(interval); document.removeEventListener('visibilitychange', tick); };
+  }, []);
 
   const highlightPostId = params.get('publicacion') ?? undefined;
   const requested = params.get('vista');
@@ -92,7 +100,9 @@ export function WhatsNewPage() {
 
   // En el feed también se ven tus publicaciones: todas en «Todo» y las recientes en «Pendientes».
   const own = view === 'feed' ? mine.filter((n) => showAll || !lastSeenAt || n.at > lastSeenAt) : [];
-  const base = [...(showAll ? news : pending), ...own].sort((a, b) => b.at.getTime() - a.at.getTime() || a.key.localeCompare(b.key));
+  const highlighted = highlightPostId ? [...news, ...mine].filter((n) => n.target?.kind === 'post' && n.target.id === highlightPostId) : [];
+  const base = [...new Map([...(showAll ? news : pending), ...own, ...highlighted].map((item) => [item.key, item])).values()]
+    .sort((a, b) => b.at.getTime() - a.at.getTime() || a.key.localeCompare(b.key));
   const bySubjectFilter = base.filter((n) => !subjectId || n.subjectId === subjectId);
   const shown = bySubjectFilter.filter((n) => !kind || n.kind === kind);
   const kinds = (Object.keys(NEWS_LABEL) as NewsKind[])
@@ -112,9 +122,10 @@ export function WhatsNewPage() {
   );
 
   return (
-    <>
-      <header className="page-header">
+    <div className="whats-new-page">
+      <header className="page-header feed-page-header">
         <div>
+          <span className="feed-page-header__eyebrow">COMUNIDAD B20</span>
           <p className="eyebrow">
             {lastSeenAt ? `Marcaste todo como visto ${seenLabel(lastSeenAt)}` : 'Primera visita'}
           </p>
@@ -147,18 +158,20 @@ export function WhatsNewPage() {
         </div>
       </header>
       {error && <p className="error" role="alert">{error}</p>}
-      <p className="muted">Las novedades y la lectura de cada chat se marcan por separado. Aquí solo se resume contenido compartido con el grupo.</p>
+      <p className="feed-privacy"><Icon name="users" size={15} />Un espacio para lo que compartimos. La lectura de tus chats se guarda por separado.</p>
 
       <div className={view === 'feed' ? 'detail detail--feed' : 'detail'}>
         <div className="detail__main">
           {view === 'feed' && (
             <>
               <StoriesBar meId={me?.id} members={members} celebrating={celebrating} messages={messages} due={due} />
-              <FeedComposer me={me} subjects={subjects} />
+              <FeedComposer key={me?.id} me={me} subjects={subjects} />
             </>
           )}
 
-          <div className="toolbar">
+          <div className="feed-filter-panel">
+          <div className="toolbar feed-filter-panel__head">
+            <h2>Explora el grupo</h2>
             <div className="segmented" role="group" aria-label="Qué mostrar">
               <button
                 type="button"
@@ -222,12 +235,17 @@ export function WhatsNewPage() {
               )}
             </>
           )}
+          </div>
+
+          {sharedExams.error && <div className="feed-sync-notice" role="status">
+            <span>No se pudieron actualizar los exámenes compartidos.</span>
+            <button type="button" className="link-button" disabled={sharedExams.loading} onClick={sharedExams.refresh}>Reintentar</button>
+          </div>}
 
           {shown.length === 0 ? (
             news.length === 0 && mine.length === 0 ? (
               <Empty icon="check" title="Todavía no pasa nada en el grupo">
-                Aquí vas a ver tareas nuevas, cambios de fecha, apuntes, trabajos subidos y
-                respuestas, en cuanto alguien los publique.
+                Aquí verás las tareas, apuntes, preguntas, retos y demás aportes que compartan contigo.
               </Empty>
             ) : (
               <Empty
@@ -247,7 +265,7 @@ export function WhatsNewPage() {
               </Empty>
             )
           ) : view === 'feed' ? (
-            <FeedView items={shown} snapshot={snapshot} isPending={isPending} now={now} highlightPostId={highlightPostId} />
+            <FeedView key={me?.id} items={shown} snapshot={snapshot} sharedExams={sharedExams.exams} isPending={isPending} now={now} highlightPostId={highlightPostId} />
           ) : (
             <ClassicNewsList items={shown} members={members} subjects={subjects} isPending={isPending} />
           )}
@@ -255,6 +273,6 @@ export function WhatsNewPage() {
 
         <NewsSidebar meId={me?.id} members={members} subjects={subjects} celebrating={celebrating} messages={messages} due={due} />
       </div>
-    </>
+    </div>
   );
 }

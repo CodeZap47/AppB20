@@ -1,3 +1,6 @@
+import { purgePresentationAiSource } from './presentationAiHandlers';
+import { purgeExamSpacedSource } from './examSpaced';
+import { purgeDocumentSource } from './documentHandlers';
 import { memberIdentityFor } from './authIdentity';
 import { SenderError } from 'spacetimedb/server';
 import { ScheduleAt, Timestamp } from 'spacetimedb';
@@ -10,14 +13,16 @@ import { purgeGuideAiSource } from './guideAiHandlers';
 import { purgeExamSource } from './examHandlers';
 import { rememberContributionOrigins } from './contributionOrigins';
 
-const KINDS = ['note', 'question', 'answer', 'guide', 'work', 'evidence'];
+const KINDS = ['note', 'question', 'answer', 'guide', 'work', 'evidence', 'feed_post', 'feed_comment', 'group_message', 'channel_message'];
 const keyOf = (kind: string, id: bigint) => `${kind}:${id}`;
 type RetentionRow = NonNullable<ReturnType<Ctx['db']['contentRetention']['key']['find']>>;
 
 function owners(db: ViewDb, kind: string, id: bigint) {
   if (kind === 'work') return [...db.workAuthor.workId.filter(id)].map((row) => row.author);
   const owner = kind === 'note' ? db.note.id.find(id)?.author : kind === 'guide' ? db.studyGuide.id.find(id)?.createdBy
-    : kind === 'question' ? db.question.id.find(id)?.author : kind === 'answer' ? db.answer.id.find(id)?.author : db.evidence.id.find(id)?.author;
+    : kind === 'question' ? db.question.id.find(id)?.author : kind === 'answer' ? db.answer.id.find(id)?.author
+    : kind === 'feed_post' ? db.feedPost.id.find(id)?.author : kind === 'feed_comment' ? db.feedComment.id.find(id)?.author
+    : kind === 'group_message' ? db.groupMessage.id.find(id)?.sender : kind === 'channel_message' ? db.channelMessage.id.find(id)?.sender : db.evidence.id.find(id)?.author;
   return owner ? [owner] : [];
 }
 function versionOf(db: ViewDb, kind: string, id: bigint) {
@@ -164,6 +169,7 @@ function purgeOne(ctx: Ctx, row: RetentionRow) {
   if (row.state !== 'pending' || !retentionExpired(ctx.timestamp.microsSinceUnixEpoch, row.expiresAt.microsSinceUnixEpoch)) return false;
   const targets = new Set([row.key]);
   if (row.kind === 'question') for (const answer of ctx.db.answer.questionId.filter(row.targetId)) targets.add(keyOf('answer', answer.id));
+  if (row.kind === 'feed_post') for (const comment of ctx.db.feedComment.postId.filter(row.targetId)) targets.add(keyOf('feed_comment', comment.id));
   // Guardar únicamente firmas internas y crédito canónico antes de eliminar las fuentes.
   rememberContributionOrigins(ctx, targets);
   ctx.db.contentRetention.key.update({ ...row, state: 'purging' });
@@ -172,8 +178,8 @@ function purgeOne(ctx: Ctx, row: RetentionRow) {
     purgeAiSource(ctx, kind, id);
     purgeMuseum(ctx.db, kind, id);
     purgeAgentSource(ctx.db, kind, id);
-    purgeGuideAiSource(ctx, kind, id);
-    purgeExamSource(ctx, kind, id);
+    purgeGuideAiSource(ctx, kind, id); purgeDocumentSource(ctx, kind, id);
+    purgeExamSource(ctx, kind, id); purgeExamSpacedSource(ctx, kind, id); purgePresentationAiSource(ctx, kind, id);
     unlinkSources(ctx, kind, id);
     if (kind === 'note') {
       drop(ctx.db.noteComment.iter(), (item) => item.noteId === id, (key) => ctx.db.noteComment.id.delete(key));
@@ -201,6 +207,20 @@ function purgeOne(ctx: Ctx, row: RetentionRow) {
       drop(ctx.db.workFile.iter(), (item) => item.workId === id, (key) => ctx.db.workFile.id.delete(key));
       ctx.db.workDetail.workId.delete(id); ctx.db.work.id.delete(id);
     } else if (kind === 'evidence') { ctx.db.evidenceDetail.evidenceId.delete(id); ctx.db.evidence.id.delete(id); }
+    else if (kind === 'feed_post') {
+      for (const reaction of [...ctx.db.feedReaction.target.filter(`post:${id}`)]) ctx.db.feedReaction.key.delete(reaction.key);
+      ctx.db.feedPost.id.delete(id);
+    } else if (kind === 'feed_comment') ctx.db.feedComment.id.delete(id);
+    else if (kind === 'group_message' || kind === 'channel_message') {
+      const message = kind === 'group_message' ? ctx.db.groupMessage.id.find(id) : ctx.db.channelMessage.id.find(id);
+      if (message) {
+        const minimal = { ...message, sender: ctx.identity, text: '', editedAt: undefined, deletedAt: ctx.timestamp, deletedBy: undefined };
+        if (kind === 'group_message') ctx.db.groupMessage.id.update(minimal);
+        else ctx.db.channelMessage.id.update({ ...ctx.db.channelMessage.id.find(id)!, ...minimal });
+      }
+      const scope = kind === 'group_message' ? 'group' : 'channel';
+      drop(ctx.db.messageReaction.iter(), (item) => item.scope === scope && item.messageId === id, (key) => ctx.db.messageReaction.id.delete(key));
+    }
     drop(ctx.db.academicComment.iter(), (item) => item.targetKind === kind && item.targetId === id, (key) => ctx.db.academicComment.id.delete(key));
     ctx.db.resourceVersion.key.delete(target); ctx.db.contentStatus.key.delete(target);
     if (target !== row.key) {

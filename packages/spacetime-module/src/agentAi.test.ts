@@ -147,11 +147,12 @@ describe('agente con Gemini: reclamar, terminar y aplicar', () => {
 });
 
 describe('agente con Gemini: retención', () => {
-  it('borra los envíos con la sesión, con el dueño y cuando se purga una fuente que contienen', () => {
+  it('purga envíos de fuentes eliminadas y conserva el historial privado de un miembro dado de baja', () => {
     const s = setup(); s.write(essay); agent.checkAgentOriginality(s.ctx, { sessionId: BigInt(s.sessionId), draftVersion: 1 });
     s.authorize('originality', 1); s.claim(1); s.finish(1, { notes: [{ refKey: 'work:11', why: 'Ambos siguen el mismo libro.', question: '¿Qué te pasó a ti al probarlo?' }] });
     agent.purgeAgentSource(s.ctx.db, 'work', 11n); expect(s.rows('agentAiRun')).toHaveLength(0);
     s.authorize('style', 2); s.claim(2); s.finish(2, { summary: 'Escribe en pasos.', traits: [] });
-    s.as(admin); remove_member(s.ctx, { identity: owner }); expect(s.rows('agentAiRun')).toHaveLength(0);
+    s.as(admin); remove_member(s.ctx, { identity: owner }); expect(s.rows('agentAiRun')).toHaveLength(1);
+    s.as(owner); expect(s.authorize('style', 3)).toMatchObject({ ok: false });
   });
 });

@@ -5,6 +5,8 @@ import { useDataSource, useSnapshot } from '../data/DataContext';
 import type { ProgressStatus, ResourceFile, ResourceTargetKind, Work } from '../data/types';
 import { formatTime, memberName } from '../lib/format';
 import { FilePicker } from './FilePicker';
+import { UploadFileList } from './uploads/UploadFileList';
+import { useResourceUploadQueue } from './uploads/ResourceUploader';
 import { RichText } from './RichText';
 import { useAction } from './useAction';
 import { ContentWithdrawal } from './ContentWithdrawal';
@@ -91,53 +93,38 @@ function ResourceSectionForTarget({ kind, id, version, canEdit, title = 'Archivo
   const { resourceFiles } = snapshot;
   const source = useDataSource();
   const { error, pending, run } = useAction();
-  const [busy, setBusy] = useState(false);
-  const [retry, setRetry] = useState<{ files: File[]; version: number } | null>(null);
-  const controller = useRef<AbortController | null>(null);
-  const [progress, setProgress] = useState<{ name: string; done: number; total: number } | null>(null);
-  useEffect(() => () => controller.current?.abort(), []);
+  const queue = useResourceUploadQueue();
   const files = resourceFiles.filter((f) => f.targetKind === kind && f.targetId === id && !f.removedAt);
   const retired = kind === 'evidence' ? resourceFiles.filter((f) => f.targetKind === kind && f.targetId === id && f.removedAt) : [];
   const publication = kind === 'work' ? snapshot.works.find((r) => r.id === id) : kind === 'evidence' ? snapshot.evidences.find((r) => r.id === id) : undefined;
   const withdrawnAt = publication?.withdrawnAt;
-  const upload = async (list: File[], firstVersion = version) => {
-    if (busy) return;
-    setBusy(true);
-    setRetry(null);
-    const current = new AbortController();
-    controller.current = current;
-    let expected = firstVersion;
-    try {
-      for (let index = 0; index < list.length; index++) {
-        const file = list[index]!;
-        setProgress({ name: file.name, done: 0, total: file.size });
-        const saved = await run(async () => { await source.attachResourceFile(kind, id, file, expected,
-          { signal: current.signal, onProgress: (done, total) => setProgress({ name: file.name, done, total }) }); return true; });
-        if (!saved) { if (!current.signal.aborted) setRetry({ files: list.slice(index), version: expected }); break; }
-        expected++;
-        if (current.signal.aborted) break;
-      }
-    } finally { controller.current = null; setProgress(null); setBusy(false); }
-  };
+  const hasPending = queue.pendingCount > 0;
+  const visibleItems = queue.items.filter((item) => !item.fileId || !resourceFiles.some((file) => file.id === item.fileId));
+  const upload = (list: File[]) => { queue.addFiles(list); void queue.upload(kind, id, version); };
+  useEffect(() => { if (!canEdit || withdrawnAt) queue.cancel(); }, [canEdit, withdrawnAt]);
   return <section className="academic-resources" aria-label={title}>
     <h3 className="label">{title}</h3>
     {(kind === 'work' || kind === 'evidence') && <ContentWithdrawal kind={kind} id={id} version={version} withdrawnAt={withdrawnAt}
       canEdit={canEdit || snapshot.me?.isCreator} reasonRequired={!canEdit} />}
     {!files.length && <p className="muted">Sin archivos adjuntos.</p>}
-    <ResourceDownloads files={files} disabled={busy || pending}
+    <ResourceDownloads files={files} disabled={queue.busy || pending || hasPending}
       onRemove={canEdit && !withdrawnAt ? (file) => { void run(() => source.removeResourceFile(file.id, version)); } : undefined} />
     {retired.length > 0 && <details className="academic-version-list">
       <summary>Archivos retirados ({retired.length})</summary>
-      <ResourceDownloads files={retired} disabled={busy || pending}
+      <ResourceDownloads files={retired} disabled={queue.busy || pending || hasPending}
         onRestore={canEdit ? (file) => { void run(() => source.restoreResourceFile(file.id, version)); } : undefined} />
     </details>}
     {canEdit && !withdrawnAt && <>
-      <FilePicker onFiles={(list) => void upload(list)} busy={busy || pending} disabled={Boolean(retry)} />
-      {progress && <p role="status">Subiendo {progress.name}: {Math.round(progress.done / progress.total * 100)} % <button type="button" className="link-button" onClick={() => controller.current?.abort()}>Cancelar subida</button></p>}
-      {retry && <div className="academic-upload-retry"><p>Quedan por confirmar: {retry.files.map((file) => file.name).join(', ')}.</p><button type="button" disabled={busy || pending} onClick={() => void upload(retry.files, retry.version)}>Reintentar archivos pendientes</button><button type="button" className="secondary" disabled={busy || pending} onClick={() => setRetry(null)}>Descartar pendientes</button></div>}
+      <FilePicker onFiles={upload} busy={queue.busy || pending} disabled={hasPending} />
+      <UploadFileList items={visibleItems} disabled={queue.busy || pending}
+        onRemove={(fileId) => void queue.remove(fileId)} onRetry={(fileId) => void queue.retry(fileId)} onCancel={() => queue.cancel()} />
+      {hasPending && !queue.busy && <div className="academic-upload-retry"><p>Quedan por confirmar: {queue.items.filter((file) => file.state !== 'complete').map((file) => file.name).join(', ')}.</p>
+        <button type="button" disabled={queue.busy || pending} onClick={() => void queue.upload(kind, id, version)}>Reintentar archivos pendientes</button>
+        <button type="button" className="secondary" disabled={queue.busy || pending} onClick={() => { void (async () => { for (const file of queue.items.filter((item) => item.state !== 'complete')) await queue.remove(file.id); })(); }}>Descartar pendientes</button>
+      </div>}
       <p className="field__hint">Hasta 50 MB por archivo. Los archivos de versiones anteriores se conservan en el historial.</p>
     </>}
-    {error && <p className="error" role="alert">{error}</p>}
+    {(error || queue.error) && <p className="error" role="alert">{error ?? queue.error}</p>}
   </section>;
 }
 

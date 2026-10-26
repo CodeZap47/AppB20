@@ -27,6 +27,7 @@ function connection(overrides: Record<string, unknown[]> = {}): Pick<DbConnectio
     'helpPosts', 'myHelpContactRequests',
     'teachingPractices', 'myTeachingPersonal', 'teachingQuestions',
     'spacedCollections', 'spacedCards', 'spacedUnavailableCards', 'mySpacedEnrollments', 'mySpacedProgress', 'mySpacedReviews',
+    ...('memberUploadStats' in overrides ? ['memberUploadStats'] : []),
   ];
   return { db: Object.fromEntries(names.map((name) => [name, table(
     overrides[name] ?? (name === 'myMember' || name === 'members' ? [member] : []),
@@ -89,6 +90,23 @@ describe('snapshot de SpacetimeDB', () => {
       connection: 'offline', connectionError: 'Sin conexión', me: undefined, members: [],
     });
     expect(readSnapshot(connection({ myMember: [] }), ID)).toEqual(emptySnapshot('ready'));
+  });
+
+  it('lee totales de perfiles sin metadatos de adjuntos y descarta miembros dados de baja en caché', () => {
+    const data = readSnapshot(connection({ memberUploadStats: [
+      { memberId: identity(), bytes: 1024n, fileCount: 2n },
+      { memberId: identity(OTHER), bytes: 8000n, fileCount: 3n },
+    ] }), ID);
+    expect(data.memberUploadStats).toEqual([{ memberId: ID, bytes: 1024, fileCount: 2 }]);
+    expect(PUBLIC_VIEWS).toContain('member_upload_stats');
+    expect(readSnapshot(connection(), ID).memberUploadStats).toBeUndefined();
+    expect(readSnapshot(connection({ memberUploadStats: [] }), ID).memberUploadStats).toEqual([]);
+  });
+
+  it('rechaza totales de bytes que no se pueden representar con precisión', () => {
+    expect(() => readSnapshot(connection({ memberUploadStats: [
+      { memberId: identity(), bytes: BigInt(Number.MAX_SAFE_INTEGER) + 1n, fileCount: 1n },
+    ] }), ID)).toThrow(/tamaño/);
   });
 
   it('conserva IDs u64, autores y fechas sin perder precisión', () => {

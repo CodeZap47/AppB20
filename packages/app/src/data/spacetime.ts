@@ -7,7 +7,10 @@ import { config } from '../config';
 import { AiClient } from './aiClient';
 import { createGuideAiActions } from './guideAiClient';
 import { createAgentAiActions } from './agentAiClient';
+import { createDocumentActions } from './documentClient';
+import { createPresentationFeatureActions } from './presentationFeatureClient';
 import { createExamActions } from './examClient';
+import { createMembershipActions } from './membershipActions';
 
 export interface ConnectionOptions {
   uri: string;
@@ -16,6 +19,8 @@ export interface ConnectionOptions {
   /** El adaptador heredado toma el token renovado en cada solicitud. */
   getToken?: () => string | undefined;
   apiUrl?: string;
+  /** Servicio que cifra los enlaces; independiente de las descargas heredadas. */
+  invitationApiUrl?: string;
 }
 
 export interface ConnectionCallbacks {
@@ -161,6 +166,6 @@ export function createSpacetimeDataSource(options: ConnectionOptions, factory?: 
   source.setAiClient(ai);
   const files = new ResourceTransport({ getConnection: source.getConnection, getIdentity: source.getIdentity,
     legacy: legacyApiUrl ? { apiUrl: legacyApiUrl, getToken: options.getToken ?? (() => options.token) } : undefined });
-  return Object.assign(source, createSpacetimeActions(source.getConnection, source.getIdentity, files), createGuideAiActions(ai), createExamActions(ai), createAgentAiActions(ai)) as
+  return Object.assign(source, createSpacetimeActions(source.getConnection, source.getIdentity, files), createMembershipActions(source.getConnection, { apiUrl: options.invitationApiUrl ?? options.apiUrl ?? config.invitationApiUrl, getToken: options.getToken ?? (() => options.token) }), createGuideAiActions(ai), createExamActions(ai), createDocumentActions(ai), { presentationFeatures: createPresentationFeatureActions(ai) }, createAgentAiActions(ai)) as
     SpacetimeDataSource & Actions;
 }

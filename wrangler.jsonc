@@ -1,25 +1,22 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  // Cambiar este nombre si Cloudflare asigna uno distinto al crear el proyecto.
   "name": "app-b20",
   "pages_build_output_dir": "./apps/web/dist",
   "compatibility_date": "2026-10-20",
-  // Pages toma estas variables públicas como fuente de verdad del build.
-  // Los secretos del backend nunca se configuran aquí.
   "vars": {
     "VITE_DATA_MODE": "spacetime",
     "VITE_WEB_ORIGIN": "https://b20.mx",
-    // El subdominio de Pages y sus aliases redirigen a VITE_WEB_ORIGIN.
     "VITE_PAGES_ORIGIN": "https://app-b20.pages.dev",
     "VITE_SPACETIME_URI": "wss://maincloud.spacetimedb.com",
     "VITE_SPACETIME_DB": "app-b20-34245",
-    "VITE_SPACETIMEAUTH_CLIENT_ID": "client_034jL0AHYYQ1bps8SupHU0",
-    "VITE_SPACETIMEAUTH_AUTHORITY": "https://auth.spacetimedb.com/oidc",
-    "VITE_SPACETIMEAUTH_REDIRECT_URI": "",
-    "VITE_SPACETIMEAUTH_POST_LOGOUT_REDIRECT_URI": "",
-    // Vacío: ningún archivo usa ya R2; todos viven en SpacetimeDB.
+    "VITE_SUPABASE_URL": "https://pypdkigeywdughdhxlcm.supabase.co",
+    "VITE_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_5aj-zMaEnGAXL5XAK7wfcg_gtJv6axe",
+    "VITE_SUPABASE_OAUTH_PROVIDERS": "",
+    "VITE_SUPABASE_PASSKEYS_ENABLED": "false",
     "VITE_API_URL": "",
-    "VITE_AI_API_URL": "https://app-b20-ai.aguaseero.workers.dev",
-    "VITE_VAPID_PUBLIC_KEY": "BDcU2DLr4bYXsOFyDIR5GJIPFDP8lg0UTdSUg4T7HhSvrO0fIK_YEuXE1cxySQIjYANBXvGBxmL-r6t4bN6nBBo"
+    "VITE_AI_API_URL": "https://api.b20.mx",
+    "VITE_VAPID_PUBLIC_KEY": "BI3gEf_VjuIUVWb__T2opJzEo-boIJ1L4-gRWSJptTM5VTVvbn8hAZPW5ixl92Iq1_FWkk1gmalQxu1wmxj_36U",
+    "VITE_AUTH_PROVIDER": "supabase",
+    "VITE_INVITATION_API_URL": "https://api.b20.mx"
   }
 }

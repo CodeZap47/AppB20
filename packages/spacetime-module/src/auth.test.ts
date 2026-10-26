@@ -172,6 +172,64 @@ describe('SpacetimeAuth y acceso por invitación en módulo', () => {
     expect(subjects(ctx)).toHaveLength(1);
   });
 
+  it.each(['', ' \t\n ', 'alumno@example.com', 'Ana @ Pérez', 'a'.repeat(81)])('rechaza el nombre %j sin consumir su invitación', (displayName) => {
+    const { ctx, db, invite } = setup();
+    invite();
+    const invitation = db.invitation.rows.get('alumno@example.com');
+    const email = db.invitationEmail.rows.get('alumno@example.com');
+    expect(() => join_group(ctx, { displayName })).toThrow(/nombre/);
+    expect(db.member.rows.size).toBe(0);
+    expect(db.invitation.rows.get('alumno@example.com')).toEqual(invitation);
+    expect(db.invitationEmail.rows.get('alumno@example.com')).toEqual(email);
+  });
+
+  it.each(['Ana', 'José Ángel', '李', 'Á'.repeat(80)])('guarda el nombre %j al unirse y al editarlo', (displayName) => {
+    const { ctx, db, invite } = setup();
+    invite();
+    join_group(ctx, { displayName: ` ${displayName} ` });
+    expect(db.member.rows.get('student')?.displayName).toBe(displayName);
+    expect(db.invitation.rows.size).toBe(0);
+    const member = db.member.rows.get('student')!;
+    const photoUrl = 'https://example.com/foto.jpg';
+    update_profile(ctx, { displayName: ` ${displayName} `, photoUrl });
+    expect(db.member.rows.get('student')).toEqual({ ...member, displayName, photoUrl });
+  });
+
+  it.each(['', ' \t\n ', 'alumno@example.com', 'Ana @ Pérez', 'a'.repeat(81)])('rechaza editar el nombre a %j sin cambiar el perfil', (displayName) => {
+    const { ctx, db, join } = setup();
+    join();
+    update_profile(ctx, { displayName: 'Alumno', photoUrl: 'https://example.com/foto.jpg' });
+    const before = db.member.rows.get('student');
+    expect(() => update_profile(ctx, { displayName, photoUrl: 'https://example.com/otra.jpg' })).toThrow(/nombre/);
+    expect(db.member.rows.get('student')).toEqual(before);
+  });
+
+  it('no valida un nombre nuevo cuando la membresía ya existe', () => {
+    const { ctx, db, join, invite } = setup();
+    join();
+    const member = db.member.rows.get('student');
+    invite();
+    expect(() => join_group(ctx, { displayName: 'alumno@example.com' })).not.toThrow();
+    expect(db.member.rows.get('student')).toEqual(member);
+    expect(db.invitation.rows.size).toBe(0);
+  });
+
+  it('permite corregir un correo guardado como nombre sin cambiar la membresía ni la foto', () => {
+    const { ctx, db, join } = setup();
+    join();
+    const before = { ...db.member.rows.get('student')!, displayName: 'alumno@example.com', photoUrl: 'https://example.com/foto.jpg' };
+    db.member.rows.set('student', before);
+    update_profile(ctx, { displayName: ' José Ángel ', photoUrl: before.photoUrl });
+    expect(db.member.rows.size).toBe(1);
+    expect(db.member.rows.get('student')).toEqual({ ...before, displayName: 'José Ángel' });
+  });
+
+  it('comprueba la invitación antes de validar el nombre de un nuevo miembro', () => {
+    const { ctx, db } = setup();
+    expect(() => join_group(ctx, { displayName: '' })).toThrow(/lista autorizada/);
+    expect(db.member.rows.size).toBe(0);
+  });
+
   it.each([
     ['sesión de Google directo', { issuer: 'https://accounts.google.com' }],
     ['cliente ajeno', { audience: ['unrelated-client'] }],

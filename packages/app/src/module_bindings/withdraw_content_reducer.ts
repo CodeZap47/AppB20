@@ -16,4 +16,5 @@ export default {
   withdrawn: __t.bool(),
   expectedVersion: __t.u32(),
   reason: __t.string(),
+  acknowledgeImpact: __t.option(__t.bool()),
 };

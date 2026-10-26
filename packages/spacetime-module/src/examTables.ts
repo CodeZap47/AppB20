@@ -19,4 +19,8 @@ export const examOperation = table({ name: 'exam_operation' }, {
 export const examGenerationImport = table({ name: 'exam_generation_import' }, {
   generationId: t.string().primaryKey(), actor: t.identity(), examId: t.string(), version: t.u32(),
 });
-export const examTables = { studyExam, examVersion, examAttempt, examOperation, examGenerationImport };
+export const examBankQuestion = table({ name: 'exam_bank_question' }, {
+  id: t.string().primaryKey(), owner: t.identity().index('btree'), subjectId: t.u64(), termId: t.u64().optional(), visibility: t.string(), version: t.u32(), updatedAt: t.timestamp(),
+});
+export const examBankVersion = table({ name: 'exam_bank_version' }, { key: t.string().primaryKey(), bankId: t.string().index('btree'), version: t.u32(), json: t.string(), createdAt: t.timestamp() });
+export const examTables = { examBankQuestion, examBankVersion,  studyExam, examVersion, examAttempt, examOperation, examGenerationImport };

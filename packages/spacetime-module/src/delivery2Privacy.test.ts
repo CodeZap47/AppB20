@@ -7,6 +7,8 @@ vi.mock('spacetimedb/server', () => {
 });
 import { change_history, create_teaching_practice, spaced_cards, spaced_unavailable_cards, stickers } from './index';
 import type { Ctx } from './moduleContext';
+import { extraWriter, withdrawnIncludingParent } from './delivery2Handlers';
+import { toggleAnswerUsefulness } from './knowledgeHandlers';
 const person = (value: string) => Identity.fromString(value.repeat(64));
 const admin = person('a'), author = person('b'), peer = person('c');
 const at = new Timestamp(1_700_000_000_000_000n);
@@ -71,6 +73,14 @@ describe('privacidad entre módulos de la segunda entrega', () => {
     expect(spaced_cards(ctx)).toEqual([]);
     expect(spaced_unavailable_cards(ctx)).toEqual([{ id: 11n, collectionId: 10n, version: 1, archived: false }, { id: 12n, collectionId: 10n, version: 1, archived: false }]);
     expect(JSON.stringify(spaced_unavailable_cards(ctx), (_key, value) => typeof value === 'bigint' ? String(value) : value)).not.toContain('Secreto');
+  });
+
+  it('una respuesta bajo una pregunta retirada no admite adjuntos ni nuevas valoraciones del autor', () => {
+    const { ctx, as } = setup({ question: [{ id: 3n, author }], answer: [{ id: 4n, questionId: 3n, author }], contentStatus: [{ key: 'question:3', withdrawnAt: at }] });
+    as(author);
+    expect(withdrawnIncludingParent(ctx.db, 'answer', 4n)).toBe(true);
+    expect(() => extraWriter(ctx, 'answer', 4n, author)).toThrow('disponible');
+    expect(() => toggleAnswerUsefulness(ctx, { answerId: 4n })).toThrow('disponible');
   });
 
   it('una fuente retirada no puede iniciar una práctica nueva ni siquiera para el autor', () => {

@@ -5,7 +5,7 @@ vi.mock('spacetimedb/server', () => {
   return { SenderError: class SenderError extends Error {}, t: new Proxy({}, { get: () => () => builder }), table: () => ({ rowType: builder }), schema: () => ({ reducer: handler, procedure: handler, init: handler, clientConnected: handler, view: handler }) };
 });
 import './index';
-import { authorizeNotification, claimNotifications, commitReminders, emitMessageNotifications, emitNotificationEvent, finishNotification, isNotificationService, markNotificationRead, readableNotification, registerPushInstallation, removePushInstallation, requestNotificationTest, saveNotificationPreferences, setNotificationService, sweepNotifications } from './notificationHandlers';
+import { authorizeNotification, claimNotifications, commitReminders, emitMessageNotifications, emitNotificationEvent, finishNotification, isNotificationService, markNotificationRead, readableNotification, registerPushInstallation, removePushInstallation, requestNotificationTest, saveNotificationPreferences, setNotificationService, sweepNotifications, suppressContentNotifications } from './notificationHandlers';
 import { DEFAULT_NOTIFICATION_PREFERENCES } from '../../core/src/notifications';
 import type { Ctx } from './moduleContext';
 const person = (digit: string) => Identity.fromString(digit.repeat(64));
@@ -97,6 +97,19 @@ describe('bandeja privada y cola de notificaciones', () => {
     rows('assignment').push({ id: 22n }); emitNotificationEvent(ctx, { eventKey: 'due:22:1', kind: 'due_change', sourceKind: 'assignment', sourceId: 22n, route: '/m/tareas/22', recipientIds: ids });
     expect(rows('notification')).toHaveLength(100); as(service); sweepNotifications(ctx); expect(rows('notification')).toHaveLength(105); sweepNotifications(ctx); expect(rows('notification')).toHaveLength(105);
   });
+  it('retirar contenido cancela fanout y envíos pendientes de forma terminal aunque se restaure', () => {
+    const { ctx, rows, as } = setup();
+    rows('notificationEvent').push({ key: 'group-message:7', sourceKind: 'group_message', sourceId: '7', recipientIds: [author, peer], cursor: 1, completed: false });
+    rows('notification').push({ id: 50n, sourceKind: 'group_message', sourceId: '7', dedupeKey: `${author.toHexString()}:group-message:7` });
+    rows('notificationDelivery').push(...['pending', 'leased', 'sent'].map((status, index) => ({ id: `delivery-${index}`, notificationId: 50n, status, leaseId: lease, leaseUntil: ctx.timestamp })));
+    suppressContentNotifications(ctx, 'group_message', 7n);
+    expect(rows('notificationEvent')[0]).toMatchObject({ completed: true, cursor: 2 });
+    expect(rows('notificationDelivery').map(row => row.status)).toEqual(['cancelled', 'cancelled', 'sent']);
+    as(service); sweepNotifications(ctx);
+    expect(rows('notification')).toHaveLength(1);
+    expect(claimNotifications(ctx, { leaseId: lease, limit: 8 }).jobs).toHaveLength(0);
+  });
+
   it('permite avisar de una invitación privada sin conceder acceso a otros miembros', () => {
     const { ctx, rows } = setup(); rows('studyRoom').push({ id: 8n, visibility: 'private', organizer: peer, status: 'scheduled' }); rows('roomMember').push({ key: `8:${author.toHexString()}`, status: 'invited' });
     expect(readableNotification(ctx.db, author, { memberId: author, sourceKind: 'room', sourceId: '8' })).toBe(true); expect(readableNotification(ctx.db, admin, { memberId: admin, sourceKind: 'room', sourceId: '8' })).toBe(false);

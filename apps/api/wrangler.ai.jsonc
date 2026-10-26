@@ -1,35 +1,54 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
-  "name": "app-b20-ai",
+  "name": "b20-api",
   "account_id": "ab3a0c0641ce296cd9f38fab76f6d90b",
   "main": "src/guideWorker.ts",
   "compatibility_date": "2026-10-21",
   "compatibility_flags": [
     "nodejs_compat"
   ],
-  "workers_dev": true,
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "api.b20.mx",
+      "custom_domain": true
+    }
+  ],
   "preview_urls": false,
   "observability": {
     "enabled": true,
-    "head_sampling_rate": 1
+    "head_sampling_rate": 1,
+    "redact_query_string": false,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true,
+      "invocation_logs": true
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.01
+    }
   },
   "vars": {
-    "CORS_ORIGINS": "https://b20.mx,https://app-b20.pages.dev,http://localhost:5173,capacitor://localhost,https://localhost",
-    "OIDC_ISSUER": "https://auth.spacetimedb.com/oidc",
-    "OIDC_AUDIENCE": "client_034jL0AHYYQ1bps8SupHU0",
-    "OIDC_JWKS_URI": "https://auth.spacetimedb.com/oidc/jwks",
-    "SPACETIMEDB_URI": "https://maincloud.spacetimedb.com",
-    "SPACETIMEDB_MODULE": "app-b20-34245",
-    "AI_ENABLED": "true",
-    "AI_MASTER_VERSION": "v1",
-    "GEMINI_MODEL": "gemini-3.8-flash",
     "AGENT_AI_STEPS": "style",
-    "NOTIFICATIONS_ENABLED": "true",
-    "VAPID_PUBLIC_KEY": "BDcU2DLr4bYXsOFyDIR5GJIPFDP8lg0UTdSUg4T7HhSvrO0fIK_YEuXE1cxySQIjYANBXvGBxmL-r6t4bN6nBBo",
-    "VAPID_SUBJECT": "https://b20.mx",
-    "INVITATION_EMAILS_ENABLED": "false",
+    "AI_ENABLED": "true",
+    "AI_MASTER_VERSION": "v2",
+    "APP_URL": "https://b20.mx",
+    "CORS_ORIGINS": "https://b20.mx,https://app-b20.pages.dev,http://localhost:5173,capacitor://localhost,https://localhost",
+    "GEMINI_MODEL": "gemini-3.8-flash",
     "INVITATION_EMAIL_FROM": "",
-    "APP_URL": "https://b20.mx"
+    "INVITATION_EMAILS_ENABLED": "false",
+    "NOTIFICATIONS_ENABLED": "true",
+    "OIDC_AUDIENCE": "authenticated",
+    "OIDC_ISSUER": "https://pypdkigeywdughdhxlcm.supabase.co/auth/v1",
+    "OIDC_JWKS_URI": "https://pypdkigeywdughdhxlcm.supabase.co/auth/v1/.well-known/jwks.json",
+    "SPACETIMEDB_MODULE": "app-b20-34245",
+    "SPACETIMEDB_URI": "https://maincloud.spacetimedb.com",
+    "SUPABASE_URL": "https://pypdkigeywdughdhxlcm.supabase.co",
+    "VAPID_PUBLIC_KEY": "BI3gEf_VjuIUVWb__T2opJzEo-boIJ1L4-gRWSJptTM5VTVvbn8hAZPW5ixl92Iq1_FWkk1gmalQxu1wmxj_36U",
+    "VAPID_SUBJECT": "https://b20.mx",
+    "INVITATION_MASTER_VERSION": "v1"
   },
   "send_email": [
     {
@@ -41,12 +60,19 @@
       "AI_SERVICE_TOKEN",
       "AI_MASTER_KEYS_JSON",
       "NOTIFICATION_SERVICE_TOKEN",
-      "VAPID_PRIVATE_KEY"
+      "VAPID_PRIVATE_KEY",
+      "INVITATION_MASTER_KEYS_JSON"
     ]
   },
   "triggers": {
     "crons": [
       "* * * * *"
     ]
-  }
+  },
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "app-b20-files"
+    }
+  ]
 }

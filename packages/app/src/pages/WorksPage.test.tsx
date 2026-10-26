@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DataProvider } from '../data/DataContext';
 import { createDemoState, DemoDataSource } from '../data/demo';
 import type { DataSource } from '../data/types';
-import { SubmitWorkPage } from './WorksPage';
+import { AssignmentFormPage, AssignmentPage, SubmitWorkPage } from './WorksPage';
 
 let root: Root;
 let container: HTMLDivElement;
@@ -38,6 +38,104 @@ async function submitForm() {
 async function openOtherTask() {
   await act(async () => [...container.querySelectorAll('a')].find((link) => link.textContent === 'Otra tarea')!.click());
 }
+
+async function renderAssignmentForm(assignmentId?: string) {
+  const subjectId = source.getSnapshot().assignments[0]!.subjectId;
+  const path = assignmentId ? `/m/tareas/${assignmentId}/editar` : `/m/tareas/nueva?materia=${subjectId}`;
+  await act(async () => root.render(<DataProvider source={source}><MemoryRouter initialEntries={[path]}>
+    <Routes><Route path="/m/tareas/nueva" element={<AssignmentFormPage />} />
+      <Route path="/m/tareas/:assignmentId/editar" element={<AssignmentFormPage />} />
+      <Route path="/m/tareas/:assignmentId" element={<p>Página guardada</p>} /></Routes><Location />
+  </MemoryRouter></DataProvider>));
+}
+
+async function typeTitle(value: string) {
+  const label = [...container.querySelectorAll('label')].find((element) => element.querySelector('.field__label')?.textContent === 'Título')!;
+  const input = label.querySelector('input')!;
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+  await act(async () => { setter.call(input, value); input.dispatchEvent(new Event('input', { bubbles: true })); });
+}
+
+describe('adjuntos de la consigna', () => {
+  it('guarda una tarea una sola vez y reintenta únicamente los archivos pendientes', async () => {
+    const create = vi.spyOn(source, 'createAssignment');
+    const original = source.attachResourceFile.bind(source);
+    const transfer = vi.spyOn(source, 'attachResourceFile').mockImplementationOnce(original)
+      .mockRejectedValueOnce(new Error('Sin conexión')).mockImplementation(original);
+    await renderAssignmentForm();
+    await typeTitle('Consigna con documentos');
+    await selectFiles([new File(['uno'], 'consigna.pdf'), new File(['dos'], 'ejemplo.png')]);
+    await submitForm();
+
+    expect(create).toHaveBeenCalledTimes(1);
+    const id = transfer.mock.calls[0]![1];
+    expect(container.textContent).toContain('La página ya está guardada');
+    expect(container.querySelector('fieldset')?.disabled).toBe(true);
+    expect(container.querySelector('[data-location]')?.textContent).toContain('/m/tareas/nueva');
+    expect(source.getSnapshot().resourceFiles.filter((file) => file.targetId === id)).toHaveLength(1);
+
+    await submitForm();
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(transfer.mock.calls.map(([kind, targetId, file, version]) => [kind, targetId, file.name, version])).toEqual([
+      ['assignment', id, 'consigna.pdf', 1], ['assignment', id, 'ejemplo.png', 2], ['assignment', id, 'ejemplo.png', 2],
+    ]);
+    expect(source.getSnapshot().resourceFiles.filter((file) => file.targetId === id)).toHaveLength(2);
+    expect(container.querySelector('[data-location]')?.textContent).toBe(`/m/tareas/${id}`);
+  });
+
+  it('adjunta al editar sin guardar otra versión de texto cuando no cambió', async () => {
+    const assignment = source.getSnapshot().assignments[0]!;
+    const update = vi.spyOn(source, 'updateAssignment');
+    const transfer = vi.spyOn(source, 'attachResourceFile');
+    await renderAssignmentForm(assignment.id);
+    expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true);
+    await selectFiles([new File(['documento'], 'recurso.pdf')]);
+    expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
+    await submitForm();
+    // La demo también pasa por updateAssignment al versionar el adjunto.
+    expect(update.mock.calls.filter((args) => args[2] !== undefined)).toHaveLength(0);
+    expect(transfer).toHaveBeenCalledWith('assignment', assignment.id, expect.any(File), assignment.version, expect.any(Object));
+    expect(source.getSnapshot().assignments.find((item) => item.id === assignment.id)?.version).toBe(assignment.version + 1);
+  });
+
+  it('mantiene guardada la edición textual y no la vuelve a enviar si falla un adjunto', async () => {
+    const assignment = source.getSnapshot().assignments[0]!;
+    const update = vi.spyOn(source, 'updateAssignment');
+    const original = source.attachResourceFile.bind(source);
+    const transfer = vi.spyOn(source, 'attachResourceFile').mockRejectedValueOnce(new Error('Sin conexión')).mockImplementation(original);
+    await renderAssignmentForm(assignment.id);
+    await typeTitle('Consigna corregida');
+    await selectFiles([new File(['documento'], 'recurso.pdf')]);
+    await submitForm();
+    expect(update.mock.calls.filter((args) => args[2] !== undefined)).toHaveLength(1);
+    expect(source.getSnapshot().assignments.find((item) => item.id === assignment.id)?.title).toBe('Consigna corregida');
+    await submitForm();
+    expect(update.mock.calls.filter((args) => args[2] !== undefined)).toHaveLength(1);
+    expect(transfer.mock.calls.map((args) => args[3])).toEqual([assignment.version + 1, assignment.version + 1]);
+    expect(container.querySelector('[data-location]')?.textContent).toBe(`/m/tareas/${assignment.id}`);
+  });
+
+  it('adjunta al editar el trabajo sin guardar una revisión textual sin cambios', async () => {
+    const assignment = source.getSnapshot().assignments[0]!;
+    const workId = await source.publishWork({ assignmentId: assignment.id, title: 'Mi trabajo', description: 'Descripción', coauthorIds: [], status: 'draft' });
+    const update = vi.spyOn(source, 'saveWorkVersion');
+    const transfer = vi.spyOn(source, 'attachResourceFile');
+    await act(async () => root.render(<DataProvider source={source}><MemoryRouter initialEntries={[`/m/tareas/${assignment.id}`]}>
+      <Routes><Route path="/m/tareas/:assignmentId" element={<AssignmentPage />} /></Routes>
+    </MemoryRouter></DataProvider>));
+    const card = container.querySelector<HTMLElement>(`#trabajo-${workId}`)!;
+    await act(async () => card.querySelector<HTMLButtonElement>('button[aria-label="Editar mi trabajo"]')!.click());
+    const editForm = card.querySelector<HTMLFormElement>('form.form')!;
+    const input = editForm.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(input, 'files', { value: [new File(['documento'], 'recurso.pdf')], configurable: true });
+    await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
+    await act(async () => editForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+    expect(update).not.toHaveBeenCalled();
+    expect(transfer).toHaveBeenCalledWith('work', workId, expect.any(File), 1, expect.any(Object));
+    expect(source.getSnapshot().works.find((item) => item.id === workId)?.version).toBe(2);
+    expect(card.querySelector('fieldset.academic-publish-fields')).toBeNull();
+  });
+});
 
 describe('publicar un trabajo con varios archivos', () => {
   it('inicia un formulario nuevo al cambiar de tarea sin reutilizar el trabajo ni los archivos anteriores', async () => {
@@ -113,12 +211,12 @@ describe('publicar un trabajo con varios archivos', () => {
     await renderForm(assignment.id);
     await selectFiles([new File(['uno'], 'primero.txt')]);
     await submitForm();
-    await act(async () => [...container.querySelectorAll('button')].find((button) => button.textContent === 'Cancelar subida')!.click());
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Cancelar primero.txt"]')!.click());
     expect(signal?.aborted).toBe(true);
     await act(async () => finish!('confirmado-antes-de-cancelar'));
     expect(transfer).toHaveBeenCalledTimes(1);
     expect(container.querySelector('[data-location]')?.textContent).toBe(`/m/tareas/${assignment.id}/subir`);
-    expect(container.textContent).toContain('Los archivos ya confirmados permanecen guardados');
+    expect(container.querySelector('[data-upload-state="complete"]')?.textContent).toContain('primero.txt');
     expect(container.querySelector('form')).not.toBeNull();
   });
 

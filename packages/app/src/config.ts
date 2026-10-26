@@ -11,6 +11,7 @@ export const config = {
   spacetimeDb: import.meta.env.VITE_SPACETIME_DB ?? 'app-b20',
   apiUrl: import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:8787' : ''),
   aiApiUrl: import.meta.env.VITE_AI_API_URL || import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8787' : ''),
+  invitationApiUrl: import.meta.env.VITE_INVITATION_API_URL || import.meta.env.VITE_AI_API_URL || import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8787' : ''),
   spacetimeAuthClientId: import.meta.env.VITE_SPACETIMEAUTH_CLIENT_ID ?? '',
   spacetimeAuthExtensionClientId: import.meta.env.VITE_SPACETIMEAUTH_EXTENSION_CLIENT_ID ?? '',
   spacetimeAuthAndroidClientId: import.meta.env.VITE_SPACETIMEAUTH_ANDROID_CLIENT_ID ?? '',

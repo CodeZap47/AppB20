@@ -1,4 +1,4 @@
-import { useId, useState, type DragEvent, type FormEvent, type ReactNode } from 'react';
+import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { commandNameError, MAX_STICKERS_PER_PACK, normalizeCommandName } from '@b20/core';
 import { useDataSource, useSnapshot } from '../data/DataContext';
@@ -9,6 +9,9 @@ import { useAction } from '../components/useAction';
 import { memberName } from '../lib/format';
 import { prepareStickers, type PreparedStickers } from '../lib/stickerImport';
 import { StickerImage } from '../components/StickerImage';
+import { FilePicker } from '../components/FilePicker';
+import { UploadFileList, type UploadFileItem } from '../components/uploads/UploadFileList';
+import '../components/uploads/consumers.css';
 
 function ToolHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
@@ -53,49 +56,64 @@ export function StickersPage() {
   const source = useDataSource();
   const { me, members, stickerPacks, stickers } = useSnapshot();
   const { error, run } = useAction();
-  const inputId = useId();
   const [prepared, setPrepared] = useState<PreparedStickers | null>(null);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
-  const [over, setOver] = useState(false);
   const [done, setDone] = useState('');
+  const [rows, setRows] = useState<UploadFileItem[]>([]);
+  const [stage, setStage] = useState<'preparing' | 'importing'>();
+  const working = useRef(false);
+  const attempt = useRef<{ name: string; files: File[] } | null>(null);
 
-  const take = async (list: FileList | null) => {
-    if (!list?.length) return;
+  const take = async (list: File[]) => {
+    if (!list.length || working.current || attempt.current) return;
+    working.current = true;
     setDone('');
+    setPrepared(null);
     setBusy(true);
+    setStage('preparing');
+    setRows(list.map((file, index) => ({ id: `sticker-${index}`, name: file.name, size: file.size, type: file.type, state: 'preparing', progress: 0 })));
     try {
-      const result = await prepareStickers([...list]);
-      setPrepared(result);
-      setName((current) => current || result.packName || '');
+      const result = await run(() => prepareStickers(list));
+      if (result) {
+        setPrepared(result);
+        setName((current) => current || result.packName || '');
+        setRows(result.files.map((file, index) => ({ id: `sticker-${index}`, name: file.name, size: file.size,
+          type: file.type, state: 'selected', progress: 0 })));
+      } else setRows((current) => current.map((item) => ({ ...item, state: 'failed', error: 'No se pudo preparar este paquete.' })));
     } finally {
+      working.current = false;
+      setStage(undefined);
       setBusy(false);
     }
   };
 
-  const onDrop = (e: DragEvent) => {
-    e.preventDefault();
-    setOver(false);
-    void take(e.dataTransfer.files);
-  };
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!prepared?.files.length) return;
+  const submit = async (e?: FormEvent) => {
+    e?.preventDefault();
+    if (!prepared?.files.length || working.current || (!attempt.current && !name.trim())) return;
+    working.current = true;
+    attempt.current ??= { name: name.trim(), files: prepared.files };
+    const pending = attempt.current;
     setBusy(true);
+    setStage('importing');
+    setRows((current) => current.map((item) => ({ ...item, state: 'preparing', progress: 0, error: undefined })));
     try {
-      await source.importStickers(name, prepared.files);
-      const n = prepared.files.length;
+      const imported = await run(async () => { await source.importStickers(pending.name, pending.files); return true; });
+      if (!imported) {
+        setRows((current) => current.map((item) => ({ ...item, state: 'failed', error: 'La importación no terminó. Reintenta el paquete completo.' })));
+        return;
+      }
+      const n = pending.files.length;
       setDone(
-        `${n === 1 ? 'Se importó 1 sticker' : `Se importaron ${n} stickers`} en «${name.trim()}». Por ahora solo tú lo ves.`,
+        `${n === 1 ? 'Se importó 1 sticker' : `Se importaron ${n} stickers`} en «${pending.name}». Por ahora solo tú lo ves.`,
       );
+      setRows((current) => current.map((item) => ({ ...item, state: 'complete', progress: 100 })));
+      attempt.current = null;
       setPrepared(null);
       setName('');
-    } catch (err) {
-      run(() => {
-        throw err;
-      });
     } finally {
+      working.current = false;
+      setStage(undefined);
       setBusy(false);
     }
   };
@@ -113,37 +131,13 @@ export function StickersPage() {
       <section className="panel">
         <h3 className="label">Importar un paquete</h3>
         <form className="form" onSubmit={(e) => void submit(e)}>
-          <label
-            htmlFor={inputId}
-            className={['dropzone', over && 'dropzone--over', busy && 'dropzone--disabled']
-              .filter(Boolean)
-              .join(' ')}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setOver(true);
-            }}
-            onDragLeave={() => setOver(false)}
-            onDrop={onDrop}
-          >
-            <input
-              id={inputId}
-              type="file"
-              multiple
-              className="sr-only"
+          <div className="b20-upload b20-upload--stickers">
+            <FilePicker onFiles={(files) => { void take(files); }} disabled={busy || Boolean(attempt.current)}
               accept=".webp,.png,.gif,.jpg,.jpeg,.wastickers,.zip,image/webp,image/png,image/gif,image/jpeg"
-              disabled={busy}
-              onChange={(e) => {
-                void take(e.target.files);
-                e.target.value = '';
-              }}
-            />
-            <Icon name="upload" size={24} />
-            <strong>Elige o suelta stickers aquí</strong>
-            <span className="muted">
-              Imágenes .webp, .png o .gif (hasta 1 MB cada una) o un paquete .wastickers. Máximo{' '}
-              {MAX_STICKERS_PER_PACK} por paquete.
-            </span>
-          </label>
+              maxSize={Infinity} label="Importar stickers" hint={`Imágenes WebP, PNG, GIF o JPEG, hasta 1 MB cada una, o paquetes .wastickers y .zip. Máximo ${MAX_STICKERS_PER_PACK} stickers.`} />
+            <UploadFileList items={rows} onRetry={prepared && !busy ? () => { void submit(); } : undefined} />
+            {busy && <p role="status">{stage === 'preparing' ? 'Preparando stickers…' : 'Importando stickers…'}</p>}
+          </div>
 
           {prepared && (
             <>
@@ -155,7 +149,7 @@ export function StickersPage() {
                 </div>
               )}
               {prepared.skipped.length > 0 && (
-                <ul className="file-picker__rejected">
+                <ul className="file-picker__rejected" role="alert">
                   {prepared.skipped.map((problem) => (
                     <li key={problem}>{problem}</li>
                   ))}
@@ -171,13 +165,14 @@ export function StickersPage() {
                       placeholder="Por ejemplo: Reacciones del salón"
                       maxLength={60}
                       required
+                      disabled={busy || Boolean(attempt.current)}
                     />
                   </label>
                   <div className="form__actions">
                     <button
                       type="button"
                       className="secondary"
-                      onClick={() => setPrepared(null)}
+                      onClick={() => { setPrepared(null); setRows([]); attempt.current = null; }}
                       disabled={busy}
                     >
                       Descartar

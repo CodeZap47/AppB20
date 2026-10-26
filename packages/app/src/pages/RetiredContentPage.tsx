@@ -4,6 +4,7 @@ import { ContentWithdrawal } from '../components/ContentWithdrawal';
 import type { WithdrawableKind } from '../data/delivery2Types';
 import type { Id } from '../data/types';
 import { useTrashClock } from '../components/useTrashClock';
+import { CONTENT_KIND_LABELS } from '../data/membershipTypes';
 
 export function RetiredContentPage() {
   const data = useSnapshot();
@@ -15,6 +16,13 @@ export function RetiredContentPage() {
   for (const answer of data.answers) if (answer.withdrawnAt) rows.push({ kind: 'answer', id: answer.id, title: data.questions.find((question) => question.id === answer.questionId)?.title ?? 'Respuesta retirada', ownerIds: [answer.authorId], version: answer.version ?? 1, at: answer.withdrawnAt, link: `/m/preguntas/${answer.questionId}` });
   for (const work of data.works) if (work.withdrawnAt) rows.push({ kind: 'work', id: work.id, title: work.title || 'Trabajo', ownerIds: work.authorIds, version: work.version, at: work.withdrawnAt, link: `/m/tareas/${work.assignmentId}?trabajo=${work.id}` });
   for (const evidence of data.evidences) if (evidence.withdrawnAt) rows.push({ kind: 'evidence', id: evidence.id, title: data.activities.find((activity) => activity.id === evidence.activityId)?.title ?? 'Evidencia', ownerIds: [evidence.authorId], version: evidence.version ?? 1, at: evidence.withdrawnAt, link: `/m/actividades/${evidence.activityId}` });
+  for (const entry of data.trashEntries) {
+    if (!['feed_post', 'feed_comment', 'group_message', 'channel_message'].includes(entry.kind) || !data.me) continue;
+    const content = data.adminContentEntries?.find((row) => row.kind === entry.kind && row.targetId === entry.targetId);
+    const channel = entry.kind === 'channel_message' ? data.channelMessages.find((row) => row.id === entry.targetId)?.channelId : undefined;
+    rows.push({ kind: entry.kind, id: entry.targetId, title: content?.title ?? `${CONTENT_KIND_LABELS[entry.kind]} retirado`, ownerIds: content?.ownerIds ?? [data.me.id], version: entry.version, at: entry.withdrawnAt,
+      link: entry.kind === 'group_message' ? '/m/mensajes' : entry.kind === 'channel_message' ? channel ? `/m/mensajes/canales/${channel}` : '/m/mensajes' : '/m/inicio' });
+  }
   const permitted = rows.filter((row) => data.me && (row.ownerIds.includes(data.me.id) || data.me.isCreator && !row.personal)).sort((a, b) => b.at.getTime() - a.at.getTime());
   return <><header className="page-header"><div><h1>Papelera</h1><p className="muted">Tus aportes retirados se pueden recuperar durante 30 días completos desde su retirada. Restaurar conserva el registro, sus versiones y sus adjuntos. El reloj del servidor determina el plazo; la moderación conserva sus permisos.</p></div></header>
     {clock.error && <p className="error" role="status">{clock.error}</p>}

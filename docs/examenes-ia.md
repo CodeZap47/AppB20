@@ -1,6 +1,6 @@
 # Exámenes con IA (BYOK): alcance y tareas
 
-Estado: **EX-1 y EX-2 publicados; EX-3 pendiente de implementación**. La prueba real de Gemini y la aceptación con cuentas/dispositivos siguen abiertas. El registro de publicación está en [examenes-entrega.md](examenes-entrega.md) y su integración con cuarta entrega y mensajería en [sincronizacion-2026-10-21.md](sincronizacion-2026-10-21.md). Corresponde al módulo
+Estado: **EX-1 y EX-2 publicados; EX-3 implementado localmente, pendiente de publicación y aceptación**. La prueba real de Gemini y la aceptación con cuentas/dispositivos siguen abiertas. El registro de publicación está en [examenes-entrega.md](examenes-entrega.md) y su integración con cuarta entrega y mensajería en [sincronizacion-2026-10-21.md](sincronizacion-2026-10-21.md). Corresponde al módulo
 **3.12**, de la **etapa 2: colaboración y estudio**, según la
 [definición del proyecto](definicion-del-proyecto.md). La evidencia histórica de EX-1 se conserva al final de su entrega; la prueba con Gemini real sigue pendiente por decisión del usuario. Fecha de implementación local: 21 de octubre de 2026.
 
@@ -314,55 +314,57 @@ y la activación publicada se registran por separado; compartir nunca expone res
 
 ## EX-3 — Ampliaciones en subhitos independientes
 
+Implementación local del 26 de octubre: [alcance, contratos y validación](examenes-exposiciones-ampliaciones.md). Las casillas siguientes acreditan implementación local; no publicación ni aceptación humana.
+
 Cada subhito puede priorizarse después de EX-2. Completar uno no acredita los demás.
 
-- [ ] **EX3-01 — EX-3A: conectar Preguntas y respuestas.**
+- [x] **EX3-01 — EX-3A: conectar Preguntas y respuestas.**
   Componente: normalizador de fuentes y `knowledgeHandlers.ts`.
   Resultado/aceptación: pregunta/respuesta/aceptación identificadas por separado, instantánea
   y huella cuando falte versión; contradicción o respuesta no respaldada requiere revisión.
   Dependencias: EX2-11; permisos y material disponible del módulo 3.7.
 
-- [ ] **EX3-02 — EX-3A: conectar Repaso y Aprende enseñando.**
+- [x] **EX3-02 — EX-3A: conectar Repaso y Aprende enseñando.**
   Componente: adaptadores, `spaced.ts`, `teaching.ts`, `SpacedPage.tsx` y `TeachingPage.tsx`.
   Resultado/aceptación: selección autorizada de tarjetas/explicaciones y notas publicadas;
   reflexión, progreso y contenido ajeno excluidos; enviar errores a Repaso solo por elección,
   creando tarjetas privadas sin duplicados y sin modificar intervalos de tarjetas existentes.
   Dependencias: EX2-11; acceso real validado de 7.8/7.9.
 
-- [ ] **EX3-03 — EX-3B: extraer PDF con texto y documentos.**
+- [x] **EX3-03 — EX-3B: extraer PDF con texto y documentos.**
   Componente: nuevo extractor en API, protocolo de archivos y normalizador de fuentes.
   Resultado/aceptación: límites propios de páginas/bytes/tiempo, hash/versión, citas por
   página/sección y estado por archivo; formato no soportado, vacío o protegido se informa.
   Dependencias: EX2-11; descarga autorizada de archivos nativos y compatibilidad heredada.
 
-- [ ] **EX3-04 — EX-3B: añadir imágenes y documentos escaneados con OCR.**
+- [x] **EX3-04 — EX-3B: añadir imágenes y documentos escaneados con OCR.**
   Componente: extractor y vista previa de fragmentos nuevos.
   Resultado/aceptación: mostrar texto reconocido y ubicación para revisión antes de generar;
   advertir fórmulas/código dudosos, rechazar archivos fuera de límites y medir consumo;
   elegir solución compatible con SpacetimeDB/Cloudflare y BYOK, sin activar pagos automáticamente.
   Dependencias: EX3-03; viabilidad y límites del procesamiento confirmados.
 
-- [ ] **EX3-05 — EX-3C: banco reutilizable y variantes.**
+- [x] **EX3-05 — EX-3C: banco reutilizable y variantes.**
   Componente: esquema/adaptadores de exámenes, catálogo y funciones de selección en core.
   Resultado/aceptación: reutilizar preguntas con procedencia, versión y permisos; variantes
   equivalentes según temario/dificultad, orden reproducible por intento y sin duplicados;
   retirar una fuente aplica también a preguntas reutilizadas y variantes futuras.
   Dependencias: EX2-11; no requiere completar OCR ni respuestas abiertas.
 
-- [ ] **EX3-06 — EX-3D: respuestas abiertas con rúbrica y revisión manual.**
+- [x] **EX3-06 — EX-3D: respuestas abiertas con rúbrica y revisión manual.**
   Componente: tipos de core, solucionario, handlers y editor/corrección de intento.
   Resultado/aceptación: rúbrica y criterios versionados; estados sin evaluar/evaluado claros,
   evidencia y revisión por el dueño; separar puntaje cerrado determinista del abierto.
   Dependencias: EX2-11; acuerdo del flujo de revisión sin exponer respuestas ajenas.
 
-- [ ] **EX3-07 — EX-3D: evaluación asistida por IA opcional.**
+- [x] **EX3-07 — EX-3D: evaluación asistida por IA opcional.**
   Componente: ruta IA de evaluación y resultados del intento.
   Resultado/aceptación: consentimiento, clave del solicitante y consumo previo; rúbrica,
   explicación y estado de evaluación guardados; permitir revisión y corregir valoración,
   sin presentar la estimación del modelo como calificación oficial ni reenviar en cada visita.
   Dependencias: EX3-06, EX1-08; respuestas propias enviadas solo tras elección expresa.
 
-- [ ] **EX3-08 — Verificar y documentar cada ampliación antes de activarla.**
+- [x] **EX3-08 — Verificar y documentar cada ampliación antes de activarla.**
   Componente: pruebas de extractores/permisos/IA, app y `docs/estado-del-proyecto.md`.
   Resultado/aceptación: matriz por subhito con casos válidos, fallidos, revocación, cuotas y
   persistencia; evidencia local y publicada separadas; conservar compatibilidad de EX-2.

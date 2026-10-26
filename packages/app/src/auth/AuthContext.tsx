@@ -11,6 +11,7 @@ import { AuthFrame } from './AuthFrame';
 import { RememberedUserStore } from './persistence';
 import { AuthContext, type SignInOptions } from './accessContext';
 import { SupabaseAuthProvider } from './SupabaseAuthProvider';
+import { capturePendingInvitation } from './pendingInvitation';
 
 export function AuthProvider(props: { clientId: string; platform?: Platform; children: ReactNode }) {
   return config.devAuthBypass ? <DevAuthProvider>{props.children}</DevAuthProvider> : <OidcAuthProvider {...props} />;
@@ -206,6 +207,7 @@ function SessionBridge({ manager, navigator, platform, children }: {
   }, [manager, store, platform]);
 
   const signIn = (options?: SignInOptions) => {
+    capturePendingInvitation();
     manuallySignedOut.current = false;
     manager.startSilentRenew();
     setCallbackError(false);
