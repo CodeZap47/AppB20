@@ -71,11 +71,5 @@
     "crons": [
       "* * * * *"
     ]
-  },
-  "r2_buckets": [
-    {
-      "binding": "FILES",
-      "bucket_name": "app-b20-files"
-    }
-  ]
+  }
 }
