@@ -6,6 +6,7 @@ export interface NoteVersion {
   id: Id;
   noteId: Id;
   version: number;
+  isFinal?: boolean;
   subjectId: Id;
   termId?: Id;
   session?: string;

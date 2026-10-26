@@ -168,6 +168,7 @@ import SaveMemberProfileReducer from "./save_member_profile_reducer";
 import SaveMuseumReducer from "./save_museum_reducer";
 import SaveNoteReducer from "./save_note_reducer";
 import SaveNoteV2Reducer from "./save_note_v_2_reducer";
+import SaveNoteV3Reducer from "./save_note_v_3_reducer";
 import SaveNotificationPreferencesReducer from "./save_notification_preferences_reducer";
 import SavePresentationAttemptReducer from "./save_presentation_attempt_reducer";
 import SavePresentationFeedbackReducer from "./save_presentation_feedback_reducer";
@@ -373,6 +374,7 @@ import MyTeachingVersionsRow from "./my_teaching_versions_table";
 import MyTrashEntriesRow from "./my_trash_entries_table";
 import NoteCommentsRow from "./note_comments_table";
 import NoteDetailsRow from "./note_details_table";
+import NoteEditionsRow from "./note_editions_table";
 import NoteVersionsRow from "./note_versions_table";
 import NotesRow from "./notes_table";
 import OpportunitiesRow from "./opportunities_table";
@@ -973,6 +975,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, NoteDetailsRow),
+  noteEditions: __table({
+    name: 'note_editions',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, NoteEditionsRow),
   noteVersions: __table({
     name: 'note_versions',
     indexes: [
@@ -1405,6 +1414,7 @@ const reducersSchema = __reducers(
   __reducerSchema("save_museum", SaveMuseumReducer),
   __reducerSchema("save_note", SaveNoteReducer),
   __reducerSchema("save_note_v_2", SaveNoteV2Reducer),
+  __reducerSchema("save_note_v_3", SaveNoteV3Reducer),
   __reducerSchema("save_notification_preferences", SaveNotificationPreferencesReducer),
   __reducerSchema("save_presentation_attempt", SavePresentationAttemptReducer),
   __reducerSchema("save_presentation_feedback", SavePresentationFeedbackReducer),
@@ -1677,6 +1687,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "note_comments": Omit<typeof tablesSchema.schemaType.tables["noteComments"], "accessorName"> & { readonly accessorName: "note_comments" };
     /** @deprecated Use `noteDetails` instead. This alias will be removed in the next major version. */
     readonly "note_details": Omit<typeof tablesSchema.schemaType.tables["noteDetails"], "accessorName"> & { readonly accessorName: "note_details" };
+    /** @deprecated Use `noteEditions` instead. This alias will be removed in the next major version. */
+    readonly "note_editions": Omit<typeof tablesSchema.schemaType.tables["noteEditions"], "accessorName"> & { readonly accessorName: "note_editions" };
     /** @deprecated Use `noteVersions` instead. This alias will be removed in the next major version. */
     readonly "note_versions": Omit<typeof tablesSchema.schemaType.tables["noteVersions"], "accessorName"> & { readonly accessorName: "note_versions" };
     /** @deprecated Use `opportunityFeedback` instead. This alias will be removed in the next major version. */
@@ -1834,6 +1846,7 @@ const tableAccessorAliases = {
   "my_trash_entries": "myTrashEntries",
   "note_comments": "noteComments",
   "note_details": "noteDetails",
+  "note_editions": "noteEditions",
   "note_versions": "noteVersions",
   "opportunity_feedback": "opportunityFeedback",
   "opportunity_interests": "opportunityInterests",
@@ -2030,6 +2043,8 @@ export type DbView = __DbViewBase & {
   readonly "note_comments": __DbViewBase["noteComments"];
   /** @deprecated Use `noteDetails` instead. This alias will be removed in the next major version. */
   readonly "note_details": __DbViewBase["noteDetails"];
+  /** @deprecated Use `noteEditions` instead. This alias will be removed in the next major version. */
+  readonly "note_editions": __DbViewBase["noteEditions"];
   /** @deprecated Use `noteVersions` instead. This alias will be removed in the next major version. */
   readonly "note_versions": __DbViewBase["noteVersions"];
   /** @deprecated Use `opportunityFeedback` instead. This alias will be removed in the next major version. */
@@ -2244,6 +2259,8 @@ export type Tables = __TablesBase & {
   readonly "note_comments": __TablesBase["noteComments"];
   /** @deprecated Use `noteDetails` instead. This alias will be removed in the next major version. */
   readonly "note_details": __TablesBase["noteDetails"];
+  /** @deprecated Use `noteEditions` instead. This alias will be removed in the next major version. */
+  readonly "note_editions": __TablesBase["noteEditions"];
   /** @deprecated Use `noteVersions` instead. This alias will be removed in the next major version. */
   readonly "note_versions": __TablesBase["noteVersions"];
   /** @deprecated Use `opportunityFeedback` instead. This alias will be removed in the next major version. */

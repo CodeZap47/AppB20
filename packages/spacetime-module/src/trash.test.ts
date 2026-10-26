@@ -29,7 +29,7 @@ function setup(extra: Record<string, Row[]> = {}) {
     appConfig: [{ id: 0, owner: admin }], authConfig: [{ id: 0, issuer: 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1', audiences: ['test'] }],
     subject: [{ id: 1n }], note: [note(1n), note(2n, 'personal')], ...extra,
   };
-  const keys: Record<string, string> = { member: 'identity', memberEmail: 'email', memberAccess: 'memberIdentity', adminContentResult: 'key', contentStatus: 'key', contentRetention: 'key', noteDetail: 'noteId', resourceVersion: 'key', evidenceDetail: 'evidenceId', workDetail: 'workId', contributionTombstone: 'fingerprint', roomSummary: 'roomId', teachingPersonal: 'practiceId', guideAiProvenance: 'key' };
+  const keys: Record<string, string> = { member: 'identity', memberEmail: 'email', memberAccess: 'memberIdentity', adminContentResult: 'key', contentStatus: 'key', contentRetention: 'key', noteDetail: 'noteId', noteEdition: 'key', resourceVersion: 'key', evidenceDetail: 'evidenceId', workDetail: 'workId', contributionTombstone: 'fingerprint', roomSummary: 'roomId', teachingPersonal: 'practiceId', guideAiProvenance: 'key' };
   const tables = new Map<string, Row[]>(); let next = 1000n;
   const rows = (name: string) => { if (!tables.has(name)) tables.set(name, [...(initial[name] ?? [])]); return tables.get(name)!; };
   const db = new Proxy({}, { get(_target, name: string) {
@@ -50,6 +50,18 @@ function setup(extra: Record<string, Row[]> = {}) {
 const withdraw = { kind: 'note', targetId: 1n, withdrawn: true, expectedVersion: 1, reason: '' };
 
 describe('papelera de 30 días con reloj del servidor', () => {
+  it('purga los marcadores editoriales propios sin afectar las otras notas', () => {
+    const s = setup({ noteEdition: [
+      { key: '1:1', noteId: 1n, version: 1, isFinal: true },
+      { key: '1:2', noteId: 1n, version: 2, isFinal: false },
+      { key: '2:1', noteId: 2n, version: 1, isFinal: true },
+    ] });
+    withdrawContent(s.ctx, withdraw);
+    expect(s.rows('noteEdition')).toHaveLength(3);
+    s.maintenance(); s.time(at.microsSinceUnixEpoch + RETENTION_MICROS);
+    purgeDue(s.ctx, { batchSize: 20 });
+    expect(s.rows('noteEdition')).toEqual([{ key: '2:1', noteId: 2n, version: 1, isFinal: true }]);
+  });
   it('restaura antes del límite, rechaza al llegar y un evento antiguo no elimina un registro restaurado', () => {
     const s = setup(); withdrawContent(s.ctx, withdraw);
     const deadline = at.microsSinceUnixEpoch + RETENTION_MICROS;

@@ -68,6 +68,103 @@ describe('flujos académicos en la interfaz', () => {
   });
 });
 
+describe('selector compacto de recursos', () => {
+  it.each([false, true])('conserva descargas y permisos con el selector compacto: %s', async (compactUpload) => {
+    const work = source.getSnapshot().works.find((item) => item.authorIds.includes('demo-1'))!;
+    await source.attachResourceFile('work', work.id, new File(['datos'], 'disponible.txt'), work.version);
+    const current = source.getSnapshot().works.find((item) => item.id === work.id)!;
+    await show(<ResourceSection kind="work" id={work.id} version={current.version} canEdit compactUpload={compactUpload} />);
+    const picker = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const upload = container.querySelector<HTMLDetailsElement>('.academic-resources__upload');
+    const download = container.querySelector('.academic-file-name')!;
+    expect(download.textContent).toBe('disponible.txt');
+    expect(download.closest('details')).toBeNull();
+    if (compactUpload) {
+      expect(upload?.open).toBe(false);
+      expect(upload?.querySelector('summary')?.textContent).toBe('Adjuntar archivos');
+      expect(upload?.contains(picker)).toBe(true);
+      expect(upload?.textContent).toContain('Los archivos de versiones anteriores se conservan en el historial.');
+      await act(async () => upload!.querySelector('summary')!.click());
+      expect(upload?.open).toBe(true);
+    } else {
+      expect(upload).toBeNull();
+      expect(picker.closest('details')).toBeNull();
+    }
+    await show(<ResourceSection kind="work" id={work.id} version={current.version} canEdit={false} compactUpload={compactUpload} />);
+    expect(container.querySelector('input[type="file"]')).toBeNull();
+    expect(container.querySelector('.academic-resources__upload')).toBeNull();
+    expect(container.querySelector('.academic-file-name')?.textContent).toBe('disponible.txt');
+  });
+
+  it('muestra el selector desplegado cuando no se solicita el modo compacto', async () => {
+    const work = source.getSnapshot().works.find((item) => item.authorIds.includes('demo-1'))!;
+    await show(<ResourceSection kind="work" id={work.id} version={work.version} canEdit />);
+    expect(container.querySelector('input[type="file"]')?.closest('details')).toBeNull();
+    expect(container.querySelector('.academic-resources__upload')).toBeNull();
+    expect(container.textContent).toContain('Los archivos de versiones anteriores se conservan en el historial.');
+  });
+
+  it('mantiene progreso, errores y reintentos accesibles al colapsar el selector', async () => {
+    const work = source.getSnapshot().works.find((item) => item.authorIds.includes('demo-1'))!;
+    let fail!: (error: Error) => void;
+    const transfer = vi.spyOn(source, 'attachResourceFile').mockImplementationOnce(async (_kind, _id, file, _version, options) => {
+      options?.onProgress?.(file.size / 2, file.size);
+      return new Promise<string>((_resolve, reject) => { fail = reject; });
+    }).mockResolvedValueOnce('archivo-confirmado');
+    await show(<ResourceSection kind="work" id={work.id} version={work.version} canEdit compactUpload />);
+    const upload = container.querySelector<HTMLDetailsElement>('.academic-resources__upload')!;
+    await act(async () => upload.querySelector('summary')!.click());
+    const file = new File(['datos'], 'pendiente.txt');
+    const input = upload.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
+    await act(async () => upload.querySelector('summary')!.click());
+    expect(upload.open).toBe(false);
+    const progress = container.querySelector('[role="progressbar"]')!;
+    expect(progress.getAttribute('aria-valuenow')).toBe('50');
+    expect(progress.closest('details')).toBeNull();
+    expect(container.querySelector('button[aria-label="Cancelar pendiente.txt"]')?.closest('details')).toBeNull();
+    await act(async () => fail(new Error('No pudimos confirmar el archivo')));
+    const alerts = [...container.querySelectorAll('[role="alert"]')];
+    expect(alerts.length).toBeGreaterThan(0);
+    expect(alerts.every((alert) => alert.closest('details') === null)).toBe(true);
+    expect(alerts.some((alert) => alert.textContent?.includes('No pudimos confirmar el archivo'))).toBe(true);
+    const retry = [...container.querySelectorAll('button')].find((button) => button.textContent === 'Reintentar archivos pendientes')!;
+    expect(retry.closest('details')).toBeNull();
+    expect(container.querySelector('[data-upload-state="failed"]')?.closest('details')).toBeNull();
+    await act(async () => retry.click());
+    expect(transfer).toHaveBeenCalledTimes(2);
+    expect(transfer.mock.calls[1]![2]).toBe(file);
+    expect(transfer.mock.calls.map((args) => args[3])).toEqual([work.version, work.version]);
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.textContent).not.toContain('Reintentar archivos pendientes');
+    expect(upload.open).toBe(false);
+  });
+
+  it('mantiene los rechazos de validación fuera del selector y los limpia al volver a elegir', async () => {
+    const work = source.getSnapshot().works.find((item) => item.authorIds.includes('demo-1'))!;
+    const transfer = vi.spyOn(source, 'attachResourceFile');
+    await show(<ResourceSection kind="work" id={work.id} version={work.version} canEdit compactUpload />);
+    const upload = container.querySelector<HTMLDetailsElement>('.academic-resources__upload')!;
+    await act(async () => upload.querySelector('summary')!.click());
+    const input = upload.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(input, 'files', { value: [new File([], 'vacio.txt')], configurable: true });
+    await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
+    await act(async () => upload.querySelector('summary')!.click());
+    expect(upload.open).toBe(false);
+    const alert = container.querySelector('[role="alert"]')!;
+    expect(alert.textContent).toContain('«vacio.txt» está vacío.');
+    expect(alert.closest('details')).toBeNull();
+    expect(container.querySelectorAll('[role="alert"]')).toHaveLength(1);
+    expect(transfer).not.toHaveBeenCalled();
+    await act(async () => upload.querySelector('summary')!.click());
+    Object.defineProperty(input, 'files', { value: [new File(['datos'], 'valido.txt')], configurable: true });
+    await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(transfer).toHaveBeenCalledTimes(1);
+  });
+});
+
 
 describe('concurrencia y recuperación de la interfaz', () => {
   it('no vuelve a mostrar como completado un archivo de la cola después de retirarlo', async () => {

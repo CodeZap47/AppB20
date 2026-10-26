@@ -63,6 +63,8 @@ if (exampleNote) {
 }
 if (new URLSearchParams(window.location.search).get('feed-review') === '1') seedFeedReview(state);
 const source = new DemoDataSource(state, 'demo-1');
+const previewPlatform = new URLSearchParams(window.location.search).get('compact') === '1'
+  ? 'extension-panel' : 'web';
 source.saveMemberProfile({
   preferredName: 'Kevin',
   bio: 'Construyendo cosas y aprendiendo en el camino. Me interesa el diseño de interfaces, el desarrollo web y las buenas ideas que se comparten.',
@@ -100,7 +102,7 @@ function PreviewTools() {
 
 createRoot(document.getElementById('root')!).render(
   <ThemeProvider>
-    <PlatformContext value="web">
+    <PlatformContext value={previewPlatform}>
       <DataProvider source={source}>
         <RouterProvider router={router} />
         <PreviewTools />

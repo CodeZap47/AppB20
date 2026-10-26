@@ -1,4 +1,5 @@
 import { memberIdentityFor } from './authIdentity';
+import { markNoteEdition, noteIsFinal } from './noteEdition';
 import { SenderError } from 'spacetimedb/server';
 import { activeMember, attachmentIds, expectVersion, log, requireGuide, requireSubject, requireText, restoreAttachments, sourceVersion, type Ctx } from './moduleContext';
 import { bumpExtra, canReadTarget, captureGuide, captureNote, withdrawn, withdrawnIncludingParent } from './delivery2Handlers';
@@ -83,6 +84,7 @@ export interface SaveNoteV2Input {
   topic: string; title: string; body: string; tags: string[]; visibility: string; source: string;
   assignmentIds: bigint[]; activityIds: bigint[]; questionIds: bigint[];
 }
+export interface SaveNoteV3Input extends SaveNoteV2Input { isFinal?: boolean }
 function optionalText(value: string, field: string, max: number) {
   const clean = value.trim();
   if (clean.length > max) throw new SenderError(`${field} excede ${max} caracteres.`);
@@ -116,10 +118,18 @@ function ownNote(ctx: Ctx, id: bigint) {
   return note;
 }
 export function saveNoteV2(ctx: Ctx, input: SaveNoteV2Input) {
+  saveNote(ctx, input);
+}
+export function saveNoteV3(ctx: Ctx, input: SaveNoteV3Input) {
+  if (input.isFinal !== undefined && typeof input.isFinal !== 'boolean') throw new SenderError('La versión editorial no es válida.');
+  saveNote(ctx, input, input.isFinal);
+}
+function saveNote(ctx: Ctx, input: SaveNoteV2Input, isFinal?: boolean) {
   activeMember(ctx); const checked = checkNoteFields(ctx, input);
   if (input.noteId === undefined) {
     const note = ctx.db.note.insert({ id: 0n, ...checked.fields, author: memberIdentityFor(ctx), version: 1, createdAt: ctx.timestamp, updatedAt: ctx.timestamp });
     ctx.db.noteDetail.insert({ noteId: note.id, ...checked.detail, publishedFromId: undefined, publishedFromVersion: undefined });
+    if (isFinal !== undefined) markNoteEdition(ctx, note.id, note.version, isFinal);
     captureNote(ctx, note.id, memberIdentityFor(ctx)); log(ctx, 'create', 'note', note.id); return;
   }
   const note = ownNote(ctx, input.noteId);
@@ -131,6 +141,7 @@ export function saveNoteV2(ctx: Ctx, input: SaveNoteV2Input) {
   const detail = { noteId: note.id, ...checked.detail, publishedFromId: prior?.publishedFromId, publishedFromVersion: prior?.publishedFromVersion };
   if (prior) ctx.db.noteDetail.noteId.update(detail); else ctx.db.noteDetail.insert(detail);
   ctx.db.note.id.update({ ...note, ...checked.fields, version: note.version + 1, updatedAt: ctx.timestamp });
+  if (isFinal !== undefined) markNoteEdition(ctx, note.id, note.version + 1, isFinal);
   captureNote(ctx, note.id, memberIdentityFor(ctx)); log(ctx, 'update', 'note', note.id);
 }
 
@@ -153,6 +164,7 @@ export function publishNoteVersion(ctx: Ctx, input: { noteId: bigint; expectedVe
   if (body !== published.body) ctx.db.note.id.update({ ...published, body });
   ctx.db.noteDetail.insert({ noteId: published.id, termId: detail?.termId, session: detail?.session ?? '', assignmentIds: detail?.assignmentIds ?? [],
     activityIds: detail?.activityIds ?? [], questionIds: detail?.questionIds ?? [], publishedFromId: note.id, publishedFromVersion: note.version });
+  markNoteEdition(ctx, published.id, 1, noteIsFinal(ctx.db, note.id, note.version));
   captureNote(ctx, published.id, memberIdentityFor(ctx)); log(ctx, 'publicar versión', 'note', published.id);
 }
 
@@ -168,6 +180,7 @@ export function restoreNoteVersion(ctx: Ctx, input: { noteId: bigint; version: n
   const detail = { noteId: note.id, ...checked.detail, publishedFromId: prior?.publishedFromId, publishedFromVersion: prior?.publishedFromVersion };
   if (prior) ctx.db.noteDetail.noteId.update(detail); else ctx.db.noteDetail.insert(detail);
   ctx.db.note.id.update({ ...note, ...checked.fields, version: note.version + 1, updatedAt: ctx.timestamp });
+  markNoteEdition(ctx, note.id, note.version + 1, noteIsFinal(ctx.db, note.id, input.version));
   captureNote(ctx, note.id, memberIdentityFor(ctx), input.version); log(ctx, 'restaurar versión', 'note', note.id);
 }
 

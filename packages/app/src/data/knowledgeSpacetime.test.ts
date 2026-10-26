@@ -17,25 +17,25 @@ function setup(reducers: Record<string, unknown> = {}, initial: Record<string, u
 const input: SaveNoteInput = { subjectId: '9007199254740993', title: 'Nota', topic: '', body: 'Contenido', tags: [], visibility: 'personal', source: 'student' };
 
 describe('contrato de conocimiento conectado a SpacetimeDB', () => {
-  it('crea notas por V2 con valores vacíos explícitos y encuentra el alta propia entre publicaciones concurrentes', async () => {
+  it('crea notas por V3 con valores vacíos explícitos y encuentra el alta propia entre publicaciones concurrentes', async () => {
     const saveNote = vi.fn();
-    const saveNoteV2 = vi.fn(async () => {
+    const saveNoteV3 = vi.fn(async () => {
       rows.notes!.push({ id: 1n, subjectId: 9007199254740993n, author: person(OTHER), title: 'Nota' });
       rows.notes!.push({ id: 18446744073709551614n, subjectId: 9007199254740993n, author: person(), title: 'Nota' });
     });
-    const { actions, rows } = setup({ saveNote, saveNoteV2 }, { notes: [] });
+    const { actions, rows } = setup({ saveNote, saveNoteV3 }, { notes: [] });
     await expect(actions.saveNote(input)).resolves.toBe('18446744073709551614');
-    expect(saveNoteV2).toHaveBeenCalledWith({ noteId: undefined, subjectId: 9007199254740993n, termId: undefined, session: '', topic: '', title: 'Nota', body: 'Contenido', tags: [], visibility: 'personal', source: 'student', assignmentIds: [], activityIds: [], questionIds: [], expectedVersion: undefined });
+    expect(saveNoteV3).toHaveBeenCalledWith({ noteId: undefined, subjectId: 9007199254740993n, termId: undefined, session: '', topic: '', title: 'Nota', body: 'Contenido', tags: [], visibility: 'personal', source: 'student', isFinal: undefined, assignmentIds: [], activityIds: [], questionIds: [], expectedVersion: undefined });
     expect(saveNote).not.toHaveBeenCalled();
   });
 
   it('preserva los IDs u64 y la versión capturada por el editor aunque la caché haya cambiado', async () => {
-    const saveNoteV2 = vi.fn(async () => {});
-    const { actions } = setup({ saveNoteV2 }, { notes: [{ id: 10n, version: 9 }] });
+    const saveNoteV3 = vi.fn(async () => {});
+    const { actions } = setup({ saveNoteV3 }, { notes: [{ id: 10n, version: 9 }] });
     await actions.saveNote({ ...input, id: '10', expectedVersion: 3, termId: '9007199254740994', session: '2026-10-21', assignmentIds: ['18446744073709551614'], activityIds: ['20'], questionIds: ['30'] });
-    expect(saveNoteV2).toHaveBeenLastCalledWith(expect.objectContaining({ noteId: 10n, expectedVersion: 3, termId: 9007199254740994n, session: '2026-10-21', assignmentIds: [18446744073709551614n], activityIds: [20n], questionIds: [30n] }));
+    expect(saveNoteV3).toHaveBeenLastCalledWith(expect.objectContaining({ noteId: 10n, expectedVersion: 3, termId: 9007199254740994n, session: '2026-10-21', assignmentIds: [18446744073709551614n], activityIds: [20n], questionIds: [30n] }));
     await actions.saveNote({ ...input, id: '10' });
-    expect(saveNoteV2).toHaveBeenLastCalledWith(expect.objectContaining({ expectedVersion: 9 }));
+    expect(saveNoteV3).toHaveBeenLastCalledWith(expect.objectContaining({ expectedVersion: 9 }));
   });
 
   it('edita guías mediante V2 y conserva la expectativa del formulario o de la llamada heredada', async () => {

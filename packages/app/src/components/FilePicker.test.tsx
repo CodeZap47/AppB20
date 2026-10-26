@@ -50,6 +50,28 @@ describe('selector y arrastre de Untitled UI', () => {
     expect(container.querySelector('[role="alert"]')).toBeNull();
   });
 
+  it('permite presentar los errores fuera del selector sin duplicarlos', async () => {
+    const onFiles = vi.fn();
+    const onErrors = vi.fn();
+    await show({ onFiles, onErrors, hideErrors: true });
+    await pick([new File([], 'vacio.txt')]);
+    expect(onErrors).toHaveBeenLastCalledWith(['«vacio.txt» está vacío.']);
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.querySelector('input')?.getAttribute('aria-invalid')).toBe('true');
+    const valid = new File(['datos'], 'valido.txt');
+    await pick([valid]);
+    expect(onErrors).toHaveBeenLastCalledWith([]);
+    expect(onFiles).toHaveBeenCalledExactlyOnceWith([valid]);
+  });
+
+  it('conserva los mensajes locales por defecto aunque se observe la validación', async () => {
+    const onErrors = vi.fn();
+    await show({ onFiles: vi.fn(), onErrors });
+    await pick([new File([], 'vacio.txt')]);
+    expect(onErrors).toHaveBeenLastCalledWith(['«vacio.txt» está vacío.']);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('«vacio.txt» está vacío.');
+  });
+
   it('bloquea selector y drop deshabilitados y previene que el navegador abra el archivo', async () => {
     const onFiles = vi.fn(); await show({ onFiles, disabled: true });
     const event = await drop([new File(['datos'], 'archivo.pdf')]);

@@ -184,6 +184,7 @@ function purgeOne(ctx: Ctx, row: RetentionRow) {
     if (kind === 'note') {
       drop(ctx.db.noteComment.iter(), (item) => item.noteId === id, (key) => ctx.db.noteComment.id.delete(key));
       drop(ctx.db.noteVersion.iter(), (item) => item.noteId === id, (key) => ctx.db.noteVersion.id.delete(key));
+      for (const marker of [...ctx.db.noteEdition.noteId.filter(id)]) ctx.db.noteEdition.key.delete(marker.key);
       ctx.db.noteDetail.noteId.delete(id); ctx.db.note.id.delete(id);
     } else if (kind === 'guide') {
       drop(ctx.db.guideVersion.iter(), (item) => item.guideId === id, (key) => ctx.db.guideVersion.id.delete(key));

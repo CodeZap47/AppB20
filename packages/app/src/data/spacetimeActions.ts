@@ -326,11 +326,11 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
       (row, author) => own(row.author, author) && row.activityId === id(activityId) && row.content === content.trim()),
     saveNote: (input) => {
       const fields = { noteId: optionalId(input.id), subjectId: id(input.subjectId), termId: optionalId(input.termId), session: input.session ?? '',
-        topic: input.topic, title: input.title, body: input.body, tags: input.tags, visibility: input.visibility, source: input.source,
+        topic: input.topic, title: input.title, body: input.body, tags: input.tags, visibility: input.visibility, source: input.source, isFinal: input.isFinal,
         assignmentIds: (input.assignmentIds ?? []).map(id), activityIds: (input.activityIds ?? []).map(id), questionIds: (input.questionIds ?? []).map(id),
         expectedVersion: input.id ? input.expectedVersion ?? versionFor('note', input.id) : undefined };
-      return input.id ? getConnection().reducers.saveNoteV2(fields).then(() => input.id!)
-        : create((c) => c.db.notes.iter(), (c) => c.reducers.saveNoteV2(fields),
+      return input.id ? getConnection().reducers.saveNoteV3(fields).then(() => input.id!)
+        : create((c) => c.db.notes.iter(), (c) => c.reducers.saveNoteV3(fields),
           (row, author) => own(row.author, author) && row.subjectId === id(input.subjectId) && row.title === input.title.trim());
     },
     commentNote: (noteId, text) => getConnection().reducers.commentNote({ noteId: id(noteId), text }),

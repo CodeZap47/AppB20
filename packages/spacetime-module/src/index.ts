@@ -26,6 +26,7 @@ import { delivery2Tables, chatChannel, channelMessage, conversationState, member
 import * as delivery2 from './delivery2Handlers';
 import { saveMemberProfile, saveProfileCover, withdrawContent } from './communityHandlers';
 import * as knowledge from './knowledgeHandlers';
+import { noteEdition } from './noteEdition';
 import { configureModuleHelpers } from './moduleContext';
 import { readContributionOrigins } from './contributionOrigins';
 import { readMemberUploadStats } from './profileUploadStats';
@@ -842,6 +843,7 @@ const spacetimedb = schema({
   ...examTables,
   ...guideAiTables,
   ...delivery2Tables,
+  noteEdition,
   ...roomsTables,
   resourceUpload, resourceChunk, resourceCapacity, resourceExpiry, retentionExpiry,
   spacedCollection, spacedCard, spacedEnrollment, spacedProgress, spacedReview,
@@ -4867,6 +4869,9 @@ export const admin_content_results = spacetimedb.view({ name: 'admin_content_res
 export const save_note_v2 = spacetimedb.reducer({ noteId: t.u64().optional(), expectedVersion: t.u32().optional(), subjectId: t.u64(), termId: t.u64().optional(),
   session: t.string(), topic: t.string(), title: t.string(), body: t.string(), tags: t.array(t.string()), visibility: t.string(), source: t.string(),
   assignmentIds: t.array(t.u64()), activityIds: t.array(t.u64()), questionIds: t.array(t.u64()) }, knowledge.saveNoteV2);
+export const save_note_v3 = spacetimedb.reducer({ noteId: t.u64().optional(), expectedVersion: t.u32().optional(), subjectId: t.u64(), termId: t.u64().optional(),
+  session: t.string(), topic: t.string(), title: t.string(), body: t.string(), tags: t.array(t.string()), visibility: t.string(), source: t.string(),
+  assignmentIds: t.array(t.u64()), activityIds: t.array(t.u64()), questionIds: t.array(t.u64()), isFinal: t.bool().optional() }, knowledge.saveNoteV3);
 export const publish_note_version = spacetimedb.reducer({ noteId: t.u64(), expectedVersion: t.u32() }, knowledge.publishNoteVersion);
 export const restore_note_version = spacetimedb.reducer({ noteId: t.u64(), version: t.u32(), expectedVersion: t.u32() }, knowledge.restoreNoteVersion);
 export const update_guide_v2 = spacetimedb.reducer({ guideId: t.u64(), expectedVersion: t.u32(), ...GUIDE_ARGS }, (ctx, { expectedVersion, ...input }) => {
@@ -4904,6 +4909,8 @@ export const note_details = spacetimedb.view({ name: 'note_details', public: tru
     .map((r) => ctx.db.note.id.find(r.noteId)?.author.isEqual(memberIdentityFor(ctx)) ? r : { ...r, publishedFromId: undefined, publishedFromVersion: undefined }));
 export const note_versions = spacetimedb.view({ name: 'note_versions', public: true }, t.array(noteVersion.rowType),
   (ctx) => [...ctx.db.noteVersion.iter()].filter((r) => delivery2.canReadTarget(ctx.db, memberIdentityFor(ctx), 'note', r.noteId) && (r.visibility === 'group' || r.author.isEqual(memberIdentityFor(ctx)))));
+export const note_editions = spacetimedb.view({ name: 'note_editions', public: true }, t.array(noteEdition.rowType),
+  (ctx) => [...ctx.db.noteEdition.iter()].filter((r) => delivery2.canReadTarget(ctx.db, memberIdentityFor(ctx), 'note', r.noteId)));
 export const guide_versions = spacetimedb.view({ name: 'guide_versions', public: true }, t.array(guideVersion.rowType),
   (ctx) => [...ctx.db.guideVersion.iter()].filter((r) => delivery2.canReadTarget(ctx.db, memberIdentityFor(ctx), 'guide', r.guideId)));
 export const question_comments = spacetimedb.view({ name: 'question_comments', public: true }, t.array(questionComment.rowType),

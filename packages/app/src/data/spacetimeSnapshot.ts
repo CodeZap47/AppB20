@@ -32,7 +32,7 @@ export const PUBLIC_VIEWS = [
   'help_post_versions',
   ...PRESENTATION_VIEWS,
   'chat_channels', 'channel_messages', 'my_conversation_states', 'my_blocked_members', 'my_message_reports', 'member_profiles', 'member_profile_covers', 'member_upload_stats',
-  'note_details', 'note_versions', 'guide_versions', 'question_comments', 'answer_usefulness', 'question_links', 'resource_versions', 'content_statuses', 'contribution_origins',
+  'note_details', 'note_versions', 'note_editions', 'guide_versions', 'question_comments', 'answer_usefulness', 'question_links', 'resource_versions', 'content_statuses', 'contribution_origins',
   'my_member', 'my_auth_identity', 'members', 'invitations', 'invitation_email_statuses', 'invite_links', 'subjects', 'terms', 'calendar',
   'assignments', 'page_revisions', 'works', 'work_authors', 'work_files',
   'assignment_details', 'my_progress', 'work_details', 'work_revisions', 'work_reviews',

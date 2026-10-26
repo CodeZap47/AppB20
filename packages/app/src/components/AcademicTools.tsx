@@ -80,7 +80,7 @@ export function ResourceDownloads({ files, onRemove, onRestore, disabled }: {
 }
 
 type ResourceSectionProps = {
-  kind: ResourceTargetKind; id: string; version: number; canEdit: boolean; title?: string;
+  kind: ResourceTargetKind; id: string; version: number; canEdit: boolean; title?: string; compactUpload?: boolean;
 };
 
 export function ResourceSection(props: ResourceSectionProps) {
@@ -88,12 +88,13 @@ export function ResourceSection(props: ResourceSectionProps) {
   return <ResourceSectionForTarget key={`${props.kind}:${props.id}`} {...props} />;
 }
 
-function ResourceSectionForTarget({ kind, id, version, canEdit, title = 'Archivos y recursos' }: ResourceSectionProps) {
+function ResourceSectionForTarget({ kind, id, version, canEdit, title = 'Archivos y recursos', compactUpload = false }: ResourceSectionProps) {
   const snapshot = useSnapshot();
   const { resourceFiles } = snapshot;
   const source = useDataSource();
   const { error, pending, run } = useAction();
   const queue = useResourceUploadQueue();
+  const [pickerErrors, setPickerErrors] = useState<string[]>([]);
   const files = resourceFiles.filter((f) => f.targetKind === kind && f.targetId === id && !f.removedAt);
   const retired = kind === 'evidence' ? resourceFiles.filter((f) => f.targetKind === kind && f.targetId === id && f.removedAt) : [];
   const publication = kind === 'work' ? snapshot.works.find((r) => r.id === id) : kind === 'evidence' ? snapshot.evidences.find((r) => r.id === id) : undefined;
@@ -115,14 +116,21 @@ function ResourceSectionForTarget({ kind, id, version, canEdit, title = 'Archivo
         onRestore={canEdit ? (file) => { void run(() => source.restoreResourceFile(file.id, version)); } : undefined} />
     </details>}
     {canEdit && !withdrawnAt && <>
-      <FilePicker onFiles={upload} busy={queue.busy || pending} disabled={hasPending} />
+      {compactUpload ? <details className="academic-resources__upload">
+        <summary>Adjuntar archivos</summary>
+        <FilePicker onFiles={upload} busy={queue.busy || pending} disabled={hasPending} onErrors={setPickerErrors} hideErrors />
+        <p className="field__hint">Hasta 50 MB por archivo. Los archivos de versiones anteriores se conservan en el historial.</p>
+      </details> : <FilePicker onFiles={upload} busy={queue.busy || pending} disabled={hasPending} />}
+      {compactUpload && pickerErrors.length > 0 && <ul className="upload-errors" role="alert">
+        {pickerErrors.map((message, index) => <li key={`${index}:${message}`}>{message}</li>)}
+      </ul>}
       <UploadFileList items={visibleItems} disabled={queue.busy || pending}
         onRemove={(fileId) => void queue.remove(fileId)} onRetry={(fileId) => void queue.retry(fileId)} onCancel={() => queue.cancel()} />
       {hasPending && !queue.busy && <div className="academic-upload-retry"><p>Quedan por confirmar: {queue.items.filter((file) => file.state !== 'complete').map((file) => file.name).join(', ')}.</p>
         <button type="button" disabled={queue.busy || pending} onClick={() => void queue.upload(kind, id, version)}>Reintentar archivos pendientes</button>
         <button type="button" className="secondary" disabled={queue.busy || pending} onClick={() => { void (async () => { for (const file of queue.items.filter((item) => item.state !== 'complete')) await queue.remove(file.id); })(); }}>Descartar pendientes</button>
       </div>}
-      <p className="field__hint">Hasta 50 MB por archivo. Los archivos de versiones anteriores se conservan en el historial.</p>
+      {!compactUpload && <p className="field__hint">Hasta 50 MB por archivo. Los archivos de versiones anteriores se conservan en el historial.</p>}
     </>}
     {(error || queue.error) && <p className="error" role="alert">{error ?? queue.error}</p>}
   </section>;

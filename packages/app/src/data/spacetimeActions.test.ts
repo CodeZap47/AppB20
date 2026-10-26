@@ -16,6 +16,27 @@ function setup(reducers: Record<string, unknown>, initial: Record<string, unknow
 }
 
 describe('acciones conectadas a SpacetimeDB', () => {
+  it.each([true, false])('guarda una nota con la elección de versión final=%s mediante V3', async (isFinal) => {
+    const saveNoteV2 = vi.fn();
+    const saveNoteV3 = vi.fn(async () => {
+      rows.notes!.push({ id: 19n, author: person(), subjectId: 7n, title: 'Apunte' });
+    });
+    const { actions, rows } = setup({ saveNoteV2, saveNoteV3 }, { notes: [] });
+    const noteId = await actions.saveNote({ subjectId: '7', topic: '', title: 'Apunte', body: 'Contenido',
+      tags: [], visibility: 'personal', source: 'student', isFinal });
+    expect(noteId).toBe('19');
+    expect(saveNoteV3).toHaveBeenCalledWith(expect.objectContaining({ isFinal, subjectId: 7n, expectedVersion: undefined }));
+    expect(saveNoteV2).not.toHaveBeenCalled();
+  });
+
+  it('no fuerza V1 cuando un consumidor edita sin indicar el estado final', async () => {
+    const saveNoteV3 = vi.fn(async () => {});
+    const { actions } = setup({ saveNoteV3 });
+    expect(await actions.saveNote({ id: '19', expectedVersion: 4, subjectId: '7', topic: '', title: 'Apunte', body: 'Contenido',
+      tags: [], visibility: 'personal', source: 'student' })).toBe('19');
+    expect(saveNoteV3).toHaveBeenCalledWith(expect.objectContaining({ noteId: 19n, expectedVersion: 4, isFinal: undefined }));
+  });
+
   it('manda versiones esperadas y referencias académicas al servidor sin convertir u64 a Number', async () => {
     const saveWorkVersion = vi.fn(async () => {});
     const reviewWork = vi.fn(async () => {});

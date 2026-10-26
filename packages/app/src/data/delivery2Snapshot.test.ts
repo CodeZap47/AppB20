@@ -13,6 +13,27 @@ function connection(rows: Record<string, unknown[]>): Pick<DbConnection, 'db'> {
 const base = { myMember: [member(me)], members: [member(me), member(other)] };
 
 describe('adaptador de datos de la segunda entrega', () => {
+  it('recupera el estado final por revisión, hereda cambios de adjuntos y respeta la vuelta a V1', () => {
+    const noteId = 18_446_744_073_709_551_614n;
+    const note = { id: noteId, subjectId: 1n, author: identity(me), title: 'Nota', body: 'Texto', topic: '',
+      tags: [], visibility: 'group', source: 'student', version: 5, createdAt: timestamp, updatedAt: timestamp };
+    const snapshot = readSnapshot(connection({ ...base,
+      notes: [note, { ...note, id: 2n, version: 3 }, { ...note, id: 3n, version: 1 }],
+      noteEditions: [
+        { key: `${noteId}:4`, noteId, version: 4, isFinal: false },
+        { key: `${noteId}:2`, noteId, version: 2, isFinal: true },
+        { key: `${noteId}:8`, noteId, version: 8, isFinal: true },
+        { key: '2:2', noteId: 2n, version: 2, isFinal: true },
+      ],
+      noteVersions: [1, 2, 3, 4, 5].map((version) => ({ ...note, id: BigInt(version), noteId, version,
+        session: '', assignmentIds: [], activityIds: [], questionIds: [], attachmentIds: [], editedAt: timestamp })),
+    }), me);
+    expect(snapshot.notes.map((item) => item.isFinal)).toEqual([false, true, false]);
+    expect(snapshot.noteVersions.map((item) => item.isFinal)).toEqual([false, true, true, false, false]);
+    expect(snapshot.notes[0]?.id).toBe(noteId.toString());
+    expect(PUBLIC_VIEWS).toContain('note_editions');
+  });
+
   it('suscribe vistas de presentación, lectura e historial y mantiene vacíos todos los arrays al desconectar', () => {
     for (const name of ['member_profiles', 'my_conversation_states', 'chat_channels', 'channel_messages', 'note_versions', 'guide_versions', 'question_comments', 'answer_usefulness', 'content_statuses', 'contribution_origins']) expect(PUBLIC_VIEWS).toContain(name);
     const snapshot = emptySnapshot('offline');

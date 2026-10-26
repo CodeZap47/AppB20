@@ -39,7 +39,7 @@ async function button(label: string, within: ParentNode = container) {
   await act(async () => target.click());
 }
 async function link(label: string, within: ParentNode = container) {
-  const target = [...within.querySelectorAll('a')].find((item) => item.textContent?.trim() === label);
+  const target = [...within.querySelectorAll('a')].find((item) => (item.getAttribute('aria-label') ?? item.textContent)?.trim() === label);
   if (!target) throw new Error(`Falta enlace ${label}`);
   await act(async () => target.click());
 }

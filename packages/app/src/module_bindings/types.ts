@@ -1500,6 +1500,17 @@ export type NoteDetail = __Infer<typeof NoteDetail>;
 export const NoteDetails = __t.object("NoteDetails", {});
 export type NoteDetails = __Infer<typeof NoteDetails>;
 
+export const NoteEdition = __t.object("NoteEdition", {
+  key: __t.string(),
+  noteId: __t.u64(),
+  version: __t.u32(),
+  isFinal: __t.bool(),
+});
+export type NoteEdition = __Infer<typeof NoteEdition>;
+
+export const NoteEditions = __t.object("NoteEditions", {});
+export type NoteEditions = __Infer<typeof NoteEditions>;
+
 export const NoteVersion = __t.object("NoteVersion", {
   id: __t.u64(),
   noteId: __t.u64(),

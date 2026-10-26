@@ -7,9 +7,10 @@ vi.mock('spacetimedb/server', () => {
   return { SenderError: class SenderError extends Error {}, t: new Proxy({}, { get: () => () => builder }), table: () => ({ rowType: builder }),
     schema: () => ({ reducer: handler, procedure: handler, init: handler, clientConnected: handler, view: handler }) };
 });
-import { accept_answer, get_resource_manifest, note_details, note_versions, notes, read_resource_chunk,
-  restore_guide_version, restore_note_version, save_note, save_note_v2, update_guide, update_guide_v2, withdraw_content, type Ctx } from './index';
-import { captureGuide, captureNote } from './delivery2Handlers';
+import { accept_answer, get_resource_manifest, note_details, note_editions, note_versions, notes, read_resource_chunk,
+  restore_guide_version, restore_note_version, save_note, save_note_v2, save_note_v3, update_guide, update_guide_v2, withdraw_content, type Ctx } from './index';
+import { bumpExtra, captureGuide, captureNote } from './delivery2Handlers';
+import { noteIsFinal } from './noteEdition';
 import { commentQuestion, publishNoteVersion, restoreGuideVersion, restoreNoteVersion, saveNoteV2, saveQuestionLinks, toggleAnswerUsefulness, type SaveNoteV2Input } from './knowledgeHandlers';
 
 const person = (digit: string) => Identity.fromString(digit.repeat(64));
@@ -48,7 +49,7 @@ function setup() {
     resourceUpload: [{ id: 'file-native', state: 'ready', chunkCount: 1, sha256: 'hash' }],
     resourceChunk: [{ id: 'file-native:0', uploadId: 'file-native', index: 0, bytes: new Uint8Array([1, 2, 3]), sha256: 'hash' }],
   };
-  const keys: Record<string, string> = { member: 'identity', noteDetail: 'noteId', answerUsefulness: 'key', contentStatus: 'key', resourceVersion: 'key' };
+  const keys: Record<string, string> = { member: 'identity', noteDetail: 'noteId', noteEdition: 'key', answerUsefulness: 'key', contentStatus: 'key', resourceVersion: 'key' };
   const tables = new Map<string, ReturnType<typeof tableStore>>();
   const db = new Proxy({}, { get: (_target, name: string) => { if (!tables.has(name)) tables.set(name, tableStore(keys[name] ?? 'id', initial[name])); return tables.get(name); } });
   const state = { db, sender: author, identity: author, timestamp: at, env: {}, senderAuth: { jwt: { issuer: 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1', audience: ['test'], fullPayload: { email: 'alumno@example.com', email_verified: true } } } };
@@ -57,6 +58,95 @@ function setup() {
   const rows = (name: string) => [...(db as Record<string, ReturnType<typeof tableStore>>)[name].rows.values()];
   return { ctx, proc, rows, as: (identity: Identity) => { state.sender = identity; }, tick: () => { state.timestamp = new Timestamp(state.timestamp.microsSinceUnixEpoch + 86_400_000_000n); } };
 }
+
+describe('edición final independiente de las revisiones técnicas', () => {
+  it('crea V1 o final sin alterar el contador ni exigir marcadores a las notas heredadas', () => {
+    const { ctx, rows } = setup();
+    expect(noteIsFinal(ctx.db, 70n, 1)).toBe(false);
+    for (const isFinal of [true, false, undefined]) {
+      save_note_v3(ctx, { ...noteInput, noteId: undefined, expectedVersion: undefined, isFinal });
+      const note = rows('note').at(-1)!;
+      expect(note.version).toBe(1);
+      expect(noteIsFinal(ctx.db, note.id as bigint, 1)).toBe(isFinal ?? false);
+    }
+    expect(rows('noteEdition')).toHaveLength(2);
+    expect(rows('noteEdition').map((marker) => marker.isFinal)).toEqual([true, false]);
+    expect(rows('noteVersion')).toHaveLength(3);
+  });
+
+  it('hereda la edición en adjuntos y clientes V2 y conserva el cambio explícito de final a V1', () => {
+    const { ctx, rows } = setup();
+    save_note_v3(ctx, { ...noteInput, isFinal: true });
+    bumpExtra(ctx, 'note', 70n);
+    save_note_v2(ctx, { ...noteInput, expectedVersion: 3 });
+    save_note_v3(ctx, { ...noteInput, expectedVersion: 4 });
+    expect(noteIsFinal(ctx.db, 70n, 1)).toBe(false);
+    for (const revision of [2, 3, 4, 5]) expect(noteIsFinal(ctx.db, 70n, revision)).toBe(true);
+    save_note_v3(ctx, { ...noteInput, expectedVersion: 5, isFinal: false });
+    bumpExtra(ctx, 'note', 70n);
+    expect(noteIsFinal(ctx.db, 70n, 5)).toBe(true);
+    expect(noteIsFinal(ctx.db, 70n, 6)).toBe(false);
+    expect(noteIsFinal(ctx.db, 70n, 7)).toBe(false);
+    expect(rows('noteEdition')).toMatchObject([
+      { key: '70:2', noteId: 70n, version: 2, isFinal: true },
+      { key: '70:6', noteId: 70n, version: 6, isFinal: false },
+    ]);
+    expect(rows('noteVersion').map((revision) => revision.version)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  });
+
+  it('copia el estado editorial y restaura el correspondiente a la revisión elegida', () => {
+    const { ctx, rows } = setup();
+    save_note_v3(ctx, { ...noteInput, isFinal: true });
+    bumpExtra(ctx, 'note', 70n);
+    publishNoteVersion(ctx, { noteId: 70n, expectedVersion: 3 });
+    const copy = rows('note').find((note) => note.id !== 70n && note.id !== 71n)!;
+    expect(copy.version).toBe(1);
+    expect(noteIsFinal(ctx.db, copy.id as bigint, 1)).toBe(true);
+    publishNoteVersion(ctx, { noteId: 70n, expectedVersion: 3 });
+    expect(rows('noteEdition').filter((marker) => marker.noteId === copy.id)).toHaveLength(1);
+    save_note_v3(ctx, { ...noteInput, expectedVersion: 3, isFinal: false });
+    restoreNoteVersion(ctx, { noteId: 70n, version: 3, expectedVersion: 4 });
+    expect(noteIsFinal(ctx.db, 70n, 5)).toBe(true);
+    restoreNoteVersion(ctx, { noteId: 70n, version: 1, expectedVersion: 5 });
+    expect(noteIsFinal(ctx.db, 70n, 6)).toBe(false);
+    expect(noteIsFinal(ctx.db, copy.id as bigint, 1)).toBe(true);
+    publishNoteVersion(ctx, { noteId: 70n, expectedVersion: 6 });
+    const v1Copy = rows('note').at(-1)!;
+    expect(noteIsFinal(ctx.db, v1Copy.id as bigint, 1)).toBe(false);
+    expect(rows('noteEdition').find((marker) => marker.noteId === v1Copy.id)?.isFinal).toBe(false);
+  });
+
+  it('protege los marcadores personales y conserva la edición al retirar y recuperar', () => {
+    const { ctx, rows, as } = setup();
+    save_note_v3(ctx, { ...noteInput, isFinal: true });
+    publishNoteVersion(ctx, { noteId: 70n, expectedVersion: 2 });
+    const copy = rows('note').find((note) => note.id !== 70n && note.id !== 71n)!;
+    as(peer);
+    expect(note_editions(ctx).map((marker) => marker.noteId)).toEqual([copy.id]);
+    as(removed); expect(note_editions(ctx)).toEqual([]);
+    as(author);
+    withdraw_content(ctx, { kind: 'note', targetId: copy.id as bigint, withdrawn: true, expectedVersion: 1, reason: '' });
+    expect(noteIsFinal(ctx.db, copy.id as bigint, 2)).toBe(true);
+    as(peer); expect(note_editions(ctx)).toEqual([]);
+    as(author);
+    withdraw_content(ctx, { kind: 'note', targetId: copy.id as bigint, withdrawn: false, expectedVersion: 2, reason: '' });
+    expect(noteIsFinal(ctx.db, copy.id as bigint, 3)).toBe(true);
+    as(peer); expect(note_editions(ctx).map((marker) => marker.noteId)).toEqual([copy.id]);
+  });
+
+  it('rechaza conflictos, autoría ajena y valores inválidos antes de escribir marcadores', () => {
+    const { ctx, rows, as } = setup();
+    as(peer);
+    expect(() => save_note_v3(ctx, { ...noteInput, isFinal: true })).toThrow('no existe');
+    expect(() => save_note_v3(ctx, { ...noteInput, noteId: 71n, visibility: 'group', isFinal: true })).toThrow('autor');
+    as(author);
+    expect(() => save_note_v3(ctx, { ...noteInput, expectedVersion: 99, isFinal: true })).toThrow('cambió');
+    expect(() => save_note_v3(ctx, { ...noteInput, isFinal: 'final' as unknown as boolean })).toThrow('editorial');
+    expect(rows('noteEdition')).toEqual([]);
+    expect(rows('noteVersion')).toEqual([]);
+    expect(ctx.db.note.id.find(70n)?.version).toBe(1);
+  });
+});
 
 describe('notas privadas e historial de conocimiento', () => {
   it('conserva el borrador privado y publica una copia con alias binarios independientes e idempotentes', () => {

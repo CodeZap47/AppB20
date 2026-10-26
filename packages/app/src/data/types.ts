@@ -601,6 +601,8 @@ export interface Note {
   source: NoteSource;
   authorId: Id;
   version: number;
+  /** Estado editorial; las notas anteriores sin valor se tratan como V1. */
+  isFinal?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -1049,6 +1051,8 @@ export interface CreateActivityInput {
 
 export interface SaveNoteInput {
   expectedVersion?: number;
+  /** Omitir al editar conserva el estado editorial actual. */
+  isFinal?: boolean;
   termId?: Id;
   session?: string;
   assignmentIds?: Id[];

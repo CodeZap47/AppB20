@@ -19,7 +19,17 @@ export function enrichDelivery2Snapshot(connection: Pick<DbConnection, 'db'>, sn
     return { withdrawnAt: row?.withdrawnAt?.toDate(), withdrawnBy: row?.withdrawnBy?.toHexString() };
   };
   const noteDetails = new Map([...(db.noteDetails?.iter() ?? [])].map((row) => [row.noteId.toString(), row]));
+  const noteEditions = new Map<string, { version: number; isFinal: boolean }[]>();
+  for (const row of [...(db.noteEditions?.iter() ?? [])].sort((a, b) => b.version - a.version)) {
+    const noteId = row.noteId.toString();
+    const editions = noteEditions.get(noteId) ?? [];
+    editions.push(row);
+    noteEditions.set(noteId, editions);
+  }
+  const isFinal = (noteId: string, version: number) =>
+    noteEditions.get(noteId)?.find((row) => row.version <= version)?.isFinal ?? false;
   const notes = snapshot.notes.filter((r) => r.visibility === 'group' || r.authorId === identity).map((row) => { const d = noteDetails.get(row.id); return { ...row, ...status('note', row.id),
+    isFinal: isFinal(row.id, row.version),
     termId: d?.termId?.toString(), session: d?.session || undefined, assignmentIds: d?.assignmentIds.map(String) ?? [],
     activityIds: d?.activityIds.map(String) ?? [], questionIds: d?.questionIds.map(String) ?? [],
     publishedFromId: d?.publishedFromId?.toString(), publishedFromVersion: d?.publishedFromVersion }; });
@@ -55,6 +65,7 @@ export function enrichDelivery2Snapshot(connection: Pick<DbConnection, 'db'>, sn
       id: r.id.toString(), memberId: r.memberId.toHexString(), subjectIds: r.subjectIds.map(String), updatedAt: r.updatedAt.toDate(),
       cover: covers.get(r.id.toString()) })),
     noteVersions: [...(db.noteVersions?.iter() ?? [])].filter((r) => visibleNotes.has(r.noteId.toString()) && (r.visibility === 'group' || r.author.toHexString() === identity)).map((r) => ({ ...r,
+      isFinal: isFinal(r.noteId.toString(), r.version),
       id: r.id.toString(), noteId: r.noteId.toString(), subjectId: r.subjectId.toString(), termId: r.termId?.toString(), session: r.session || undefined,
       visibility: value(r.visibility, ['group', 'personal']), source: value(r.source, ['student', 'teacher', 'ai']), authorId: r.author.toHexString(),
       assignmentIds: r.assignmentIds.map(String), activityIds: r.activityIds.map(String), questionIds: r.questionIds.map(String),

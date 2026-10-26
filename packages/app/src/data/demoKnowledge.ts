@@ -47,7 +47,7 @@ export class DemoKnowledgeStore {
     return this.ctx.files().filter((file) => file.targetKind === kind && file.targetId === id && !file.removedAt).map((file) => file.id);
   }
   private noteSnapshot(note: Note, editedBy?: Id): NoteVersion {
-    return { id: `note:${note.id}:${note.version}`, noteId: note.id, version: note.version,
+    return { id: `note:${note.id}:${note.version}`, noteId: note.id, version: note.version, isFinal: note.isFinal ?? false,
       subjectId: note.subjectId, termId: note.termId, session: note.session,
       topic: note.topic, title: note.title, body: note.body, tags: [...note.tags], visibility: note.visibility,
       source: note.source, authorId: note.authorId, assignmentIds: [...(note.assignmentIds ?? [])],
@@ -103,6 +103,7 @@ export class DemoKnowledgeStore {
     if (input.termId && !state.terms.some((term) => term.id === input.termId && term.subjectId === input.subjectId)) throw new Error('El parcial no pertenece a esta materia.');
     if (input.session && (!/^\d{4}-\d{2}-\d{2}$/.test(input.session) || !Number.isFinite(Date.parse(`${input.session}T12:00:00Z`)) || new Date(`${input.session}T12:00:00Z`).toISOString().slice(0, 10) !== input.session)) throw new Error('Escribe una fecha de sesión válida.');
     if (!['personal', 'group'].includes(input.visibility) || !['student', 'teacher', 'ai'].includes(input.source)) throw new Error('La visibilidad o el origen no son válidos.');
+    if (input.isFinal !== undefined && typeof input.isFinal !== 'boolean') throw new Error('La versión de la publicación no es válida.');
     const assignments = [...new Set(input.assignmentIds ?? [])]; const activities = [...new Set(input.activityIds ?? [])]; const questions = [...new Set(input.questionIds ?? [])];
     if ([assignments, activities, questions].some((ids) => ids.length > 50)) throw new Error('Selecciona hasta 50 vínculos de cada tipo.');
     if (assignments.some((id) => !state.assignments.some((item) => item.id === id && item.subjectId === input.subjectId)) || activities.some((id) => !state.activities.some((item) => item.id === id && item.subjectId === input.subjectId)) || questions.some((id) => !state.questions.some((item) => item.id === id && item.subjectId === input.subjectId))) throw new Error('Los vínculos deben pertenecer a esta materia.');
@@ -110,7 +111,7 @@ export class DemoKnowledgeStore {
     if (tags.length > 30 || tags.some((tag) => tag.length > 60)) throw new Error('Usa hasta 30 etiquetas de 60 caracteres.');
     return { subjectId: input.subjectId, termId: input.termId || undefined, session: input.session || undefined,
       topic: text(input.topic, 'El tema', 120), title: text(input.title, 'El título', 200, true), body: text(input.body, 'El contenido', 50_000, true),
-      visibility: input.visibility, source: input.source, tags, assignmentIds: assignments, activityIds: activities, questionIds: questions };
+      visibility: input.visibility, source: input.source, isFinal: input.isFinal ?? false, tags, assignmentIds: assignments, activityIds: activities, questionIds: questions };
   }
   saveNote(input: SaveNoteInput): Id {
     const me = this.ctx.active(); const fields = this.fields(input); const state = this.ctx.state(); const now = this.ctx.now();
@@ -118,7 +119,7 @@ export class DemoKnowledgeStore {
       const current = this.note(input.id, true); version(current.version, input.expectedVersion);
       if (current.visibility !== fields.visibility) throw new Error('Publica una copia desde la nota personal para compartir una versión. La visibilidad del historial se conserva.');
       this.captureNote(current.id);
-      state.notes = state.notes.map((note) => note.id === current.id ? { ...note, ...fields, version: note.version + 1, updatedAt: now } : note);
+      state.notes = state.notes.map((note) => note.id === current.id ? { ...note, ...fields, isFinal: input.isFinal ?? current.isFinal ?? false, version: note.version + 1, updatedAt: now } : note);
       this.captureNote(current.id, me.id); this.ctx.emit(); return current.id;
     }
     const note: Note = { id: this.ctx.id(), ...fields, authorId: me.id, version: 1, createdAt: now, updatedAt: now };
@@ -133,7 +134,7 @@ export class DemoKnowledgeStore {
     const now = this.ctx.now(); const nextId = this.ctx.id();
     const copied = this.ctx.copyFiles(id, nextId);
     const body = current.body.replace(/\(resource:([a-zA-Z0-9_-]+)\)/g, (original, fileId: string) => copied.has(fileId) ? `(resource:${copied.get(fileId)})` : original);
-    const next: Note = { ...current, id: nextId, body, version: 1, visibility: 'group', publishedFromId: id,
+    const next: Note = { ...current, id: nextId, body, version: 1, isFinal: current.isFinal ?? false, visibility: 'group', publishedFromId: id,
       publishedFromVersion: expectedVersion, createdAt: now, updatedAt: now };
     state.notes = [...state.notes, next]; this.captureNote(nextId, current.authorId); this.ctx.emit(); return nextId;
   }

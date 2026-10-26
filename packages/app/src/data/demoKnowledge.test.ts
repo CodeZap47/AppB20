@@ -33,6 +33,61 @@ function setup() {
 }
 
 describe('simulación de notas y guías', () => {
+  it('guarda el estado editorial sin confundirlo con la revisión y lo conserva al editar sin enviarlo', () => {
+    const { state, store, input } = setup();
+    const id = store.saveNote(input);
+    expect(state.notes.find((note) => note.id === id)).toMatchObject({ version: 1, isFinal: false });
+    store.saveNote({ ...input, id, isFinal: true, expectedVersion: 1 });
+    store.saveNote({ ...input, id, title: 'Final corregida', expectedVersion: 2 });
+    expect(state.notes.find((note) => note.id === id)).toMatchObject({ title: 'Final corregida', version: 3, isFinal: true });
+    store.saveNote({ ...input, id, isFinal: false, expectedVersion: 3 });
+    expect(state.notes.find((note) => note.id === id)).toMatchObject({ version: 4, isFinal: false });
+    expect(store.snapshot('demo-1').noteVersions.filter((revision) => revision.noteId === id)
+      .map(({ version, isFinal }) => ({ version, isFinal }))).toEqual([
+      { version: 1, isFinal: false }, { version: 2, isFinal: true },
+      { version: 3, isFinal: true }, { version: 4, isFinal: false },
+    ]);
+  });
+
+  it('publica una copia final independiente y conserva el estado de esa versión en su historial', () => {
+    const { state, store, input } = setup();
+    const id = store.saveNote({ ...input, isFinal: true });
+    const publishedId = store.publishNoteVersion(id, 1);
+    expect(state.notes.find((note) => note.id === publishedId))
+      .toMatchObject({ visibility: 'group', version: 1, isFinal: true, publishedFromVersion: 1 });
+    expect(store.snapshot('demo-4').noteVersions.find((revision) => revision.noteId === publishedId))
+      .toMatchObject({ version: 1, isFinal: true });
+    store.saveNote({ ...input, id, expectedVersion: 1, isFinal: false });
+    expect(state.notes.find((note) => note.id === publishedId)?.isFinal).toBe(true);
+    expect(state.notes.find((note) => note.id === id)?.isFinal).toBe(false);
+  });
+
+  it('restaura el estado editorial de cada revisión, también para notas anteriores sin ese campo', () => {
+    const { state, store, input } = setup();
+    const now = new Date('2026-10-20T16:00:00Z');
+    state.notes.push({ ...input, id: 'legacy', authorId: 'demo-1', version: 1, createdAt: now, updatedAt: now });
+    expect(state.notes[0]?.isFinal).toBeUndefined();
+    expect(store.snapshot('demo-1').noteVersions[0]?.isFinal).toBe(false);
+    store.saveNote({ ...input, id: 'legacy', expectedVersion: 1, isFinal: true });
+    store.restoreNoteVersion('legacy', 1, 2);
+    expect(state.notes[0]).toMatchObject({ version: 3, isFinal: false });
+    store.restoreNoteVersion('legacy', 2, 3);
+    expect(state.notes[0]).toMatchObject({ version: 4, isFinal: true });
+    expect(store.snapshot('demo-1').noteVersions.find((revision) => revision.version === 4))
+      .toMatchObject({ isFinal: true, restoredFromVersion: 2 });
+  });
+
+  it.each([null, 'final', 1, {}])('rechaza un estado editorial inválido (%j) sin modificar notas', (invalid) => {
+    const { state, store, input } = setup();
+    const isFinal = invalid as unknown as SaveNoteInput['isFinal'];
+    expect(() => store.saveNote({ ...input, isFinal })).toThrow('versión de la publicación');
+    expect(state.notes).toHaveLength(0);
+    const id = store.saveNote({ ...input, isFinal: true });
+    expect(() => store.saveNote({ ...input, id, expectedVersion: 1, isFinal })).toThrow('versión de la publicación');
+    expect(state.notes[0]).toMatchObject({ version: 1, isFinal: true });
+    expect(store.snapshot('demo-1').noteVersions).toHaveLength(1);
+  });
+
   it('publica una versión y conserva privados sus cambios posteriores y sus archivos originales', () => {
     const { state, store, input, addFile } = setup();
     const id = store.saveNote({ ...input, body: '![Dibujo](resource:privado)' });
