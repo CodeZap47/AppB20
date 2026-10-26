@@ -86,7 +86,7 @@ describe('correo de invitación', () => {
     const { invite, claim, queued } = setup();
     invite(true);
     expect(queued()?.status).toBe('pending');
-    expect(claim().jobs).toEqual([{ email: 'alumno@example.com', isCreator: true, inviterName: 'Ana' }]);
+    expect(claim().jobs).toEqual([{ email: 'alumno@example.com', isCreator: true, inviterName: 'Ana', requestId: JSON.stringify(['alumno@example.com', '0']) }]);
     expect(queued()?.status).toBe('leased');
   });
 
@@ -111,6 +111,32 @@ describe('correo de invitación', () => {
     expect(queued()?.attempts).toBe(1);
   });
 
+  it('recuperar un lease o reintentar conserva la solicitud; reenviar crea otra', () => {
+    const { ctx, as, admin, advance, invite, claim, finish } = setup();
+    invite();
+    const original = claim().jobs[0]!.requestId;
+    advance(6);
+    expect(claim(OTHER_LEASE).jobs[0]!.requestId).toBe(original);
+    finish('retry', OTHER_LEASE);
+    advance(8);
+    expect(claim().jobs[0]!.requestId).toBe(original);
+    finish('sent');
+    advance(11);
+    as(admin); resend_invitation_email(ctx, { email: 'alumno@example.com' });
+    const resent = claim().jobs[0]!.requestId;
+    expect(resent).not.toBe(original);
+    expect(JSON.parse(resent)).toEqual(['alumno@example.com', minutes(11).microsSinceUnixEpoch.toString()]);
+  });
+
+  it('distintos destinatarios tienen solicitudes diferentes aun con la misma fecha', () => {
+    const { ctx, invite, claim } = setup();
+    invite();
+    invite_member(ctx, { email: 'otro@example.com', isCreator: false });
+    const jobs = claim().jobs;
+    expect(jobs).toHaveLength(2);
+    expect(new Set(jobs.map((job) => job.requestId)).size).toBe(2);
+  });
+
   it('enviado queda registrado; un error temporal reintenta más tarde y uno definitivo falla', () => {
     const { advance, invite, claim, finish, queued } = setup();
     invite();
@@ -132,6 +158,19 @@ describe('correo de invitación', () => {
     invite();
     for (let attempt = 0; attempt < 5; attempt++) { advance(attempt * 600); claim(); finish('retry'); }
     expect(queued()).toMatchObject({ status: 'failed', attempts: 5 });
+  });
+
+  it('Retry-After aplaza el siguiente intento y conserva los límites de espera', () => {
+    const { ctx, advance, invite, claim, queued } = setup();
+    invite(); claim();
+    finishInvitationEmail(ctx, { email: 'alumno@example.com', leaseId: LEASE, outcome: 'retry', retryAfterSeconds: 180 });
+    expect(queued()).toMatchObject({ status: 'pending', attempts: 1, nextAttemptAt: minutes(3) });
+    advance(2);
+    expect(claim().jobs).toHaveLength(0);
+    advance(3);
+    expect(claim().jobs).toHaveLength(1);
+    finishInvitationEmail(ctx, { email: 'alumno@example.com', leaseId: LEASE, outcome: 'retry', retryAfterSeconds: 86400 });
+    expect(queued()?.nextAttemptAt).toEqual(minutes(3 + 8 * 60));
   });
 
   it('un lease ajeno o vencido no puede cerrar el envío', () => {

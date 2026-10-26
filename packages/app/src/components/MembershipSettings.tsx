@@ -147,7 +147,7 @@ function InvitationsSection() {
 
 function emailStatusText(invitation: Invitation): string | undefined {
   switch (invitation.emailStatus) {
-    case 'pending': return 'Enviando correo…';
+    case 'pending': return 'Correo pendiente de envío';
     case 'sent': return invitation.emailSentAt ? `Correo enviado el ${formatMediumDate(invitation.emailSentAt)}` : 'Correo enviado';
     case 'failed': return 'No se pudo enviar el correo';
     default: return undefined;

@@ -83,7 +83,7 @@ it('muestra el estado del correo y permite reenviar solo cuando corresponde', as
   await render(source);
   const resend = (email: string) => [...invitationItem(email)!.querySelectorAll('button')].find((b) => b.textContent === 'Reenviar');
 
-  expect(invitationItem('enviando@ejemplo.mx')?.textContent).toContain('Enviando correo');
+  expect(invitationItem('enviando@ejemplo.mx')?.textContent).toContain('Correo pendiente de envío');
   expect(invitationItem('reciente@ejemplo.mx')?.textContent).toContain('Correo enviado el');
   expect(invitationItem('fallido@ejemplo.mx')?.textContent).toContain('No se pudo enviar');
   expect(resend('enviando@ejemplo.mx')).toBeUndefined();

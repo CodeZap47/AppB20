@@ -4996,7 +4996,7 @@ export const invitation_emails_claim = spacetimedb.procedure({ payload: t.string
 }));
 export const invitation_emails_finish = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => {
   const input = notificationPayload(payload);
-  invitationEmails.finishInvitationEmail(tx, { email: notificationText(input, 'email'), leaseId: notificationText(input, 'leaseId'), outcome: notificationText(input, 'outcome'), error: input.error === undefined ? undefined : notificationText(input, 'error') }); return '{}';
+  invitationEmails.finishInvitationEmail(tx, { email: notificationText(input, 'email'), leaseId: notificationText(input, 'leaseId'), outcome: notificationText(input, 'outcome'), error: input.error === undefined ? undefined : notificationText(input, 'error'), retryAfterSeconds: input.retryAfterSeconds === undefined ? undefined : notificationNumber(input, 'retryAfterSeconds', 0, 86400) }); return '{}';
 }));
 /** Preflight de activación Supabase: no crea membresías ni consume plazas. */
 export const auth_activation_check = spacetimedb.procedure({ payload: t.string() }, t.bool(), (ctx, { payload }) => ctx.withTx((tx) =>

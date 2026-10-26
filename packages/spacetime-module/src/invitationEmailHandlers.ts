@@ -50,7 +50,7 @@ export function resendInvitationEmail(ctx: Ctx, email: string) {
 
 export function claimInvitationEmails(ctx: Ctx, input: { leaseId: string; limit: number }) {
   service(ctx); if (!UUID.test(input.leaseId)) throw new SenderError('Lease inválido.');
-  const jobs: { email: string; isCreator: boolean; inviterName: string }[] = [];
+  const jobs: { email: string; isCreator: boolean; inviterName: string; requestId: string }[] = [];
   const limit = Math.min(25, Math.max(1, input.limit));
   for (const row of [...ctx.db.invitationEmail.iter()]) {
     if (jobs.length >= limit) break;
@@ -64,12 +64,15 @@ export function claimInvitationEmails(ctx: Ctx, input: { leaseId: string; limit:
     if (attempts >= MAX_ATTEMPTS) { ctx.db.invitationEmail.email.update({ ...row, attempts, status: 'failed', leaseUntil: undefined }); continue; }
     ctx.db.invitationEmail.email.update({ ...row, attempts, status: 'leased', leaseId: input.leaseId, leaseUntil: at(now(ctx) + LEASE_MS) });
     const inviter = ctx.db.member.identity.find(invite.invitedBy);
-    jobs.push({ email: row.email, isCreator: invite.isCreator, inviterName: inviter?.status === 'active' ? inviter.displayName : 'La administración del grupo' });
+    jobs.push({ email: row.email, isCreator: invite.isCreator, inviterName: inviter?.status === 'active' ? inviter.displayName : 'La administración del grupo',
+      // El lease cambia al recuperar el trabajo; la solicitud solo cambia al volver a encolarlo.
+      requestId: JSON.stringify([row.email, row.requestedAt.microsSinceUnixEpoch.toString()]),
+    });
   }
   return { now: now(ctx), jobs };
 }
 
-export function finishInvitationEmail(ctx: Ctx, input: { email: string; leaseId: string; outcome: string; error?: string }) {
+export function finishInvitationEmail(ctx: Ctx, input: { email: string; leaseId: string; outcome: string; error?: string; retryAfterSeconds?: number }) {
   service(ctx); const row = ctx.db.invitationEmail.email.find(input.email);
   if (!row || row.leaseId !== input.leaseId || row.status !== 'leased') return;
   if (!row.leaseUntil || ms(row.leaseUntil) <= now(ctx)) throw new SenderError('El lease ya venció.');
@@ -81,7 +84,7 @@ export function finishInvitationEmail(ctx: Ctx, input: { email: string; leaseId:
     return;
   }
   const status = input.outcome === 'failed' || attempts >= MAX_ATTEMPTS ? 'failed' : 'pending';
-  ctx.db.invitationEmail.email.update({ ...row, attempts, status, lastError, nextAttemptAt: at(now(ctx) + notificationRetrySeconds(attempts) * 1000), leaseUntil: undefined });
+  ctx.db.invitationEmail.email.update({ ...row, attempts, status, lastError, nextAttemptAt: at(now(ctx) + notificationRetrySeconds(attempts, input.retryAfterSeconds) * 1000), leaseUntil: undefined });
 }
 
 /** Solo los creadores activos ven el estado, igual que la lista de invitaciones. */
