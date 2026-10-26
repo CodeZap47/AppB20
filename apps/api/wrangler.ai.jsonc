@@ -39,8 +39,8 @@
     "APP_URL": "https://b20.mx",
     "CORS_ORIGINS": "https://b20.mx,https://app-b20.pages.dev,http://localhost:5173,capacitor://localhost,https://localhost",
     "GEMINI_MODEL": "gemini-3.8-flash",
-    "INVITATION_EMAIL_FROM": "",
-    "INVITATION_EMAILS_ENABLED": "false",
+    "INVITATION_EMAIL_FROM": "B20 <invitaciones@b20.mx>",
+    "INVITATION_EMAILS_ENABLED": "true",
     "NOTIFICATIONS_ENABLED": "true",
     "OIDC_AUDIENCE": "authenticated",
     "OIDC_ISSUER": "https://pypdkigeywdughdhxlcm.supabase.co/auth/v1",
@@ -53,18 +53,14 @@
     "VAPID_SUBJECT": "https://b20.mx",
     "INVITATION_MASTER_VERSION": "v1"
   },
-  "send_email": [
-    {
-      "name": "EMAIL"
-    }
-  ],
   "secrets": {
     "required": [
       "AI_SERVICE_TOKEN",
       "AI_MASTER_KEYS_JSON",
       "NOTIFICATION_SERVICE_TOKEN",
       "VAPID_PRIVATE_KEY",
-      "INVITATION_MASTER_KEYS_JSON"
+      "INVITATION_MASTER_KEYS_JSON",
+      "RESEND_API_KEY"
     ]
   },
   "triggers": {

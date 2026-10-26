@@ -13,6 +13,12 @@ export async function runScheduledMaintenance(env: DeliveryMaintenanceEnv): Prom
   ];
   const results = await Promise.allSettled(tasks.map((task) => task.run()));
   for (let index = 0; index < results.length; index++) {
-    console.log(JSON.stringify({ event: 'scheduled_maintenance', task: tasks[index]!.name, ok: results[index]!.status === 'fulfilled' }));
+    const result = results[index]!;
+    const invitationResult = tasks[index]!.name === 'invitation-emails' && result.status === 'fulfilled'
+      ? result.value : undefined;
+    console.log(JSON.stringify({
+      event: 'scheduled_maintenance', task: tasks[index]!.name, ok: result.status === 'fulfilled',
+      ...(invitationResult && typeof invitationResult === 'object' ? invitationResult : {}),
+    }));
   }
 }
