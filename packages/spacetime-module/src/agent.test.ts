@@ -39,7 +39,7 @@ function setup() {
   const member = [admin, owner, peer, removed].map((person) => ({ identity: person, displayName: person === peer ? 'Ana Pérez' : 'Alumno', isCreator: person === admin, status: person === removed ? 'removed' : 'active' }));
   const work = (id: bigint, description: string) => ({ id, assignmentId: 1n, title: '', description, version: 2, createdBy: owner, createdAt: at, updatedAt: at });
   const initial: Record<string, Row[]> = {
-    member, appConfig: [{ id: 0, owner: admin }], authConfig: [{ id: 0, issuer: 'https://auth.spacetimedb.com/oidc', audiences: ['test'] }],
+    member, appConfig: [{ id: 0, owner: admin }], authConfig: [{ id: 0, issuer: 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1', audiences: ['test'] }],
     assignment: [{ id: 1n, subjectId: 1n, kind: 'tarea', title: 'Ciclos', instructions, version: 1, createdBy: admin, createdAt: at, updatedBy: admin, updatedAt: at }],
     work: [work(10n, 'Mi trabajo propio sobre recursión y casos base que se resuelven paso a paso.'), work(11n, essay), work(12n, 'Trabajo de mi equipo con Ana.')],
     workAuthor: [{ id: 1n, workId: 10n, author: owner }, { id: 2n, workId: 11n, author: peer }, { id: 3n, workId: 12n, author: owner }, { id: 4n, workId: 12n, author: peer }],
@@ -53,7 +53,7 @@ function setup() {
     if (!tables.has(property)) tables.set(property, store(keys[property] ?? 'id', initial[property]));
     return tables.get(property);
   } });
-  const state = { db, sender: owner, identity: admin, timestamp: at, env: {}, senderAuth: { jwt: { issuer: 'https://auth.spacetimedb.com/oidc', audience: ['test'], fullPayload: { email: 'alumno@example.com', email_verified: true } } } };
+  const state = { db, sender: owner, identity: admin, timestamp: at, env: {}, senderAuth: { jwt: { issuer: 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1', audience: ['test'], fullPayload: { email: 'alumno@example.com', email_verified: true } } } };
   return { ctx: state as unknown as Ctx, as: (sender: Identity) => { state.sender = sender; },
     rows: (table: string) => [...(db as Record<string, ReturnType<typeof store>>)[table].rows.values()] };
 }

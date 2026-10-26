@@ -16,11 +16,11 @@ Keep shared academic work, learning materials, conversations, and personal progr
 
 ## Capabilities and Constraints
 
-Existing React/TypeScript interface shared by web/PWA, Chrome extension and Capacitor Android. SpacetimeAuth OIDC identifies users; SpacetimeDB enforces invitations, membership, ownership and privacy. Preserve those checks. Demo data is synthetic and isolated. Keep work local and uncommitted.
+Existing React/TypeScript interface shared by web/PWA, Chrome extension and Capacitor Android. Supabase Auth identifies users (authentication only); SpacetimeDB enforces invitations, membership, ownership and privacy. Preserve those checks. Demo data is synthetic and isolated. Keep work local and uncommitted.
 
-Confirmed development brief: persistent login with options beyond magic links; first-use tutorial and profile setup; bounded profile customization; a royal gold admin banner titled «lamerapoya» for Luis Flores Bojorquez, Gamaliel Seefoo, Christian (surname unknown), and Kevin Alcaraz; due-date calendar; subjects with assignments and linked class notes; typing presence; better profile spacing and contribution navigation; purposeful panel and route animation.
+Confirmed development brief: persistent login with options beyond magic links; first-use tutorial and profile setup; bounded profile customization; a royal gold visual banner titled «lamerapoya» exclusively for Kevin Alcaraz; due-date calendar; subjects with assignments and linked class notes; typing presence; better profile spacing and contribution navigation; purposeful panel and route animation.
 
-The decorative admin title must not grant permissions. Exact immutable member identities are not supplied. Never grant roles by name. Supported login methods depend on SpacetimeAuth project configuration; do not invent a local password service.
+The decorative admin title must not grant permissions. Exact immutable member identities are not supplied. Never grant roles by name. Supported login methods depend on the Supabase Auth project configuration; do not invent a local password service.
 
 ## Brand Commitments
 

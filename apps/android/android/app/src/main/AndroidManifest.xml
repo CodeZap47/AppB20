@@ -22,7 +22,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Retornos OIDC; state/nonce/PKCE se verifican en oidc-client-ts. -->
+            <!-- Retornos OAuth de Supabase Auth; el SDK verifica el código PKCE. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

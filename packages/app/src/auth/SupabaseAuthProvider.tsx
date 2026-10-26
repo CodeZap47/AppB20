@@ -7,7 +7,7 @@ import { AuthFrame } from './AuthFrame';
 import { SessionStore } from './session';
 import { createB20Supabase, supabaseRedirect, supabaseStorage } from './supabaseClient';
 import { getChromeAuth } from './platformAuth';
-import { matchesCallback, signinReturnTo } from './oidc';
+import { matchesCallback, signinReturnTo } from './callbacks';
 import { pendingInviteLink } from './inviteLink';
 import { capturePendingInvitation, getPendingInvitation } from './pendingInvitation';
 
@@ -211,7 +211,7 @@ function SupabaseBridge({ client, platform, children }: {
       if (register) setPendingStep((step) => step === 'passkey' ? null : step);
     }),
   };
-  return <AuthContext value={{ store, signIn: () => {}, busy: pending > 0 }}>
+  return <AuthContext value={{ store, busy: pending > 0 }}>
     <SupabaseContext value={actions}>{children}</SupabaseContext>
   </AuthContext>;
 }

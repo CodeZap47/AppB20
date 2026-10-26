@@ -1,5 +1,6 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
+  // API de B20 (acceso, IA, avisos y correos), ligada al dominio del proyecto.
   "name": "b20-api",
   "account_id": "ab3a0c0641ce296cd9f38fab76f6d90b",
   "main": "src/guideWorker.ts",
@@ -33,6 +34,7 @@
   "vars": {
     "AGENT_AI_STEPS": "style",
     "AI_ENABLED": "true",
+    // Las claves de Gemini guardadas con la versión perdida v1 deben volver a guardarse.
     "AI_MASTER_VERSION": "v2",
     "APP_URL": "https://b20.mx",
     "CORS_ORIGINS": "https://b20.mx,https://app-b20.pages.dev,http://localhost:5173,capacitor://localhost,https://localhost",
@@ -45,6 +47,7 @@
     "OIDC_JWKS_URI": "https://pypdkigeywdughdhxlcm.supabase.co/auth/v1/.well-known/jwks.json",
     "SPACETIMEDB_MODULE": "app-b20-34245",
     "SPACETIMEDB_URI": "https://maincloud.spacetimedb.com",
+    // La clave secreta se conserva como secreto del Worker.
     "SUPABASE_URL": "https://pypdkigeywdughdhxlcm.supabase.co",
     "VAPID_PUBLIC_KEY": "BI3gEf_VjuIUVWb__T2opJzEo-boIJ1L4-gRWSJptTM5VTVvbn8hAZPW5ixl92Iq1_FWkk1gmalQxu1wmxj_36U",
     "VAPID_SUBJECT": "https://b20.mx",

@@ -8,9 +8,10 @@ function required(name: string): string {
 export const env = {
   port: Number(process.env.PORT ?? 8787),
   corsOrigins: (process.env.CORS_ORIGINS ?? '').split(',').filter(Boolean),
-  oidcIssuer: () => process.env.OIDC_ISSUER ?? 'https://auth.spacetimedb.com/oidc',
+  /** Supabase Auth: `https://<ref>.supabase.co/auth/v1`, audiencia `authenticated`. */
+  oidcIssuer: () => required('OIDC_ISSUER'),
   oidcAudiences: () => required('OIDC_AUDIENCE').split(',').map((value) => value.trim()).filter(Boolean),
-  oidcJwksUri: () => process.env.OIDC_JWKS_URI ?? 'https://auth.spacetimedb.com/oidc/jwks',
+  oidcJwksUri: () => required('OIDC_JWKS_URI'),
   spacetimeUri: () => required('SPACETIMEDB_URI'),
   spacetimeModule: () => required('SPACETIMEDB_MODULE'),
   /** La API Node heredada es solo local; el despliegue nuevo usa SpacetimeDB + Cloudflare. */

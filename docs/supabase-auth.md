@@ -1,29 +1,33 @@
 # Supabase Auth + SpacetimeDB en B20
 
-Proyecto autorizado: **casdrecords**, referencia `tgtvvbqlmlljuufrutbk`.
+Proyecto actual: referencia **`pypdkigeywdughdhxlcm`** (`https://pypdkigeywdughdhxlcm.supabase.co`),
+en uso desde el 23 de octubre de 2026. Sustituyó al proyecto anterior `casdrecords`
+(`tgtvvbqlmlljuufrutbk`), cuya configuración no se completó.
 
 Supabase solo gestiona credenciales, confirmación de correo, recuperación y sesiones.
 Los perfiles, membresías, permisos, trabajos, archivos, calendario y mensajes permanecen
 en el módulo de SpacetimeDB. B20 no consulta tablas de dominio de Supabase.
 
-## Configuración realizada el 22 de octubre de 2026
+## Estado del proyecto actual
 
-- SQL aprobado aplicado mediante el plugin Supabase como `b20_auth_verified_email_hook`.
-- Hook `b20_auth.access_token_hook` habilitado en Authentication → Auth Hooks, con aprobación explícita.
-- Retorno exacto `http://localhost:5173/auth/callback` registrado, con aprobación explícita.
-- Site URL existente `http://localhost:3000` conservada.
-- Descubrimiento OIDC comprobado: `https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1/.well-known/openid-configuration`.
-- JWKS comprobado: `https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1/.well-known/jwks.json`, clave ES256.
-- API pública de configuración: email habilitado, registro habilitado, confirmación de correo requerida;
-  Google, GitHub, teléfono y acceso anónimo deshabilitados.
-- `.env.local` usa Supabase Auth con la clave publishable pública obtenida del proyecto.
-  El preview actual usa `VITE_DATA_MODE=spacetime`, `wss://maincloud.spacetimedb.com` y `app-b20-34245`.
-- No se publicó el módulo en Maincloud, no se cambió su proveedor de producción ni se vincularon cuentas reales.
-- No se hicieron commits, push ni despliegues de Cloudflare.
+Comprobado el 23 de octubre de 2026 con su configuración pública:
 
-El plugin permite SQL y consultar el proyecto, pero no editar los ajustes de Auth.
-La activación del hook y el retorno se completaron en el panel. El SQL fuente reproducible
-está en `scripts/supabase-b20-auth.sql`.
+- Emisor `https://pypdkigeywdughdhxlcm.supabase.co/auth/v1`; JWKS en
+  `/auth/v1/.well-known/jwks.json` con una clave **ES256**, que SpacetimeDB y el Worker verifican.
+- Correo habilitado, acceso anónimo deshabilitado.
+
+Configuración pendiente en el panel del proyecto:
+
+1. **SQL Editor:** ejecutar `scripts/supabase-b20-auth.sql` y activar `b20_auth.access_token_hook`
+   en **Authentication → Hooks → Customize Access Token**.
+2. **SQL Editor:** ejecutar `scripts/supabase-b20-account-state.sql`.
+3. Desactivar **Allow new users to sign up** (hoy sigue abierto).
+4. Plantilla **Magic Link** con `docs/email/supabase-magic-link.html` y SMTP de Resend;
+   Site URL `https://b20.mx`.
+5. Crear una clave `sb_secret_`; `node scripts/recrear-api-worker.mjs` la guarda como `SUPABASE_SECRET_KEY` del Worker `b20-api`.
+
+`scripts/supabase-reset-for-b20.sql` es un registro del proyecto anterior: **no** se ejecuta en
+este, cuyo esquema `public` ya está vacío.
 
 ## Correo verificado
 
@@ -38,8 +42,7 @@ ausencia de EXECUTE para `anon` y `authenticated`; metadatos falsificados no ver
 ## Cliente
 
 ```dotenv
-VITE_AUTH_PROVIDER=supabase
-VITE_SUPABASE_URL=https://tgtvvbqlmlljuufrutbk.supabase.co
+VITE_SUPABASE_URL=https://pypdkigeywdughdhxlcm.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 VITE_SUPABASE_OAUTH_PROVIDERS=
 VITE_SUPABASE_PASSKEYS_ENABLED=false
@@ -51,41 +54,103 @@ La biblioteca administra refresh tokens, PKCE y eventos de sesión. El almacenam
 «Mantener mi sesión iniciada», elimina copias antiguas y permite cerrar la sesión local
 incluso si falla la red. La renovación reemplaza el token utilizado por la conexión SpacetimeDB.
 
-El login ofrece contraseña, registro, recuperación y acceso por correo. El formulario de código
-funciona si la plantilla de email contiene el OTP. El enlace PKCE debe abrirse en el navegador
-que inició el flujo. La devolución web consume el código y retira parámetros de autenticación.
+### Acceso sin registro abierto
+
+Nadie crea su propia cuenta. **Invitar a alguien en B20 es lo que lo activa**, y el acceso va por pasos:
+
+1. La persona escribe su correo y pulsa **Continuar**. La web pregunta al Worker de IA
+   (`POST /auth/account/state`) en qué estado está esa cuenta:
+   - `password`: ya tiene contraseña; se le pide la contraseña.
+   - `setup`: está activada y aún no la crea. Se le envía un código de 6 dígitos.
+   - `inactive`: no tiene cuenta ni invitación pendiente; se le pide que solicite acceso.
+2. Si la cuenta no existe en Supabase, el Worker consulta al módulo con `auth_activation_check`
+   (solo la identidad técnica de notificaciones puede llamarlo). Si el correo tiene una invitación
+   pendiente, crea la cuenta con la API administrativa de Supabase y responde `setup`.
+3. Tras confirmar el código, la contraseña es **obligatoria**: la app muestra "Crea tu contraseña"
+   hasta guardarla. El código usa `shouldCreateUser: false`, así que nunca crea cuentas.
+4. Si las passkeys están habilitadas, justo después se ofrece añadir una; se puede omitir.
+5. "Olvidé mi contraseña" reutiliza el código y vuelve a pedir una contraseña nueva.
+
+La marca `user_metadata.b20_password` solo decide qué pantalla mostrar; la autorización sigue
+siendo el correo verificado por el hook y la membresía en SpacetimeDB.
+
+Configuración necesaria antes de usarlo en producción:
+
+- Ejecutar `scripts/supabase-b20-account-state.sql` como `postgres`. Crea `public.b20_account_state`,
+  ejecutable solo por `service_role`.
+- En **Authentication → Sign In / Providers**, desactivar **Allow new users to sign up**.
+- En **Authentication → Emails → Magic Link**, usar el asunto «Tu código para entrar a B20» y pegar
+  como cuerpo `docs/email/supabase-magic-link.html`, que lleva `{{ .Token }}` con el diseño de la
+  edición Campus. Se regenera desde `apps/api/src/email/accessCode.ts` con
+  `npm run email:templates -w @b20/api`; una prueba falla si el archivo queda desactualizado.
+  La estrella del encabezado se sirve desde `https://b20.mx/email/estrella.png`
+  (`apps/web/public/email/`), así que aparece cuando esa versión de la web esté publicada.
+- Guardar la clave `sb_secret_…` como secreto del Worker de IA. Nunca va en el cliente:
+
+  ```sh
+  npx wrangler secret put SUPABASE_SECRET_KEY --config apps/api/wrangler.ai.jsonc
+  ```
+
+- Publicar el módulo (añade `auth_activation_check`) y desplegar el Worker de IA.
+
+El Worker no limita todavía cuántas consultas de estado recibe; la respuesta revela si un correo
+está activado. Si hiciera falta, añadir una regla de rate limiting de Cloudflare a esa ruta.
 
 Google/GitHub solo aparecen al configurar `VITE_SUPABASE_OAUTH_PROVIDERS`; no están habilitados
-en casdrecords. Las passkeys están preparadas detrás de una bandera y requieren habilitar/configurar
+en el proyecto. Las passkeys están preparadas detrás de una bandera y requieren habilitar/configurar
 su RP ID y origins en Supabase. Su UI se ofrece solo en la web con WebAuthn; el APK necesita
 la integración nativa correspondiente. No se cambió esa configuración ni se registraron credenciales.
 
 Android conserva `mx.b20.app://auth/callback`; OAuth de extensión usa el retorno exacto
-de `chrome.identity`. Esos retornos deben registrarse antes de usar esos flujos. Email y contraseña
-no requieren un navegador externo; recuperación y confirmación de correo sí necesitan un retorno válido.
+de `chrome.identity`. Esos retornos deben registrarse antes de usar esos flujos. El código,
+la contraseña y su recuperación no requieren un navegador externo ni un retorno registrado.
 
-Antes de abrir el registro a compañeros, comprobar el SMTP del proyecto: el servicio de correo
+Antes de activar a compañeros, comprobar el SMTP del proyecto: el servicio de correo
 predeterminado de Supabase tiene restricciones de destinatarios y de envío. No se enviaron correos
 de prueba ni se crearon cuentas reales durante esta integración.
 
-## Cambio de producción y conservación de cuentas
+### Enlace de invitación
 
-1. Publicar el módulo compatible con `--delete-data=never` y mantener al propietario técnico actual.
-2. Identificar la membresía original y la identidad de conexión nueva de cada cuenta mediante un
-   proceso de recuperación verificado. **No usar nombres o metadatos editables como prueba.**
-3. El propietario llama `link_auth_identity(sessionIdentity, memberIdentity)` para cada cuenta aprobada.
-   No permite fusionar dos miembros, cambiar un vínculo existente, crear cadenas ni vincular el owner técnico.
-   `unlink_auth_identity` revoca un vínculo explícitamente.
-4. El propietario configura `set_supabase_auth` con issuer `https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1`,
-   audiencia `authenticated` y `enabled=true`. Usa la fila adicional 1, conservando el proveedor
-   anterior en la fila 0 para los miembros que todavía no han migrado. Registrar primero el
-   retorno HTTPS exacto de la web final. Se puede revocar la fila adicional con `enabled=false`.
-5. Ajustar los Workers: `OIDC_ISSUER` al issuer anterior, `OIDC_AUDIENCE=authenticated`,
-   `OIDC_JWKS_URI` al JWKS anterior. La API valida firma RS256/ES256, issuer, audiencia,
-   vencimiento, correo verificado y membresía activa en cada solicitud.
-6. Activar `VITE_AUTH_PROVIDER=supabase` en el build de producción, publicar el cliente y
-   reconectar los clientes existentes. Verificar login y permisos antes de retirar el flujo anterior;
-   al finalizar la transición, `set_auth_config` puede sustituir el proveedor principal por Supabase.
+Además de invitar correo por correo, un creador puede compartir **un enlace** desde
+**Ajustes → Enlace de invitación**. Quien lo abra entra con **cualquier correo**: la API crea la
+invitación de integrante para ese correo, envía el código y la persona crea su contraseña y se
+une. El rol siempre es integrante; nunca da administración.
+
+- **Dirección:** `https://b20.mx/#/unirme/<código>`. El código son 32 bytes aleatorios generados en
+  el navegador de quien lo crea; el módulo solo guarda su **hash SHA-256** (`invite_link`), así que
+  el enlace se muestra **una sola vez**. Lo que va después de `#` no viaja al servidor; la web lo
+  guarda en `sessionStorage` hasta que la persona se une.
+- **Límites:** vence en 1, 7 o 30 días; de 1 a 100 usos; como máximo 10 enlaces vigentes. Cada
+  correo gasta un uso una sola vez (`invite_link_redemption`). Si el correo ya tenía invitación,
+  se respeta la que hay y no se gasta uso.
+- **Canje:** `POST /auth/account/state` recibe `invite`; el Worker calcula el hash y llama
+  `invite_link_redeem` con la identidad técnica de avisos. El módulo responde `true`/`false` sin
+  explicar por qué; la web muestra «Este enlace venció, se revocó o ya no tiene usos».
+- **Revocar:** el enlace deja de servir y se retiran las invitaciones que creó y que nadie aceptó.
+  Quien ya se unió sigue en el grupo.
+- **Cuidado:** quien tenga el enlace puede entrar. Compártelo solo con el grupo y revócalo si se
+  filtra. El correo con el código solo llega a personas fuera de tu equipo de Supabase cuando
+  Resend está configurado como SMTP.
+
+## Supabase Auth como único proveedor
+
+Desde el 23 de octubre de 2026 B20 ya no usa SpacetimeAuth. El corte consistió en:
+
+1. `set_auth_config` con el emisor `https://pypdkigeywdughdhxlcm.supabase.co/auth/v1` y la
+   audiencia `authenticated`. Desde ese momento las sesiones de SpacetimeAuth dejan de valer.
+2. Publicar el módulo que solo acepta emisores de Supabase (`allowedAuthIssuer`) y lee una sola
+   fila de `auth_config`.
+3. Desplegar los Workers con `OIDC_ISSUER`, `OIDC_AUDIENCE=authenticated` y el JWKS del proyecto.
+   La API valida firma RS256/ES256, emisor, audiencia, vencimiento, correo verificado y
+   membresía activa en cada solicitud.
+4. Publicar la web con `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY`; el cliente ya no
+   incluye `oidc-client-ts` ni la pantalla de SpacetimeAuth.
+
+Las membresías creadas con SpacetimeAuth conservan autoría, progreso y mensajes: el propietario
+las vincula a la cuenta nueva con `link_auth_identity(sessionIdentity, memberIdentity)`. No
+permite fusionar dos miembros, cambiar un vínculo existente, crear cadenas ni vincular el owner
+técnico; `unlink_auth_identity` revoca un vínculo. Hasta vincularse, esas personas no tienen
+acceso. **No usar nombres o metadatos editables como prueba de identidad.**
 
 ### Obtener la identidad nueva de cada miembro
 
@@ -96,9 +161,11 @@ pedírsela a la persona ni confiar en datos que ella pueda editar.
 con el `iss` y el `sub` del token de la CLI produce exactamente la identidad que muestra
 `spacetime login show`.
 
-1. La persona crea su cuenta en la web con el correo con el que ya era miembro y lo confirma.
-2. En Supabase, **Authentication → Users**: buscar su correo, comprobar que figura como
-   confirmado y copiar su **User UID**.
+1. Activa su cuenta en Supabase antes de que entre. Los miembros actuales no tienen invitación
+   pendiente, así que el Worker no los activa solo: en **Authentication → Users → Add user →
+   Create new user**, usa su correo, una contraseña temporal que no compartas y **Auto Confirm**.
+   No la invites en B20: con una invitación pendiente, `join_group` le crearía otra membresía.
+2. En esa misma lista, copiar su **User UID**.
 3. Confirmar con la persona, por un canal que ya conozcas, que ese correo es suyo. El nombre
    visible del miembro no sirve como prueba: lo edita cada quien.
 4. Listar las membresías activas y elegir la suya:
@@ -121,6 +188,9 @@ su correo, `join_group` crearía una membresía nueva para la identidad de Supab
 `link_auth_identity` la rechazaría por no poder fusionar membresías. Antes del cambio, revoca
 con `revoke_invitation` las invitaciones de personas que ya son miembros.
 
+Una vez vinculada, la persona escribe su correo en la web; como su cuenta ya tiene la contraseña
+temporal, usa **Olvidé mi contraseña**, confirma el código y crea la suya.
+
 La tabla privada `auth_identity_link` conserva la identidad de dominio antigua. Los reducers,
 procedures y vistas resuelven la identidad de miembro de forma consistente para preservar
 autoría, progreso, mensajes privados y claves de IA. Las credenciales del propietario técnico
@@ -137,7 +207,7 @@ vínculo; una caché de otra cuenta nunca basta para aceptar su membresía.
 - No se completó login con una cuenta real; requiere que su titular introduzca sus credenciales.
 - Revisión visual de localhost pendiente: se denegó acceso del navegador a ese origen.
 
-## Limpieza de la aplicación anterior, autorizada por el propietario
+## Limpieza de la aplicación anterior en casdrecords (proyecto anterior)
 
 El 22 de octubre de 2026 se aplicó mediante el plugin la migración
 `reset_legacy_schema_for_b20_auth_only`, con autorización explícita de eliminar la base anterior.

@@ -6,6 +6,12 @@ cron y claves VAPID están configurados en producción. El cron real observado y
 La recepción push en dispositivos, con permiso y suscripción de sus titulares, sigue
 pendiente de validación; configurar el servicio no concede esos permisos.
 
+**Verificación técnica del 23 de octubre de 2026:** el servicio actual `b20-api`
+(`https://api.b20.mx`) tiene avisos habilitados, claves públicas coincidentes con la web
+y una ejecución real del cron observada sin errores. La [verificación de push en teléfonos](verificacion-push-moviles.md)
+registra la revisión publicada, las pruebas de permisos, los límites de la interfaz y el
+protocolo de aceptación en iPhone y Android como PWA. La recepción física continúa pendiente.
+
 La bandeja `/m/avisos` persiste en SpacetimeDB y funciona sin permiso del navegador, sin VAPID y sin activar el Worker. Los eventos de la aplicación materializan los primeros 100 destinatarios inmediatamente. Un cursor privado conserva el resto para el cron. Las preferencias son privadas, tienen versión y permiten elegir categorías, zona IANA, hora del recordatorio y descanso. Descanso con inicio y fin iguales significa desactivado.
 
 Los recordatorios de calendario dependen del cron de Cloudflare, ya activo en el grupo publicado. Web Push añade la entrega al dispositivo; sus endpoints son transporte estándar de los navegadores. No se usa el SDK de Firebase ni se almacenan eventos, claves o colas en otro servicio. Las suscripciones y la cola viven en tablas privadas de SpacetimeDB. El cliente sólo recibe el nombre y estado de sus instalaciones, nunca endpoints ni claves del resto de miembros.
@@ -44,6 +50,19 @@ La confirmación del navegador y la base de datos no forman una transacción dis
 
 Las pruebas cubren permisos privados, lectura/silencio/bloqueo, deduplicación, leases y renovación, límites de instalaciones, catch-up, DST y año bisiesto. El cifrado se verifica con el vector publicado de RFC 8291, descifrado del receptor y firma VAPID. Una prueba con Miniflare ejecuta HKDF, ECDH, AES-GCM y VAPID en workerd.
 
-No se han creado secretos reales, enviado avisos a dispositivos personales ni desplegado el Worker durante esta implementación. La entrega efectiva requiere HTTPS, service worker activo, soporte de Push API y permiso concedido. En iOS depende de una PWA instalada y del soporte de la versión del sistema; en la extensión y el APK se usa Web Push sólo si el contenedor expone esas APIs. La bandeja privada sigue disponible en las tres superficies.
+La implementación inicial no envió avisos a dispositivos personales. La entrega efectiva
+requiere HTTPS, service worker activo, soporte de Push API y permiso concedido. La
+verificación móvil se refiere a la PWA instalada en iPhone y Android; el APK excluye el
+service worker de la PWA y no tiene implementada la recepción push nativa. La bandeja
+privada sigue disponible en las tres superficies.
+
+En el **código local, aún sin desplegar**, la guía de instalación incluye iPhone y Android y
+explica cómo guardar el envío, activar el dispositivo y conceder o rehabilitar su permiso.
+El indicador «Activo» del dispositivo local exige permiso concedido, suscripción disponible,
+registro habilitado y envío guardado. Las otras instalaciones habilitadas se muestran como
+«Registrado», sin afirmar que sus permisos sigan concedidos. La consulta no pide permisos
+y se repite al volver a la pantalla. Ningún indicador acredita por sí solo recepción visible:
+consultar el protocolo y las restricciones del sistema en la
+[verificación de teléfonos](verificacion-push-moviles.md).
 
 Referencias: [RFC 8291](https://www.rfc-editor.org/rfc/rfc8291), [RFC 8292](https://www.rfc-editor.org/rfc/rfc8292), [Web Crypto en Cloudflare Workers](https://developers.cloudflare.com/workers/runtime-apis/web-crypto/).

@@ -1,3 +1,5 @@
+-- REGISTRO HISTÓRICO: se aplicó una sola vez al proyecto anterior (casdrecords).
+-- NO ejecutar en el proyecto actual pypdkigeywdughdhxlcm: borra el esquema public.
 -- DESTRUCTIVO. Proyecto autorizado: casdrecords / tgtvvbqlmlljuufrutbk.
 -- Elimina el dominio de la aplicación anterior; conserva Supabase y el Auth de B20.
 -- Los archivos/buckets deben eliminarse mediante Storage, nunca borrando sus filas SQL.

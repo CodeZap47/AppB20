@@ -14,12 +14,9 @@ export default defineConfig(({ mode }) => {
     if (env.VITE_DATA_MODE && !['demo', 'spacetime'].includes(env.VITE_DATA_MODE)) {
       throw new Error('VITE_DATA_MODE debe ser demo o spacetime.');
     }
-    const required = ['VITE_WEB_ORIGIN', 'VITE_SPACETIME_URI', 'VITE_SPACETIME_DB',
-      ...(env.VITE_AUTH_PROVIDER === 'supabase' ? ['VITE_SUPABASE_URL', 'VITE_SUPABASE_PUBLISHABLE_KEY'] : ['VITE_SPACETIMEAUTH_CLIENT_ID'])];
-    if (env.VITE_AUTH_PROVIDER && !['supabase', 'spacetimeauth'].includes(env.VITE_AUTH_PROVIDER)) {
-      throw new Error('VITE_AUTH_PROVIDER debe ser supabase o spacetimeauth.');
-    }
-    if (env.VITE_AUTH_PROVIDER === 'supabase' && !env.VITE_SUPABASE_PUBLISHABLE_KEY?.startsWith('sb_publishable_')) {
+    // Supabase Auth es el único proveedor de inicio de sesión.
+    const required = ['VITE_WEB_ORIGIN', 'VITE_SPACETIME_URI', 'VITE_SPACETIME_DB', 'VITE_SUPABASE_URL', 'VITE_SUPABASE_PUBLISHABLE_KEY'];
+    if (env.VITE_SUPABASE_PUBLISHABLE_KEY && !env.VITE_SUPABASE_PUBLISHABLE_KEY.startsWith('sb_publishable_')) {
       throw new Error('Usa una clave pública sb_publishable_ de Supabase en el cliente.');
     }
     for (const key of required) {
@@ -40,8 +37,6 @@ export default defineConfig(({ mode }) => {
       ['VITE_AI_API_URL', 'https:'],
       ['VITE_INVITATION_API_URL', 'https:'],
       ['VITE_SUPABASE_URL', 'https:'],
-      ['VITE_SPACETIMEAUTH_REDIRECT_URI', 'https:'],
-      ['VITE_SPACETIMEAUTH_POST_LOGOUT_REDIRECT_URI', 'https:'],
     ] as const;
     for (const [key, protocol] of urls) {
       if (!env[key]?.trim()) continue;
@@ -51,10 +46,6 @@ export default defineConfig(({ mode }) => {
           url.username || url.password || url.search || url.hash) {
         throw new Error(`${key} debe usar ${protocol} sin credenciales y apuntar a un servicio público.`);
       }
-    }
-    if (env.VITE_SPACETIMEAUTH_AUTHORITY &&
-        env.VITE_SPACETIMEAUTH_AUTHORITY.replace(/\/$/, '') !== 'https://auth.spacetimedb.com/oidc') {
-      throw new Error('VITE_SPACETIMEAUTH_AUTHORITY debe ser https://auth.spacetimedb.com/oidc.');
     }
   }
   return {

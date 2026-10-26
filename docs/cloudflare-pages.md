@@ -2,7 +2,7 @@
 
 El proyecto **Pages `app-b20`** está conectado al repositorio `CodeZap47/AppB20` y su
 dirección estable es **https://app-b20.pages.dev**. El repositorio está preparado para
-publicar `VITE_DATA_MODE=spacetime`: autenticación por SpacetimeAuth, membresía por invitación,
+publicar `VITE_DATA_MODE=spacetime`: autenticación por Supabase Auth, membresía por invitación,
 datos y archivos nuevos en SpacetimeDB. Este estado del código no acredita una publicación.
 Consultar **Deployments** para identificar el commit que sirve el dominio estable y registrar
 el resultado en [estado-del-proyecto.md](estado-del-proyecto.md).
@@ -55,16 +55,17 @@ el cambio a la rama de producción. No hace falta duplicarlas en el panel.
 | Variable en `vars` | Valor |
 | --- | --- |
 | `VITE_DATA_MODE` | `spacetime` |
-| `VITE_WEB_ORIGIN` | `https://app-b20.pages.dev` |
+| `VITE_WEB_ORIGIN` | `https://b20.mx` |
+| `VITE_PAGES_ORIGIN` | `https://app-b20.pages.dev` |
 | `VITE_SPACETIME_URI` | `wss://maincloud.spacetimedb.com` |
 | `VITE_SPACETIME_DB` | `app-b20-34245` |
-| `VITE_SPACETIMEAUTH_AUTHORITY` | `https://auth.spacetimedb.com/oidc` |
-| `VITE_SPACETIMEAUTH_CLIENT_ID` | `client_034jL0AHYYQ1bps8SupHU0` |
-| `VITE_SPACETIMEAUTH_REDIRECT_URI` | `""` |
-| `VITE_SPACETIMEAUTH_POST_LOGOUT_REDIRECT_URI` | `""` |
-| `VITE_API_URL` | `https://app-b20-api.sucanasta1.workers.dev`, compatibilidad R2 anterior |
-| `VITE_AI_API_URL` | `https://app-b20-ai.aguaseero.workers.dev`, IA y Guías en el Worker dedicado |
-| `VITE_INVITATION_API_URL` | Opcional; vacío utiliza `VITE_AI_API_URL` y después `VITE_API_URL` para los enlaces |
+| `VITE_SUPABASE_URL` | `https://pypdkigeywdughdhxlcm.supabase.co` |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Clave pública `sb_publishable_…`; nunca la secreta |
+| `VITE_SUPABASE_OAUTH_PROVIDERS` | `""` |
+| `VITE_SUPABASE_PASSKEYS_ENABLED` | `false` |
+| `VITE_API_URL` | `""`; configurar únicamente si se necesitan descargas R2 heredadas |
+| `VITE_AI_API_URL` | `https://api.b20.mx`, API de acceso, IA y avisos en el Worker `b20-api` |
+| `VITE_INVITATION_API_URL` | `https://api.b20.mx`; vacío utiliza `VITE_AI_API_URL` y después `VITE_API_URL` para los enlaces |
 | `VITE_VAPID_PUBLIC_KEY` | Misma clave pública VAPID del Worker; valor completo en `wrangler.jsonc` |
 
 Esta tabla refleja la configuración preparada en `wrangler.jsonc`, no las variables del
@@ -118,32 +119,19 @@ y toma el control de las pestañas abiertas para que no se siga mostrando el acc
 desde su caché. La recarga de actualización reinicia los cambios simulados en memoria, como
 cualquier otra recarga de la app. Se omite la recarga mientras se procesa un retorno OAuth
 para no interrumpir el canje del código de acceso o el cierre de sesión.
-SpacetimeAuth debe estar configurado en ambos modos; en `spacetime` también se necesita URI y
+Supabase Auth debe estar configurado en ambos modos; en `spacetime` también se necesita URI y
 nombre de base. `VITE_DATA_MODE` admite `demo` o `spacetime`, con `demo` como predeterminado.
 `.env.pages` sirve para probar o compilar localmente, pero está ignorado por Git y no llega a
 la compilación de Cloudflare.
 
-## Retornos ya guardados en SpacetimeAuth
+## Acceso con Supabase Auth
 
-En **SpacetimeAuth → Clients → `client_034jL0AHYYQ1bps8SupHU0`** ya están guardadas estas
-URL exactas de entrada y salida. Se conservaron los retornos locales y se añadieron el dominio
-estable y un despliegue anterior para que el enlace ya compartido siga funcionando.
-
-| Entorno | Redirect URI | Post Logout Redirect URI |
-| --- | --- | --- |
-| Local | `http://localhost:5173/auth/callback` | `http://localhost:5173/auth/logout` |
-| Producción recomendada | `https://app-b20.pages.dev/auth/callback` | `https://app-b20.pages.dev/auth/logout` |
-| Enlace anterior conservado | `https://af0dd1ec.app-b20.pages.dev/auth/callback` | `https://af0dd1ec.app-b20.pages.dev/auth/logout` |
-
-No hace falta modificar `auth_config` por estos retornos del mismo cliente. Comparte y abre
-**https://app-b20.pages.dev**. Los futuros alias deben llevar al dominio estable; no registres
-cada hash ni comodines. El error previo `invalid_redirect_uri` se debía a que únicamente
-estaban registrados los retornos de localhost; esa configuración ya se corrigió.
-
-El formulario ofrece acceso por enlace al correo de SpacetimeAuth. La compilación preparada
-en modo `spacetime` exige además una invitación para unirse al grupo; un correo verificado
-por sí solo no autoriza consultar sus datos. `AuthProvider` se utiliza siempre, también si
-la URL contiene `?demo`: la falta de configuración no abre una demo sin sesión.
+El formulario pide el correo; si la cuenta ya tiene contraseña la solicita y, si es su primer
+acceso, envía un código y obliga a crear una contraseña. Ese flujo no necesita direcciones de
+retorno registradas. La compilación en modo `spacetime` exige además una invitación para unirse
+al grupo; un correo verificado por sí solo no autoriza consultar sus datos. `AuthProvider` se
+utiliza siempre, también si la URL contiene `?demo`: la falta de configuración no abre una demo
+sin sesión. Configuración completa: [supabase-auth.md](supabase-auth.md).
 
 ## Registro histórico de la versión de prueba
 
@@ -157,8 +145,7 @@ En ese modo, los cambios viven en memoria: renovar el token de la misma cuenta c
 recargar, cerrar sesión o cambiar de identidad la reinicia. No se guardan datos simulados en
 `localStorage` ni se comparten entre personas. La configuración preparada ahora usa
 `VITE_DATA_MODE=spacetime`; hay que validar conexión, persistencia y membresía por invitación
-en la publicación correspondiente. Las cuentas de SpacetimeAuth se conservan; la simulación
-no importa sus ejemplos ni cambios al grupo real.
+en la publicación correspondiente. La simulación no importa sus ejemplos ni cambios al grupo real.
 
 ## Comprobar después de compilar
 
@@ -177,7 +164,7 @@ no importa sus ejemplos ni cambios al grupo real.
    no sustituyen estas comprobaciones.
 
 Los pasos completos están en [Tareas y Actividades](tareas-actividades.md),
-[archivos privados](archivos-spacetime.md) y [SpacetimeAuth y modos de datos](spacetimeauth.md).
+[archivos privados](archivos-spacetime.md) y [Supabase Auth](supabase-auth.md).
 
 ## Resolver los errores encontrados
 
@@ -253,7 +240,7 @@ la web. Los archivos nuevos se transfieren directamente a SpacetimeDB; el Worker
 las descargas heredadas de R2 mientras existan objetos que dependan de ellas.
 
 La interfaz de IA/BYOK conecta con el Worker indicado por `VITE_AI_API_URL`. El servicio
-`app-b20-ai`, configurado en `apps/api/wrangler.ai.jsonc`, comparte la autenticación y base
+`b20-api` (`https://api.b20.mx`), configurado en `apps/api/wrangler.ai.jsonc`, comparte la autenticación y base
 de Pages sin depender del Worker R2 anterior. Su habilitación requiere publicar el módulo
 y el Worker actualizados y conservar los secretos descritos en [gemini-byok.md](gemini-byok.md).
 Los recordatorios y Web Push usan una identidad técnica exclusiva y se activan según

@@ -69,6 +69,7 @@ import type {
   HelpContactRequest,
   HelpPostInput,
   Invitation,
+  InviteLink,
   Activity,
   Assignment,
   AssignmentInput,
@@ -175,6 +176,7 @@ import { emptyStudyRooms, type StudyRoomActions, type StudyRoomsSnapshot } from 
 
 interface State extends PresentationDemoState, StudyRoomsSnapshot {
   invitations: Invitation[];
+  inviteLinks: InviteLink[];
   members: Member[];
   subjects: Subject[];
   terms: Term[];
@@ -225,7 +227,7 @@ function emptyState(): State {
   return {
     ...emptyPresentationsSnapshot(), presentationRequests: [],
     ...emptyStudyRooms(),
-    invitations: [], members: [], subjects: [], terms: [], calendar: [], assignments: [],
+    invitations: [], inviteLinks: [], members: [], subjects: [], terms: [], calendar: [], assignments: [],
     works: [], workFiles: [], revisions: [], groupMessages: [], directConversations: [],
     directMessages: [], reactions: [], stickerPacks: [], stickers: [], chatCommands: [],
     birthdays: [], activities: [], evidences: [], notes: [], noteComments: [], questions: [],
@@ -563,6 +565,7 @@ export class DemoDataSource implements DataSource {
         me,
         members: [],
         invitations: [],
+        inviteLinks: [],
         subjects: [],
         terms: [],
         calendar: [],
@@ -645,6 +648,7 @@ export class DemoDataSource implements DataSource {
       me,
       members: s.members,
       invitations: isCreator(me) ? s.invitations : [],
+      inviteLinks: isCreator(me) ? s.inviteLinks : [],
       subjects: s.subjects,
       terms: s.terms,
       calendar: s.calendar,
@@ -1052,6 +1056,29 @@ export class DemoDataSource implements DataSource {
 
   revokeInvitation(email: string) {
     return this.#membership.revokeInvitation(email);
+  }
+
+  /** La simulación muestra el enlace, pero nadie puede entrar con él: no hay correos ni cuentas. */
+  createInviteLink(expiresInDays: number, maxUses: number) {
+    const me = this.#requireCreator();
+    if (![1, 7, 30].includes(expiresInDays)) throw new Error('Elige un vencimiento de 1, 7 o 30 días.');
+    if (!Number.isInteger(maxUses) || maxUses < 1 || maxUses > 100) throw new Error('Elige de 1 a 100 usos.');
+    const now = this.#now();
+    const active = this.#state.inviteLinks.filter((l) => !l.revokedAt && l.expiresAt > now && l.uses < l.maxUses);
+    if (active.length >= 10) throw new Error('Ya hay 10 enlaces vigentes. Revoca uno antes de crear otro.');
+    const id = String(this.#state.inviteLinks.length + 1);
+    this.#state.inviteLinks = [...this.#state.inviteLinks, {
+      id, createdBy: me.id, createdAt: now, expiresAt: new Date(now.getTime() + expiresInDays * 86_400_000), maxUses, uses: 0,
+    }];
+    this.#emit();
+    return `${window.location.origin}/#/unirme/simulacion-${id}`;
+  }
+
+  revokeInviteLink(id: Id) {
+    this.#requireCreator();
+    if (!this.#state.inviteLinks.some((l) => l.id === id)) throw new Error('Ese enlace ya no existe.');
+    this.#state.inviteLinks = this.#state.inviteLinks.map((l) => l.id === id && !l.revokedAt ? { ...l, revokedAt: this.#now() } : l);
+    this.#emit();
   }
 
   removeMember(memberId: Id) {

@@ -7,7 +7,7 @@ import type { DataSource } from './data/types';
 
 const control = vi.hoisted(() => ({
   session: { status: 'signedOut' } as SessionState,
-  config: { dataMode: 'demo', spacetimeAuthClientId: 'client_test' },
+  config: { dataMode: 'demo' },
   currentSource: undefined as DataSource | undefined,
   realSource: undefined as DataSource | undefined,
   realConnections: vi.fn(),
@@ -18,7 +18,12 @@ vi.mock('./auth/AuthContext', () => ({
   AuthProvider: ({ children }: { children: ReactNode }) => <div data-auth-provider>{children}</div>,
   useSession: () => control.session,
   useSessionStore: () => ({ signOut: () => { control.session = { status: 'signedOut' }; } }),
-  SpacetimeAuthButton: ({ label = 'Continuar con SpacetimeAuth' }: { label?: string }) => <button>{label}</button>,
+}));
+vi.mock('./auth/SupabaseSignInForm', () => ({
+  SupabaseSignInForm: () => <button>Continuar</button>,
+  CreatePasswordPage: () => null,
+  PasskeySuggestionPage: () => null,
+  PasskeySettings: () => null,
 }));
 vi.mock('react-router', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react-router')>();
@@ -100,7 +105,7 @@ describe('login real antes de cualquier fuente de datos', () => {
     window.history.replaceState({}, '', url);
     await renderApp();
     expect(container.querySelector('[data-auth-provider]')).not.toBeNull();
-    expect(container.textContent).toContain('Continuar con correo');
+    expect(container.textContent).toContain('Continuar');
     expect(container.querySelector('[data-simulation]')).toBeNull();
     expect(container.querySelector('a[href="?demo"]')).toBeNull();
     expect(control.realConnections).not.toHaveBeenCalled();
@@ -112,7 +117,7 @@ describe('login real antes de cualquier fuente de datos', () => {
     expect(container.querySelector('main[aria-busy="true"]')).not.toBeNull();
     expect(container.querySelector('[role="status"]')).not.toBeNull();
     expect(container.querySelector('[data-simulation]')).toBeNull();
-    expect(container.textContent).not.toContain('Continuar con correo');
+    expect(container.textContent).not.toContain('Continuar');
     expect(control.realConnections).not.toHaveBeenCalled();
   });
 
@@ -125,8 +130,8 @@ describe('login real antes de cualquier fuente de datos', () => {
 
   it('tampoco ofrece una entrada de prueba cuando falta configurar el cliente real', async () => {
     const { AuthProvider } = await vi.importActual<typeof import('./auth/AuthContext')>('./auth/AuthContext');
-    await act(async () => root.render(<AuthProvider clientId=""><p>Datos protegidos</p></AuthProvider>));
-    expect(container.textContent).toContain('Client ID');
+    await act(async () => root.render(<AuthProvider><p>Datos protegidos</p></AuthProvider>));
+    expect(container.textContent).toContain('Supabase');
     expect(container.textContent).not.toContain('Datos protegidos');
     expect(container.querySelector('a[href="?demo"]')).toBeNull();
   });

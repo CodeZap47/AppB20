@@ -35,7 +35,7 @@ function subscribe(connection: DbConnection, views = ['subjects', 'terms', 'note
 }
 async function initialize(connect: (token: string) => Promise<DbConnection>, tokens: string[]) {
   const owner = await connect(tokens[0]!);
-  await owner.reducers.setAuthConfig({ issuer: 'https://auth.spacetimedb.com/oidc', audiences: ['b20-local-smoke'] });
+  await owner.reducers.setAuthConfig({ issuer: 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1', audiences: ['b20-local-smoke'] });
   for (const [index, name] of ['owner', 'author', 'reviewer'].entries()) {
     await owner.reducers.inviteMember({ email: `${name}@b20-smoke.invalid`, isCreator: index === 0 });
   }

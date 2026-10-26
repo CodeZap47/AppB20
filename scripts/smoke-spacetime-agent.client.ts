@@ -19,7 +19,7 @@ export async function runSmoke(options: { address: string; database: string; tok
   const sessions = (c: DbConnection) => [...c.db.myAgentSessions.iter()];
   const lastCheck = (c: DbConnection) => [...c.db.myAgentOriginalityChecks.iter()].sort((a, b) => Number(a.id - b.id)).at(-1);
   try {
-    let admin = await connect(options.tokens[0]!); await admin.reducers.setAuthConfig({ issuer: 'https://auth.spacetimedb.com/oidc', audiences: ['b20-local-smoke'] });
+    let admin = await connect(options.tokens[0]!); await admin.reducers.setAuthConfig({ issuer: 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1', audiences: ['b20-local-smoke'] });
     for (const name of ['admin', 'owner', 'peer']) await admin.reducers.inviteMember({ email: `${name}@b20-smoke.invalid`, isCreator: name === 'admin' });
     await admin.reducers.joinGroup({ displayName: 'Local admin' });
     let owner = await connect(options.tokens[1]!); let peer = await connect(options.tokens[2]!); const outsider = await connect(options.tokens[3]!);

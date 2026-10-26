@@ -30,7 +30,7 @@ function setup() {
   const keys: Record<string, string> = { member: 'identity', memberBlock: 'key', conversationState: 'key', resourceVersion: 'key', contentStatus: 'key' };
   const initial: Record<string, Row[]> = {
     appConfig: [{ id: 0, owner: admin }],
-    authConfig: [{ id: 0, issuer: 'https://auth.spacetimedb.com/oidc', audiences: ['test'] }],
+    authConfig: [{ id: 0, issuer: 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1', audiences: ['test'] }],
     member: [admin, author, recipient, third].map((identity) => ({ identity, displayName: identity.toHexString()[0], status: 'active', isCreator: identity === admin })),
     subject: [{ id: 1n, name: 'Programación' }],
     chatChannel: [{ id: 10n, name: 'Materia', kind: 'subject', subjectId: 1n, createdBy: author, createdAt: at }, { id: 11n, name: 'Proyecto', kind: 'project', createdBy: author, createdAt: at }],
@@ -43,7 +43,7 @@ function setup() {
   const db = new Proxy({}, { get: (_target, property: string) => {
     if (!tables.has(property)) tables.set(property, tableStore(keys[property] ?? 'id', initial[property])); return tables.get(property);
   } });
-  const mutable = { db, sender: author, timestamp: at, env: {}, senderAuth: { jwt: { issuer: 'https://auth.spacetimedb.com/oidc', audience: ['test'], fullPayload: { email: 'alumno@example.com', email_verified: true } } } };
+  const mutable = { db, sender: author, timestamp: at, env: {}, senderAuth: { jwt: { issuer: 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1', audience: ['test'], fullPayload: { email: 'alumno@example.com', email_verified: true } } } };
   const ctx = mutable as unknown as Ctx & Parameters<typeof resource_files>[0];
   const proc = { withTx: (fn: (tx: typeof ctx) => unknown) => fn(ctx) } as unknown as Parameters<typeof get_resource_manifest>[0];
   const as = (identity: Identity) => { mutable.sender = identity; };

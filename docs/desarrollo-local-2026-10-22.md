@@ -34,7 +34,7 @@ Tutorial de cuatro pasos para usuarios reales sin registro de finalización: col
 
 Se mantienen foto, portada, presentación, intereses, habilidades y enlaces con los límites existentes. El encabezado tiene nueva distribución y la presentación se mueve a una columna propia. Las secciones del archivo se muestran como navegación horizontal con contadores discretos; se conserva su comportamiento y sus filtros.
 
-El distintivo dorado «lamerapoya» exige membresía activa y el rol de creador ya concedido por el servidor. Reconoce los nombres Luis Flores Bojorquez, Gamaliel Seefoo y Kevin Alcaraz; Christian se reconoce por su primer nombre hasta conocer el apellido. Se usa `member.displayName`, no el apodo personal del perfil. Esto **no concede ni modifica permisos**. Para una asignación inmutable futura deben confirmarse los IDs de las cuatro cuentas.
+El distintivo dorado «lamerapoya» es exclusivamente visual y honorífico para Kevin Alcaraz en su perfil. Esto **no concede ni modifica permisos** de seguridad ni de administración.
 
 ### Calendario y materias
 

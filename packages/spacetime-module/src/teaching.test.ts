@@ -61,7 +61,7 @@ function setup() {
   const people = [owner, reviewer, third, admin];
   const db = {
     appConfig: tableStore('id', [{ id: 0, owner: admin }]),
-    authConfig: tableStore('id', [{ id: 0, issuer: 'https://auth.spacetimedb.com/oidc', audiences: ['web'] }]),
+    authConfig: tableStore('id', [{ id: 0, issuer: 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1', audiences: ['web'] }]),
     member: tableStore('identity', people.map((person) => ({
       identity: person, status: 'active', isCreator: person === admin,
     }))),
@@ -83,7 +83,7 @@ function setup() {
   const mutableCtx = {
     sender: owner,
     senderAuth: { jwt: {
-      issuer: 'https://auth.spacetimedb.com/oidc', audience: ['web'],
+      issuer: 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1', audience: ['web'],
       fullPayload: { email: 'member@example.com', email_verified: true },
     } },
     db, timestamp: 123n, env: {},

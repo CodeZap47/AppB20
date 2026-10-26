@@ -185,15 +185,10 @@ const router = createHashRouter(routes);
 export function App({ platform }: { platform: Platform }) {
   const [invitationReady, setInvitationReady] = useState(false);
   useEffect(() => { let alive = true; void preparePendingInvitation().finally(() => { if (alive) setInvitationReady(true); }); return () => { alive = false; }; }, []);
-  const clientId = platform === 'android'
-    ? config.spacetimeAuthAndroidClientId || config.spacetimeAuthClientId
-    : platform.startsWith('extension')
-      ? config.spacetimeAuthExtensionClientId || config.spacetimeAuthClientId
-      : config.spacetimeAuthClientId;
   if (!invitationReady) return <AuthFrame title="Preparando el acceso" busy><p role="status">Preparando el acceso…</p></AuthFrame>;
   return (
     <ThemeProvider><PlatformContext value={platform}>
-      <AuthProvider clientId={clientId} platform={platform}>
+      <AuthProvider platform={platform}>
         <SignedInGate />
       </AuthProvider>
     </PlatformContext></ThemeProvider>

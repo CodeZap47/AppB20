@@ -26,7 +26,7 @@ las entregas, calificaciones y asistencia oficiales siguen en los sistemas de la
 
 ## Estado actual
 
-El proyecto tiene una interfaz compartida, autenticación con SpacetimeAuth y una implementación
+El proyecto tiene una interfaz compartida, autenticación con Supabase Auth y una implementación
 de datos y archivos privados en SpacetimeDB. Las comprobaciones automatizadas incluyen tipos,
 pruebas, compilaciones y transferencia de archivos contra un servidor local persistente.
 La [web publicada](https://b20.mx/) reúne la cuarta entrega, Exámenes EX-2,
@@ -156,7 +156,7 @@ su configuración de acceso y sus comprobaciones antes de distribuirse.
 | Interfaz compartida | React, TypeScript y Vite; [`packages/app`](packages/app). |
 | Reglas de negocio | Módulos, plan de estudios, permisos y reglas con pruebas; [`packages/core`](packages/core). |
 | Datos y archivos | SpacetimeDB: tablas privadas, vistas con permisos y archivos por fragmentos; [`packages/spacetime-module`](packages/spacetime-module). |
-| Autenticación | SpacetimeAuth, con correo verificado e invitaciones en el modo de datos reales. |
+| Autenticación | Supabase Auth (solo autenticación), con correo verificado e invitaciones en el modo de datos reales. |
 | Web/PWA y alojamiento | [`apps/web`](apps/web) y Cloudflare Pages. |
 | Extensión y Android | [`apps/extension`](apps/extension) con Manifest V3 y [`apps/android`](apps/android) con Capacitor. |
 
@@ -173,7 +173,7 @@ las instalaciones nuevas guardan los archivos en SpacetimeDB. Los detalles está
 - **CLI de SpacetimeDB 2.12.0** para trabajar con la base local o generar bindings, en la
   misma versión que el SDK del cliente y del módulo. No se necesita para explorar la demo.
 - **Android Studio y JDK 21** solo si vas a preparar el APK.
-- Un cliente de **SpacetimeAuth** configurado para iniciar sesión, también en modo demo.
+- Un proyecto de **Supabase Auth** configurado para iniciar sesión, también en modo demo.
 
 ### Ejecutar la web con datos de ejemplo
 
@@ -188,10 +188,10 @@ cp .env.example .env.local
 Si usas nvm y aún no tienes Node 22, ejecuta `nvm install` antes de `nvm use`. Si utilizas
 otro gestor, selecciona Node 22 o superior antes de instalar las dependencias.
 
-En `.env.local`, conserva `VITE_DATA_MODE=demo` y completa `VITE_SPACETIMEAUTH_CLIENT_ID`
-con el ID público de tu cliente. Registra los retornos locales
-`http://localhost:5173/auth/callback` y `http://localhost:5173/auth/logout` en SpacetimeAuth.
-La [guía de autenticación](docs/spacetimeauth.md) explica la configuración; los secretos
+En `.env.local`, conserva `VITE_DATA_MODE=demo` y completa `VITE_SUPABASE_PUBLISHABLE_KEY`
+con la clave pública `sb_publishable_` del proyecto. Para entrar sin cuenta en desarrollo,
+`VITE_DEV_AUTH_BYPASS=true` funciona solo con `npm run dev` y datos de ejemplo.
+La [guía de autenticación](docs/supabase-auth.md) explica la configuración; los secretos
 deben permanecer fuera de las variables públicas `VITE_*` y del repositorio.
 
 ```bash
@@ -216,8 +216,8 @@ npm run spacetime:publish
 npm run spacetime:generate
 ```
 
-Configura el emisor, los clientes autorizados y la invitación inicial según la
-[guía de autenticación](docs/spacetimeauth.md). Para esta base local, adapta los comandos
+Configura el emisor, la audiencia y la invitación inicial según la
+[guía de autenticación](docs/supabase-auth.md). Para esta base local, adapta los comandos
 de la guía a `-s http://localhost:3000` y a la base `app-b20`. Después cambia `.env.local` a
 `VITE_DATA_MODE=spacetime`, conserva la dirección local y el nombre de base de `.env.example`,
 y reinicia la web. El inicio de sesión y la membresía son requisitos distintos.
@@ -246,7 +246,7 @@ Para publicar servicios y configurar producción, sigue la [guía de despliegue]
 - [Exámenes EX-2](docs/examenes-entrega.md): recorrido publicado, conservación y aceptación pendiente.
 - [Sincronización del 21 de octubre de 2026](docs/sincronizacion-2026-10-21.md): integración y recibo de publicación conjunta.
 - [Arquitectura](docs/arquitectura.md): componentes, datos y permisos.
-- [Autenticación y acceso](docs/spacetimeauth.md): clientes, retornos e invitaciones.
+- [Autenticación y acceso](docs/supabase-auth.md): Supabase Auth, activación por invitación y vinculación de cuentas.
 - [Tareas y Actividades](docs/tareas-actividades.md): consignas, trabajos, evidencias e historial.
 - [Exposiciones](docs/exposiciones.md): ensayos por texto, preguntas y siguientes intentos privados.
 - [Primera vista](docs/primera-vista-feed.md): vista Feed o Clásica, reacciones, publicaciones y comentarios.

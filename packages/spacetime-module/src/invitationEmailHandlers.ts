@@ -31,6 +31,12 @@ export function cancelInvitationEmail(ctx: Ctx, email: string) {
   ctx.db.invitationEmail.email.delete(email);
 }
 
+/** El Worker activa la cuenta de Supabase solo si el correo tiene una invitación pendiente. */
+export function invitationPending(ctx: Ctx, email: string): boolean {
+  service(ctx);
+  return !!ctx.db.invitation.email.find(email.trim().toLowerCase());
+}
+
 /** Quien llama ya pasó requireCreator. */
 export function resendInvitationEmail(ctx: Ctx, email: string) {
   if (!ctx.db.invitation.email.find(email)) throw new SenderError('Esa invitación ya no existe.');

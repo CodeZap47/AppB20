@@ -6,7 +6,7 @@ import { createRequireAuth, type AuthOptions, type AuthVariables } from './auth.
 import { createApp } from '../app.ts';
 import { EncryptedMemoryStore } from './secrets.ts';
 
-const issuer = 'https://auth.spacetimedb.com/oidc';
+const issuer = 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1';
 let keys: Awaited<ReturnType<typeof generateKeyPair>>;
 let jwks: AuthOptions['jwks'];
 
@@ -35,11 +35,11 @@ function setup(isActiveMember = vi.fn(async () => true)) {
   return { app, options, isActiveMember };
 }
 
-describe('SpacetimeAuth en API', () => {
+describe('Supabase Auth en API', () => {
   it('valida el token ES256 de Supabase y exige el claim verificado del hook', async () => {
     const pair = await generateKeyPair('ES256');
     const publicKey = await exportJWK(pair.publicKey);
-    const supabaseIssuer = 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1';
+    const supabaseIssuer = 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1';
     const isActiveMember = vi.fn(async () => true);
     const app = new Hono<{ Variables: AuthVariables }>();
     app.use('*', createRequireAuth({ issuer: supabaseIssuer, audiences: ['authenticated'],

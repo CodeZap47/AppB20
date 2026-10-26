@@ -23,7 +23,7 @@ export async function runSmoke(options: { address: string; database: string; tok
   const close = () => { for (const c of connections) c.disconnect(); connections.clear(); };
   try {
     let owner = await connect(options.tokens[0]!);
-    await owner.reducers.setAuthConfig({ issuer: 'https://auth.spacetimedb.com/oidc', audiences: ['b20-local-smoke'] });
+    await owner.reducers.setAuthConfig({ issuer: 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1', audiences: ['b20-local-smoke'] });
     for (const name of ['author','other']) await owner.reducers.inviteMember({ email: `${name}@b20-smoke.invalid`, isCreator: false });
     const oldAuthor = await connect(options.tokens[1]!);
     await oldAuthor.reducers.joinGroup({ displayName: 'Original author' });
@@ -38,12 +38,12 @@ export async function runSmoke(options: { address: string; database: string; tok
     await oldAuthor.reducers.sendDirectMessage({ conversationId, text: 'Original private message', replyToId: undefined });
     const groupId = [...oldAuthor.db.groupMessages.iter()][0]!.id;
     const privateId = [...oldAuthor.db.myDirectMessages.iter()][0]!.id;
-    // Obtener las identidades de Supabase requiere conectar después de configurar el emisor.
+    // El corte cambia la audiencia aceptada: las sesiones anteriores dejan de valer al instante.
     close();
     owner = await connect(options.tokens[0]!);
-    await owner.reducers.setSupabaseAuth({ issuer: 'https://tgtvvbqlmlljuufrutbk.supabase.co/auth/v1', audiences: ['authenticated'], enabled: true });
-    const legacy = await connect(options.tokens[1]!);
-    await legacy.reducers.assertActiveMember({});
+    await owner.reducers.setAuthConfig({ issuer: 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1', audiences: ['authenticated'] });
+    // El servidor rechaza la conexión de la sesión anterior (on_connect falla).
+    await assert.rejects(connect(options.tokens[1]!));
     let author = await connect(options.tokens[4]!);
     let other = await connect(options.tokens[5]!);
     const outsider = await connect(options.tokens[6]!);

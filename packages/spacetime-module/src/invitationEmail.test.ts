@@ -16,9 +16,9 @@ import { Timestamp } from 'spacetimedb';
 import {
   invitation_email_statuses, invite_member, join_group, on_connect, resend_invitation_email, revoke_invitation,
 } from './index';
-import { claimInvitationEmails, finishInvitationEmail } from './invitationEmailHandlers';
+import { claimInvitationEmails, finishInvitationEmail, invitationPending } from './invitationEmailHandlers';
 
-const issuer = 'https://auth.spacetimedb.com/oidc';
+const issuer = 'https://pypdkigeywdughdhxlcm.supabase.co/auth/v1';
 const identity = (hex: string) => ({
   toHexString: () => hex,
   isEqual: (other: { toHexString(): string }) => other.toHexString() === hex,
@@ -220,5 +220,21 @@ describe('correo de invitación', () => {
     db.member.insert({ identity: student, displayName: 'Alumno', status: 'active', isCreator: false });
     as(student); on_connect(ctx, {});
     expect(queued()).toBeUndefined();
+  });
+
+  it('el servicio comprueba si un correo tiene invitación pendiente para activar su cuenta', () => {
+    const { ctx, db, as, admin, student, mailer, invite } = setup();
+    as(mailer);
+    expect(invitationPending(ctx, 'alumno@example.com')).toBe(false);
+    invite();
+    as(mailer);
+    expect(invitationPending(ctx, ' Alumno@Example.com ')).toBe(true);
+    for (const who of [admin, student]) {
+      as(who);
+      expect(() => invitationPending(ctx, 'alumno@example.com')).toThrow(/notificaciones/);
+    }
+    db.notificationServiceConfig.rows.set('0', { ...db.notificationServiceConfig.rows.get('0')!, enabled: false });
+    as(mailer);
+    expect(() => invitationPending(ctx, 'alumno@example.com')).toThrow(/notificaciones/);
   });
 });

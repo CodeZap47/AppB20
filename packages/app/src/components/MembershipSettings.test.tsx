@@ -8,7 +8,7 @@ import { MembershipSettings } from './MembershipSettings';
 
 let root: Root; let container: HTMLDivElement;
 beforeEach(() => { Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true }); container = document.createElement('div'); document.body.append(container); root = createRoot(container); });
-afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.restoreAllMocks(); });
+afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 const render = (source: DemoDataSource) => act(async () => root.render(<DataProvider source={source}><MembershipSettings /></DataProvider>));
 const emailInput = () => container.querySelector<HTMLInputElement>('input[type="email"]')!;
@@ -71,7 +71,7 @@ it('muestra el estado del correo y permite reenviar solo cuando corresponde', as
   const me = { id: 'yo', displayName: 'Ana', status: 'active', isCreator: true, joinedAt: new Date() };
   const base = { invitedBy: 'yo', createdAt: new Date('2026-10-20T12:00:00Z'), isCreator: false };
   const snapshot = {
-    me, members: [me], subjects: [],
+    me, members: [me], subjects: [], inviteLinks: [],
     invitations: [
       { ...base, email: 'enviando@ejemplo.mx', emailStatus: 'pending', emailRequestedAt: new Date() },
       { ...base, email: 'reciente@ejemplo.mx', emailStatus: 'sent', emailRequestedAt: new Date(), emailSentAt: new Date() },
@@ -92,4 +92,28 @@ it('muestra el estado del correo y permite reenviar solo cuando corresponde', as
 
   await act(async () => resend('fallido@ejemplo.mx')!.click());
   expect(resendInvitationEmail).toHaveBeenCalledWith('fallido@ejemplo.mx');
+});
+
+it('gestiona enlaces desde Administración y crea uno sin usar el flujo anterior', async () => {
+  vi.stubGlobal('CSS', { escape: (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, '_') });
+  const source = new DemoDataSource(createDemoState(), 'demo-1');
+  const url = `https://b20.test/#/invitacion?token=${'A'.repeat(43)}`;
+  const create = vi.spyOn(source, 'createInvitationLink').mockResolvedValue({ id: '11111111-1111-4111-8111-111111111111', url });
+  const legacy = vi.spyOn(source, 'createInviteLink');
+  await render(source);
+  expect(container.querySelectorAll('#admin-links-title')).toHaveLength(1);
+  expect(container.textContent).toContain('Integrantes y correos');
+  const createButton = [...container.querySelectorAll('button')].find((button) => button.textContent === 'Crear enlace')!;
+  await act(async () => createButton.click());
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+  expect(dialog.getAttribute('aria-label')).toBe('Crear enlace de invitación');
+  await act(async () => dialog.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  expect(create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+    requestId: expect.stringMatching(/^[0-9a-f-]{36}$/), name: 'Invitación al grupo',
+    expiresAt: expect.any(Number), maxUses: null,
+  }));
+  expect(legacy).not.toHaveBeenCalled();
+  expect(dialog.querySelector<HTMLInputElement>('input[readonly]')?.value).toBe(url);
+  expect(dialog.textContent).toContain('Podrás volver a copiarlo desde Administración');
+  source.dispose();
 });

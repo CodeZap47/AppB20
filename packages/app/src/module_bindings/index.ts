@@ -203,7 +203,6 @@ import SetSpacedEnrollmentReducer from "./set_spaced_enrollment_reducer";
 import SetStickerPackSharedReducer from "./set_sticker_pack_shared_reducer";
 import SetStudyRoomMaterialReducer from "./set_study_room_material_reducer";
 import SetStudyRoomStatusReducer from "./set_study_room_status_reducer";
-import SetSupabaseAuthReducer from "./set_supabase_auth_reducer";
 import SetTeachingReviewerReducer from "./set_teaching_reviewer_reducer";
 import SetTypingReducer from "./set_typing_reducer";
 import ShareBirthdayReducer from "./share_birthday_reducer";
@@ -1441,7 +1440,6 @@ const reducersSchema = __reducers(
   __reducerSchema("set_sticker_pack_shared", SetStickerPackSharedReducer),
   __reducerSchema("set_study_room_material", SetStudyRoomMaterialReducer),
   __reducerSchema("set_study_room_status", SetStudyRoomStatusReducer),
-  __reducerSchema("set_supabase_auth", SetSupabaseAuthReducer),
   __reducerSchema("set_teaching_reviewer", SetTeachingReviewerReducer),
   __reducerSchema("set_typing", SetTypingReducer),
   __reducerSchema("share_birthday", ShareBirthdayReducer),
