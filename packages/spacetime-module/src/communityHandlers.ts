@@ -1,4 +1,5 @@
 import { memberIdentityFor } from './authIdentity';
+import { invalidateFeedShares } from './feedInteractionLifecycle';
 import { SenderError } from 'spacetimedb/server';
 import { activeMember, bumpMaterial, expectVersion, log, requireSubject, saveTargetBaseline, targetVersion, type Ctx } from './moduleContext';
 import { canReadTarget, contentOwner } from './delivery2Handlers';
@@ -138,6 +139,7 @@ export function withdrawContent(ctx: Ctx, input: { kind: string; targetId: bigin
     reason: input.withdrawn ? reason : '' };
   if (previous) ctx.db.contentStatus.key.update(row); else ctx.db.contentStatus.insert(row);
   if (input.withdrawn) {
+    invalidateFeedShares(ctx, input.kind, input.targetId);
     scheduleRetention(ctx, input.kind, input.targetId, actorRole);
     suppressContentNotifications(ctx, input.kind, input.targetId);
   }

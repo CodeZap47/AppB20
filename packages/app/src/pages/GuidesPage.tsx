@@ -1,43 +1,52 @@
+import { ResourceComments } from '../components/whatsNew/ResourceComments';
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { RelatedVisualProjects } from '../components/RelatedVisualProjects';
 import {
   canReviewGuide,
   GUIDE_SECTIONS,
   isValidPeriod,
   PERIOD_COUNT,
   periodLabel,
+  parseTopics,
+  type GuideAiSourceRef,
   type GuideReviewVerdict,
   type GuideSourceStatus,
 } from '@b20/core';
 import { useDataSource, useSnapshot } from '../data/DataContext';
-import type { GuideSource, GuideSourceRef, Snapshot, StudyGuide } from '../data/types';
+import type { GuideSource, GuideSourceRef, ResourceFile, Snapshot, StudyGuide } from '../data/types';
 import { Avatar } from '../components/Avatar';
 import { Empty } from '../components/Empty';
-import { Icon } from '../components/Icon';
+import { Icon, type IconName } from '../components/Icon';
 import { ResourceDownloads, ResourceSection } from '../components/AcademicTools';
 import { StructuredEditor, StructuredText } from '../components/StructuredText';
 import { ContentWithdrawal } from '../components/ContentWithdrawal';
 import { GuideAiPanel } from '../components/GuideAiPanel';
+import { GuideMaterialPicker } from '../components/GuideMaterialPicker';
+import { GuideMaterialDraftStatus } from '../components/GuideMaterialDraftStatus';
+import { useGuideMaterialSelection } from '../lib/useGuideMaterialSelection';
+import type { GuideAiCandidate } from '../lib/guideAiSources';
 import { GuideAiProvenance } from '../components/GuideAiProvenance';
 import { ExamMaterialLink } from '../components/ExamMaterialLink';
 import { useAction } from '../components/useAction';
 import { AttachmentUploader, useResourceUploadQueue } from '../components/uploads/ResourceUploader';
-import { formatTime, memberName } from '../lib/format';
-import { candidateSources, describeSource, guideStatus, isOutdated, type SourceInfo } from '../lib/guides';
+import { formatListTime, formatTime, memberName } from '../lib/format';
+import { candidateSources, describeSource, guideScopeLabel, guideStatus, isOutdated, type SourceInfo } from '../lib/guides';
 import { currentPlacement, lastPeriod, rememberPeriod, termAt } from '../lib/period';
 import { bySubject } from '../lib/works';
+import './GuidesPage.css';
 
 const PERIODS = Array.from({ length: PERIOD_COUNT }, (_, i) => i + 1);
 const refKey = (ref: GuideSourceRef) => `${ref.kind}:${ref.refId}`;
 
 function placeLabel(guide: StudyGuide, data: Snapshot): string {
   const subject = data.subjects.find((s) => s.id === guide.subjectId);
-  const term = data.terms.find((t) => t.id === guide.termId);
-  return [subject?.name ?? 'Materia', term?.name ?? 'Sin parcial'].join(' · ');
+  return [subject?.name ?? 'Materia', guideScopeLabel(guide, data)].join(' · ');
 }
 
 function NotFound() {
   return (
+    <div className="guides-page"><div className="guides-empty guides-surface">
     <Empty
       icon="file"
       title="No encontramos esta guía"
@@ -49,6 +58,7 @@ function NotFound() {
     >
       Puede que el enlace esté incompleto o que la guía ya no exista.
     </Empty>
+    </div></div>
   );
 }
 
@@ -78,18 +88,21 @@ function CoverageBar({ covered, total }: { covered: number; total: number }) {
 // Lista
 // ---------------------------------------------------------------------------
 
-/** Guías de estudio (3.5): una por materia y parcial, con fuentes y cobertura a la vista. */
+/** Biblioteca de guías parciales y cuatrimestrales, con fuentes y cobertura a la vista. */
 export function GuidesPage() {
   const data = useSnapshot();
   const { guides, subjects, members } = data;
   const [withdrawn, setWithdrawn] = useState(false);
-  const [showAi, setShowAi] = useState(false);
+  const [showAi, setShowAi] = useState(() => new URLSearchParams(window.location.search || window.location.hash.split('?')[1]).get('modo') === 'ia');
   const [params, setParams] = useSearchParams();
   const period = Number(params.get('cuatri')) || 0;
   const subjectId = params.get('materia') ?? '';
+  const guideType = params.get('tipo') === 'partial' ? 'partial' : params.get('tipo') === 'quarter' ? 'quarter' : '';
 
   const subjectOf = (g: StudyGuide) => subjects.find((s) => s.id === g.subjectId);
-  const inPeriod = guides.filter((g) => withdrawn ? Boolean(g.withdrawnAt) : !g.withdrawnAt).filter((g) => !period || subjectOf(g)?.period === period);
+  const inPeriod = guides.filter((g) => withdrawn ? Boolean(g.withdrawnAt) : !g.withdrawnAt)
+    .filter((g) => !period || subjectOf(g)?.period === period)
+    .filter((g) => !guideType || (guideType === 'partial' ? Boolean(g.termId) : !g.termId));
   const shown = inPeriod
     .filter((g) => !subjectId || g.subjectId === subjectId)
     .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
@@ -110,17 +123,18 @@ export function GuidesPage() {
   };
 
   return (
-    <>
-      <header className="page-header">
+    <div className="guides-page guides-page--library">
+      <header className="guides-header">
         <div>
+          <p className="guides-eyebrow"><Icon name="book" size={16} /> Tu biblioteca de estudio</p>
           <h1>Guías de estudio</h1>
           <p className="muted">
-            Una guía por materia y parcial, armada con los trabajos, actividades, apuntes y
-            preguntas del grupo. Cada una dice qué fuentes usó y qué temas del temario faltan.
+            Conecta los apuntes, las fuentes y las ideas del grupo. Un lugar para preparar cada
+            parcial o todo el cuatrimestre y ver qué falta por repasar.
           </p>
         </div>
         <div className="row">
-          <button type="button" className="button secondary" aria-expanded={showAi} onClick={() => setShowAi(!showAi)}>Preparar guía con IA</button>
+          <button type="button" className="secondary with-icon" aria-expanded={showAi} aria-controls="guides-ai-workspace" onClick={() => setShowAi(!showAi)}><Icon name="reply" size={16} /> Preparar guía con IA</button>
           {guides.length > 0 && (
             <Link
               to={`/m/guias/compendio${compendiumPeriod ? `?cuatri=${compendiumPeriod}` : ''}`}
@@ -129,30 +143,44 @@ export function GuidesPage() {
               Compendio del cuatrimestre
             </Link>
           )}
-          <Link to="/m/guias/nueva" className="button with-icon">
+          <Link to="/m/guias/nueva" className="button with-icon guides-primary">
             <Icon name="plus" size={18} /> Nueva guía
           </Link>
         </div>
       </header>
-      {showAi && <GuideAiPanel />}
-      <label className="check"><input type="checkbox" checked={withdrawn} onChange={(event) => setWithdrawn(event.target.checked)} />Ver guías retiradas que puedo recuperar</label>
+      {showAi && <div className="guides-ai-workspace" id="guides-ai-workspace">
+        <div className="guides-ai-intro">
+          <span className="guides-feature-icon"><Icon name="reply" size={23} /></span>
+          <div><p className="guides-eyebrow">De tus fuentes a un borrador</p><h2>Prepara, revisa y comparte</h2><p>Elige el material que quieres usar. Tu borrador sigue siendo privado hasta que decidas publicarlo.</p></div>
+        </div>
+        <GuideAiPanel />
+      </div>}
 
       {guides.length === 0 ? (
+        <section className="guides-surface guides-empty">
         <Empty
           icon="file"
           title="Todavía no hay guías"
           action={
-            <Link to="/m/guias/nueva" className="button">
+            <Link to="/m/guias/nueva" className="button guides-primary">
               Crear la primera
             </Link>
           }
         >
-          Elige una materia y un parcial, escribe el temario y la app te propone el material del
+          Elige una materia y el alcance de la guía, escribe el temario y la app te propone el material del
           grupo que le corresponde.
         </Empty>
+        <ol className="guides-start-steps" aria-label="Cómo empezar una guía">
+          <li><span>01</span><div><strong>Elige el alcance</strong><p>Prepara un parcial o integra todo el cuatrimestre de una materia.</p></div></li>
+          <li><span>02</span><div><strong>Reúne las fuentes</strong><p>Conecta trabajos, actividades y apuntes del grupo.</p></div></li>
+          <li><span>03</span><div><strong>Repasen juntos</strong><p>Escriban, revisen y completen lo que falta.</p></div></li>
+        </ol>
+        </section>
       ) : (
         <>
-          <div className="toolbar">
+          <section className="guides-filters" aria-label="Filtrar guías">
+          <div className="guides-filter-row">
+            <label className="field guides-period-filter"><span>Cuatrimestre</span>
             <select
               aria-label="Cuatrimestre"
               value={period || ''}
@@ -165,12 +193,22 @@ export function GuidesPage() {
                 </option>
               ))}
             </select>
+            </label>
+            <label className="field guides-period-filter"><span>Tipo de guía</span>
+              <select aria-label="Tipo de guía" value={guideType} onChange={(event) => update({ tipo: event.target.value })}>
+                <option value="">Todos los tipos</option>
+                <option value="partial">Guías de parcial</option>
+                <option value="quarter">Guías cuatrimestrales</option>
+              </select>
+            </label>
+            <label className="guides-withdrawn"><input type="checkbox" checked={withdrawn} onChange={(event) => setWithdrawn(event.target.checked)} />Ver guías retiradas que puedo recuperar</label>
           </div>
           {subjectChips.length > 1 && (
-            <div className="chips chips--small chips--scroll" role="group" aria-label="Materia">
+            <div className="guides-subjects" role="group" aria-label="Materia">
+              <span className="guides-filter-label">Materia</span>
               <button
                 type="button"
-                className="chip"
+                className="guides-subject"
                 aria-pressed={!subjectId}
                 onClick={() => update({ materia: '' })}
               >
@@ -180,31 +218,39 @@ export function GuidesPage() {
                 <button
                   key={s.id}
                   type="button"
-                  className="chip"
+                  className="guides-subject"
                   aria-pressed={subjectId === s.id}
                   onClick={() => update({ materia: s.id })}
                 >
-                  {s.name} <span className="chip__count">{s.count}</span>
+                  {s.name} <span className="guides-count">{s.count}</span>
                 </button>
               ))}
             </div>
           )}
+          </section>
+          <div className="guides-results"><p aria-live="polite">{shown.length} {shown.length === 1 ? 'guía' : 'guías'} {withdrawn ? 'retiradas' : period || subjectId || guideType ? 'con estos filtros' : 'en tu biblioteca'}</p><span>Última actualización primero</span></div>
           {shown.length === 0 ? (
+            <div className="guides-surface guides-empty">
             <Empty icon="search" title="No hay guías con estos filtros">
               Prueba con otro cuatrimestre o crea la guía que falta.
             </Empty>
+            </div>
           ) : (
-            <ul className="work-grid">
+            <ul className="guides-grid" aria-label="Guías de estudio">
               {shown.map((guide) => {
                 const status = guideStatus(guide, data);
                 return (
                   <li key={guide.id}>
-                    <Link to={`/m/guias/${guide.id}`} className="work-card guide-card">
-                      <span className="work-card__context">{placeLabel(guide, data)}</span>
-                      <strong className="work-card__title">{guide.title}</strong>
+                    <Link to={`/m/guias/${guide.id}`} className="guides-card">
+                      <span className="guides-card__context"><span className="guides-feature-icon"><Icon name="book" size={20} /></span><span>{placeLabel(guide, data)}</span></span>
+                      <strong className="guides-card__title">{guide.title}</strong>
+                      <span className="guides-scope-badge">{guide.termId ? 'Guía de parcial' : 'Alcance cuatrimestral'}</span>
+                      <span className="guides-card__topics">{guide.topics.slice(0, 3).join(' · ')}{guide.topics.length > 3 ? '…' : ''}</span>
                       {guide.withdrawnAt && <span className="badge">Retirada</span>}
+                      <span className="guides-card__coverage"><span className="guides-mini-label">Cobertura del temario</span>
                       <CoverageBar covered={status.covered} total={guide.topics.length} />
-                      <span className="guide-card__facts">
+                      </span>
+                      <span className="guides-card__facts">
                         <span>
                           {status.sources.length}{' '}
                           {status.sources.length === 1 ? 'fuente' : 'fuentes'}
@@ -225,11 +271,10 @@ export function GuidesPage() {
                           <span className="badge">Sin revisar</span>
                         )}
                       </span>
-                      <span className="work-card__footer">
-                        <span className="work-card__authors">
-                          Versión {guide.version} · {memberName(members, guide.updatedBy)}
-                        </span>
-                        <span className="work-card__date">{formatTime(guide.updatedAt)}</span>
+                      <span className="guides-card__footer">
+                        <Avatar member={members.find((member) => member.id === guide.updatedBy)} size={28} />
+                        <span className="guides-card__author">{memberName(members, guide.updatedBy)}<span>Versión {guide.version}</span></span>
+                        <time dateTime={guide.updatedAt.toISOString()}>{formatListTime(guide.updatedAt)}</time>
                       </span>
                     </Link>
                   </li>
@@ -239,7 +284,7 @@ export function GuidesPage() {
           )}
         </>
       )}
-    </>
+    </div>
   );
 }
 
@@ -248,6 +293,10 @@ export function GuidesPage() {
 // ---------------------------------------------------------------------------
 
 type Tab = '' | 'fuentes' | 'revisiones' | 'historial';
+
+function GuideStudyLink({ to, icon, label }: { to: string; icon: IconName; label: string }) {
+  return <li><Link to={to} className="guides-study-link"><span className="guides-action-icon"><Icon name={icon} size={18} /></span><span>{label}</span><Icon name="forward" size={14} /></Link></li>;
+}
 
 export function GuidePage() {
   const { guideId = '' } = useParams();
@@ -264,7 +313,6 @@ export function GuidePage() {
     text: guide.sections[i] ?? '',
   }));
   const missingSections = written.filter((s) => !s.text);
-  const term = data.terms.find((t) => t.id === guide.termId);
   const subject = data.subjects.find((s) => s.id === guide.subjectId);
   const relatedCollections = data.spacedCollections.filter((collection) => !collection.archived
     && (collection.visibility === 'group' || collection.ownerId === data.me?.id)
@@ -279,43 +327,26 @@ export function GuidePage() {
   ];
 
   return (
-    <>
+    <div className="guides-page guides-page--reading">
       <Link to="/m/guias" className="back with-icon">
         <Icon name="back" size={16} /> Guías de estudio
       </Link>
-      <header className="page-header">
+      <header className="guides-header guides-header--document">
         <div>
-          <p className="eyebrow">{placeLabel(guide, data)}</p>
+          <p className="guides-eyebrow"><Link to={`/m/guias?materia=${encodeURIComponent(guide.subjectId)}`}>{subject?.name ?? 'Materia'}</Link><span>· {guideScopeLabel(guide, data)}</span></p>
           <h1>{guide.title}</h1>
-          {!guide.withdrawnAt && <Link className="button secondary" to={`/ajustes?aiSource=guide:${guide.id}&purpose=guide`}>Crear borrador con Gemini</Link>}
-          <p className="muted">
-            Versión {guide.version} · guardada por {memberName(data.members, guide.updatedBy)} ·{' '}
-            {formatTime(guide.updatedAt)}
-          </p>
+          <div className="guides-byline"><Avatar member={data.members.find((member) => member.id === guide.updatedBy)} size={36} /><div><strong>{memberName(data.members, guide.updatedBy)}</strong><span>Versión {guide.version} · {formatTime(guide.updatedAt)}</span></div><span className={`badge ${guide.withdrawnAt ? '' : status.changeRequests ? 'badge--open' : status.approvals ? 'badge--resolved' : ''}`}>{guide.withdrawnAt ? 'Retirada' : status.changeRequests ? 'Con cambios propuestos' : status.approvals ? 'Revisada' : 'Pendiente de revisión'}</span></div>
         </div>
-        <div className="row">
-          <Link to={`/m/repaso/tarjetas/nueva?guia=${encodeURIComponent(guide.id)}`} className="button secondary">
-            Crear tarjeta
-          </Link>
-          {!guide.withdrawnAt && <ExamMaterialLink kind="guide" id={guide.id} />}
-          <Link to={`/m/aprende-ensenando/nueva?guia=${encodeURIComponent(guide.id)}`} className="button secondary">
-            Practicar explicándolo
-          </Link>
-          {!guide.withdrawnAt && <Link to={`/m/exposiciones/nueva?guia=${encodeURIComponent(guide.id)}`} className="button secondary">
-            Ensayar exposición
-          </Link>}
-          {!guide.withdrawnAt && <Link to={`/m/salas?guia=${encodeURIComponent(guide.id)}`} className="button secondary">Estudiar en una sala</Link>}
-          {!guide.withdrawnAt && <Link to={`/m/guias/${guide.id}/editar`} className="button secondary with-icon">
+        {!guide.withdrawnAt && <div className="row">
+          <Link to={`/m/guias/${guide.id}/editar`} className="button secondary with-icon">
             <Icon name="edit" size={16} /> Editar
-          </Link>}
-        </div>
+          </Link>
+        </div>}
       </header>
-      <ContentWithdrawal kind="guide" id={guide.id} version={guide.version} withdrawnAt={guide.withdrawnAt}
-        canEdit={guide.createdBy === data.me?.id || data.me?.isCreator} reasonRequired={guide.createdBy !== data.me?.id} />
 
-      <div className="detail">
-        <div className="detail__main">
-          <div className="segmented guide-tabs" role="group" aria-label="Sección de la guía">
+      <div className="guides-detail">
+        <div className="guides-detail__main">
+          <div className="guides-tabs" role="group" aria-label="Sección de la guía">
             {tabs.map((t) => (
               <button
                 key={t.id}
@@ -324,18 +355,19 @@ export function GuidePage() {
                 onClick={() => setParams(t.id ? { pestana: t.id } : {}, { replace: true })}
               >
                 {t.label}
-                {t.count !== undefined && <span className="chip__count"> {t.count}</span>}
+                {t.count !== undefined && <span className="guides-count"> {t.count}</span>}
               </button>
             ))}
           </div>
 
           {tab === '' && (
-            <article className="panel guide-body">
+            <>
+            <article className="guides-surface guide-body guides-document" aria-label="Contenido de la guía">
               <p className="guide-disclaimer">
                 Esta guía reúne el material del grupo. No promete conocer el examen ni reemplaza el
                 temario del docente; revisa las respuestas y el código antes de darlos por buenos.
               </p>
-              <section>
+              <section className="guides-outline">
                 <h2>Temario</h2>
                 <ol className="guide-topics">
                   {status.coverage.map((c) => (
@@ -349,7 +381,7 @@ export function GuidePage() {
               {written
                 .filter((s) => s.text)
                 .map((s) => (
-                  <section key={s.id}>
+                  <section key={s.id} className="guides-document-section">
                     <h2>{s.title}</h2>
                     <StructuredText text={s.text} />
                   </section>
@@ -358,27 +390,44 @@ export function GuidePage() {
               {missingSections.length > 0 && (
                 <p className="muted guide-missing">
                   Sin escribir todavía: {missingSections.map((s) => s.title).join(', ')}.{' '}
-                  <Link to={`/m/guias/${guide.id}/editar`}>Completar</Link>
+                  {!guide.withdrawnAt && <Link to={`/m/guias/${guide.id}/editar`}>Completar</Link>}
                 </p>
               )}
-              <ResourceSection kind="guide" id={guide.id} version={guide.version} canEdit={Boolean(data.me) && !guide.withdrawnAt} />
             </article>
+            <div className="guides-surface guides-attachments"><ResourceSection kind="guide" id={guide.id} version={guide.version} canEdit={Boolean(data.me) && !guide.withdrawnAt} compactUpload /></div>
+            <ResourceComments target={{ kind: 'guide', id: guide.id }} title="Comentarios de la guía" />
+            </>
           )}
-          {tab === 'fuentes' && <fieldset disabled={Boolean(guide.withdrawnAt)} style={{ border: 0, padding: 0, margin: 0 }}><SourcesTab guide={guide} /></fieldset>}
+          {tab === 'fuentes' && <fieldset disabled={Boolean(guide.withdrawnAt)} className="guides-source-fields"><legend className="guides-sr">Fuentes de la guía</legend><SourcesTab guide={guide} /></fieldset>}
           {tab === 'revisiones' && <ReviewsTab guide={guide} />}
           {tab === 'historial' && <GuideHistory guide={guide} />}
         </div>
 
-        <aside className="detail__side">
-          <section className="panel">
-            <h2 className="label">Repaso de esta guía</h2>
+        <aside className="guides-detail__side" aria-label="Herramientas de la guía">
+          {!guide.withdrawnAt && <RelatedVisualProjects kind="guide" id={guide.id} />}
+          <section className="guides-surface guides-study">
+            <p className="guides-eyebrow">Del material a la práctica</p>
+            <h2>Estudiar con esta guía</h2>
+            <ul className="guides-study-links">
+              <GuideStudyLink to={`/m/repaso/tarjetas/nueva?guia=${encodeURIComponent(guide.id)}`} icon="copy" label="Crear tarjeta" />
+              <GuideStudyLink to={`/m/aprende-ensenando/nueva?guia=${encodeURIComponent(guide.id)}`} icon="chat" label="Practicar explicándolo" />
+              {!guide.withdrawnAt && <>
+                <GuideStudyLink to={`/m/exposiciones/nueva?guia=${encodeURIComponent(guide.id)}`} icon="users" label="Ensayar exposición" />
+                <GuideStudyLink to={`/m/salas?guia=${encodeURIComponent(guide.id)}`} icon="book" label="Estudiar en una sala" />
+                <li className="guides-exam-action"><span className="guides-action-icon"><Icon name="file" size={18} /></span><ExamMaterialLink kind="guide" id={guide.id} className="" /><Icon name="forward" size={14} /></li>
+                <GuideStudyLink to={`/ajustes?aiSource=guide:${guide.id}&purpose=guide`} icon="reply" label="Crear borrador con Gemini" />
+              </>}
+            </ul>
+          </section>
+          <section className="guides-surface guides-side-section">
+            <h2>Repaso de esta guía</h2>
             {relatedCollections.length ? <ul className="links">{relatedCollections.map((collection) => <li key={collection.id}>
               <Link to={`/m/repaso/colecciones/${collection.id}`}>{collection.title}</Link>
             </li>)}</ul> : <p className="muted">Todavía no hay colecciones vinculadas a esta guía.</p>}
             <Link to={`/m/repaso/tarjetas/nueva?guia=${encodeURIComponent(guide.id)}`}>Crear una tarjeta de repaso</Link>
           </section>
-          <section className="panel">
-            <h2 className="label">Cobertura del temario</h2>
+          <section className="guides-surface guides-side-section guides-coverage-panel">
+            <div className="guides-section-heading"><Icon name="check" size={18} /><h2>Cobertura del temario</h2></div>
             <CoverageBar covered={status.covered} total={guide.topics.length} />
             {status.covered < guide.topics.length && (
               <p className="muted guide-side-note">
@@ -386,8 +435,8 @@ export function GuidePage() {
               </p>
             )}
           </section>
-          <section className="panel">
-            <h2 className="label">Fuentes</h2>
+          <section className="guides-surface guides-side-section">
+            <h2>Fuentes</h2>
             <dl className="facts">
               <dt>Procesadas</dt>
               <dd>{status.processed}</dd>
@@ -408,13 +457,16 @@ export function GuidePage() {
               Ver el índice de fuentes
             </button>
           </section>
-          <section className="panel">
-            <h2 className="label">Datos</h2>
+          <section className="guides-surface guides-side-section">
+            <h2>Datos</h2>
             <dl className="facts">
               <dt>Materia</dt>
               <dd>{subject?.name}</dd>
-              <dt>Parcial</dt>
-              <dd>{term?.name ?? 'Sin parcial'}</dd>
+              <dt>Tipo de guía</dt>
+              <dd>{guide.termId ? 'Guía de parcial' : 'Alcance cuatrimestral'}</dd>
+              <dt>Alcance</dt>
+              <dd>{guideScopeLabel(guide, data)}</dd>
+              {subject && <><dt>Cuatrimestre</dt><dd>{periodLabel(subject.period)}</dd></>}
               <dt>Creó</dt>
               <dd>{memberName(data.members, guide.createdBy)}</dd>
               <dt>Revisión</dt>
@@ -427,9 +479,11 @@ export function GuidePage() {
               </dd>
             </dl>
           </section>
+          {(guide.withdrawnAt || guide.createdBy === data.me?.id || data.me?.isCreator) && <section className="guides-surface guides-side-section guides-availability"><h2>Disponibilidad</h2><ContentWithdrawal kind="guide" id={guide.id} version={guide.version} withdrawnAt={guide.withdrawnAt}
+            canEdit={guide.createdBy === data.me?.id || data.me?.isCreator} reasonRequired={guide.createdBy !== data.me?.id} /></section>}
         </aside>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -438,7 +492,7 @@ function GuideHistory({ guide }: { guide: StudyGuide }) {
   const source = useDataSource();
   const { error, pending, run } = useAction();
   const history = data.guideVersions.filter((revision) => revision.guideId === guide.id).sort((a, b) => b.version - a.version);
-  return <section className="panel academic-history"><h2 className="label">Historial recuperable</h2>
+  return <section className="guides-surface academic-history guides-history"><div className="guides-section-heading"><Icon name="calendar" size={19} /><h2>Historial recuperable</h2></div>
     <p className="field__hint">Cada versión conserva temario, secciones, fuentes, su estado de procesamiento y los archivos. Restaurar crea una versión nueva y conserva este historial.</p>
     {history.map((revision) => <details className="academic-version" key={revision.id}>
       <summary>Versión {revision.version} · {formatTime(revision.editedAt)}{revision.version === guide.version ? ' · Actual' : ''}</summary>
@@ -707,6 +761,7 @@ function AddSources({
   return (
     <div className="panel add-sources">
       <SourcePicker
+        wholePeriod={!guide.termId}
         matched={matched}
         unplaced={unplaced}
         picked={picked}
@@ -736,12 +791,14 @@ function AddSources({
 }
 
 function SourcePicker({
+  wholePeriod = false,
   matched,
   unplaced,
   picked,
   onChange,
   emptyText,
 }: {
+  wholePeriod?: boolean;
   matched: SourceInfo[];
   unplaced: SourceInfo[];
   picked: Set<string>;
@@ -784,8 +841,8 @@ function SourcePicker({
   if (!matched.length && !unplaced.length) return <p className="muted">{emptyText}</p>;
   return (
     <div className="source-picker">
-      {group('Del parcial', 'propuestas para la guía', matched)}
-      {group('Sin parcial', 'revisa si aplican a este parcial', unplaced)}
+      {group(wholePeriod ? 'De todos los parciales' : 'Del parcial', 'propuestas para la guía', matched)}
+      {group('Sin parcial', wholePeriod ? 'revisa si corresponden a este cuatrimestre' : 'revisa si aplican a este parcial', unplaced)}
     </div>
   );
 }
@@ -899,11 +956,24 @@ function ReviewsTab({ guide }: { guide: StudyGuide }) {
 
 export function GuideFormPage() {
   const { guideId } = useParams();
-  const { guides } = useSnapshot();
+  const { guides, me } = useSnapshot();
+  const [params] = useSearchParams();
   const guide = guides.find((g) => g.id === guideId);
   if (guideId && !guide) return <NotFound />;
-  if (guide?.withdrawnAt) return <p className="placeholder">Restaura la guía desde <Link to={`/m/guias/${guide.id}`}>su página</Link> antes de editarla.</p>;
-  return <GuideForm key={guide?.id ?? 'nueva'} guide={guide} />;
+  if (guide?.withdrawnAt) return <div className="guides-page"><p className="guides-notice">Restaura la guía desde <Link to={`/m/guias/${guide.id}`}>su página</Link> antes de editarla.</p></div>;
+  if (!guideId && params.get('modo') === 'ia') return <div className="guides-page"><Link to="/m/guias" className="back">Guías de estudio</Link><h1>Nueva guía de estudio</h1><GuideAiPanel /></div>;
+  return <GuideForm key={`${guide?.id ?? 'nueva'}:${me?.id ?? ''}`} guide={guide} />;
+}
+
+function GuideSectionEditor({ section, index, value, onChange, files }: {
+  section: (typeof GUIDE_SECTIONS)[number]; index: number; value: string;
+  onChange: (value: string) => void; files: ResourceFile[];
+}) {
+  const [open, setOpen] = useState(Boolean(value.trim()) || index === 0);
+  return <details className="guides-editor-disclosure" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
+    <summary><span className="guides-editor-number">{String(index + 1).padStart(2, '0')}</span><span>{section.title}</span><span className="guides-editor-state">{value.trim() ? 'Con contenido' : 'Por escribir'}</span></summary>
+    <div><StructuredEditor label={section.title} value={value} onChange={onChange} rows={section.id === 'codigo' ? 7 : 5} files={files} /><p className="field__hint">{section.hint}</p></div>
+  </details>;
 }
 
 function GuideForm({ guide }: { guide: StudyGuide | undefined }) {
@@ -929,8 +999,10 @@ function GuideForm({ guide }: { guide: StudyGuide | undefined }) {
   const [subjectId, setSubjectId] = useState(() => asked?.id ?? firstIn(period));
   const currentTermOf = (subject: string, n: number) =>
     n === current?.period ? (termAt(terms, subject, current.term)?.id ?? '') : '';
+  const firstTermOf = (subject: string) => terms.filter((term) => term.subjectId === subject).sort((a, b) => a.position - b.position)[0]?.id ?? '';
+  const [guideType, setGuideType] = useState<'partial' | 'quarter'>(() => guide ? guide.termId ? 'partial' : 'quarter' : 'partial');
   const [termId, setTermId] = useState(() =>
-    guide ? (guide.termId ?? '') : currentTermOf(subjectId, period),
+    guide ? (guide.termId ?? '') : currentTermOf(subjectId, period) || firstTermOf(subjectId),
   );
   const [title, setTitle] = useState(guide?.title ?? '');
   const [topicsText, setTopicsText] = useState(guide?.topics.join('\n') ?? '');
@@ -941,17 +1013,17 @@ function GuideForm({ guide }: { guide: StudyGuide | undefined }) {
   const locked = pending || queue.busy || contentSaved;
   const conflict = Boolean(guide && !contentSaved && baseVersion !== guide.version);
 
-  const candidates = guide
-    ? { matched: [], unplaced: [] }
-    : candidateSources(subjectId, termId || undefined, data);
-  // Lo del parcial va marcado; lo que no tiene parcial se ofrece sin marcar.
-  const defaultPick = (list: SourceInfo[]) => new Set(list.map(refKey));
-  const [picked, setPicked] = useState(() => defaultPick(candidates.matched));
-  const [pickedFor, setPickedFor] = useState(`${subjectId}|${termId}`);
-  if (!guide && pickedFor !== `${subjectId}|${termId}`) {
-    setPickedFor(`${subjectId}|${termId}`);
-    setPicked(defaultPick(candidates.matched));
-  }
+  const [materials, setMaterials] = useState<GuideAiSourceRef[]>([]);
+  const [chosenFileIds, setChosenFileIds] = useState<string[]>([]);
+  const [pendingMaterials, setPendingMaterials] = useState(0);
+  const [materialCatalogue, setMaterialCatalogue] = useState<GuideAiCandidate[]>([]);
+  const manualRequest = useRef(crypto.randomUUID());
+  const parsedTopics = parseTopics(topicsText);
+  const materialDraft = useGuideMaterialSelection({ subjectId, termId: guideType === 'partial' ? termId || undefined : undefined, guideType, title, topicsText, sources: materials, chosenFileIds, manualSections: sections }, (record) => {
+    setSubjectId(record.subjectId); setPeriod(subjects.find((entry) => entry.id === record.subjectId)?.period ?? period); setGuideType(record.guideType); setTermId(record.termId ?? ''); setTitle(record.title); setTopicsText(record.topicsText); setMaterials(record.sources); setChosenFileIds(record.chosenFileIds); if (record.manualSections) setSections(record.manualSections);
+  }, !guide);
+  const privateMaterials = materials.some((ref) => ref.kind === 'exam' && ref.includeSolutions || materialCatalogue.some((candidate) => candidate.kind === ref.kind && candidate.refId === ref.refId && candidate.visibility === 'personal'));
+  const unavailableMaterials = materials.some((ref) => !materialCatalogue.some((candidate) => candidate.kind === ref.kind && candidate.refId === ref.refId));
 
   const periodSubjects = subjects.filter((s) => s.period === period).sort(bySubject);
   const subjectTerms = terms
@@ -962,21 +1034,23 @@ function GuideForm({ guide }: { guide: StudyGuide | undefined }) {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (submitting.current || queue.busy || conflict) return;
+    if (submitting.current || queue.busy || conflict || (!guide && (privateMaterials || unavailableMaterials || pendingMaterials || !materialDraft.ready)) || (guideType === 'partial' && !termId)) return;
     submitting.current = true;
     try {
       await run(async () => {
         if (!saved.current) {
-          const input = { subjectId, termId: termId || undefined, title, topicsText, sections };
+          const input = { subjectId, termId: guideType === 'partial' ? termId || undefined : undefined, title, topicsText, sections };
           let id: string;
           if (guide) {
             await source.updateGuide(guide.id, input, baseVersion);
             id = guide.id;
           } else {
-            const refs = [...candidates.matched, ...candidates.unplaced]
-              .filter((i) => picked.has(refKey(i)))
-              .map(({ kind, refId }) => ({ kind, refId }));
-            id = await source.createGuide(input, refs);
+            await materialDraft.flush();
+            if ('problem' in parsedTopics) throw new Error(parsedTopics.problem);
+            if (materials.length) {
+              const created = await source.createGuideFromMaterials({ subjectId, ...(guideType === 'partial' && termId ? { termId } : {}), guideType, period: String(period), title, topics: parsedTopics.topics, sources: materials, sections, requestId: manualRequest.current });
+              id = created.id;
+            } else id = await source.createGuide(input, []);
           }
           if (!active.current) return;
           saved.current = { id, version: guide ? baseVersion! + 1 : 1 };
@@ -992,25 +1066,36 @@ function GuideForm({ guide }: { guide: StudyGuide | undefined }) {
   };
 
   return (
-    <>
+    <div className="guides-page guides-page--compose">
       <Link to={backTo} className="back with-icon">
         <Icon name="back" size={16} /> {guide ? guide.title : 'Guías de estudio'}
       </Link>
-      <header className="page-header">
+      <header className="guides-header">
         <div>
+          <p className="guides-eyebrow"><Icon name="edit" size={16} /> Tu espacio para organizar lo aprendido</p>
           <h1>{guide ? 'Editar guía' : 'Nueva guía de estudio'}</h1>
           <p className="muted">
             {guide
               ? `Es del grupo. Tu cambio se guarda como versión ${guide.version + 1} a tu nombre, y las revisiones de la versión anterior se conservan.`
-              : 'Escribe una guía manual para el grupo. También puedes preparar un borrador privado con Gemini desde la lista de guías.'}
+              : 'Define el alcance, agrega tus materiales y los del grupo, y redacta la guía o continúa con IA. Tu borrador y sus materiales se guardan de forma privada.'}
           </p>
         </div>
       </header>
 
-      <form className="panel form form--wide" onSubmit={submit}>
-        <fieldset className="upload-form-fields" disabled={locked}>
-        <section className="form__section">
-          <h2>De qué materia y parcial</h2>
+      <form className={`guides-compose${guide ? '' : ' guides-compose--materials'}`} onSubmit={submit}>
+        <fieldset className="guides-compose__settings" disabled={locked || !guide && !materialDraft.ready}>
+          <legend className="guides-sr">Organización y fuentes</legend>
+        <section className="guides-surface guides-form-section">
+          <h2>Alcance de la guía</h2>
+          <div className="guides-scope-options" role="group" aria-label="Tipo de guía">
+            <button type="button" className="secondary" aria-pressed={guideType === 'partial'} onClick={() => {
+              if (guideType === 'partial') return;
+              setGuideType('partial'); setTermId(currentTermOf(subjectId, period) || firstTermOf(subjectId)); setMaterials((refs) => refs.map((ref) => ({ ...ref, includeOutsideTerm: true })));
+            }}><strong>Para un parcial</strong>{' '}<span>Enfoca el temario de una evaluación.</span></button>
+            <button type="button" className="secondary" aria-pressed={guideType === 'quarter'} onClick={() => {
+              setGuideType('quarter'); setTermId('');
+            }}><strong>Para el cuatrimestre</strong>{' '}<span>Integra todos los parciales de la materia.</span></button>
+          </div>
           <div className="form__grid">
             <label className="field">
               <span className="field__label">Cuatrimestre</span>
@@ -1022,8 +1107,8 @@ function GuideForm({ guide }: { guide: StudyGuide | undefined }) {
                   if (!isValidPeriod(next)) return;
                   const subject = firstIn(next);
                   setPeriod(next);
-                  setSubjectId(subject);
-                  setTermId(currentTermOf(subject, next));
+                  setSubjectId(subject); setMaterials([]); setChosenFileIds([]); setMaterialCatalogue([]);
+                  setTermId(guideType === 'partial' ? currentTermOf(subject, next) || firstTermOf(subject) : '');
                 }}
               >
                 {PERIODS.map((n) => (
@@ -1040,8 +1125,8 @@ function GuideForm({ guide }: { guide: StudyGuide | undefined }) {
                 disabled={Boolean(guide)}
                 onChange={(e) => {
                   const position = terms.find((t) => t.id === termId)?.position;
-                  setSubjectId(e.target.value);
-                  setTermId(termAt(terms, e.target.value, position)?.id ?? '');
+                  setSubjectId(e.target.value); setMaterials([]); setChosenFileIds([]); setMaterialCatalogue([]);
+                  setTermId(guideType === 'partial' ? termAt(terms, e.target.value, position)?.id ?? firstTermOf(e.target.value) : '');
                 }}
               >
                 {periodSubjects.map((s) => (
@@ -1051,22 +1136,33 @@ function GuideForm({ guide }: { guide: StudyGuide | undefined }) {
                 ))}
               </select>
             </label>
-            <label className="field">
+            {guideType === 'partial' && <label className="field">
               <span className="field__label">Parcial</span>
-              <select value={termId} onChange={(e) => setTermId(e.target.value)}>
-                <option value="">Sin parcial</option>
+              <select value={termId} onChange={(e) => { setTermId(e.target.value); setMaterials((refs) => refs.map((ref) => ({ ...ref, includeOutsideTerm: true }))); }} required>
+                <option value="">Elige un parcial</option>
                 {subjectTerms.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}
                   </option>
                 ))}
               </select>
-            </label>
+            </label>}
           </div>
-          {guide && <p className="field__hint">La materia de una guía no cambia; el parcial sí.</p>}
+          {guideType === 'quarter' && <p className="field__hint">Esta guía abarca todos los parciales de la materia en el cuatrimestre elegido.</p>}
+          {guide && <p className="field__hint">La materia de una guía no cambia; puedes ajustar el alcance.</p>}
         </section>
-
-        <section className="form__section">
+          <div className="guides-compose-note"><Icon name="users" size={20} /><p>Los cambios se guardan a tu nombre. Las versiones anteriores y las revisiones del grupo se conservan.</p></div>
+        </fieldset>
+        {!guide && <section className="guides-compose__materials guides-surface" aria-label="Materiales para crear la guía"><h2>Materiales para tu guía</h2><p>Agrega notas, tareas, actividades y exámenes. Cambiar los filtros conserva todo lo agregado.</p>
+          <GuideMaterialPicker key={subjectId} subjectId={subjectId} termId={guideType === 'partial' ? termId || undefined : undefined} topics={'topics' in parsedTopics ? parsedTopics.topics : []} selected={materials} onChange={setMaterials} chosenFileIds={chosenFileIds} onChosenFileIdsChange={setChosenFileIds} restoredTranscriptions={materialDraft.saved?.transcriptions} onPendingFilesChange={setPendingMaterials} onCandidatesChange={setMaterialCatalogue} disabled={locked || !materialDraft.ready} />
+          <GuideMaterialDraftStatus draft={materialDraft} mode="manual" />
+          {privateMaterials && <p className="guides-notice">Incluiste materiales personales: la selección y tu texto se guardan privados. Para crear una guía del grupo, retira esas fuentes o compártelas desde su módulo.</p>}
+          {unavailableMaterials && <p className="guides-notice">Estamos comprobando los materiales agregados. Si alguno ya no está disponible, retíralo de la lista para continuar.</p>}
+          {pendingMaterials > 0 && <p className="guides-notice">Revisa o quita los {pendingMaterials} archivos elegidos pendientes antes de crear la guía.</p>}
+        </section>}
+        <fieldset className="guides-compose__document guides-surface" disabled={locked || !guide && !materialDraft.ready}>
+          <legend className="guides-sr">Contenido de la guía</legend>
+        <section className="guides-form-section">
           <h2>Temario</h2>
           <label className="field">
             <span className="field__label">Título de la guía</span>
@@ -1074,7 +1170,7 @@ function GuideForm({ guide }: { guide: StudyGuide | undefined }) {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder={
-                subjectName ? `Guía de ${subjectName}${termName ? `, ${termName}` : ''}` : ''
+                subjectName ? `Guía de ${subjectName}${guideType === 'quarter' ? ', cuatrimestre completo' : termName ? `, ${termName}` : ''}` : ''
               }
               maxLength={200}
               required
@@ -1094,40 +1190,20 @@ function GuideForm({ guide }: { guide: StudyGuide | undefined }) {
             </span>
           </label>
         </section>
-
-        {!guide && (
-          <section className="form__section">
-            <h2>Fuentes</h2>
-            <p className="field__hint">
-              Entran como pendientes. En la guía marcas cuáles ya procesaste y qué temas cubre cada
-              una.
-            </p>
-            <SourcePicker
-              matched={candidates.matched}
-              unplaced={candidates.unplaced}
-              picked={picked}
-              onChange={setPicked}
-              emptyText="Todavía no hay material de esta materia. Puedes crear la guía y agregar fuentes después."
-            />
-          </section>
-        )}
-
-        <section className="form__section">
+        <section className="guides-form-section guides-editor-section">
           <h2>Contenido</h2>
           <p className="field__hint">
             Escribe lo que ya tengas; las secciones vacías no se muestran y quedan señaladas como
             pendientes.
           </p>
-          {GUIDE_SECTIONS.map((section, i) => <div key={section.id}>
-            <StructuredEditor label={section.title} value={sections[i] ?? ''} onChange={(value) => setSections(sections.map((text, j) => j === i ? value : text))}
-              rows={section.id === 'codigo' ? 6 : 4} files={data.resourceFiles.filter((file) => file.targetKind === 'guide' && file.targetId === guide?.id)} />
-            <p className="field__hint">{section.hint}</p>
-          </div>)}
+          {GUIDE_SECTIONS.map((section, i) => <GuideSectionEditor key={section.id} section={section} index={i}
+            value={sections[i] ?? ''} onChange={(value) => setSections(sections.map((text, j) => j === i ? value : text))}
+            files={data.resourceFiles.filter((file) => file.targetKind === 'guide' && file.targetId === guide?.id)} />)}
         </section>
-
         </fieldset>
-        <AttachmentUploader queue={queue} disabled={pending || contentSaved} title="Archivos de la guía" />
-        {contentSaved && <p className="field__hint">La guía ya está guardada. Termina o retira los archivos pendientes para continuar.</p>}
+        <div className="guides-compose__attachments guides-surface"><AttachmentUploader queue={queue} disabled={pending || contentSaved} title="Archivos de la guía" /></div>
+        <div className="guides-compose__status">
+        {contentSaved && <p className="guides-notice" role="status">La guía ya está guardada. Termina o retira los archivos pendientes para continuar.</p>}
         {conflict && <p className="error" role="alert">La guía cambió mientras la editabas. Conserva tu borrador y abre de nuevo la edición para evitar sobrescribir el trabajo del grupo.</p>}
 
         {error && (
@@ -1135,16 +1211,18 @@ function GuideForm({ guide }: { guide: StudyGuide | undefined }) {
             {error}
           </p>
         )}
-        <div className="form__actions">
+        </div>
+        <div className="form__actions guides-compose__actions">
+          <p className="guides-save-hint"><Icon name="users" size={16} /> Una guía del grupo, construida entre todos.</p>
           <Link to={backTo} className="button secondary">
             Cancelar
           </Link>
-          <button type="submit" disabled={pending || queue.busy || !subjectId || conflict}>
+          <button type="submit" className="guides-primary" disabled={pending || queue.busy || !subjectId || conflict || (!guide && (privateMaterials || unavailableMaterials || pendingMaterials > 0 || !materialDraft.ready)) || (guideType === 'partial' && !termId)}>
             {contentSaved ? queue.pendingCount ? 'Reintentar archivos pendientes' : 'Continuar' : guide ? 'Guardar versión nueva' : 'Crear guía'}
           </button>
         </div>
       </form>
-    </>
+    </div>
   );
 }
 
@@ -1158,7 +1236,7 @@ export function GuideCompendiumPage() {
   const [params, setParams] = useSearchParams();
   const asked = Number(params.get('cuatri'));
   const period = isValidPeriod(asked) ? asked : (currentPlacement(data.calendar)?.period ?? 1);
-  const termPosition = (g: StudyGuide) => data.terms.find((t) => t.id === g.termId)?.position ?? 99;
+  const termPosition = (g: StudyGuide) => g.termId ? data.terms.find((t) => t.id === g.termId)?.position ?? 99 : 0;
   const bySubjectInPeriod = data.subjects
     .filter((s) => s.period === period)
     .sort(bySubject)
@@ -1171,17 +1249,17 @@ export function GuideCompendiumPage() {
     .filter((s) => s.guides.length > 0);
 
   return (
-    <>
+    <div className="guides-page guides-page--compendium">
       <Link to="/m/guias" className="back with-icon no-print">
         <Icon name="back" size={16} /> Guías de estudio
       </Link>
-      <header className="page-header">
+      <header className="guides-header">
         <div>
-          <p className="eyebrow">Compendio</p>
+          <p className="guides-eyebrow"><Icon name="book" size={16} /> Compendio</p>
           <h1>{periodLabel(period)}</h1>
           <p className="muted">
-            Las guías de este cuatrimestre en un solo lugar, cada materia por separado y con sus
-            fuentes.
+            Las guías de parcial y las de alcance cuatrimestral en un solo lugar, cada materia
+            por separado y con sus fuentes. Este compendio reúne las guías existentes.
           </p>
         </div>
         <div className="row no-print">
@@ -1205,6 +1283,7 @@ export function GuideCompendiumPage() {
       </header>
 
       {bySubjectInPeriod.length === 0 ? (
+        <div className="guides-surface guides-empty">
         <Empty
           icon="file"
           title="No hay guías en este cuatrimestre"
@@ -1214,23 +1293,25 @@ export function GuideCompendiumPage() {
             </Link>
           }
         />
+        </div>
       ) : (
         <>
-          <nav className="panel compendium-index no-print" aria-label="Materias del compendio">
-            <h2 className="label">Materias</h2>
+          <nav className="guides-surface compendium-index no-print" aria-label="Materias del compendio">
+            <div className="guides-section-heading"><Icon name="folder" size={20} /><h2>Materias</h2><span className="guides-count">{bySubjectInPeriod.length}</span></div>
             <ul className="links">
               {bySubjectInPeriod.map(({ subject, guides }) => (
                 <li key={subject.id}>
                   <a href={`#materia-${subject.id}`} onClick={(e) => jumpTo(e, subject.id)}>
                     <strong>{subject.name}</strong>
                     <span className="muted">
-                      {guides.length} {guides.length === 1 ? 'guía' : 'guías'}
+                      {guides.filter((guide) => !guide.termId).length} de alcance cuatrimestral · {guides.filter((guide) => guide.termId).length} de parcial
                     </span>
                   </a>
                 </li>
               ))}
             </ul>
           </nav>
+          <div className="guides-compendium-content">
           {bySubjectInPeriod.map(({ subject, guides }) => (
             <section key={subject.id} id={`materia-${subject.id}`} className="compendium-subject">
               <h2>{subject.name}</h2>
@@ -1239,26 +1320,26 @@ export function GuideCompendiumPage() {
               ))}
             </section>
           ))}
+          </div>
         </>
       )}
-    </>
+    </div>
   );
 }
 
 /** Con hash routing, un enlace `#ancla` cambiaría de ruta: se desplaza a mano. */
 function jumpTo(e: MouseEvent, subjectId: string) {
   e.preventDefault();
-  document.getElementById(`materia-${subjectId}`)?.scrollIntoView({ behavior: 'smooth' });
+  document.getElementById(`materia-${subjectId}`)?.scrollIntoView({ behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
 }
 
 function CompendiumGuide({ guide }: { guide: StudyGuide }) {
   const data = useSnapshot();
   const status = guideStatus(guide, data);
-  const term = data.terms.find((t) => t.id === guide.termId);
   return (
-    <article className="panel guide-body compendium-guide">
-      <p className="eyebrow">
-        {term?.name ?? 'Sin parcial'} · versión {guide.version}
+    <article className="guides-surface guide-body compendium-guide">
+      <p className="guides-eyebrow">
+        {guideScopeLabel(guide, data)} · versión {guide.version}
       </p>
       <h3>
         <Link to={`/m/guias/${guide.id}`}>{guide.title}</Link>

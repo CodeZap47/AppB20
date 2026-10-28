@@ -43,6 +43,7 @@ export function enrichDelivery2Snapshot(connection: Pick<DbConnection, 'db'>, sn
   const enriched: Snapshot = { ...snapshot,
     onboardingCompleted: [...(db.myOnboarding?.iter() ?? [])].some((row) => row.memberId.toHexString() === identity && row.version >= 1),
     typingPresence: [...(db.typingPresence?.iter() ?? [])].map((row) => ({ memberId: row.memberId.toHexString(), scope: scope(row.scope), conversationId: row.conversationId, expiresAt: row.expiresAt.toDate() })),
+    liveDraftSharingEnabled: snapshot.me?.status === 'active' ? [...(db.myLiveDraftPreference?.iter() ?? [])].find((row) => row.memberId.toHexString() === identity)?.enabled ?? true : undefined,
     guideAiSourceAvailability: [...(db.guideAiSourceAvailability?.iter() ?? [])]
       .filter((row) => snapshot.guides.some((guide) => guide.id === row.guideId.toString() && guide.version === row.guideVersion && !guide.withdrawnAt)
         && snapshot.guideSources.some((source) => source.id === row.sourceId.toString() && source.guideId === row.guideId.toString()))

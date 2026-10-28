@@ -1,3 +1,4 @@
+import { ResourceComments } from '../components/whatsNew/ResourceComments';
 import { ExamSpacedButton } from '../components/ExamSpacedButton';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
@@ -41,6 +42,7 @@ function ExamDetailScreen({ examId }: { examId: string }) {
     {detail.draft && !detail.archived && <ExamDraftEditor key={`${detail.draft.version}:${detail.revision}`} exam={detail} draft={detail.draft} busy={busy || conflict} mutate={mutate} onDirtyChange={setHasEdits} />}
     <section className="panel"><h2>Historial de versiones</h2><ul>{detail.versions.map((version) => <li key={version.version}>Versión {version.version} · {version.state === 'ready' ? 'Lista e inmutable' : 'Borrador privado'} · {version.questionCount} preguntas · {version.model} <button type="button" className="link-button" disabled={busy} onClick={() => { const request = ++op.current; setError(''); void source.examAction({ action: 'getVersion', examId, version: version.version }).then((value) => { if (request === op.current) setReviewVersion(value); }).catch((failure) => { if (request === op.current) setError(examMessage(failure)); }); }}>Revisar versión</button></li>)}</ul>{reviewVersion && <section><h3>Versión {reviewVersion.version}</h3>{reviewVersion.questions.map((question, index) => <details className="ai-fragment" key={question.id}><summary>{index + 1}. {question.text}</summary><StructuredText text={question.explanation} /><p>Respuesta de referencia: {question.type === 'open' ? question.referenceAnswer : question.options.find((option) => option.id === question.correctOptionId)?.text}</p><BankSaveButton exam={detail} version={reviewVersion.version} questionId={question.id} /></details>)}</section>}</section>
     </>}
+    {detail.visibility === 'group' && detail.readyVersion && !detail.archived && <ResourceComments target={{ kind: 'exam', id: detail.id }} title="Comentarios del examen compartido" />}
     <ExamAttempts attempts={history} />
     </>}
   </>;

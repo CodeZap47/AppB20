@@ -477,7 +477,8 @@ a.button.secondary {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+  max-width: none;
+  padding: 0;
   container: content / inline-size;
 }
 

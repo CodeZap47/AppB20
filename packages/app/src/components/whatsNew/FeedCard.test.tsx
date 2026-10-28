@@ -12,6 +12,32 @@ import { FeedCard } from './FeedCard';
 import { FeedExcerpt } from './FeedContent';
 
 const now = new Date('2026-10-26T18:00:00Z');
+// Record obliga a actualizar esta cobertura cuando se añade un NewsKind al catálogo.
+const interactionShapes: Record<NewsKind, Pick<NewsItem, 'target' | 'resource'>> = {
+  tarea: { target: { kind: 'assignment', id: '123' } },
+  fecha: { target: { kind: 'assignment', id: '123' } },
+  trabajo: { target: { kind: 'work', id: '123' } },
+  nota: { target: { kind: 'note', id: '123' } },
+  actividad: { target: { kind: 'activity', id: '123' } },
+  evidencia: { target: { kind: 'evidence', id: '123' } },
+  pregunta: { target: { kind: 'question', id: '123' } },
+  respuesta: { target: { kind: 'answer', id: '123' } },
+  resuelta: { target: { kind: 'question', id: '123' } },
+  guia: { target: { kind: 'guide', id: '123' } },
+  votacion: { target: { kind: 'poll', id: '123' } },
+  ayuda: { target: { kind: 'help', id: '123' } },
+  repaso: { target: { kind: 'spaced', id: '123' } },
+  publicacion: { target: { kind: 'post', id: '123' } },
+  ranking: { resource: { kind: 'ranking', id: `parcial:3:1:2026-10-19|${'a'.repeat(64)}|1793037600000` } },
+  reto: { resource: { kind: 'challenge', id: '123' } },
+  solucion: { resource: { kind: 'solution', id: '123' } },
+  revision: { resource: { kind: 'review', id: '123' } },
+  observacion: { resource: { kind: 'review-comment', id: '123' } },
+  museo: { resource: { kind: 'museum', id: '123' }, target: { kind: 'question', id: '123' } },
+  oportunidad: { resource: { kind: 'opportunity', id: '123' } },
+  sala: { resource: { kind: 'room', id: '123' } },
+  examen: { resource: { kind: 'exam', id: 'shared-exam' } },
+};
 let data: Snapshot;
 let demo: DemoDataSource;
 let source: DataSource;
@@ -50,6 +76,7 @@ function ownPost() {
 }
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  vi.stubGlobal('CSS', { escape: (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, char => `\\${char.codePointAt(0)!.toString(16)} `) });
   demo = new DemoDataSource(createDemoState(now), 'demo-1', () => now); source = demo;
   data = { ...demo.getSnapshot(), subjects: [{ id: 'subject', name: 'Programación', period: 1 }] };
   vi.spyOn(source, 'getSnapshot').mockImplementation(() => data);
@@ -58,6 +85,15 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); demo.dispose(); container.remove(); vi.restoreAllMocks(); });
 
 describe('tarjetas y contenido integrado del feed', () => {
+  it.each(Object.entries(interactionShapes))('ofrece Comentar y Compartir para el tipo %s', async (kind, shape) => {
+    const read = vi.spyOn(source, 'readFeedThread'); const share = vi.spyOn(source, 'createFeedShare');
+    await mount({ ...item(kind as NewsKind, '123'), target: shape.target, resource: shape.resource });
+    const comment = [...container.querySelectorAll<HTMLButtonElement>('button')].find((entry) => entry.textContent?.startsWith('Comentar'));
+    expect(comment).toBeDefined(); expect(comment!.disabled).toBe(false);
+    expect(button('Compartir').disabled).toBe(false);
+    expect(read).not.toHaveBeenCalled(); expect(share).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['tarea', 'Tarea'], ['actividad', 'Actividad académica'], ['exposicion', 'Exposición'], ['examen', 'Examen académico'],
   ] as const)('presenta %s con etiqueta, materia, estado, instrucciones y entrega propias', async (kind, label) => {
@@ -135,9 +171,9 @@ describe('tarjetas y contenido integrado del feed', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     await mount(news);
     expect(button('Editar publicación').disabled).toBe(true); expect(button('Eliminar publicación').disabled).toBe(true);
-    expect(button('Eliminar comentario').disabled).toBe(true);
-    expect((container.querySelector('input[aria-label="Escribe un comentario"]') as HTMLInputElement).disabled).toBe(true);
-    await click('Eliminar publicación'); await click('Eliminar comentario');
+    expect(container.querySelector<HTMLButtonElement>('.resource-comments__toggle')?.disabled).toBe(true);
+    expect(container.querySelector('[aria-label="Escribe un comentario"]')).toBeNull();
+    await click('Eliminar publicación');
     expect(edit).not.toHaveBeenCalled(); expect(remove).not.toHaveBeenCalled(); expect(removeComment).not.toHaveBeenCalled(); expect(confirm).not.toHaveBeenCalled();
   });
 
@@ -150,6 +186,14 @@ describe('tarjetas y contenido integrado del feed', () => {
     expect((container.querySelector('textarea') as HTMLTextAreaElement).value).toBe('Edición que debe conservarse');
     await act(async () => container.querySelector('form.feed-card__edit')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
     expect(edit).not.toHaveBeenCalled();
+  });
+
+  it('cierra compartir al cambiar de cuenta sin crear un enlace para la nueva sesión', async () => {
+    const news = ownPost(); const create = vi.spyOn(source, 'createFeedShare').mockResolvedValue({id: 'share', url: '#/m/inicio', preview: {title: 'Publicación', description: 'Extracto', kindLabel: 'Publicación', path: '/m/inicio'}});
+    vi.spyOn(source, 'listFeedShares').mockResolvedValue([]);
+    await mount(news); await click('Compartir'); expect(document.querySelector('[role="dialog"]')).not.toBeNull(); expect(create).not.toHaveBeenCalled();
+    data = { ...data, me: data.members.find((row) => row.id === 'demo-2') }; await mount(news);
+    expect(document.querySelector('[role="dialog"]')).toBeNull(); expect(create).not.toHaveBeenCalled();
   });
 
   it.each(['reto', 'solucion', 'revision', 'observacion', 'oportunidad', 'sala', 'examen', 'ranking'] as const)('no ofrece reacciones sobre el recurso nuevo %s sin target admitido', async (kind) => {

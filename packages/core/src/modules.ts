@@ -2,7 +2,7 @@
  * Catálogo de módulos de App B20 según la definición del proyecto (secciones 3, 6, 7 y 8).
  * La interfaz lo usa para la navegación y para mostrar en qué etapa entra cada módulo.
  *
- * El módulo experimental 3.11 se incorpora en la etapa 3 y permanece pendiente.
+ * El módulo experimental 3.11 se incorpora en la etapa 3.
  * Las actividades de clase (3.3) no tienen entrada propia: viven dentro de «Tareas y Actividades».
  */
 
@@ -24,6 +24,7 @@ export interface ModuleInfo {
 }
 
 export const MODULES: readonly ModuleInfo[] = [
+  { id: 'laboratorio-visual', title: 'Laboratorio visual', section: '7.12', summary: 'Proyectos de 3D, diseño explicativo y simulaciones relacionados con tus materias.', stage: 3, worksWithoutAi: true, ready: true },
   { id: 'calendario', title: 'Calendario de entregas', section: '3.2', summary: 'Tareas en su fecha de entrega y agenda por día.', stage: 1, worksWithoutAi: true, ready: true },
   { id: 'materias', title: 'Materias', section: '3.2', summary: 'Consignas y apuntes compartidos por materia.', stage: 1, worksWithoutAi: true, ready: true },
   {
@@ -222,6 +223,7 @@ export const MODULES: readonly ModuleInfo[] = [
     summary: 'Diccionario versionado, prácticas y fichas de anotaciones con fuentes.',
     stage: 3,
     worksWithoutAi: true,
+    ready: true,
   },
   {
     id: 'prestamos',

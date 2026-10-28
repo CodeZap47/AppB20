@@ -1,5 +1,6 @@
 import { sendExamToSpaced } from './examSpaced';
 import { memberIdentityFor } from './authIdentity';
+import { invalidateFeedShares } from './feedInteractionLifecycle';
 import { SenderError } from 'spacetimedb/server';
 import { aiHash, aiRecord, aiSourceFingerprint, aiUuid, sanitizeAiText, validateAiGenerationConfig,
   type AiGenerationConfig, type AiPreparation } from '../../core/src/ai';
@@ -39,7 +40,11 @@ function requireVersion(ctx: Ctx, examId: string, version: unknown) { const row 
 function data(row: VersionRow) { return JSON.parse(row.json) as StoredVersion; }
 function attemptData(row: AttemptRow) { return JSON.parse(row.json) as StoredAttempt; }
 function ownAttempt(ctx: Ctx, attemptId: unknown) { activeMember(ctx); const row = ctx.db.examAttempt.id.find(uuid(attemptId)); if (!row || !row.actor.isEqual(memberIdentityFor(ctx))) fail('unavailable', 'El intento no está disponible.'); return row; }
-function bump(ctx: Ctx, exam: ExamRow, changes: Partial<ExamRow> = {}) { const next = { ...exam, ...changes, revision: exam.revision + 1, updatedAt: ctx.timestamp }; ctx.db.studyExam.id.update(next); return next; }
+function bump(ctx: Ctx, exam: ExamRow, changes: Partial<ExamRow> = {}) {
+  const next = { ...exam, ...changes, revision: exam.revision + 1, updatedAt: ctx.timestamp };
+  if (exam.visibility === 'group' && (next.visibility !== 'group' || next.archived || !next.readyVersion)) invalidateFeedShares(ctx, 'exam', exam.id);
+  ctx.db.studyExam.id.update(next); return next;
+}
 function mutable(ctx: Ctx, raw: Record<string, unknown>) {
   const exam = own(ctx, raw.examId); expectVersion(exam.revision, integer(raw.expectedRevision, 'Revisión'));
   const version = requireVersion(ctx, exam.id, raw.version);
@@ -408,4 +413,33 @@ export function purgeExamSource(ctx: Ctx, kind: string, targetId: bigint): void 
 /** Service operations still resolve every original with the student's identity. */
 export function getExamEvaluationSnapshot(ctx: Ctx, actor: import('spacetimedb').Identity, attemptId: unknown, questionId: unknown) {
   const row = ctx.db.examAttempt.id.find(uuid(attemptId)); if (!row || !row.actor.isEqual(actor) || row.state !== 'closed') fail('unavailable', 'El intento concluido no está disponible.'); const exam = ctx.db.studyExam.id.find(row.examId); if (!exam || !(exam.owner.isEqual(actor) || exam.visibility === 'group')) fail('unavailable', 'El examen ya no está disponible.'); const value = attemptData(row); const version = data(requireVersion(ctx, row.examId, row.version)); const question = version.questions.find((question) => question.id === questionId); const issues = prepIssues(ctx, version.preparation, actor); if (!question || question.type !== 'open' || !questionAvailable(ctx, version, question, issues, actor)) fail('unavailable', 'La pregunta abierta ya no está disponible.'); const answer = Object.hasOwn(value.answers, question.id) ? value.answers[question.id]?.text ?? '' : ''; const citations = version.preparation.fragments.filter((fragment) => question.citations.includes(fragment.id)).map((fragment) => ({ ...fragment, origins: availableOrigins(ctx, version, fragment, issues, actor) })); const snapshot = { attemptId: row.id, questionId: question.id, revision: row.revision, question, answer, citations }; return { ...snapshot, fingerprint: aiHash(snapshot) };
+}
+
+/** Authorized study-material projection. It never starts an attempt or exposes another student's answers. */
+export function resolveGuideExamMaterial(ctx: Ctx, examId: string, person = memberIdentityFor(ctx), options: { examVersion?: number; includeSolutions?: boolean } = {}) {
+  const exam = ctx.db.studyExam.id.find(uuid(examId));
+  const owner = !!exam?.owner.isEqual(person);
+  if (!exam || exam.archived || !ctx.db.member.identity.find(person) || ctx.db.member.identity.find(person)?.status !== 'active' || !owner && exam.visibility !== 'group') fail('unavailable', 'El examen no está disponible como material de estudio.');
+  const number = options.examVersion ?? (owner ? exam.draftVersion ?? exam.readyVersion : exam.readyVersion);
+  if (!number || owner && number !== exam.draftVersion && number !== exam.readyVersion || !owner && number !== exam.readyVersion) fail('unavailable', 'Elige una versión vigente del examen.');
+  const row = requireVersion(ctx, exam.id, number);
+  if (!owner && row.state !== 'ready') fail('unavailable', 'El examen todavía no tiene una versión compartida lista.');
+  const value = data(row); const issues = prepIssues(ctx, value.preparation, person);
+  if (issues.some((issue) => issue.state === 'unavailable') || value.questions.some((question) => !questionAvailable(ctx, value, question, issues, person))) fail('unavailable', 'Una fuente del examen ya no está disponible para tu cuenta.');
+  const revealed = new Set<string>();
+  if (!owner) for (const attempt of ctx.db.examAttempt.actor.filter(person)) {
+    if (attempt.examId !== exam.id || attempt.version !== number) continue;
+    const saved = attemptData(attempt);
+    for (const question of value.questions) if (attempt.state === 'closed' || saved.mode === 'practice' && question.type !== 'open' && saved.answers[question.id]?.confirmed) revealed.add(question.id);
+  }
+  const canIncludeSolutions = owner || revealed.size > 0;
+  const fields = value.questions.flatMap((question, index) => {
+    const base = [{ name: `pregunta:${question.id}`, text: `${index + 1}. ${question.text}\n${question.options.map((option) => `${option.id}. ${option.text}`).join('\n')}` }];
+    if (options.includeSolutions && (owner || revealed.has(question.id))) base.push({ name: `solucion:${question.id}`, text: [question.type === 'open' ? question.referenceAnswer : `Respuesta correcta: ${question.options.find((option) => option.id === question.correctOptionId)?.text ?? question.correctOptionId}`, question.explanation, question.rubric ? JSON.stringify(question.rubric) : ''].filter(Boolean).join('\n') });
+    return base;
+  });
+  return { kind: 'exam' as const, refId: exam.id, version: number, examVersion: number, subjectId: String(exam.subjectId), ...(exam.termId ? { termId: String(exam.termId) } : {}), title: value.title,
+    visibility: (exam.visibility === 'personal' || value.hasPersonalSources || row.state !== 'ready' || options.includeSolutions === true && canIncludeSolutions ? 'personal' : 'group') as 'group' | 'personal', ownerId: exam.owner.toHexString(), topics: value.preparation.topics,
+    canIncludeSolutions, sourceIssues: issues, fields, context: aiHash({ revision: exam.revision, version: number, json: row.json, issues, selectedSolutions: options.includeSolutions ? [...revealed].sort() : [], includeSolutions: options.includeSolutions === true }),
+    omissions: options.includeSolutions && !owner && revealed.size < value.questions.length ? ['Las soluciones todavía ocultas no se incluyen; solo se usan las que ya puedes consultar.'] : [] };
 }

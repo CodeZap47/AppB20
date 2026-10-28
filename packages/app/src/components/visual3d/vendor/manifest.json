@@ -1,0 +1,32 @@
+{
+  "three": "0.186.1",
+  "basisSource": "https://github.com/BinomialLLC/basis_universal",
+  "basisCommit": "b15211474da1cf7c3a408a40dd22f18b15514b22",
+  "emscripten": "6.0.9",
+  "basisCmakeOptions": [
+    "NO_DYNAMIC_EXECUTION=ON",
+    "EMBIND_AOT=ON",
+    "KTX2=ON",
+    "KTX2_ZSTANDARD=ON",
+    "EXPORT_ES6=1",
+    "ENVIRONMENT=web,worker",
+    "MAXIMUM_MEMORY=536870912",
+    "INCOMING_MODULE_JS_API=wasmBinary,onRuntimeInitialized,locateFile,print,printErr"
+  ],
+  "files": {
+    "THREE-LICENSE.txt": "8b378ebe60e2fe500158cb0ac71cb5e8b7d92953c2abcc63a0eb90499653b5bc",
+    "draco-gltf.d.mts": "da27f812c253b41f7d116b7085efa06f0c36ef336fe36b574b651432bb135488",
+    "draco_decoder.wasm": "a680d927bed9cb864ddbd63521868891af2bfbe755092761b4837487618df8ac",
+    "basis_transcoder.wasm": "cec8390a146bd65379d33a525ff533e02b7939517408cf418f2eb09dadfad10f",
+    "BASIS-LICENSE.txt": "065fcf48d6af21c0b75e23be5ed5753aee75c892e1c2cf178fa6736305614a5c",
+    "basis_transcoder.d.mts": "6414d120b3bec5c3b935cf3ce86b70f2b23b04ac2ef5f9beb01e993a2cac5786",
+    "BASIS-NOTICE.txt": "a710c77f53231533f19fbc00e04a7109077f2dec74232b62a96f2ac1a1c04c85",
+    "README.md": "da7070e193b3e7dfcb514e6e0ca30c95f0757eb80361ae93c4954be96174dc35",
+    "MESHOPT-LICENSE.txt": "f03037ca7bad1e3eb7f4a63fa6084a8baabd5ba30d3c239a9a7f35705d873e26",
+    "DRACO-LICENSE.txt": "d3709b0fb4b8a94bbb1d02b8a2e484f258b0d9c5c5a01f940391f3fe662cd1a4",
+    "basis_transcoder.mjs": "d01da119c6407d9c2d533537ae9d9ad7ffc52f6fec30a0c6b97e0ab19919dc4a",
+    "draco-gltf.mjs": "c18a7a6cf02021619ea16fab3e5613b4ec607d4bc6d3589cd14205cf63a9f68a",
+    "meshopt.mjs": "b07dbc04ab101ea9a0941b42450c81a0a14dc174c1984bc60819d695371f08a5",
+    "BSD-3-clause.txt": "849b4babf98a7400533c3e359ebd372b3d29b252eb2e466abfff80940b480188"
+  }
+}

@@ -1,6 +1,9 @@
+import type { ResourceFormContext } from '../components/messaging/resourceFormContext';
+import { ResourceComments } from '../components/whatsNew/ResourceComments';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ExamMaterialLink } from '../components/ExamMaterialLink';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router';
+import { RelatedVisualProjects } from '../components/RelatedVisualProjects';
 import { isValidPeriod, PERIOD_COUNT, periodLabel, WORK_KIND_LABEL } from '@b20/core';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import type { Activity, Evidence, Member } from '../data/types';
@@ -39,7 +42,7 @@ function EvidenceCard({
 }) {
   const mine = Boolean(meId && evidence.participantIds.includes(meId));
   return (
-    <article className="panel evidence">
+    <article className="panel evidence" id={`evidencia-${evidence.id}`} tabIndex={-1}>
       <header className="evidence__header">
         <AvatarStack
           members={evidence.participantIds.map((id) => members.find((m) => m.id === id))}
@@ -167,7 +170,15 @@ function EvidenceForm({ activityId, onDone }: { activityId: string; onDone: () =
 
 export function ActivityPage() {
   const { activityId = '' } = useParams();
+  const [params] = useSearchParams();
   const { me, activities, assignments, evidences, members, subjects, terms, notes } = useSnapshot();
+  const linkedEvidence = params.get('evidencia');
+  useEffect(() => {
+    if (!evidences.some((entry) => entry.id === linkedEvidence && entry.activityId === activityId && !entry.withdrawnAt)) return;
+    const element = document.getElementById(`evidencia-${linkedEvidence}`);
+    element?.focus({ preventScroll: true });
+    element?.scrollIntoView?.({ block: 'center' });
+  }, [activityId, linkedEvidence, evidences]);
   const [adding, setAdding] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const activity = activities.find((a) => a.id === activityId);
@@ -289,6 +300,7 @@ export function ActivityPage() {
           )}
 
           <section className="panel"><ResourceSection kind="activity" id={activity.id} version={activity.version} canEdit={Boolean(me)} title="Recursos de la actividad" /></section>
+          <RelatedVisualProjects kind="activity" id={activity.id} />
           <h2 className="section-title">
             Evidencias <span className="muted">{own.length}</span>
           </h2>
@@ -309,6 +321,7 @@ export function ActivityPage() {
               Sube lo que hizo tu equipo: código, observaciones o resultados.
             </Empty>
           )}
+          <ResourceComments target={{ kind: 'activity', id: activity.id }} title="Comentarios de la actividad" />
         </div>
 
         <aside className="detail__side">
@@ -418,13 +431,14 @@ export function ActivityFormPage() {
   return <ActivityForm key={activity?.id ?? 'nueva'} activity={activity} />;
 }
 
-function ActivityForm({ activity }: { activity: Activity | undefined }) {
+export function ActivityForm({ activity, initialTitle, onSaved, onCancel, onBusyChange }: { activity?: Activity } & ResourceFormContext) {
   const source = useDataSource();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const { subjects, terms, members, calendar } = useSnapshot();
   const { error, pending, run } = useAction();
   const queue = useResourceUploadQueue();
+  useEffect(() => { onBusyChange?.(pending || queue.busy); }, [pending, queue.busy, onBusyChange]);
   const submitting = useRef(false);
   const active = useRef(true);
   const savedParent = useRef<{ id: string; version: number } | null>(null);
@@ -453,7 +467,7 @@ function ActivityForm({ activity }: { activity: Activity | undefined }) {
   const samePosition = (subject: string) =>
     termAt(terms, subject, terms.find((t) => t.id === termId)?.position)?.id ?? '';
   const [date, setDate] = useState(() => activity?.date ?? toDay(new Date()));
-  const [title, setTitle] = useState(activity?.title ?? '');
+  const [title, setTitle] = useState(activity?.title ?? initialTitle ?? '');
   const [topic, setTopic] = useState(activity?.topic ?? '');
   const [objective, setObjective] = useState(activity?.objective ?? '');
   const [instructions, setInstructions] = useState(activity?.instructions ?? '');
@@ -487,15 +501,15 @@ function ActivityForm({ activity }: { activity: Activity | undefined }) {
       const target = savedParent.current;
       if (!await queue.upload('activity', target.id, target.version) || !active.current) return;
       rememberPeriod(period);
-      void navigate(`/m/actividades/${target.id}`);
+      if (onSaved) onSaved(target.id, true); else void navigate(`/m/actividades/${target.id}`);
     } finally { submitting.current = false; }
   };
 
   return (
     <>
-      <Link to={backTo} className="back with-icon">
+      {onCancel ? <button type="button" className="back with-icon" onClick={onCancel} disabled={pending || queue.busy}><Icon name="back" size={16} /> Volver al chat</button> : <Link to={backTo} className="back with-icon">
         <Icon name="back" size={16} /> {activity ? activity.title : 'Tareas y Actividades'}
-      </Link>
+      </Link>}
       <header className="page-header">
         <div>
           <h1>{activity ? 'Editar página' : 'Registrar actividad de clase'}</h1>
@@ -622,9 +636,7 @@ function ActivityForm({ activity }: { activity: Activity | undefined }) {
               Última edición de {memberName(members, activity.updatedBy)}, {formatTime(activity.updatedAt)}
             </span>
           )}
-          <Link to={backTo} className="button secondary">
-            Cancelar
-          </Link>
+          {onCancel ? <button type="button" className="secondary" onClick={onCancel} disabled={pending || queue.busy}>Cancelar</button> : <Link to={backTo} className="button secondary">Cancelar</Link>}
           <button type="submit" disabled={pending || queue.busy || (!saved && !changed && !queue.hasFiles)}>
             {pending || queue.busy ? 'Guardando…' : saved ? queue.pendingCount ? 'Reintentar archivos pendientes' : 'Continuar' : activity ? 'Guardar versión nueva' : 'Registrar'}
           </button>

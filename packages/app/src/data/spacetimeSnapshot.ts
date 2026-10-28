@@ -1,3 +1,6 @@
+import { readVisualProjectsSnapshot } from './visualProjectsSnapshot';
+import { emptySignalsSnapshot } from '@b20/core';
+import { readSignalsSnapshot } from './signalsSnapshot';
 import type { DbConnection } from '../module_bindings';
 import type { Snapshot } from './types';
 import { enrichAcademicSnapshot } from './academicSnapshot';
@@ -21,7 +24,8 @@ import type { WithdrawableKind } from './delivery2Types';
 
 /** Solo vistas públicas del módulo; nunca tablas privadas ni SELECT * de toda la base. */
 export const PUBLIC_VIEWS = [
-  'typing_presence', 'my_onboarding',
+  'online_members',
+  'my_message_receipts', 'typing_presence', 'my_live_draft_preference', 'my_onboarding', 'signal_snapshot', 'visual_projects',
   ...PRACTICE_VIEWS,
   ...AGENT_VIEWS,
   'museum_entries', 'museum_revisions', 'opportunities', 'opportunity_revisions', 'opportunity_interests', 'opportunity_feedback',
@@ -38,7 +42,7 @@ export const PUBLIC_VIEWS = [
   'assignment_details', 'my_progress', 'work_details', 'work_revisions', 'work_reviews',
   'academic_comments', 'resource_files', 'activity_links', 'page_snapshots', 'evidence_details',
   'group_messages', 'my_direct_conversations', 'my_direct_messages', 'message_reactions',
-  'sticker_packs', 'stickers', 'my_chat_commands', 'birthdays', 'activities', 'evidences',
+  'sticker_packs', 'stickers', 'my_chat_commands', 'available_chat_commands', 'chat_command_details', 'birthdays', 'activities', 'evidences',
   'notes', 'note_comments', 'questions', 'answers', 'my_last_seen',
   'study_guides', 'guide_sources', 'guide_reviews', 'guide_ai_source_availability', 'polls', 'poll_votes',
   'help_posts', 'my_help_contact_requests',
@@ -49,6 +53,9 @@ export const PUBLIC_VIEWS = [
 
 export function emptySnapshot(connection: Snapshot['connection'], connectionError?: string): Snapshot {
   return {
+    onlineMemberIds: [],
+    visualProjects: [],
+    signals: emptySignalsSnapshot(),
     ...emptyNotifications(),
     trashEntries: [],
     adminContentEntries: [], adminContentResults: [],
@@ -66,7 +73,7 @@ export function emptySnapshot(connection: Snapshot['connection'], connectionErro
     works: [], workFiles: [], revisions: [], groupMessages: [], directConversations: [],
     myProgress: [], workRevisions: [], workReviews: [], academicComments: [],
     resourceFiles: [], activityLinks: [], pageSnapshots: [],
-    directMessages: [], reactions: [], stickerPacks: [], stickers: [], chatCommands: [],
+    messageReceipts: [], directMessages: [], reactions: [], stickerPacks: [], stickers: [], chatCommands: [],
     birthdays: [], activities: [], evidences: [], notes: [], noteComments: [], questions: [],
     answers: [], guides: [], guideSources: [], guideReviews: [], guideAiSourceAvailability: [], polls: [], pollVotes: [], helpPosts: [], helpContacts: [],
     teachingPractices: [], teachingPersonal: [], teachingQuestions: [],
@@ -176,6 +183,7 @@ export function readSnapshot(connection: Pick<DbConnection, 'db'>, identity: str
     connection: 'ready',
     me,
     members,
+    onlineMemberIds: [...new Set([...(db.onlineMembers?.iter?.() ?? [])].map(row => row.memberId.toHexString()).filter(id => activeMembers.has(id)))].sort(),
     memberUploadStats: db.memberUploadStats ? [...db.memberUploadStats.iter()]
       .filter((row) => activeMembers.has(row.memberId.toHexString()))
       .map((row) => ({ memberId: row.memberId.toHexString(), bytes: fileSize(row.bytes), fileCount: fileSize(row.fileCount) })) : undefined,
@@ -292,8 +300,9 @@ export function readSnapshot(connection: Pick<DbConnection, 'db'>, identity: str
       replyToId: row.replyToId?.toString(), editedAt: row.editedAt?.toDate(),
       deletedAt: row.deletedAt?.toDate(), deletedBy: row.deletedBy?.toHexString(),
     })),
+    messageReceipts: [...(db.myMessageReceipts?.iter() ?? [])].map(row => ({ scope: enumValue(row.scope, ['group', 'direct', 'channel']), conversationId: row.conversationId, messageId: row.messageId.toString(), recipientId: row.recipient.toHexString(), deliveredAt: row.deliveredAt?.toDate(), readAt: row.readAt?.toDate(), tracked: row.tracked })),
     reactions: [...db.messageReactions.iter()].map((row) => ({
-      scope: enumValue(row.scope, ['group', 'direct']), messageId: row.messageId.toString(),
+      scope: enumValue(row.scope, ['group', 'direct', 'channel']), messageId: row.messageId.toString(),
       memberId: row.member.toHexString(), emoji: row.emoji,
     })),
     stickerPacks: [...db.stickerPacks.iter()].map((row) => ({
@@ -304,10 +313,14 @@ export function readSnapshot(connection: Pick<DbConnection, 'db'>, identity: str
       id: row.id.toString(), packId: row.packId.toString(), url: row.storageKey.startsWith('native:') ? row.storageKey : '', contentType: row.contentType,
       size: fileSize(row.size), animated: row.animated, createdAt: row.createdAt.toDate(),
     })),
-    chatCommands: [...db.myChatCommands.iter()].map((row) => ({
-      id: row.id.toString(), ownerId: row.owner.toHexString(), name: row.name,
-      description: row.description, text: row.text, createdAt: row.createdAt.toDate(),
-    })),
+    chatCommands: [...(db.availableChatCommands?.iter() ?? db.myChatCommands.iter())].map((row) => {
+      const detail = [...(db.chatCommandDetails?.iter() ?? [])].find(value => value.commandId === row.id);
+      return { id: row.id.toString(), ownerId: row.owner.toHexString(), name: row.name,
+        description: row.description, text: row.text, createdAt: row.createdAt.toDate(),
+        visibility: detail?.shared ? 'classroom' as const : 'personal' as const,
+        actionKind: detail?.actionKind === 'create' ? 'create' as const : 'text' as const,
+        resourceKind: detail?.resourceKind as Snapshot['chatCommands'][number]['resourceKind'], version: detail?.version ?? 1 };
+    }),
     birthdays: [...db.birthdays.iter()].map((row) => ({
       memberId: row.identity.toHexString(), day: row.day, month: row.month, remind: row.remind,
     })),
@@ -372,10 +385,20 @@ export function readSnapshot(connection: Pick<DbConnection, 'db'>, identity: str
       pollId: row.pollId.toString(), voterId: row.voter.toHexString(), choices: [...row.choices],
       votedAt: row.votedAt.toDate(), changedAt: row.changedAt?.toDate(),
     })),
+    visualProjects: [],
+    signals: emptySignalsSnapshot(),
     lastSeenAt: [...db.myLastSeen.iter()].find((row) => row.identity.toHexString() === identity)?.at.toDate(),
   }, identity), identity), identity);
-  return { ...enrichNotificationsSnapshot(connection, snapshot, identity), trashEntries: readTrashEntries(connection),
+  const visualProjects = readVisualProjectsSnapshot(connection, snapshot, identity);
+  const visibleProjects = new Map(visualProjects.map((project) => [project.id, project]));
+  return { ...enrichNotificationsSnapshot(connection, snapshot, identity), visualProjects,
+    resourceFiles: snapshot.resourceFiles.filter((file) => {
+      if (file.targetKind !== 'visual_project') return true;
+      const project = visibleProjects.get(file.targetId);
+      return Boolean(project && (project.authorId === identity || !file.removedAt && project.coverFileId === file.id));
+    }), trashEntries: readTrashEntries(connection),
     adminContentEntries: me.isCreator ? [...(db.adminContentEntries?.iter() ?? [])].map((row) => ({ ...row, kind: row.kind as WithdrawableKind, targetId: row.targetId.toString(), ownerIds: row.owners.map((owner) => owner.toHexString()) })) : [],
     adminContentResults: me.isCreator ? [...(db.adminContentResults?.iter() ?? [])].map((row) => ({ operationId: row.operationId, kind: row.kind, targetId: row.targetId.toString(), status: row.status, error: row.error })) : [],
+    signals: readSignalsSnapshot(connection, identity, members),
     ...readPracticeSnapshot(connection, identity, members), ...readCommunity4Snapshot(connection, snapshot, identity), ...readAgentSnapshot(connection, snapshot, identity), ...readFeedSnapshot(connection, snapshot, identity) };
 }

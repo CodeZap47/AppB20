@@ -17,6 +17,7 @@ import { Avatar } from '../components/Avatar';
 import { AvatarStack } from '../components/AvatarStack';
 import { BirthdayForm } from '../components/BirthdayForm';
 import { ProfileCover, ProfileEditor, ProfilePhoto } from '../components/ProfilePresentation';
+import { ProfileCustomizationHint } from '../components/ProfileCustomizationHint';
 import { Empty } from '../components/Empty';
 import { Icon } from '../components/Icon';
 import { useAction } from '../components/useAction';
@@ -241,6 +242,8 @@ export function ProfilesPage() {
         </div>
       </header>
 
+      <ProfileCustomizationHint compact />
+
       <dl className="profiles-overview" aria-label="Resumen del grupo" aria-describedby="profiles-upload-scope">
         <div><dt>Integrantes</dt><dd>{active.length}</dd></div>
         <div><dt>{uploadLabel}</dt><dd>{total.fileCount}</dd></div>
@@ -316,7 +319,9 @@ export function ProfilesPage() {
                   </div>
                   <div className="person-card__footer">
                     {birthday && <span className="person-card__birthday" title={`Cumpleaños: ${formatDayMonth(birthday.day, birthday.month)}`}><Icon name="cake" size={14} />{formatDayMonth(birthday.day, birthday.month)}</span>}
-                    <Link to={`/perfil/${m.id}`} aria-label={`Ver perfil de ${nameOf(m)}`}>Ver perfil <Icon name="forward" size={15} /></Link>
+                    {m.id === me?.id
+                      ? <Link to={`/perfil/${m.id}?personalizar=1`} aria-label="Personalizar mi perfil">Personalizar <Icon name="edit" size={15} /></Link>
+                      : <Link to={`/perfil/${m.id}`} aria-label={`Ver perfil de ${nameOf(m)}`}>Ver perfil <Icon name="forward" size={15} /></Link>}
                   </div>
                 </article>
               </li>
@@ -836,6 +841,14 @@ export function ProfilePage() {
   useEffect(() => {
     if (memberId === me?.id && params.get('personalizar') === '1') setEditingPresentation(true);
   }, [memberId, me?.id, params]);
+  const closePresentation = () => {
+    setEditingPresentation(false);
+    if (params.get('personalizar') === '1') setParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.delete('personalizar');
+      return next;
+    }, { replace: true });
+  };
 
   // ⌘K / Ctrl+K lleva al buscador del perfil, como indica el atajo junto al campo.
   useEffect(() => {
@@ -988,10 +1001,10 @@ export function ProfilePage() {
                   </button>
                   <button
                     type="button"
-                    className="secondary"
+                    className="secondary with-icon"
                     onClick={() => setEditingPresentation(true)}
                   >
-                    Editar presentación y foto
+                    <Icon name="edit" size={16} /> Personalizar perfil
                   </button>
                 </>
               ) : (
@@ -1001,6 +1014,7 @@ export function ProfilePage() {
               )}
             </div>
           )}
+          {isMe && !editing && <p className="profile-personalization-tip">Tu portada, foto y presentación se muestran al grupo en el módulo Perfiles.</p>}
           <label className="search profile-search" role="search">
             <Icon name="search" size={18} />
             <input
@@ -1021,7 +1035,7 @@ export function ProfilePage() {
           {error}
         </p>
       )}
-      {editingPresentation && isMe && <ProfileEditor member={member} profile={profile} onDone={() => setEditingPresentation(false)} />}
+      {editingPresentation && isMe && <ProfileEditor member={member} profile={profile} onDone={closePresentation} />}
 
 
       <div className="detail">

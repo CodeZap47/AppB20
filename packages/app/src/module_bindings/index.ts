@@ -36,6 +36,7 @@ import {
 // Import all reducer arg schemas
 import AcceptAnswerReducer from "./accept_answer_reducer";
 import AcknowledgeAgentMatchReducer from "./acknowledge_agent_match_reducer";
+import AcknowledgeMessageDeliveryReducer from "./acknowledge_message_delivery_reducer";
 import AddEvidenceReducer from "./add_evidence_reducer";
 import AddGuideSourcesReducer from "./add_guide_sources_reducer";
 import AddGuideSourcesV3Reducer from "./add_guide_sources_v_3_reducer";
@@ -46,6 +47,7 @@ import AnswerTeachingQuestionReducer from "./answer_teaching_question_reducer";
 import ArchivePresentationPracticeReducer from "./archive_presentation_practice_reducer";
 import ArchiveSpacedCardReducer from "./archive_spaced_card_reducer";
 import ArchiveSpacedCollectionReducer from "./archive_spaced_collection_reducer";
+import ArchiveVisualProjectReducer from "./archive_visual_project_reducer";
 import AskPresentationQuestionReducer from "./ask_presentation_question_reducer";
 import AskQuestionReducer from "./ask_question_reducer";
 import AskTeachingQuestionReducer from "./ask_teaching_question_reducer";
@@ -66,6 +68,7 @@ import CommentQuestionReducer from "./comment_question_reducer";
 import CompleteOnboardingReducer from "./complete_onboarding_reducer";
 import CompletePresentationAttemptReducer from "./complete_presentation_attempt_reducer";
 import CompleteTeachingPracticeReducer from "./complete_teaching_practice_reducer";
+import ConfigureFeedShareServiceReducer from "./configure_feed_share_service_reducer";
 import ControlStudyRoomTimerReducer from "./control_study_room_timer_reducer";
 import CreateActivityReducer from "./create_activity_reducer";
 import CreateAssignmentReducer from "./create_assignment_reducer";
@@ -88,6 +91,7 @@ import DeleteFeedCommentReducer from "./delete_feed_comment_reducer";
 import DeleteFeedPostReducer from "./delete_feed_post_reducer";
 import DeleteMessageReducer from "./delete_message_reducer";
 import DisableAgentReducer from "./disable_agent_reducer";
+import DiscardVisualModelAssetsReducer from "./discard_visual_model_assets_reducer";
 import EditFeedPostReducer from "./edit_feed_post_reducer";
 import EditMessageReducer from "./edit_message_reducer";
 import EnableAgentReducer from "./enable_agent_reducer";
@@ -102,6 +106,7 @@ import LeaveStudyRoomReducer from "./leave_study_room_reducer";
 import LinkAuthIdentityReducer from "./link_auth_identity_reducer";
 import MarkAllNotificationsReadReducer from "./mark_all_notifications_read_reducer";
 import MarkConversationReadReducer from "./mark_conversation_read_reducer";
+import MarkMessagesSeenReducer from "./mark_messages_seen_reducer";
 import MarkNotificationReadReducer from "./mark_notification_read_reducer";
 import MarkSeenReducer from "./mark_seen_reducer";
 import ModerateContentItemReducer from "./moderate_content_item_reducer";
@@ -163,6 +168,7 @@ import SaveActivityLinksReducer from "./save_activity_links_reducer";
 import SaveAgentDraftReducer from "./save_agent_draft_reducer";
 import SaveCalendarReducer from "./save_calendar_reducer";
 import SaveChatCommandReducer from "./save_chat_command_reducer";
+import SaveChatCommandV2Reducer from "./save_chat_command_v_2_reducer";
 import SaveHelpPostReducer from "./save_help_post_reducer";
 import SaveMemberProfileReducer from "./save_member_profile_reducer";
 import SaveMuseumReducer from "./save_museum_reducer";
@@ -179,6 +185,8 @@ import SaveSpacedCardReducer from "./save_spaced_card_reducer";
 import SaveSpacedCollectionReducer from "./save_spaced_collection_reducer";
 import SaveStudyRoomSummaryReducer from "./save_study_room_summary_reducer";
 import SaveTeachingPracticeReducer from "./save_teaching_practice_reducer";
+import SaveVisualProjectReducer from "./save_visual_project_reducer";
+import SaveVisualSceneReducer from "./save_visual_scene_reducer";
 import SaveWorkVersionReducer from "./save_work_version_reducer";
 import SendChannelMessageReducer from "./send_channel_message_reducer";
 import SendDirectMessageReducer from "./send_direct_message_reducer";
@@ -187,11 +195,14 @@ import SendHelpContactReducer from "./send_help_contact_reducer";
 import SendOpportunityFeedbackReducer from "./send_opportunity_feedback_reducer";
 import SendStudyRoomEntryReducer from "./send_study_room_entry_reducer";
 import SetAiServiceReducer from "./set_ai_service_reducer";
+import SetAppPresenceReducer from "./set_app_presence_reducer";
 import SetAuthConfigReducer from "./set_auth_config_reducer";
 import SetChatChannelArchivedReducer from "./set_chat_channel_archived_reducer";
 import SetConversationMutedReducer from "./set_conversation_muted_reducer";
 import SetFileServiceReducer from "./set_file_service_reducer";
 import SetHelpPostStatusReducer from "./set_help_post_status_reducer";
+import SetLiveDraftReducer from "./set_live_draft_reducer";
+import SetLiveDraftSharingReducer from "./set_live_draft_sharing_reducer";
 import SetMaintenanceServiceReducer from "./set_maintenance_service_reducer";
 import SetMemberBlockedReducer from "./set_member_blocked_reducer";
 import SetMoodleSyncReducer from "./set_moodle_sync_reducer";
@@ -206,7 +217,9 @@ import SetStudyRoomMaterialReducer from "./set_study_room_material_reducer";
 import SetStudyRoomStatusReducer from "./set_study_room_status_reducer";
 import SetTeachingReviewerReducer from "./set_teaching_reviewer_reducer";
 import SetTypingReducer from "./set_typing_reducer";
+import SetVisualProjectVisibilityReducer from "./set_visual_project_visibility_reducer";
 import ShareBirthdayReducer from "./share_birthday_reducer";
+import SignalActionReducer from "./signal_action_reducer";
 import StartAgentSessionReducer from "./start_agent_session_reducer";
 import StartTeachingPracticeReducer from "./start_teaching_practice_reducer";
 import ToggleAnswerUsefulnessReducer from "./toggle_answer_usefulness_reducer";
@@ -254,15 +267,21 @@ import * as AiStatusProcedure from "./ai_status_procedure";
 import * as AuthActivationCheckProcedure from "./auth_activation_check_procedure";
 import * as AuthorizeFileUploadProcedure from "./authorize_file_upload_procedure";
 import * as BlockEmailProcedure from "./block_email_procedure";
+import * as ChatPostActionProcedure from "./chat_post_action_procedure";
 import * as CreateStickerPackNativeProcedure from "./create_sticker_pack_native_procedure";
+import * as CreateVisualModelAssetProcedure from "./create_visual_model_asset_procedure";
 import * as DocumentPreparationProcedure from "./document_preparation_procedure";
 import * as ExamActionProcedure from "./exam_action_procedure";
 import * as ExamEvaluationAiProcedure from "./exam_evaluation_ai_procedure";
+import * as FeedShareActionProcedure from "./feed_share_action_procedure";
+import * as FeedSharePreviewProcedure from "./feed_share_preview_procedure";
+import * as FeedThreadProcedure from "./feed_thread_procedure";
 import * as GetFileDownloadAccessProcedure from "./get_file_download_access_procedure";
 import * as GetFileUploadStatusProcedure from "./get_file_upload_status_procedure";
 import * as GetResourceManifestProcedure from "./get_resource_manifest_procedure";
 import * as GetResourceUploadStatusProcedure from "./get_resource_upload_status_procedure";
 import * as GetTrashClockProcedure from "./get_trash_clock_procedure";
+import * as GetVisualSceneProcedure from "./get_visual_scene_procedure";
 import * as GuideAiProcedure from "./guide_ai_procedure";
 import * as HelpMutateProcedure from "./help_mutate_procedure";
 import * as HelpReadHistoryProcedure from "./help_read_history_procedure";
@@ -305,6 +324,7 @@ import AnswerUsefulnessRow from "./answer_usefulness_table";
 import AnswersRow from "./answers_table";
 import AssignmentDetailsRow from "./assignment_details_table";
 import AssignmentsRow from "./assignments_table";
+import AvailableChatCommandsRow from "./available_chat_commands_table";
 import BirthdaysRow from "./birthdays_table";
 import CalendarRow from "./calendar_table";
 import ChallengeCommentsRow from "./challenge_comments_table";
@@ -313,6 +333,7 @@ import ChallengeSolutionsRow from "./challenge_solutions_table";
 import ChangeHistoryRow from "./change_history_table";
 import ChannelMessagesRow from "./channel_messages_table";
 import ChatChannelsRow from "./chat_channels_table";
+import ChatCommandDetailsRow from "./chat_command_details_table";
 import CodeReviewCommentsRow from "./code_review_comments_table";
 import CodeReviewVersionsRow from "./code_review_versions_table";
 import CodeReviewsRow from "./code_reviews_table";
@@ -335,11 +356,14 @@ import HelpPostsRow from "./help_posts_table";
 import InvitationEmailStatusesRow from "./invitation_email_statuses_table";
 import InvitationsRow from "./invitations_table";
 import InviteLinksRow from "./invite_links_table";
+import LiveDraftsRow from "./live_drafts_table";
 import MemberProfileCoversRow from "./member_profile_covers_table";
 import MemberProfilesRow from "./member_profiles_table";
 import MemberUploadStatsRow from "./member_upload_stats_table";
 import MembersRow from "./members_table";
 import MessageReactionsRow from "./message_reactions_table";
+import MessageReceiptDetailsRow from "./message_receipt_details_table";
+import MessageReceiptTrackingRow from "./message_receipt_tracking_table";
 import MuseumEntriesRow from "./museum_entries_table";
 import MuseumRevisionsRow from "./museum_revisions_table";
 import MyAgentOriginalityChecksRow from "./my_agent_originality_checks_table";
@@ -358,7 +382,9 @@ import MyDirectMessagesRow from "./my_direct_messages_table";
 import MyHelpContactRequestsRow from "./my_help_contact_requests_table";
 import MyHelpRoomLinksRow from "./my_help_room_links_table";
 import MyLastSeenRow from "./my_last_seen_table";
+import MyLiveDraftPreferenceRow from "./my_live_draft_preference_table";
 import MyMemberRow from "./my_member_table";
+import MyMessageReceiptsRow from "./my_message_receipts_table";
 import MyMessageReportsRow from "./my_message_reports_table";
 import MyNotificationPreferencesRow from "./my_notification_preferences_table";
 import MyNotificationsRow from "./my_notifications_table";
@@ -377,6 +403,7 @@ import NoteDetailsRow from "./note_details_table";
 import NoteEditionsRow from "./note_editions_table";
 import NoteVersionsRow from "./note_versions_table";
 import NotesRow from "./notes_table";
+import OnlineMembersRow from "./online_members_table";
 import OpportunitiesRow from "./opportunities_table";
 import OpportunityFeedbackRow from "./opportunity_feedback_table";
 import OpportunityInterestsRow from "./opportunity_interests_table";
@@ -399,6 +426,7 @@ import RoomMaterialsRow from "./room_materials_table";
 import RoomMembersRow from "./room_members_table";
 import RoomSummariesRow from "./room_summaries_table";
 import RoomTimersRow from "./room_timers_table";
+import SignalSnapshotRow from "./signal_snapshot_table";
 import SpacedCardsRow from "./spaced_cards_table";
 import SpacedCollectionsRow from "./spaced_collections_table";
 import SpacedUnavailableCardsRow from "./spaced_unavailable_cards_table";
@@ -411,6 +439,7 @@ import TeachingPracticesRow from "./teaching_practices_table";
 import TeachingQuestionsRow from "./teaching_questions_table";
 import TermsRow from "./terms_table";
 import TypingPresenceRow from "./typing_presence_table";
+import VisualProjectsRow from "./visual_projects_table";
 import WorkAuthorsRow from "./work_authors_table";
 import WorkDetailsRow from "./work_details_table";
 import WorkFilesRow from "./work_files_table";
@@ -492,6 +521,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, AssignmentsRow),
+  availableChatCommands: __table({
+    name: 'available_chat_commands',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AvailableChatCommandsRow),
   birthdays: __table({
     name: 'birthdays',
     indexes: [
@@ -548,6 +584,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, ChatChannelsRow),
+  chatCommandDetails: __table({
+    name: 'chat_command_details',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, ChatCommandDetailsRow),
   codeReviewComments: __table({
     name: 'code_review_comments',
     indexes: [
@@ -702,6 +745,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, InviteLinksRow),
+  liveDrafts: __table({
+    name: 'live_drafts',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, LiveDraftsRow),
   memberProfileCovers: __table({
     name: 'member_profile_covers',
     indexes: [
@@ -737,6 +787,20 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MessageReactionsRow),
+  messageReceiptDetails: __table({
+    name: 'message_receipt_details',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MessageReceiptDetailsRow),
+  messageReceiptTracking: __table({
+    name: 'message_receipt_tracking',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MessageReceiptTrackingRow),
   museumEntries: __table({
     name: 'museum_entries',
     indexes: [
@@ -863,6 +927,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyLastSeenRow),
+  myLiveDraftPreference: __table({
+    name: 'my_live_draft_preference',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyLiveDraftPreferenceRow),
   myMember: __table({
     name: 'my_member',
     indexes: [
@@ -870,6 +941,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyMemberRow),
+  myMessageReceipts: __table({
+    name: 'my_message_receipts',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyMessageReceiptsRow),
   myMessageReports: __table({
     name: 'my_message_reports',
     indexes: [
@@ -996,6 +1074,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, NotesRow),
+  onlineMembers: __table({
+    name: 'online_members',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, OnlineMembersRow),
   opportunities: __table({
     name: 'opportunities',
     indexes: [
@@ -1150,6 +1235,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, RoomTimersRow),
+  signalSnapshot: __table({
+    name: 'signal_snapshot',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, SignalSnapshotRow),
   spacedCards: __table({
     name: 'spaced_cards',
     indexes: [
@@ -1234,6 +1326,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, TypingPresenceRow),
+  visualProjects: __table({
+    name: 'visual_projects',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, VisualProjectsRow),
   workAuthors: __table({
     name: 'work_authors',
     indexes: [
@@ -1282,6 +1381,7 @@ const tablesSchema = __schema({
 const reducersSchema = __reducers(
   __reducerSchema("accept_answer", AcceptAnswerReducer),
   __reducerSchema("acknowledge_agent_match", AcknowledgeAgentMatchReducer),
+  __reducerSchema("acknowledge_message_delivery", AcknowledgeMessageDeliveryReducer),
   __reducerSchema("add_evidence", AddEvidenceReducer),
   __reducerSchema("add_guide_sources", AddGuideSourcesReducer),
   __reducerSchema("add_guide_sources_v_3", AddGuideSourcesV3Reducer),
@@ -1292,6 +1392,7 @@ const reducersSchema = __reducers(
   __reducerSchema("archive_presentation_practice", ArchivePresentationPracticeReducer),
   __reducerSchema("archive_spaced_card", ArchiveSpacedCardReducer),
   __reducerSchema("archive_spaced_collection", ArchiveSpacedCollectionReducer),
+  __reducerSchema("archive_visual_project", ArchiveVisualProjectReducer),
   __reducerSchema("ask_presentation_question", AskPresentationQuestionReducer),
   __reducerSchema("ask_question", AskQuestionReducer),
   __reducerSchema("ask_teaching_question", AskTeachingQuestionReducer),
@@ -1312,6 +1413,7 @@ const reducersSchema = __reducers(
   __reducerSchema("complete_onboarding", CompleteOnboardingReducer),
   __reducerSchema("complete_presentation_attempt", CompletePresentationAttemptReducer),
   __reducerSchema("complete_teaching_practice", CompleteTeachingPracticeReducer),
+  __reducerSchema("configure_feed_share_service", ConfigureFeedShareServiceReducer),
   __reducerSchema("control_study_room_timer", ControlStudyRoomTimerReducer),
   __reducerSchema("create_activity", CreateActivityReducer),
   __reducerSchema("create_assignment", CreateAssignmentReducer),
@@ -1334,6 +1436,7 @@ const reducersSchema = __reducers(
   __reducerSchema("delete_feed_post", DeleteFeedPostReducer),
   __reducerSchema("delete_message", DeleteMessageReducer),
   __reducerSchema("disable_agent", DisableAgentReducer),
+  __reducerSchema("discard_visual_model_assets", DiscardVisualModelAssetsReducer),
   __reducerSchema("edit_feed_post", EditFeedPostReducer),
   __reducerSchema("edit_message", EditMessageReducer),
   __reducerSchema("enable_agent", EnableAgentReducer),
@@ -1348,6 +1451,7 @@ const reducersSchema = __reducers(
   __reducerSchema("link_auth_identity", LinkAuthIdentityReducer),
   __reducerSchema("mark_all_notifications_read", MarkAllNotificationsReadReducer),
   __reducerSchema("mark_conversation_read", MarkConversationReadReducer),
+  __reducerSchema("mark_messages_seen", MarkMessagesSeenReducer),
   __reducerSchema("mark_notification_read", MarkNotificationReadReducer),
   __reducerSchema("mark_seen", MarkSeenReducer),
   __reducerSchema("moderate_content_item", ModerateContentItemReducer),
@@ -1409,6 +1513,7 @@ const reducersSchema = __reducers(
   __reducerSchema("save_agent_draft", SaveAgentDraftReducer),
   __reducerSchema("save_calendar", SaveCalendarReducer),
   __reducerSchema("save_chat_command", SaveChatCommandReducer),
+  __reducerSchema("save_chat_command_v_2", SaveChatCommandV2Reducer),
   __reducerSchema("save_help_post", SaveHelpPostReducer),
   __reducerSchema("save_member_profile", SaveMemberProfileReducer),
   __reducerSchema("save_museum", SaveMuseumReducer),
@@ -1425,6 +1530,8 @@ const reducersSchema = __reducers(
   __reducerSchema("save_spaced_collection", SaveSpacedCollectionReducer),
   __reducerSchema("save_study_room_summary", SaveStudyRoomSummaryReducer),
   __reducerSchema("save_teaching_practice", SaveTeachingPracticeReducer),
+  __reducerSchema("save_visual_project", SaveVisualProjectReducer),
+  __reducerSchema("save_visual_scene", SaveVisualSceneReducer),
   __reducerSchema("save_work_version", SaveWorkVersionReducer),
   __reducerSchema("send_channel_message", SendChannelMessageReducer),
   __reducerSchema("send_direct_message", SendDirectMessageReducer),
@@ -1433,11 +1540,14 @@ const reducersSchema = __reducers(
   __reducerSchema("send_opportunity_feedback", SendOpportunityFeedbackReducer),
   __reducerSchema("send_study_room_entry", SendStudyRoomEntryReducer),
   __reducerSchema("set_ai_service", SetAiServiceReducer),
+  __reducerSchema("set_app_presence", SetAppPresenceReducer),
   __reducerSchema("set_auth_config", SetAuthConfigReducer),
   __reducerSchema("set_chat_channel_archived", SetChatChannelArchivedReducer),
   __reducerSchema("set_conversation_muted", SetConversationMutedReducer),
   __reducerSchema("set_file_service", SetFileServiceReducer),
   __reducerSchema("set_help_post_status", SetHelpPostStatusReducer),
+  __reducerSchema("set_live_draft", SetLiveDraftReducer),
+  __reducerSchema("set_live_draft_sharing", SetLiveDraftSharingReducer),
   __reducerSchema("set_maintenance_service", SetMaintenanceServiceReducer),
   __reducerSchema("set_member_blocked", SetMemberBlockedReducer),
   __reducerSchema("set_moodle_sync", SetMoodleSyncReducer),
@@ -1452,7 +1562,9 @@ const reducersSchema = __reducers(
   __reducerSchema("set_study_room_status", SetStudyRoomStatusReducer),
   __reducerSchema("set_teaching_reviewer", SetTeachingReviewerReducer),
   __reducerSchema("set_typing", SetTypingReducer),
+  __reducerSchema("set_visual_project_visibility", SetVisualProjectVisibilityReducer),
   __reducerSchema("share_birthday", ShareBirthdayReducer),
+  __reducerSchema("signal_action", SignalActionReducer),
   __reducerSchema("start_agent_session", StartAgentSessionReducer),
   __reducerSchema("start_teaching_practice", StartTeachingPracticeReducer),
   __reducerSchema("toggle_answer_usefulness", ToggleAnswerUsefulnessReducer),
@@ -1502,15 +1614,21 @@ const proceduresSchema = __procedures(
   __procedureSchema("auth_activation_check", AuthActivationCheckProcedure.params, AuthActivationCheckProcedure.returnType),
   __procedureSchema("authorize_file_upload", AuthorizeFileUploadProcedure.params, AuthorizeFileUploadProcedure.returnType),
   __procedureSchema("block_email", BlockEmailProcedure.params, BlockEmailProcedure.returnType),
+  __procedureSchema("chat_post_action", ChatPostActionProcedure.params, ChatPostActionProcedure.returnType),
   __procedureSchema("create_sticker_pack_native", CreateStickerPackNativeProcedure.params, CreateStickerPackNativeProcedure.returnType),
+  __procedureSchema("create_visual_model_asset", CreateVisualModelAssetProcedure.params, CreateVisualModelAssetProcedure.returnType),
   __procedureSchema("document_preparation", DocumentPreparationProcedure.params, DocumentPreparationProcedure.returnType),
   __procedureSchema("exam_action", ExamActionProcedure.params, ExamActionProcedure.returnType),
   __procedureSchema("exam_evaluation_ai", ExamEvaluationAiProcedure.params, ExamEvaluationAiProcedure.returnType),
+  __procedureSchema("feed_share_action", FeedShareActionProcedure.params, FeedShareActionProcedure.returnType),
+  __procedureSchema("feed_share_preview", FeedSharePreviewProcedure.params, FeedSharePreviewProcedure.returnType),
+  __procedureSchema("feed_thread", FeedThreadProcedure.params, FeedThreadProcedure.returnType),
   __procedureSchema("get_file_download_access", GetFileDownloadAccessProcedure.params, GetFileDownloadAccessProcedure.returnType),
   __procedureSchema("get_file_upload_status", GetFileUploadStatusProcedure.params, GetFileUploadStatusProcedure.returnType),
   __procedureSchema("get_resource_manifest", GetResourceManifestProcedure.params, GetResourceManifestProcedure.returnType),
   __procedureSchema("get_resource_upload_status", GetResourceUploadStatusProcedure.params, GetResourceUploadStatusProcedure.returnType),
   __procedureSchema("get_trash_clock", GetTrashClockProcedure.params, GetTrashClockProcedure.returnType),
+  __procedureSchema("get_visual_scene", GetVisualSceneProcedure.params, GetVisualSceneProcedure.returnType),
   __procedureSchema("guide_ai", GuideAiProcedure.params, GuideAiProcedure.returnType),
   __procedureSchema("help_mutate", HelpMutateProcedure.params, HelpMutateProcedure.returnType),
   __procedureSchema("help_read_history", HelpReadHistoryProcedure.params, HelpReadHistoryProcedure.returnType),
@@ -1559,6 +1677,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "answer_usefulness": Omit<typeof tablesSchema.schemaType.tables["answerUsefulness"], "accessorName"> & { readonly accessorName: "answer_usefulness" };
     /** @deprecated Use `assignmentDetails` instead. This alias will be removed in the next major version. */
     readonly "assignment_details": Omit<typeof tablesSchema.schemaType.tables["assignmentDetails"], "accessorName"> & { readonly accessorName: "assignment_details" };
+    /** @deprecated Use `availableChatCommands` instead. This alias will be removed in the next major version. */
+    readonly "available_chat_commands": Omit<typeof tablesSchema.schemaType.tables["availableChatCommands"], "accessorName"> & { readonly accessorName: "available_chat_commands" };
     /** @deprecated Use `challengeComments` instead. This alias will be removed in the next major version. */
     readonly "challenge_comments": Omit<typeof tablesSchema.schemaType.tables["challengeComments"], "accessorName"> & { readonly accessorName: "challenge_comments" };
     /** @deprecated Use `challengeHints` instead. This alias will be removed in the next major version. */
@@ -1571,6 +1691,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "channel_messages": Omit<typeof tablesSchema.schemaType.tables["channelMessages"], "accessorName"> & { readonly accessorName: "channel_messages" };
     /** @deprecated Use `chatChannels` instead. This alias will be removed in the next major version. */
     readonly "chat_channels": Omit<typeof tablesSchema.schemaType.tables["chatChannels"], "accessorName"> & { readonly accessorName: "chat_channels" };
+    /** @deprecated Use `chatCommandDetails` instead. This alias will be removed in the next major version. */
+    readonly "chat_command_details": Omit<typeof tablesSchema.schemaType.tables["chatCommandDetails"], "accessorName"> & { readonly accessorName: "chat_command_details" };
     /** @deprecated Use `codeReviewComments` instead. This alias will be removed in the next major version. */
     readonly "code_review_comments": Omit<typeof tablesSchema.schemaType.tables["codeReviewComments"], "accessorName"> & { readonly accessorName: "code_review_comments" };
     /** @deprecated Use `codeReviewVersions` instead. This alias will be removed in the next major version. */
@@ -1611,6 +1733,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "invitation_email_statuses": Omit<typeof tablesSchema.schemaType.tables["invitationEmailStatuses"], "accessorName"> & { readonly accessorName: "invitation_email_statuses" };
     /** @deprecated Use `inviteLinks` instead. This alias will be removed in the next major version. */
     readonly "invite_links": Omit<typeof tablesSchema.schemaType.tables["inviteLinks"], "accessorName"> & { readonly accessorName: "invite_links" };
+    /** @deprecated Use `liveDrafts` instead. This alias will be removed in the next major version. */
+    readonly "live_drafts": Omit<typeof tablesSchema.schemaType.tables["liveDrafts"], "accessorName"> & { readonly accessorName: "live_drafts" };
     /** @deprecated Use `memberProfileCovers` instead. This alias will be removed in the next major version. */
     readonly "member_profile_covers": Omit<typeof tablesSchema.schemaType.tables["memberProfileCovers"], "accessorName"> & { readonly accessorName: "member_profile_covers" };
     /** @deprecated Use `memberProfiles` instead. This alias will be removed in the next major version. */
@@ -1619,6 +1743,10 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "member_upload_stats": Omit<typeof tablesSchema.schemaType.tables["memberUploadStats"], "accessorName"> & { readonly accessorName: "member_upload_stats" };
     /** @deprecated Use `messageReactions` instead. This alias will be removed in the next major version. */
     readonly "message_reactions": Omit<typeof tablesSchema.schemaType.tables["messageReactions"], "accessorName"> & { readonly accessorName: "message_reactions" };
+    /** @deprecated Use `messageReceiptDetails` instead. This alias will be removed in the next major version. */
+    readonly "message_receipt_details": Omit<typeof tablesSchema.schemaType.tables["messageReceiptDetails"], "accessorName"> & { readonly accessorName: "message_receipt_details" };
+    /** @deprecated Use `messageReceiptTracking` instead. This alias will be removed in the next major version. */
+    readonly "message_receipt_tracking": Omit<typeof tablesSchema.schemaType.tables["messageReceiptTracking"], "accessorName"> & { readonly accessorName: "message_receipt_tracking" };
     /** @deprecated Use `museumEntries` instead. This alias will be removed in the next major version. */
     readonly "museum_entries": Omit<typeof tablesSchema.schemaType.tables["museumEntries"], "accessorName"> & { readonly accessorName: "museum_entries" };
     /** @deprecated Use `museumRevisions` instead. This alias will be removed in the next major version. */
@@ -1655,8 +1783,12 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "my_help_room_links": Omit<typeof tablesSchema.schemaType.tables["myHelpRoomLinks"], "accessorName"> & { readonly accessorName: "my_help_room_links" };
     /** @deprecated Use `myLastSeen` instead. This alias will be removed in the next major version. */
     readonly "my_last_seen": Omit<typeof tablesSchema.schemaType.tables["myLastSeen"], "accessorName"> & { readonly accessorName: "my_last_seen" };
+    /** @deprecated Use `myLiveDraftPreference` instead. This alias will be removed in the next major version. */
+    readonly "my_live_draft_preference": Omit<typeof tablesSchema.schemaType.tables["myLiveDraftPreference"], "accessorName"> & { readonly accessorName: "my_live_draft_preference" };
     /** @deprecated Use `myMember` instead. This alias will be removed in the next major version. */
     readonly "my_member": Omit<typeof tablesSchema.schemaType.tables["myMember"], "accessorName"> & { readonly accessorName: "my_member" };
+    /** @deprecated Use `myMessageReceipts` instead. This alias will be removed in the next major version. */
+    readonly "my_message_receipts": Omit<typeof tablesSchema.schemaType.tables["myMessageReceipts"], "accessorName"> & { readonly accessorName: "my_message_receipts" };
     /** @deprecated Use `myMessageReports` instead. This alias will be removed in the next major version. */
     readonly "my_message_reports": Omit<typeof tablesSchema.schemaType.tables["myMessageReports"], "accessorName"> & { readonly accessorName: "my_message_reports" };
     /** @deprecated Use `myNotificationPreferences` instead. This alias will be removed in the next major version. */
@@ -1691,6 +1823,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "note_editions": Omit<typeof tablesSchema.schemaType.tables["noteEditions"], "accessorName"> & { readonly accessorName: "note_editions" };
     /** @deprecated Use `noteVersions` instead. This alias will be removed in the next major version. */
     readonly "note_versions": Omit<typeof tablesSchema.schemaType.tables["noteVersions"], "accessorName"> & { readonly accessorName: "note_versions" };
+    /** @deprecated Use `onlineMembers` instead. This alias will be removed in the next major version. */
+    readonly "online_members": Omit<typeof tablesSchema.schemaType.tables["onlineMembers"], "accessorName"> & { readonly accessorName: "online_members" };
     /** @deprecated Use `opportunityFeedback` instead. This alias will be removed in the next major version. */
     readonly "opportunity_feedback": Omit<typeof tablesSchema.schemaType.tables["opportunityFeedback"], "accessorName"> & { readonly accessorName: "opportunity_feedback" };
     /** @deprecated Use `opportunityInterests` instead. This alias will be removed in the next major version. */
@@ -1729,6 +1863,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "room_summaries": Omit<typeof tablesSchema.schemaType.tables["roomSummaries"], "accessorName"> & { readonly accessorName: "room_summaries" };
     /** @deprecated Use `roomTimers` instead. This alias will be removed in the next major version. */
     readonly "room_timers": Omit<typeof tablesSchema.schemaType.tables["roomTimers"], "accessorName"> & { readonly accessorName: "room_timers" };
+    /** @deprecated Use `signalSnapshot` instead. This alias will be removed in the next major version. */
+    readonly "signal_snapshot": Omit<typeof tablesSchema.schemaType.tables["signalSnapshot"], "accessorName"> & { readonly accessorName: "signal_snapshot" };
     /** @deprecated Use `spacedCards` instead. This alias will be removed in the next major version. */
     readonly "spaced_cards": Omit<typeof tablesSchema.schemaType.tables["spacedCards"], "accessorName"> & { readonly accessorName: "spaced_cards" };
     /** @deprecated Use `spacedCollections` instead. This alias will be removed in the next major version. */
@@ -1747,6 +1883,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "teaching_questions": Omit<typeof tablesSchema.schemaType.tables["teachingQuestions"], "accessorName"> & { readonly accessorName: "teaching_questions" };
     /** @deprecated Use `typingPresence` instead. This alias will be removed in the next major version. */
     readonly "typing_presence": Omit<typeof tablesSchema.schemaType.tables["typingPresence"], "accessorName"> & { readonly accessorName: "typing_presence" };
+    /** @deprecated Use `visualProjects` instead. This alias will be removed in the next major version. */
+    readonly "visual_projects": Omit<typeof tablesSchema.schemaType.tables["visualProjects"], "accessorName"> & { readonly accessorName: "visual_projects" };
     /** @deprecated Use `workAuthors` instead. This alias will be removed in the next major version. */
     readonly "work_authors": Omit<typeof tablesSchema.schemaType.tables["workAuthors"], "accessorName"> & { readonly accessorName: "work_authors" };
     /** @deprecated Use `workDetails` instead. This alias will be removed in the next major version. */
@@ -1782,12 +1920,14 @@ const tableAccessorAliases = {
   "admin_members": "adminMembers",
   "answer_usefulness": "answerUsefulness",
   "assignment_details": "assignmentDetails",
+  "available_chat_commands": "availableChatCommands",
   "challenge_comments": "challengeComments",
   "challenge_hints": "challengeHints",
   "challenge_solutions": "challengeSolutions",
   "change_history": "changeHistory",
   "channel_messages": "channelMessages",
   "chat_channels": "chatChannels",
+  "chat_command_details": "chatCommandDetails",
   "code_review_comments": "codeReviewComments",
   "code_review_versions": "codeReviewVersions",
   "code_reviews": "codeReviews",
@@ -1808,10 +1948,13 @@ const tableAccessorAliases = {
   "help_posts": "helpPosts",
   "invitation_email_statuses": "invitationEmailStatuses",
   "invite_links": "inviteLinks",
+  "live_drafts": "liveDrafts",
   "member_profile_covers": "memberProfileCovers",
   "member_profiles": "memberProfiles",
   "member_upload_stats": "memberUploadStats",
   "message_reactions": "messageReactions",
+  "message_receipt_details": "messageReceiptDetails",
+  "message_receipt_tracking": "messageReceiptTracking",
   "museum_entries": "museumEntries",
   "museum_revisions": "museumRevisions",
   "my_agent_originality_checks": "myAgentOriginalityChecks",
@@ -1830,7 +1973,9 @@ const tableAccessorAliases = {
   "my_help_contact_requests": "myHelpContactRequests",
   "my_help_room_links": "myHelpRoomLinks",
   "my_last_seen": "myLastSeen",
+  "my_live_draft_preference": "myLiveDraftPreference",
   "my_member": "myMember",
+  "my_message_receipts": "myMessageReceipts",
   "my_message_reports": "myMessageReports",
   "my_notification_preferences": "myNotificationPreferences",
   "my_notifications": "myNotifications",
@@ -1848,6 +1993,7 @@ const tableAccessorAliases = {
   "note_details": "noteDetails",
   "note_editions": "noteEditions",
   "note_versions": "noteVersions",
+  "online_members": "onlineMembers",
   "opportunity_feedback": "opportunityFeedback",
   "opportunity_interests": "opportunityInterests",
   "opportunity_revisions": "opportunityRevisions",
@@ -1867,6 +2013,7 @@ const tableAccessorAliases = {
   "room_members": "roomMembers",
   "room_summaries": "roomSummaries",
   "room_timers": "roomTimers",
+  "signal_snapshot": "signalSnapshot",
   "spaced_cards": "spacedCards",
   "spaced_collections": "spacedCollections",
   "spaced_unavailable_cards": "spacedUnavailableCards",
@@ -1876,6 +2023,7 @@ const tableAccessorAliases = {
   "teaching_practices": "teachingPractices",
   "teaching_questions": "teachingQuestions",
   "typing_presence": "typingPresence",
+  "visual_projects": "visualProjects",
   "work_authors": "workAuthors",
   "work_details": "workDetails",
   "work_files": "workFiles",
@@ -1915,6 +2063,8 @@ export type DbView = __DbViewBase & {
   readonly "answer_usefulness": __DbViewBase["answerUsefulness"];
   /** @deprecated Use `assignmentDetails` instead. This alias will be removed in the next major version. */
   readonly "assignment_details": __DbViewBase["assignmentDetails"];
+  /** @deprecated Use `availableChatCommands` instead. This alias will be removed in the next major version. */
+  readonly "available_chat_commands": __DbViewBase["availableChatCommands"];
   /** @deprecated Use `challengeComments` instead. This alias will be removed in the next major version. */
   readonly "challenge_comments": __DbViewBase["challengeComments"];
   /** @deprecated Use `challengeHints` instead. This alias will be removed in the next major version. */
@@ -1927,6 +2077,8 @@ export type DbView = __DbViewBase & {
   readonly "channel_messages": __DbViewBase["channelMessages"];
   /** @deprecated Use `chatChannels` instead. This alias will be removed in the next major version. */
   readonly "chat_channels": __DbViewBase["chatChannels"];
+  /** @deprecated Use `chatCommandDetails` instead. This alias will be removed in the next major version. */
+  readonly "chat_command_details": __DbViewBase["chatCommandDetails"];
   /** @deprecated Use `codeReviewComments` instead. This alias will be removed in the next major version. */
   readonly "code_review_comments": __DbViewBase["codeReviewComments"];
   /** @deprecated Use `codeReviewVersions` instead. This alias will be removed in the next major version. */
@@ -1967,6 +2119,8 @@ export type DbView = __DbViewBase & {
   readonly "invitation_email_statuses": __DbViewBase["invitationEmailStatuses"];
   /** @deprecated Use `inviteLinks` instead. This alias will be removed in the next major version. */
   readonly "invite_links": __DbViewBase["inviteLinks"];
+  /** @deprecated Use `liveDrafts` instead. This alias will be removed in the next major version. */
+  readonly "live_drafts": __DbViewBase["liveDrafts"];
   /** @deprecated Use `memberProfileCovers` instead. This alias will be removed in the next major version. */
   readonly "member_profile_covers": __DbViewBase["memberProfileCovers"];
   /** @deprecated Use `memberProfiles` instead. This alias will be removed in the next major version. */
@@ -1975,6 +2129,10 @@ export type DbView = __DbViewBase & {
   readonly "member_upload_stats": __DbViewBase["memberUploadStats"];
   /** @deprecated Use `messageReactions` instead. This alias will be removed in the next major version. */
   readonly "message_reactions": __DbViewBase["messageReactions"];
+  /** @deprecated Use `messageReceiptDetails` instead. This alias will be removed in the next major version. */
+  readonly "message_receipt_details": __DbViewBase["messageReceiptDetails"];
+  /** @deprecated Use `messageReceiptTracking` instead. This alias will be removed in the next major version. */
+  readonly "message_receipt_tracking": __DbViewBase["messageReceiptTracking"];
   /** @deprecated Use `museumEntries` instead. This alias will be removed in the next major version. */
   readonly "museum_entries": __DbViewBase["museumEntries"];
   /** @deprecated Use `museumRevisions` instead. This alias will be removed in the next major version. */
@@ -2011,8 +2169,12 @@ export type DbView = __DbViewBase & {
   readonly "my_help_room_links": __DbViewBase["myHelpRoomLinks"];
   /** @deprecated Use `myLastSeen` instead. This alias will be removed in the next major version. */
   readonly "my_last_seen": __DbViewBase["myLastSeen"];
+  /** @deprecated Use `myLiveDraftPreference` instead. This alias will be removed in the next major version. */
+  readonly "my_live_draft_preference": __DbViewBase["myLiveDraftPreference"];
   /** @deprecated Use `myMember` instead. This alias will be removed in the next major version. */
   readonly "my_member": __DbViewBase["myMember"];
+  /** @deprecated Use `myMessageReceipts` instead. This alias will be removed in the next major version. */
+  readonly "my_message_receipts": __DbViewBase["myMessageReceipts"];
   /** @deprecated Use `myMessageReports` instead. This alias will be removed in the next major version. */
   readonly "my_message_reports": __DbViewBase["myMessageReports"];
   /** @deprecated Use `myNotificationPreferences` instead. This alias will be removed in the next major version. */
@@ -2047,6 +2209,8 @@ export type DbView = __DbViewBase & {
   readonly "note_editions": __DbViewBase["noteEditions"];
   /** @deprecated Use `noteVersions` instead. This alias will be removed in the next major version. */
   readonly "note_versions": __DbViewBase["noteVersions"];
+  /** @deprecated Use `onlineMembers` instead. This alias will be removed in the next major version. */
+  readonly "online_members": __DbViewBase["onlineMembers"];
   /** @deprecated Use `opportunityFeedback` instead. This alias will be removed in the next major version. */
   readonly "opportunity_feedback": __DbViewBase["opportunityFeedback"];
   /** @deprecated Use `opportunityInterests` instead. This alias will be removed in the next major version. */
@@ -2085,6 +2249,8 @@ export type DbView = __DbViewBase & {
   readonly "room_summaries": __DbViewBase["roomSummaries"];
   /** @deprecated Use `roomTimers` instead. This alias will be removed in the next major version. */
   readonly "room_timers": __DbViewBase["roomTimers"];
+  /** @deprecated Use `signalSnapshot` instead. This alias will be removed in the next major version. */
+  readonly "signal_snapshot": __DbViewBase["signalSnapshot"];
   /** @deprecated Use `spacedCards` instead. This alias will be removed in the next major version. */
   readonly "spaced_cards": __DbViewBase["spacedCards"];
   /** @deprecated Use `spacedCollections` instead. This alias will be removed in the next major version. */
@@ -2103,6 +2269,8 @@ export type DbView = __DbViewBase & {
   readonly "teaching_questions": __DbViewBase["teachingQuestions"];
   /** @deprecated Use `typingPresence` instead. This alias will be removed in the next major version. */
   readonly "typing_presence": __DbViewBase["typingPresence"];
+  /** @deprecated Use `visualProjects` instead. This alias will be removed in the next major version. */
+  readonly "visual_projects": __DbViewBase["visualProjects"];
   /** @deprecated Use `workAuthors` instead. This alias will be removed in the next major version. */
   readonly "work_authors": __DbViewBase["workAuthors"];
   /** @deprecated Use `workDetails` instead. This alias will be removed in the next major version. */
@@ -2131,6 +2299,8 @@ export type Tables = __TablesBase & {
   readonly "answer_usefulness": __TablesBase["answerUsefulness"];
   /** @deprecated Use `assignmentDetails` instead. This alias will be removed in the next major version. */
   readonly "assignment_details": __TablesBase["assignmentDetails"];
+  /** @deprecated Use `availableChatCommands` instead. This alias will be removed in the next major version. */
+  readonly "available_chat_commands": __TablesBase["availableChatCommands"];
   /** @deprecated Use `challengeComments` instead. This alias will be removed in the next major version. */
   readonly "challenge_comments": __TablesBase["challengeComments"];
   /** @deprecated Use `challengeHints` instead. This alias will be removed in the next major version. */
@@ -2143,6 +2313,8 @@ export type Tables = __TablesBase & {
   readonly "channel_messages": __TablesBase["channelMessages"];
   /** @deprecated Use `chatChannels` instead. This alias will be removed in the next major version. */
   readonly "chat_channels": __TablesBase["chatChannels"];
+  /** @deprecated Use `chatCommandDetails` instead. This alias will be removed in the next major version. */
+  readonly "chat_command_details": __TablesBase["chatCommandDetails"];
   /** @deprecated Use `codeReviewComments` instead. This alias will be removed in the next major version. */
   readonly "code_review_comments": __TablesBase["codeReviewComments"];
   /** @deprecated Use `codeReviewVersions` instead. This alias will be removed in the next major version. */
@@ -2183,6 +2355,8 @@ export type Tables = __TablesBase & {
   readonly "invitation_email_statuses": __TablesBase["invitationEmailStatuses"];
   /** @deprecated Use `inviteLinks` instead. This alias will be removed in the next major version. */
   readonly "invite_links": __TablesBase["inviteLinks"];
+  /** @deprecated Use `liveDrafts` instead. This alias will be removed in the next major version. */
+  readonly "live_drafts": __TablesBase["liveDrafts"];
   /** @deprecated Use `memberProfileCovers` instead. This alias will be removed in the next major version. */
   readonly "member_profile_covers": __TablesBase["memberProfileCovers"];
   /** @deprecated Use `memberProfiles` instead. This alias will be removed in the next major version. */
@@ -2191,6 +2365,10 @@ export type Tables = __TablesBase & {
   readonly "member_upload_stats": __TablesBase["memberUploadStats"];
   /** @deprecated Use `messageReactions` instead. This alias will be removed in the next major version. */
   readonly "message_reactions": __TablesBase["messageReactions"];
+  /** @deprecated Use `messageReceiptDetails` instead. This alias will be removed in the next major version. */
+  readonly "message_receipt_details": __TablesBase["messageReceiptDetails"];
+  /** @deprecated Use `messageReceiptTracking` instead. This alias will be removed in the next major version. */
+  readonly "message_receipt_tracking": __TablesBase["messageReceiptTracking"];
   /** @deprecated Use `museumEntries` instead. This alias will be removed in the next major version. */
   readonly "museum_entries": __TablesBase["museumEntries"];
   /** @deprecated Use `museumRevisions` instead. This alias will be removed in the next major version. */
@@ -2227,8 +2405,12 @@ export type Tables = __TablesBase & {
   readonly "my_help_room_links": __TablesBase["myHelpRoomLinks"];
   /** @deprecated Use `myLastSeen` instead. This alias will be removed in the next major version. */
   readonly "my_last_seen": __TablesBase["myLastSeen"];
+  /** @deprecated Use `myLiveDraftPreference` instead. This alias will be removed in the next major version. */
+  readonly "my_live_draft_preference": __TablesBase["myLiveDraftPreference"];
   /** @deprecated Use `myMember` instead. This alias will be removed in the next major version. */
   readonly "my_member": __TablesBase["myMember"];
+  /** @deprecated Use `myMessageReceipts` instead. This alias will be removed in the next major version. */
+  readonly "my_message_receipts": __TablesBase["myMessageReceipts"];
   /** @deprecated Use `myMessageReports` instead. This alias will be removed in the next major version. */
   readonly "my_message_reports": __TablesBase["myMessageReports"];
   /** @deprecated Use `myNotificationPreferences` instead. This alias will be removed in the next major version. */
@@ -2263,6 +2445,8 @@ export type Tables = __TablesBase & {
   readonly "note_editions": __TablesBase["noteEditions"];
   /** @deprecated Use `noteVersions` instead. This alias will be removed in the next major version. */
   readonly "note_versions": __TablesBase["noteVersions"];
+  /** @deprecated Use `onlineMembers` instead. This alias will be removed in the next major version. */
+  readonly "online_members": __TablesBase["onlineMembers"];
   /** @deprecated Use `opportunityFeedback` instead. This alias will be removed in the next major version. */
   readonly "opportunity_feedback": __TablesBase["opportunityFeedback"];
   /** @deprecated Use `opportunityInterests` instead. This alias will be removed in the next major version. */
@@ -2301,6 +2485,8 @@ export type Tables = __TablesBase & {
   readonly "room_summaries": __TablesBase["roomSummaries"];
   /** @deprecated Use `roomTimers` instead. This alias will be removed in the next major version. */
   readonly "room_timers": __TablesBase["roomTimers"];
+  /** @deprecated Use `signalSnapshot` instead. This alias will be removed in the next major version. */
+  readonly "signal_snapshot": __TablesBase["signalSnapshot"];
   /** @deprecated Use `spacedCards` instead. This alias will be removed in the next major version. */
   readonly "spaced_cards": __TablesBase["spacedCards"];
   /** @deprecated Use `spacedCollections` instead. This alias will be removed in the next major version. */
@@ -2319,6 +2505,8 @@ export type Tables = __TablesBase & {
   readonly "teaching_questions": __TablesBase["teachingQuestions"];
   /** @deprecated Use `typingPresence` instead. This alias will be removed in the next major version. */
   readonly "typing_presence": __TablesBase["typingPresence"];
+  /** @deprecated Use `visualProjects` instead. This alias will be removed in the next major version. */
+  readonly "visual_projects": __TablesBase["visualProjects"];
   /** @deprecated Use `workAuthors` instead. This alias will be removed in the next major version. */
   readonly "work_authors": __TablesBase["workAuthors"];
   /** @deprecated Use `workDetails` instead. This alias will be removed in the next major version. */

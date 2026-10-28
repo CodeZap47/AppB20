@@ -69,7 +69,7 @@ describe('perfiles y cumpleaños', () => {
     expect(pressed?.textContent).toContain('2');
     const titles = [...container.querySelectorAll('.feed .work-card__title')].map((el) => el.textContent);
     expect(titles).toEqual(['Apunte de octubre', 'Apunte de septiembre']);
-    for (const label of ['Editar nombre', 'Editar presentación y foto', 'Agregar cumpleaños']) {
+    for (const label of ['Editar nombre', 'Personalizar perfil', 'Agregar cumpleaños']) {
       expect(container.textContent).toContain(label);
     }
 
@@ -84,7 +84,7 @@ describe('perfiles y cumpleaños', () => {
   });
 
   it('guarda campos opcionales y la versión sin solicitar datos de nacimiento o calificaciones', async () => {
-    await mount('/perfil/me'); await click('Editar presentación y foto');
+    await mount('/perfil/me'); await click('Personalizar perfil');
     const form = container.querySelector('form')!;
     expect(form.textContent).not.toContain('Año de nacimiento');
     await act(async () => form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
@@ -96,7 +96,7 @@ describe('perfiles y cumpleaños', () => {
       expect(input.expectedVersion).toBe(snapshot.memberProfiles[0]!.version);
       snapshot.memberProfiles = snapshot.memberProfiles.map((entry) => ({ ...entry, cover: input, version: input.expectedVersion + 1 }));
     });
-    await mount('/perfil/me'); await click('Editar presentación y foto');
+    await mount('/perfil/me'); await click('Personalizar perfil');
     const dialog = container.querySelector('dialog.profile-editor')!;
     expect(dialog.textContent).toContain('Portada');
     const oceano = dialog.querySelector<HTMLInputElement>('input[name="cover-preset"][value="oceano"]')!;
@@ -111,7 +111,7 @@ describe('perfiles y cumpleaños', () => {
     snapshot.memberProfiles = [{ ...profile, cover: { preset: 'atardecer' } }];
     await mount('/perfil/me');
     expect(container.querySelector<HTMLElement>('.profile-hero .profile-cover')?.style.backgroundImage).toContain('rgb(247, 169, 120)');
-    await click('Editar presentación y foto');
+    await click('Personalizar perfil');
     const input = container.querySelector<HTMLInputElement>('input[aria-label="Imagen de portada"]')!;
     const svg = new File(['<svg/>'], 'portada.svg', { type: 'image/svg+xml' });
     Object.defineProperty(input, 'files', { value: [svg] });
@@ -121,7 +121,7 @@ describe('perfiles y cumpleaños', () => {
 
   it('agrega y quita etiquetas, y pide confirmar antes de descartar cambios', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
-    await mount('/perfil/me'); await click('Editar presentación y foto');
+    await mount('/perfil/me'); await click('Personalizar perfil');
     const input = container.querySelector<HTMLInputElement>('.tag-field input')!;
     const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
     await act(async () => { setValue.call(input, 'Música'); input.dispatchEvent(new Event('input', { bubbles: true })); });

@@ -1,3 +1,4 @@
+import { SpacetimeMessageReceiptStore } from './messageReceiptStore';
 import { DbConnection } from '../module_bindings';
 import type { Actions, Snapshot } from './types';
 import { createSpacetimeActions } from './spacetimeActions';
@@ -6,13 +7,19 @@ import { ResourceTransport } from './resourceTransport';
 import { config } from '../config';
 import { AiClient } from './aiClient';
 import { createGuideAiActions } from './guideAiClient';
+import { createGuideMaterialsActions } from './guideMaterialsClient';
 import { createAgentAiActions } from './agentAiClient';
 import { createDocumentActions } from './documentClient';
 import { createPresentationFeatureActions } from './presentationFeatureClient';
 import { createExamActions } from './examClient';
 import { createMembershipActions } from './membershipActions';
+import { SpacetimeLiveDraftStore } from './liveDraftStore';
+import { SpacetimeAppPresenceStore, browserAppPresenceEnvironment, type AppPresenceEnvironment } from './appPresenceStore';
+import type { Platform } from '../platform';
 
 export interface ConnectionOptions {
+  platform?: Platform;
+  presenceEnvironment?: AppPresenceEnvironment;
   uri: string;
   database: string;
   token: string;
@@ -46,6 +53,9 @@ const openConnection: ConnectionFactory = (options, callbacks) => DbConnection.b
 /** A session owns one cache. Disconnecting or signing out always discards that cache. */
 export class SpacetimeDataSource {
   readonly label = 'Grupo B20';
+  readonly liveDrafts = new SpacetimeLiveDraftStore();
+  readonly messageReceipts = new SpacetimeMessageReceiptStore();
+  readonly appPresence: SpacetimeAppPresenceStore;
   private snapshot: Snapshot = emptySnapshot('connecting');
   private listeners = new Set<() => void>();
   private connection?: DbConnection;
@@ -60,7 +70,7 @@ export class SpacetimeDataSource {
   constructor(
     private options: ConnectionOptions,
     private factory: ConnectionFactory = openConnection,
-  ) {}
+  ) { this.appPresence = new SpacetimeAppPresenceStore(options.presenceEnvironment ?? browserAppPresenceEnvironment(options.platform === 'android')); }
 
   getSnapshot = (): Snapshot => this.snapshot;
   subscribe = (listener: () => void): (() => void) => {
@@ -98,6 +108,7 @@ export class SpacetimeDataSource {
           const changed = () => this.queueRefresh(generation);
           // Only public, permission-filtered views exist in the generated client.
           for (const table of new Set(Object.values(connected.db))) {
+            if (table === connected.db.liveDrafts || table === connected.db.messageReceiptDetails || table === connected.db.messageReceiptTracking) continue;
             table.onInsert(changed);
             table.onDelete(changed);
             table.onUpdate(changed);
@@ -107,6 +118,9 @@ export class SpacetimeDataSource {
               if (generation !== this.generation) return;
               this.ready = true;
               this.refresh(generation);
+              this.liveDrafts.connect(connected);
+              this.messageReceipts.connect(connected, this.snapshot.me?.id);
+              this.appPresence.connect(connected, this.snapshot.me?.status === 'active' ? this.snapshot.me.id : undefined);
             })
             .onError(() => this.fail(generation,
               'No se pudo cargar el grupo. Comprueba la configuración de acceso y vuelve a conectar.'))
@@ -134,7 +148,9 @@ export class SpacetimeDataSource {
   private refresh(generation: number) {
     if (!this.ready || !this.connection || generation !== this.generation) return;
     try {
-      this.emit(readSnapshot(this.connection, this.identity));
+      const next = readSnapshot(this.connection, this.identity);
+      this.appPresence.setMember(next.me?.status === 'active' ? next.me.id : undefined);
+      this.emit(next);
     } catch {
       this.fail(generation, 'Los datos del grupo requieren una actualización. Vuelve a conectar.');
     }
@@ -147,7 +163,10 @@ export class SpacetimeDataSource {
   }
 
   disconnect() {
+    this.appPresence.disconnect();
     this.aiClient?.cancelPending();
+    this.liveDrafts.disconnect();
+    this.messageReceipts.disconnect();
     ++this.generation;
     this.ready = false;
     this.refreshQueued = false;
@@ -166,6 +185,6 @@ export function createSpacetimeDataSource(options: ConnectionOptions, factory?: 
   source.setAiClient(ai);
   const files = new ResourceTransport({ getConnection: source.getConnection, getIdentity: source.getIdentity,
     legacy: legacyApiUrl ? { apiUrl: legacyApiUrl, getToken: options.getToken ?? (() => options.token) } : undefined });
-  return Object.assign(source, createSpacetimeActions(source.getConnection, source.getIdentity, files), createMembershipActions(source.getConnection, { apiUrl: options.invitationApiUrl ?? options.apiUrl ?? config.invitationApiUrl, getToken: options.getToken ?? (() => options.token) }), createGuideAiActions(ai), createExamActions(ai), createDocumentActions(ai), { presentationFeatures: createPresentationFeatureActions(ai) }, createAgentAiActions(ai)) as
+  return Object.assign(source, createSpacetimeActions(source.getConnection, source.getIdentity, files, { apiUrl: (options.apiUrl ?? config.aiApiUrl) || config.invitationApiUrl, getToken: () => source.getSnapshot().me?.status === 'active' ? (options.getToken ?? (() => options.token))() : undefined }), createMembershipActions(source.getConnection, { apiUrl: options.invitationApiUrl ?? options.apiUrl ?? config.invitationApiUrl, getToken: options.getToken ?? (() => options.token) }), createGuideAiActions(ai), createGuideMaterialsActions(ai), createExamActions(ai), createDocumentActions(ai), { presentationFeatures: createPresentationFeatureActions(ai) }, createAgentAiActions(ai)) as
     SpacetimeDataSource & Actions;
 }

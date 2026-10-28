@@ -1,7 +1,9 @@
+import { purgeMessageReceipts } from './messageReceiptHandlers';
 import { purgePresentationAiSource } from './presentationAiHandlers';
 import { purgeExamSpacedSource } from './examSpaced';
 import { purgeDocumentSource } from './documentHandlers';
 import { memberIdentityFor } from './authIdentity';
+import { purgeFeedThread } from './feedInteractionLifecycle';
 import { SenderError } from 'spacetimedb/server';
 import { ScheduleAt, Timestamp } from 'spacetimedb';
 import { retentionDeadline, retentionExpired } from '../../core/src/retention';
@@ -175,6 +177,7 @@ function purgeOne(ctx: Ctx, row: RetentionRow) {
   ctx.db.contentRetention.key.update({ ...row, state: 'purging' });
   for (const target of targets) {
     const split = target.indexOf(':'); const kind = target.slice(0, split); const id = BigInt(target.slice(split + 1));
+    purgeFeedThread(ctx, kind, id);
     purgeAiSource(ctx, kind, id);
     purgeMuseum(ctx.db, kind, id);
     purgeAgentSource(ctx.db, kind, id);
@@ -220,6 +223,7 @@ function purgeOne(ctx: Ctx, row: RetentionRow) {
         else ctx.db.channelMessage.id.update({ ...ctx.db.channelMessage.id.find(id)!, ...minimal });
       }
       const scope = kind === 'group_message' ? 'group' : 'channel';
+      purgeMessageReceipts(ctx, scope, id);
       drop(ctx.db.messageReaction.iter(), (item) => item.scope === scope && item.messageId === id, (key) => ctx.db.messageReaction.id.delete(key));
     }
     drop(ctx.db.academicComment.iter(), (item) => item.targetKind === kind && item.targetId === id, (key) => ctx.db.academicComment.id.delete(key));

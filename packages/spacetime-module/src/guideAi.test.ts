@@ -7,7 +7,7 @@ import type { GuideAiDraft, GuideAiPrepareInput } from '../../core/src/guideAi';
 vi.mock('spacetimedb/server', () => {
   const builder: unknown = new Proxy({}, { get: () => () => builder }); const handler = (...args: unknown[]) => args.at(-1);
   return { SenderError: class SenderError extends Error {}, t: new Proxy({}, { get: () => () => builder }), table: () => ({ rowType: builder }),
-    schema: () => ({ reducer: handler, procedure: handler, init: handler, clientConnected: handler, view: handler }) };
+    schema: () => ({ reducer: handler, procedure: handler, init: handler, clientConnected: handler, clientDisconnected: handler, view: handler }) };
 });
 import { guide_ai, update_guide_v2, type Ctx } from './index';
 import { guideAiSourceAvailability } from './guideAiHandlers';
@@ -33,7 +33,7 @@ function setup() {
   const initial: Record<string, Row[]> = {
     appConfig: [{ id: 0, owner }], authConfig: [{ id: 0, issuer: 'https://issuer.test', audiences: ['test'] }],
     member: [alice, bob, removed].map((identity) => ({ identity, status: identity.isEqual(removed) ? 'removed' : 'active', isCreator: false })),
-    subject: [{ id: 1n }], term: [{ id: 11n, subjectId: 1n }, { id: 12n, subjectId: 1n }],
+    subject: [{ id: 1n, period: 8 }], term: [{ id: 11n, subjectId: 1n }, { id: 12n, subjectId: 1n }],
     aiServiceConfig: [{ id: 0, identity: service, enabled: true, dailyTokenBudget: 100_000 }],
     aiConsent: [alice, bob].map((actor) => ({ actor, version: AI_CONSENT_VERSION, accepted: true, updatedAt: at })),
     aiKey: [alice, bob].map((actor) => ({ actor, keyId: uid(actor.isEqual(alice) ? 901 : 902), provider: 'gemini', ciphertext: 'private-ciphertext', iv: 'AAAAAAAAAAAAAAAA', masterVersion: 'v1', updatedAt: at })),
@@ -49,7 +49,7 @@ function setup() {
     resourceUpload: [{ id: 'file-1', state: 'ready', sha256: fileHash }],
     studyGuide: [{ id: 80n, subjectId: 1n, termId: 11n, title: 'Manual', topics: ['Tema'], sections: Array(8).fill('Texto manual'), version: 1, createdBy: alice, updatedBy: alice, createdAt: at, updatedAt: at }],
   };
-  const keys: Record<string, string> = { member: 'identity', aiConsent: 'actor', aiKey: 'actor', noteDetail: 'noteId', evidenceDetail: 'evidenceId', assignmentDetail: 'assignmentId', contentStatus: 'key', resourceVersion: 'key', guideAiProvenance: 'key' };
+  const keys: Record<string, string> = { member: 'identity', aiConsent: 'actor', aiKey: 'actor', noteDetail: 'noteId', evidenceDetail: 'evidenceId', assignmentDetail: 'assignmentId', contentStatus: 'key', resourceVersion: 'key', guideAiProvenance: 'key', examVersion: 'key' };
   const tables = new Map<string, ReturnType<typeof tableStore>>();
   const db = new Proxy({}, { get: (_target, name: string) => { if (!tables.has(name)) tables.set(name, tableStore(keys[name] ?? 'id', initial[name])); return tables.get(name); } });
   const state = { db, sender: alice, timestamp: at, env: {}, senderAuth: { jwt: { issuer: 'https://issuer.test', audience: ['test'], fullPayload: { email: 'member@example.com', email_verified: true } } } };
@@ -72,14 +72,78 @@ function setup() {
 }
 
 describe('Guías IA: servidor privado, cuotas compartidas y publicación atómica', () => {
+  it('persiste diagnóstico y respuestas privadas y bloquea generación hasta revisarlas', () => {
+    const s = setup(); const prep = s.prepare(1, { guideType: 'partial', period: '8', reviewBeforeGenerate: true, topics: ['Tema', 'Tema ausente'] });
+    expect(prep.totalSteps).toBe(2); expect(prep.steps[0]!.kind).toBe('assessment');
+    const authorized = s.authorize(prep); expect(s.claim(authorized).claimed).toBe(true);
+    const diagnostic = { topics: [{ topic: 'Tema', coverage: 'thin', reason: 'Faltan ejemplos.', citations: [prep.preparation.fragments[0]!.id] }, { topic: 'Tema ausente', coverage: 'missing', reason: 'No aparece.', citations: [] }], questions: [{ id: 'q1', topic: 'Tema', question: '¿Qué ejemplo pidió el docente?' }, { id: 'q2', topic: 'Tema ausente', question: '¿Cuál es el alcance de este tema?' }] };
+    const assessed = s.finish(authorized, 100, { result: diagnostic });
+    expect(assessed.state).toBe('prepared'); expect(assessed.result).toBeUndefined(); expect(assessed.assessment).toEqual(diagnostic);
+    expect(() => s.authorize(assessed, 101)).toThrow('diagnóstico');
+    expect(() => s.call('reviewTopics', { id: prep.id, expectedRevision: assessed.revision, answers: [], acknowledgeGaps: false })).toThrow('pendientes');
+    const reviewed = s.call('reviewTopics', { id: prep.id, expectedRevision: assessed.revision, answers: [{ questionId: 'q1', answer: 'El ciclo while con contador.' }], acknowledgeGaps: true });
+    expect(reviewed.topicsReviewed).toBe(true); expect(reviewed.preparation.input.clarifications).toMatchObject([{ questionId: 'q1', topic: 'Tema', answer: 'El ciclo while con contador.' }]);
+    expect(reviewed.preparation.fingerprint).not.toBe(assessed.preparation.fingerprint);
+    s.as(bob); expect(() => s.call('getDraft', { id: prep.id })).toThrow('disponible'); s.as(alice);
+    expect(s.call('getDraft', { id: prep.id }).topicsReviewed).toBe(true);
+    const generation = s.authorize(reviewed, 101); expect(s.claim(generation, 101).claimed).toBe(true);
+    let ready = s.finish(generation, 101);
+    expect(() => s.prepare(2, { reviewBeforeGenerate: true, clarifications: reviewed.preparation.input.clarifications })).toThrow('diagnóstico');
+    expect(() => s.call('reprepareDraft', { id: ready.id, expectedRevision: ready.revision, requestId: uid(220), model: ready.preparation.model, input: { ...prep.preparation.input, topics: ['Otro tema'], sources: prep.preparation.input.sources.map((ref) => ({ ...ref, topics: ['Otro tema'] })) } })).toThrow('otro borrador');
+    const refreshed = s.call('reprepareDraft', { id: ready.id, expectedRevision: ready.revision, requestId: uid(221), model: ready.preparation.model, input: { ...prep.preparation.input, maxOutputTokens: 1600 } });
+    expect(refreshed.preparation.input.clarifications).toEqual(reviewed.preparation.input.clarifications); expect(refreshed.preparation.input.topicReview).toEqual(reviewed.preparation.input.topicReview);
+    ready = s.call('saveDraft', { id: ready.id, expectedRevision: refreshed.revision, result: refreshed.result });
+    const published = s.call('publish', { id: ready.id, expectedRevision: ready.revision, requestId: uid(200) });
+    const provenance = JSON.parse(String(s.rows('guideAiProvenance')[0]!.json));
+    expect(published.state).toBe('published'); expect(provenance).toMatchObject({ guideType: 'partial', period: '8', clarifications: [{ questionId: 'q1' }] });
+  });
+  it('resume todos los lotes grandes antes del diagnóstico y reanuda después de la cuota horaria', () => {
+    const s = setup(); const refs = Array.from({ length: 31 }, (_, i) => {
+      const refId = String(100 + i); s.ctx.db.note.insert({ id: BigInt(refId), subjectId: 1n, title: `Material ${i}`, topic: 'Tema', body: `${i} ` + 'contenido académico '.repeat(250), visibility: 'group', version: 1, author: alice, createdAt: s.ctx.timestamp, updatedAt: s.ctx.timestamp, tags: [], source: 'student' });
+      return { kind: 'note' as const, refId, topics: ['Tema'], includeUnplaced: true };
+    });
+    let draft = s.prepare(650, { sources: refs, reviewBeforeGenerate: true });
+    expect(draft.preparation.sources).toHaveLength(31); expect(draft.preparation.fragments.reduce((n, f) => n + f.text.length, 0)).toBeGreaterThan(120000);
+    let call = 700;
+    while (draft.steps.find((step) => step.state === 'pending')?.kind === 'summary') {
+      const step = draft.steps.find((step) => step.state === 'pending')!;
+      const authorized = s.authorize(draft, call); s.claim(authorized, call);
+      const fragments = draft.preparation.batches.find((batch) => batch.id === step.batchId)!.fragmentIds;
+      draft = s.finish(authorized, call++, { result: { paragraphs: [{ text: `Resumen fiel del lote ${step.id}`, citations: fragments }] } });
+    }
+    const authorized = s.authorize(draft, call); s.claim(authorized, call);
+    const assessment = { topics: [{ topic: 'Tema', coverage: 'thin', reason: 'Precisa el alcance.', citations: [draft.preparation.fragments[0]!.id] }], questions: [{ id: 'q1', topic: 'Tema', question: '¿Qué alcance pidió el profesor?' }] };
+    draft = s.finish(authorized, call++, { result: assessment });
+    draft = s.call('reviewTopics', { id: draft.id, expectedRevision: draft.revision, answers: [{ questionId: 'q1', answer: 'Repasar todos los ejemplos.' }], acknowledgeGaps: false });
+    const generation = s.authorize(draft, call); expect(() => s.claim(generation, call)).toThrow('límite compartido'); s.as(alice); s.tick(3601);
+    expect(s.claim(generation, call).claimed).toBe(true); const ready = s.finish(generation, call); expect(ready.state).toBe('ready'); expect(ready.preparation.sources).toHaveLength(31);
+  });
+  it('valida cuatrimestre y permite combinar parciales solo en alcance cuatrimestral', () => {
+    const s = setup(); expect(() => s.prepare(1, { guideType: 'quarter', period: '7', termId: undefined })).toThrow('cuatrimestre');
+    expect(() => s.prepare(2, { guideType: 'quarter', period: '8' })).toThrow('alcance');
+    const quarter = s.prepare(3, { guideType: 'quarter', period: '8', termId: undefined });
+    expect(quarter.preparation.input).toMatchObject({ guideType: 'quarter', period: '8' }); expect(quarter.termId).toBeUndefined();
+  });
+  it('conserva respuestas anteriores al renovar antes de generar sin asignarlas a preguntas nuevas', () => {
+    const s = setup(); const prep = s.prepare(1, { reviewBeforeGenerate: true }); const authorized = s.authorize(prep); s.claim(authorized);
+    const assessment = { topics: [{ topic: 'Tema', coverage: 'thin', reason: 'Falta un ejemplo.', citations: [prep.preparation.fragments[0]!.id] }], questions: [{ id: 'q1', topic: 'Tema', question: '¿Qué ejemplo pidió el docente?' }] };
+    const assessed = s.finish(authorized, 100, { result: assessment });
+    const reviewed = s.call('reviewTopics', { id: prep.id, expectedRevision: assessed.revision, answers: [{ questionId: 'q1', answer: 'Un ciclo con contador.' }], acknowledgeGaps: false });
+    const refreshed = s.call('reprepareDraft', { id: prep.id, expectedRevision: reviewed.revision, requestId: uid(230), model: prep.preparation.model, input: { ...prep.preparation.input, maxOutputTokens: 1600 } });
+    expect(refreshed.previousClarifications).toMatchObject([{ questionId: 'q1', answer: 'Un ciclo con contador.' }]); expect(refreshed.preparation.input.clarifications).toBeUndefined(); expect(refreshed.assessment).toBeUndefined(); expect(refreshed.topicsReviewed).toBe(false);
+    expect(s.call('getDraft', { id: prep.id }).previousClarifications).toEqual(refreshed.previousClarifications);
+    expect(s.call<Record<string, unknown>[]>('listDrafts')[0]).not.toHaveProperty('previousClarifications');
+    s.rows('note')[0]!.visibility = 'personal'; s.rows('note')[0]!.author = bob; const cancelled = s.call('cancelDraft', { id: prep.id, expectedRevision: refreshed.revision });
+    expect(cancelled.previousClarifications).toBeUndefined(); expect(cancelled.assessment).toBeUndefined();
+  });
   it('aísla borradores y transcripciones; lista solo resúmenes y bloquea bajas', () => {
     const s = setup(); const draft = s.prepare(); const listed = s.call<Record<string, unknown>[]>('listDrafts');
     expect(listed[0]).toMatchObject({ id: draft.id, completedSteps: 0, totalSteps: 1 }); expect(JSON.stringify(listed)).not.toContain('repite instrucciones');
     s.as(bob); expect(s.call('listDrafts')).toEqual([]); expect(() => s.call('getDraft', { id: draft.id })).toThrow('disponible');
     s.as(removed); expect(() => s.call('listDrafts')).toThrow('activo'); s.as(service); expect(() => s.call('listDrafts')).toThrow('activo');
   });
-  it('solo usa notas del grupo, evidencias seleccionadas y respuestas públicas; fija clasificación y versiones', () => {
-    const s = setup(); expect(() => s.prepare(2, { sources: [{ kind: 'note', refId: '2', topics: ['Tema'], includeUnplaced: false }] })).toThrow('compartido');
+  it('acepta notas personales propias y protege las ajenas, evidencias y respuestas públicas', () => {
+    const s = setup(); expect(s.prepare(2, { sources: [{ kind: 'note', refId: '2', topics: ['Tema'], includeUnplaced: false }] }).preparation.sources[0]!.visibility).toBe('personal'); s.as(bob); expect(() => s.prepare(22, { sources: [{ kind: 'note', refId: '2', topics: ['Tema'], includeUnplaced: false }] })).toThrow('disponible'); s.as(alice);
     const draft = s.prepare(3, { sources: [{ kind: 'activity', refId: '20', topics: ['Tema'], includeUnplaced: false, evidenceIds: ['21'] }, { kind: 'question', refId: '30', topics: ['Tema'], includeUnplaced: true }] });
     const text = JSON.stringify(draft.preparation.fragments); expect(text).toContain('Evidencia seleccionada'); expect(text).not.toContain('Evidencia no seleccionada'); expect(text).toContain('condición es falsa');
     expect(() => s.prepare(4, { termId: '12' })).toThrow('clasificación');
@@ -302,7 +366,7 @@ describe('Guías IA: servidor privado, cuotas compartidas y publicación atómic
     const s = setup(); const draft = s.ready();
     const input = { ...s.input, sources: [{ kind: 'assignment', refId: '10', topics: ['Tema'], includeUnplaced: false }] };
     const request = { id: draft.id, expectedRevision: draft.revision, requestId: uid(500), input, model: draft.preparation.model };
-    s.rows('note')[0]!.visibility = 'personal'; expect(() => s.call('reprepareDraft', request)).toThrow('compartido');
+    s.rows('note')[0]!.visibility = 'personal'; s.rows('note')[0]!.author = bob; expect(() => s.call('reprepareDraft', request)).toThrow('disponible'); s.rows('note')[0]!.author = alice;
     s.rows('note')[0]!.visibility = 'group'; s.ctx.db.contentStatus.insert({ key: 'note:1', kind: 'note', targetId: 1n, withdrawnAt: s.ctx.timestamp, withdrawnBy: alice, reason: 'Retirada' });
     expect(() => s.call('reprepareDraft', request)).toThrow('disponible');
     expect(s.rows('guideAiDraft')[0]!.revision).toBe(draft.revision); expect(s.rows('aiReservation')).toHaveLength(1);
@@ -315,5 +379,38 @@ describe('Guías IA: servidor privado, cuotas compartidas y publicación atómic
     expect(cancelled.preparation.input.sources).toEqual([]); expect(cancelled.result).toBeUndefined(); expect(JSON.stringify(cancelled)).not.toContain('repite instrucciones');
     expect(String(s.rows('guideAiDraft')[0]!.json)).toContain('repite instrucciones');
     expect(() => s.claim(cancelled)).toThrow('disponible'); expect(s.rows('aiGeneration')).toHaveLength(0);
+  });
+});
+
+
+describe('materiales de examen y creación manual de guías', () => {
+  function exam(s: ReturnType<typeof setup>, visibility = 'group') {
+    const examId = uid(600), at = s.ctx.timestamp;
+    s.ctx.db.studyExam.insert({ id: examId, owner: alice, title: 'Examen de ciclos', subjectId: 1n, termId: 11n, visibility, archived: false, revision: 1, readyVersion: 1, draftVersion: undefined, createdAt: at, updatedAt: at });
+    s.ctx.db.examVersion.insert({ key: `${examId}:1`, examId, version: 1, state: 'ready', createdAt: at, json: JSON.stringify({ title: 'Examen de ciclos', preparation: { topics: ['Tema'], sources: [], fragments: [] }, hasPersonalSources: false, questions: [{ id: 'q1', type: 'single', topic: 'Tema', text: '¿Qué repite instrucciones?', options: [{ id: 'a', text: 'Un ciclo' }, { id: 'b', text: 'Una constante' }], correctOptionId: 'a', explanation: 'SOLUCIÓN PROTEGIDA', citations: [] }] }) });
+    return examId;
+  }
+  it('usa enunciados de exámenes compartidos sin descubrir soluciones ocultas', () => {
+    const s = setup(), examId = exam(s); s.as(bob);
+    const prepared = s.prepare(601, { sources: [{ kind: 'exam', refId: examId, examVersion: 1, includeSolutions: true, topics: ['Tema'], includeUnplaced: false }] });
+    expect(JSON.stringify(prepared.preparation.fragments)).toContain('¿Qué repite instrucciones?'); expect(JSON.stringify(prepared.preparation.fragments)).not.toContain('SOLUCIÓN PROTEGIDA');
+    expect(s.rows('examAttempt')).toHaveLength(0);
+    s.ctx.db.examAttempt.insert({ id: uid(602), actor: bob, examId, version: 1, revision: 1, state: 'closed', json: JSON.stringify({ mode: 'simulation', answers: {} }), startedAt: s.ctx.timestamp });
+    const revealed = s.prepare(603, { sources: [{ kind: 'exam', refId: examId, examVersion: 1, includeSolutions: true, topics: ['Tema'], includeUnplaced: false }] });
+    expect(JSON.stringify(revealed.preparation.fragments)).toContain('SOLUCIÓN PROTEGIDA'); expect(revealed.preparation.sources[0]!.visibility).toBe('personal');
+  });
+  it('permite exámenes personales solo al dueño y bloquea publicar fuentes personales', () => {
+    const s = setup(), examId = exam(s, 'personal');
+    const prepared = s.prepare(604, { sources: [{ kind: 'exam', refId: examId, examVersion: 1, topics: ['Tema'], includeUnplaced: false }] });
+    expect(prepared.preparation.sources[0]!.visibility).toBe('personal'); s.as(bob); expect(() => s.prepare(605, { sources: prepared.preparation.input.sources })).toThrow('disponible'); s.as(alice);
+    const authorized = s.authorize(prepared); s.claim(authorized); const ready = s.finish(authorized);
+    expect(() => s.call('publish', { id: ready.id, expectedRevision: ready.revision, requestId: uid(606) })).toThrow('personales');
+  });
+  it('crea manualmente con exámenes UUID y materiales de otro parcial una sola vez sin llamar al proveedor', () => {
+    const s = setup(), examId = exam(s);
+    const request = { ...s.input, guideType: 'partial', period: '8', termId: '12', sources: [{ kind: 'exam', refId: examId, examVersion: 1, includeOutsideTerm: true, includeUnplaced: false, topics: ['Tema'] }], sections: ['Objetivo manual', '', '', '', '', '', '', ''], requestId: uid(607) };
+    const created = s.call<{ id: string; version: number }>('createManualFromMaterials', request);
+    expect(s.call('createManualFromMaterials', request)).toEqual(created); expect(s.rows('aiGeneration')).toHaveLength(0); expect(s.rows('guideSource')).toHaveLength(0);
+    const provenance = JSON.parse(String(s.rows('guideAiProvenance')[0]!.json)); expect(provenance.model).toBe('manual'); expect(provenance.sources[0]).toMatchObject({ kind: 'exam', refId: examId, examVersion: 1 });
   });
 });

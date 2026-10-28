@@ -1,7 +1,19 @@
+import { DemoMessageReceiptStore } from './messageReceiptDemo';
+import { DemoAppPresenceStore } from './appPresenceDemo';
+import type { AppPresenceEnvironment } from './appPresenceStore';
+import { DemoVisualProjectsStore, type VisualProjectsDemoState } from './visualProjectsDemo';
+import { DemoVisualSceneStore } from './visualSceneDemo';
+import type { VisualSceneInput } from '@b20/core';
+import { visualProjectCoverError, type VisualProjectInput, type VisualProjectLink, type VisualProjectVisibility } from '@b20/core';
+import { DemoSignalsStore } from './signalsDemo';
+import { DemoLiveDraftStore } from './liveDraftDemo';
+import { emptySignalsSnapshot, type SignalCommand } from '@b20/core';
 import { DemoDocumentStore } from './demoDocuments';
 import type { DocumentActions } from './documentTypes';
 import type { ExamActionRequest, AiFragmentOrigin } from '@b20/core';
 import { DemoGuideAiStore } from './demoGuideAi';
+import { DemoGuideMaterialsStore } from './demoGuideMaterials';
+import type { GuideMaterialsActions } from './guideMaterialsTypes';
 import { DemoExamStore } from './demoExams';
 import { DemoMembershipStore, seedDemoMembership } from './demoMembership';
 import type { MembershipActions } from './membershipTypes';
@@ -15,12 +27,12 @@ import {
   buildPeriodCalendar,
   canDeleteMessage,
   canEditMessage,
-  commandNameError,
+  cleanChatCommand,
   detectImageType,
   isAnimatedWebp,
   isReaction,
+  normalizeReaction,
   MAX_STICKERS_PER_PACK,
-  normalizeCommandName,
   stickerFileError,
   canManageCalendar,
   canReadDirectConversation,
@@ -154,6 +166,10 @@ import { DemoCommunity4Store } from './community4Demo';
 import { DemoAgentStore } from './agentStore';
 import { emptyAgent, type AgentActions, type AgentAiActions } from './agentTypes';
 import { DemoFeedStore } from './feedDemo';
+import { DemoFeedInteractionStore } from './feedInteractionDemo';
+import type { FeedInteractionActions } from './feedInteractionTypes';
+import type { ChatPostActions } from './chatPostActions';
+import { resolveDemoChatPosts, searchDemoChatPosts } from './chatPostDemo';
 import { demoContentInventory, demoReferencedFileReadable } from './demoContentInventory';
 import type { AdminContentResult, ModerateContentInput } from './membershipTypes';
 import { contentImpactSignature } from './membershipTypes';
@@ -174,7 +190,7 @@ import { emptyStudyRooms, type StudyRoomActions, type StudyRoomsSnapshot } from 
  * ningún compañero real.
  */
 
-interface State extends PresentationDemoState, StudyRoomsSnapshot {
+interface State extends PresentationDemoState, StudyRoomsSnapshot, VisualProjectsDemoState {
   invitations: Invitation[];
   inviteLinks: InviteLink[];
   members: Member[];
@@ -225,6 +241,7 @@ const sharedDemoContentResults = new WeakMap<State, Map<string, { request: strin
 
 function emptyState(): State {
   return {
+    visualProjects: [], visualProjectRequests: [],
     ...emptyPresentationsSnapshot(), presentationRequests: [],
     ...emptyStudyRooms(),
     invitations: [], inviteLinks: [], members: [], subjects: [], terms: [], calendar: [], assignments: [],
@@ -272,6 +289,9 @@ function toBase64(bytes: Uint8Array): string {
 
 export class DemoDataSource implements DataSource {
   readonly label = 'Datos de prueba';
+  readonly liveDrafts: DemoLiveDraftStore;
+  readonly messageReceipts: DemoMessageReceiptStore;
+  readonly appPresence: DemoAppPresenceStore;
   #state: State;
   #viewerId: Id;
   #listeners = new Set<() => void>();
@@ -288,24 +308,30 @@ export class DemoDataSource implements DataSource {
   #trash: DemoTrashStore;
   #notifications: DemoNotificationsStore;
   #practice: DemoPracticeStore;
+  #signals: DemoSignalsStore;
+  #visualProjects: DemoVisualProjectsStore;
+  #visualScenes: DemoVisualSceneStore;
   #community4: DemoCommunity4Store;
   #agent: DemoAgentStore;
   #feed: DemoFeedStore;
+  #feedInteractions: DemoFeedInteractionStore;
   #helpVersions: DemoHelpVersions;
   #teachingVersions: DemoTeachingVersions;
   #batchDepth = 0;
   #batchChanged = false;
   #guideAi: DemoGuideAiStore;
+  #guideMaterials: DemoGuideMaterialsStore;
   #exams: DemoExamStore;
   #documents: DemoDocumentStore;
   #examSpaced = new Map<string, {actor: string; collectionId: string; cardId: string; sourceId: string; examVersion: number; origins: AiFragmentOrigin[]}>();
   #membership: DemoMembershipStore;
   #profiles: MemberProfile[] = [];
   #withdrawals: Map<string, DemoWithdrawal>;
-  #invalidate = () => { this.#snapshot = undefined; for (const listener of this.#listeners) listener(); };
+  #invalidate = () => { if (this.#disposed) return; this.#snapshot = undefined; this.appPresence?.refreshMember(); for (const listener of this.#listeners) listener(); };
 
-  constructor(state: State, viewerId: Id, now: () => Date = () => new Date()) {
+  constructor(state: State, viewerId: Id, now: () => Date = () => new Date(), presenceEnvironment?: AppPresenceEnvironment, options?: { visualPersistenceKey?: string }) {
     this.#state = state;
+    state.visualProjects ??= []; state.visualProjectRequests ??= [];
     const observers = sharedDemoListeners.get(state) ?? new Set<() => void>();
     observers.add(this.#invalidate); sharedDemoListeners.set(state, observers);
     this.#withdrawals = sharedDemoWithdrawals.get(state) ?? new Map<string, DemoWithdrawal>();
@@ -325,16 +351,29 @@ export class DemoDataSource implements DataSource {
       captureExtra: (kind, id) => this.#captureExtra(kind, id),
       changedExtra: (kind, id) => this.#changedExtra(kind, id) });
     this.#chat = new DemoChatStore({ state: () => this.#state, active: () => this.#activeMember(), id: () => this.#id(), now: () => this.#now(), emit: () => this.#emit(), validateText: (text, me) => this.#messageText(text, me), available: (kind, id) => !this.#withdrawals.get(`${kind}:${id}`)?.withdrawnAt && !this.#trash?.blocksRead(kind, id) });
+    this.messageReceipts = new DemoMessageReceiptStore({ state, active: () => this.#activeMember(), members: () => this.#state.members,
+      now: () => this.#now(), emit: () => this.#emit(), subscribe: listener => this.subscribe(listener),
+      lookup: (scope, id, viewer) => this.#chat.receiptMessage(scope, id, viewer) });
+    this.liveDrafts = new DemoLiveDraftStore({ state, current: () => this.getSnapshot(), now: () => this.#now(), emit: () => this.#emit(),
+      subscribe: (listener) => this.subscribe(listener), visible: (viewer, row) => this.#chat.liveDraftVisible(viewer, row) });
     this.#knowledge = new DemoKnowledgeStore({ state: () => this.#state, active: () => this.#activeMember(), id: () => this.#id(), now: () => this.#now(), emit: () => this.#emit(),
       files: () => this.#academic.resources(), restoreFiles: (kind, id, ids) => this.#academic.restoreFiles(kind, id, ids), copyFiles: (from, to) => this.#academic.copyFiles(from, to) });
+    this.#visualProjects = new DemoVisualProjectsStore({ state: () => this.#state, active: () => this.#activeMember(), id: () => this.#id(),
+      now: () => this.#now(), emit: () => this.#emit(), subjects: () => this.#state.subjects, terms: () => this.#state.terms,
+      source: (link) => this.#visualSource(link), files: () => this.#academic.resources() });
+    this.#visualScenes = new DemoVisualSceneStore({ state: () => this.#state, active: () => this.#activeMember(), now: () => this.#now(), emit: () => this.#emit(),
+      existingFiles: () => this.#academic.resources(), persistenceKey: options?.visualPersistenceKey,
+      covers: () => this.#academic.visualCoverState(), restoreCovers: (files, blobs) => this.#academic.restoreVisualCovers(files, blobs) });
+    this.#signals = new DemoSignalsStore({ state: () => this.#state, snapshot: () => this.getSnapshot(), now: () => this.#now(), emit: () => this.#emit() });
     this.#practice = new DemoPracticeStore({ state: () => this.#state, active: () => this.#activeMember(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit() });
     this.#community4 = new DemoCommunity4Store({ state: () => this.#state, active: () => this.#activeMember(), current: () => this.getSnapshot(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit(), createQuestion: (input) => this.askQuestion(input) });
     this.#agent = new DemoAgentStore({ state: () => this.#state, active: () => this.#activeMember(), current: () => this.getSnapshot(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit() });
     this.#feed = new DemoFeedStore({ state: () => this.#state, active: () => this.#activeMember(), current: () => this.getSnapshot(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit(), available: (kind, id) => !this.#withdrawals.get(`${kind}:${id}`)?.withdrawnAt && !this.#trash?.blocksRead(kind, id) });
+    this.#feedInteractions = new DemoFeedInteractionStore({ state: () => this.#state, source: () => this, active: () => this.#activeMember(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit(), available: (kind, id) => !this.#withdrawals.get(`${kind}:${id}`)?.withdrawnAt && !this.#trash?.blocksRead(kind, id) });
     this.#trash = new DemoTrashStore({ state: () => this.#state, active: () => this.#activeMember(), now: () => this.#now(), emit: () => this.#emit(), resources: () => this.#academic.resources(),
       extraContent: (kind, id) => { const row = this.#contentRow(kind, id); return row ? { ownerIds: this.#contentAuthors(kind, id), version: row.version ?? 1, personal: kind === 'note' && (row as Note).visibility === 'personal' } : undefined; },
       extraTargets: (targets) => { for (const row of this.#feed.raw().feedComments) if (targets.has(`feed_post:${row.postId}`)) targets.add(`feed_comment:${row.id}`); },
-      purgePrivate: (targets) => { const references = this.#knowledge.purgeTargets(targets); this.#academic.purgeTargets(targets, references); this.#feed.purgeManaged(targets); this.#chat.purgeManaged(targets); this.#exams?.purgeTargets(targets); this.#purgeExamSpaced(targets); for (const key of targets) { const separator = key.indexOf(':'); this.#community4.purgeMuseum(key.slice(0, separator), key.slice(separator + 1)); this.#agent.purgeSource(key.slice(0, separator), key.slice(separator + 1)); this.#presentations.features.purgeSource(key.slice(0, separator), key.slice(separator + 1)); } } });
+      purgePrivate: (targets) => { const references = this.#knowledge.purgeTargets(targets); this.#academic.purgeTargets(targets, references); this.#feed.purgeManaged(targets); this.#chat.purgeManaged(targets); for (const target of targets) { const match = /^(group|channel|direct)_message:(.+)$/.exec(target); if (match) this.messageReceipts.purge(match[1] as MessageScope, match[2]!); } this.#exams?.purgeTargets(targets); this.#purgeExamSpaced(targets); for (const key of targets) { const separator = key.indexOf(':'); this.#community4.purgeMuseum(key.slice(0, separator), key.slice(separator + 1)); this.#agent.purgeSource(key.slice(0, separator), key.slice(separator + 1)); this.#presentations.features.purgeSource(key.slice(0, separator), key.slice(separator + 1)); } } });
     this.#notifications = new DemoNotificationsStore({ state: () => this.#state, active: () => this.#activeMember(), current: () => this.getSnapshot(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit() });
     this.#rooms = new DemoRoomsStore({ state: () => this.#state, active: () => this.#activeMember(), id: () => this.#id(), now: () => this.#now(), emit: () => this.#emit(),
       sourceAvailable: (kind, sourceId) => !this.#withdrawals.get(`${kind}:${sourceId}`)?.withdrawnAt });
@@ -347,11 +386,12 @@ export class DemoDataSource implements DataSource {
     this.#documents = new DemoDocumentStore({ snapshot: () => this.getSnapshot(), now: () => this.#now(), download: (id) => this.downloadResourceFile(id) }, this.#state);
     this.#exams = new DemoExamStore({ snapshot: () => this.getSnapshot(), now: () => this.#now(), getDocumentTranscription: (id) => this.#documents.getDocumentTranscription(id), resolveReviewedTranscription: (id) => this.#documents.resolveReviewedTranscription(id), sendToSpaced: (request) => this.#sendExamToSpaced(request) }, this.#state);
     this.#guideAi = new DemoGuideAiStore({ snapshot: () => this.getSnapshot(), now: () => this.#now(), changed: () => this.#emit(),
+      resolveExamMaterial: async (ref) => { const value = await this.#exams.getGuideExamMaterial(ref.refId, ref.examVersion!, ref.includeSolutions); return { kind: 'exam', refId: value.id, version: value.version, title: value.title, subjectId: value.subjectId, termId: value.termId, visibility: value.visibility, fields: value.fields, omissions: value.omissions }; },
       publish: (input, refs, target) => {
         const me = this.#activeMember(); const checked = this.#checkGuide(input); const now = this.#now();
         const existing = target ? this.#guide(target.id) : undefined;
         if (existing) { this.#guideExpected(existing.id, target!.expectedVersion); this.#knowledge.captureGuide(existing.id); }
-        const prepared = refs.map((ref) => ({ ...ref, sourceVersion: this.#sourceVersion(ref, checked.subjectId, checked.termId) }));
+        const prepared = refs.map((ref) => ({ ...ref, sourceVersion: this.#sourceVersion(ref, checked.subjectId, undefined) }));
         const guide: StudyGuide = existing ? { ...existing, ...checked, version: existing.version + 1, updatedAt: now, updatedBy: me.id }
           : { id: this.#id(), ...checked, version: 1, createdBy: me.id, createdAt: now, updatedBy: me.id, updatedAt: now };
         this.#state.guides = existing ? this.#state.guides.map((row) => row.id === guide.id ? guide : row) : [...this.#state.guides, guide];
@@ -359,6 +399,12 @@ export class DemoDataSource implements DataSource {
           sourceVersion: ref.sourceVersion, status: ref.used ? 'processed' : 'pending', reason: ref.used ? '' : 'Preparada, pero no citada en esta versión.', topics: ref.topics, addedBy: me.id, addedAt: now }))];
         this.#knowledge.captureGuide(guide.id, me.id); this.#emit(); return { id: guide.id, version: guide.version };
       }, download: (id) => this.downloadResourceFile(id) });
+    this.#guideMaterials = new DemoGuideMaterialsStore({ snapshot: () => this.getSnapshot(), now: () => this.#now(),
+      listExams: (subjectId) => this.#exams.listGuideExamMaterials(subjectId), exam: (id, version, includeSolutions) => this.#exams.getGuideExamMaterial(id, version, includeSolutions),
+      getTranscription: (id) => this.#guideAi.materialTranscription(id) }, this.#state);
+    this.appPresence = new DemoAppPresenceStore({ state, member: () => this.#state.members.find(member => member.id === this.#viewerId),
+      members: () => this.#state.members, now: () => this.#now(), emit: () => this.#emit() }, presenceEnvironment);
+    this.appPresence.connect();
   }
 
   get viewerId(): Id {
@@ -378,6 +424,15 @@ export class DemoDataSource implements DataSource {
   unblockEmail = (...args: Parameters<MembershipActions['unblockEmail']>) => this.#membership.unblockEmail(...args);
   getMyMembershipAccess = (...args: Parameters<MembershipActions['getMyMembershipAccess']>) => this.#membership.getMyMembershipAccess(...args);
 
+  saveVisualProject = (input: VisualProjectInput) => this.#visualScenes.transaction(() => this.#visualProjects.save(input));
+  setVisualProjectVisibility = (id: Id, visibility: VisualProjectVisibility, expectedVersion: number) => this.#visualScenes.transaction(() => this.#visualProjects.visibility(id, visibility, expectedVersion));
+  archiveVisualProject = (id: Id, archived: boolean, expectedVersion: number) => this.#visualScenes.transaction(() => this.#visualProjects.archive(id, archived, expectedVersion));
+  getVisualScene = (projectId: Id) => this.#visualScenes.get(projectId);
+  saveVisualScene = (input: VisualSceneInput) => this.#visualScenes.save(input);
+  createVisualModelAsset = (projectId: Id, requestId: string, name: string) => this.#visualScenes.createAsset(projectId, requestId, name);
+  discardVisualModelAssets = (projectId: Id, assets: { id: Id; expectedVersion: number }[]) => this.#visualScenes.discard(projectId, assets);
+
+  signalAction = (command: SignalCommand) => this.#signals.action(command);
   createCodingChallenge = (...args: Parameters<PracticeActions['createCodingChallenge']>) => this.#practice.createCodingChallenge(...args);
   unlockChallengeHint = (...args: Parameters<PracticeActions['unlockChallengeHint']>) => this.#practice.unlockChallengeHint(...args);
   saveChallengeSolution = (...args: Parameters<PracticeActions['saveChallengeSolution']>) => this.#practice.saveChallengeSolution(...args);
@@ -410,6 +465,14 @@ export class DemoDataSource implements DataSource {
   previewAgentAi = (...args: Parameters<AgentAiActions['previewAgentAi']>) => this.#agent.previewAgentAi(...args);
   runAgentAiStep = () => this.#agent.runAgentAiStep();
   listAgentAiRuns = () => this.#agent.listAgentAiRuns();
+  readFeedThread = (...args: Parameters<FeedInteractionActions['readFeedThread']>) => this.#feedInteractions.readFeedThread(...args);
+  resolveChatPosts = (...args: Parameters<ChatPostActions['resolveChatPosts']>) => resolveDemoChatPosts(this, args[0], target => this.#feedInteractions.resolveChatPostPreview(target));
+  searchChatPosts = (...args: Parameters<ChatPostActions['searchChatPosts']>) => searchDemoChatPosts(this, args[0], args[1], target => this.#feedInteractions.resolveChatPostPreview(target));
+  addFeedThreadComment = (...args: Parameters<FeedInteractionActions['addFeedThreadComment']>) => this.#feedInteractions.addFeedThreadComment(...args);
+  deleteFeedThreadComment = (...args: Parameters<FeedInteractionActions['deleteFeedThreadComment']>) => this.#feedInteractions.deleteFeedThreadComment(...args);
+  createFeedShare = (...args: Parameters<FeedInteractionActions['createFeedShare']>) => this.#feedInteractions.createFeedShare(...args);
+  listFeedShares = (...args: Parameters<FeedInteractionActions['listFeedShares']>) => this.#feedInteractions.listFeedShares(...args);
+  revokeFeedShare = (...args: Parameters<FeedInteractionActions['revokeFeedShare']>) => this.#feedInteractions.revokeFeedShare(...args);
   toggleFeedReaction = (...args: Parameters<FeedActions['toggleFeedReaction']>) => this.#feed.toggleFeedReaction(...args);
   createFeedPost = (...args: Parameters<FeedActions['createFeedPost']>) => this.#feed.createFeedPost(...args);
   editFeedPost = (...args: Parameters<FeedActions['editFeedPost']>) => this.#feed.editFeedPost(...args);
@@ -468,6 +531,11 @@ export class DemoDataSource implements DataSource {
   prepareExamMaterial = (...args: Parameters<ExamActions['prepareExamMaterial']>) => this.#exams.prepareExamMaterial(...args);
   generateExamQuestions = (...args: Parameters<ExamActions['generateExamQuestions']>) => this.#exams.generateExamQuestions(...args);
   getExamGeneration = (...args: Parameters<ExamActions['getExamGeneration']>) => this.#exams.getExamGeneration(...args);
+  listGuideExamMaterials = (...args: Parameters<GuideMaterialsActions['listGuideExamMaterials']>) => this.#guideMaterials.listGuideExamMaterials(...args);
+  getGuideExamMaterial = (...args: Parameters<GuideMaterialsActions['getGuideExamMaterial']>) => this.#guideMaterials.getGuideExamMaterial(...args);
+  getGuideMaterialSelection = (...args: Parameters<GuideMaterialsActions['getGuideMaterialSelection']>) => this.#guideMaterials.getGuideMaterialSelection(...args);
+  saveGuideMaterialSelection = (...args: Parameters<GuideMaterialsActions['saveGuideMaterialSelection']>) => this.#guideMaterials.saveGuideMaterialSelection(...args);
+  listGuideMaterialSelections = () => this.#guideMaterials.listGuideMaterialSelections();
   prepareGuideAiDraft = (...args: Parameters<GuideAiActions['prepareGuideAiDraft']>) => this.#guideAi.prepareGuideAiDraft(...args);
   refreshGuideAiDraft = (...args: Parameters<GuideAiActions['refreshGuideAiDraft']>) => this.#guideAi.refreshGuideAiDraft(...args);
   listGuideAiDrafts = () => this.#guideAi.listGuideAiDrafts();
@@ -475,9 +543,11 @@ export class DemoDataSource implements DataSource {
   getGuideAiFile = (...args: Parameters<GuideAiActions['getGuideAiFile']>) => this.#guideAi.getGuideAiFile(...args);
   saveGuideAiTranscription = (...args: Parameters<GuideAiActions['saveGuideAiTranscription']>) => this.#guideAi.saveGuideAiTranscription(...args);
   runGuideAiStep = (...args: Parameters<GuideAiActions['runGuideAiStep']>) => this.#guideAi.runGuideAiStep(...args);
+  reviewGuideAiTopics = (...args: Parameters<GuideAiActions['reviewGuideAiTopics']>) => this.#guideAi.reviewGuideAiTopics(...args);
   updateGuideAiDraft = (...args: Parameters<GuideAiActions['updateGuideAiDraft']>) => this.#guideAi.updateGuideAiDraft(...args);
   cancelGuideAiDraft = (...args: Parameters<GuideAiActions['cancelGuideAiDraft']>) => this.#guideAi.cancelGuideAiDraft(...args);
   publishGuideAiDraft = (...args: Parameters<GuideAiActions['publishGuideAiDraft']>) => this.#guideAi.publishGuideAiDraft(...args);
+  createGuideFromMaterials = (...args: Parameters<GuideAiActions['createGuideFromMaterials']>) => this.#guideAi.createGuideFromMaterials(...args);
   getGuideAiProvenance = (...args: Parameters<GuideAiActions['getGuideAiProvenance']>) => this.#guideAi.getGuideAiProvenance(...args);
 
   createStudyRoom = (...args: Parameters<StudyRoomActions['createStudyRoom']>) => this.#rooms.createStudyRoom(...args);
@@ -498,7 +568,9 @@ export class DemoDataSource implements DataSource {
   /** Solo en modo de prueba: ver la app como otro miembro para revisar permisos. */
   setViewer(id: Id) {
     this.#assertAlive();
+    this.liveDrafts.clearSession();
     this.#viewerId = id;
+    this.appPresence.refreshMember();
     this.#emit();
   }
 
@@ -509,12 +581,18 @@ export class DemoDataSource implements DataSource {
   }
 
   getSnapshot(): Snapshot {
+    if (!this.#disposed && this.#signals.purgeDue()) {
+      this.#snapshot = undefined;
+      queueMicrotask(() => { if (!this.#disposed) this.#emit(); });
+    }
     if (!this.#disposed && this.#trash.purgeDue()) {
       for (const key of this.#trash.purgedKeys()) this.#withdrawals.delete(key);
       this.#snapshot = undefined;
       queueMicrotask(() => { if (!this.#disposed) this.#emit(); });
     }
     this.#snapshot ??= this.#buildSnapshot();
+    this.#snapshot.messageReceipts = this.messageReceipts.own();
+    this.messageReceipts.cacheApplied(this.#snapshot);
     return this.#snapshot;
   }
 
@@ -522,14 +600,18 @@ export class DemoDataSource implements DataSource {
   dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
+    this.appPresence.dispose();
     for (const url of this.#objectUrls) {
       if (typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(url);
     }
     this.#objectUrls.clear();
     this.#academic.dispose();
+    this.#visualScenes.dispose();
     this.#guideAi.dispose();
     this.#exams.dispose();
     this.#chat.dispose();
+    this.liveDrafts.dispose();
+    this.messageReceipts.dispose();
     this.#notifications.dispose();
     this.#profiles = [];
     sharedDemoListeners.get(this.#state)?.delete(this.#invalidate);
@@ -541,6 +623,7 @@ export class DemoDataSource implements DataSource {
 
   completeOnboarding() { this.#activeMember(); this.#onboardingCompleted = true; this.#emit(); }
   setTyping(scope: MessageScope, conversationId: Id, typing: boolean) { this.#chat.setTyping(scope, conversationId, typing); }
+  setLiveDraftSharing(enabled: boolean) { this.liveDrafts.setSharingEnabled(enabled); }
 
   #assertAlive(): void {
     if (this.#disposed) throw new Error('La sesión de prueba ya terminó.');
@@ -551,9 +634,12 @@ export class DemoDataSource implements DataSource {
     const me = s.members.find((m) => m.id === this.#viewerId);
     if (me?.status !== 'active') {
       return {
+        onlineMemberIds: [],
         ...emptyNotifications(),
         trashEntries: [],
         ...emptyPractice(),
+        visualProjects: [],
+        signals: emptySignalsSnapshot(),
         ...emptyCommunity4(),
         ...emptyAgent(),
         ...emptyFeed(),
@@ -637,6 +723,8 @@ export class DemoDataSource implements DataSource {
       ...emptyNotifications(),
       trashEntries: [],
       ...emptyPractice(),
+      visualProjects: [],
+      signals: emptySignalsSnapshot(),
       ...emptyCommunity4(),
       ...emptyAgent(),
       ...emptyFeed(),
@@ -647,6 +735,7 @@ export class DemoDataSource implements DataSource {
       connection: 'ready',
       me,
       members: s.members,
+      onlineMemberIds: this.appPresence?.onlineMemberIds() ?? [],
       invitations: isCreator(me) ? s.invitations : [],
       inviteLinks: isCreator(me) ? s.inviteLinks : [],
       subjects: s.subjects,
@@ -661,7 +750,7 @@ export class DemoDataSource implements DataSource {
       reactions: s.reactions.filter((r) => readable.has(`${r.scope}:${r.messageId}`)),
       stickerPacks,
       stickers: s.stickers.filter((x) => packIds.has(x.packId) || sent.has(x.id)),
-      chatCommands: s.chatCommands.filter((c) => c.ownerId === me.id),
+      chatCommands: s.chatCommands.filter((c) => c.ownerId === me.id || (c.visibility === 'classroom' && s.members.some(m => m.id === c.ownerId && m.status === 'active'))),
       birthdays: s.birthdays,
       activities: s.activities,
       evidences: s.evidences.map((row) => ({ ...row, version: row.version ?? 1 })),
@@ -706,7 +795,12 @@ export class DemoDataSource implements DataSource {
     combined.workRevisions = combined.workRevisions.filter((row) => workIds.has(row.workId)); combined.workReviews = combined.workReviews.filter((row) => workIds.has(row.workId)); combined.workFiles = combined.workFiles.filter((row) => workIds.has(row.workId));
     const evidenceIds = new Set(combined.evidences.map((row) => row.id));
     combined.academicComments = combined.academicComments.filter((row) => row.targetKind === 'work' ? workIds.has(row.targetId) : evidenceIds.has(row.targetId));
+    combined.visualProjects = this.#visualScenes.summaries(this.#visualProjects.snapshot());
     combined.resourceFiles = [...new Map([...combined.resourceFiles, ...this.#academic.resources().filter((file) => demoReferencedFileReadable(combined, file.id))].map((file) => [file.id, file])).values()].filter((file) => {
+      if (file.targetKind === 'visual_project') {
+        const project = combined.visualProjects.find((row) => row.id === file.targetId);
+        return project?.authorId === me.id || Boolean(project && !file.removedAt && project.coverFileId === file.id);
+      }
       if (demoReferencedFileReadable(combined, file.id)) return true;
       if (this.#chat.handles(file.targetKind)) return true; // La tienda de chat filtra retiradas y excepciones de reportes.
       if (this.#withdrawnForInteraction(file.targetKind, file.targetId)) return false;
@@ -717,6 +811,7 @@ export class DemoDataSource implements DataSource {
       }
       return true;
     });
+    combined.resourceFiles.push(...this.#visualScenes.resources());
     combined.contributionOrigins = this.#trash.contributionOrigins(this.#academic.resources(), combined);
     combined.trashEntries = this.#trash.snapshot(me.id);
     combined.guideAiSourceAvailability = this.#guideAi.sourceAvailability(combined);
@@ -741,7 +836,7 @@ export class DemoDataSource implements DataSource {
     result.groupMessages = result.groupMessages.map((row) => redact(row, 'group_message'));
     result.channelMessages = result.channelMessages.map((row) => redact(row, 'channel_message'));
     result.reactions = result.reactions.filter((row) => row.scope === 'direct' || !this.#withdrawals.get(`${row.scope}_message:${row.messageId}`)?.withdrawnAt);
-    return { ...result, ...this.#notifications.snapshot(result), ...this.#practice.snapshot(), ...this.#community4.snapshot(result), ...this.#agent.snapshot(result), ...this.#feed.snapshot(result) };
+    return this.#feedInteractions.filterSnapshot({ ...result, liveDraftSharingEnabled: this.liveDrafts.sharingEnabled(me.id), signals: this.#signals.snapshot(result), ...this.#notifications.snapshot(result), ...this.#practice.snapshot(), ...this.#community4.snapshot(result), ...this.#agent.snapshot(result), ...this.#feed.snapshot(result) });
   }
 
   #emit() {
@@ -764,7 +859,8 @@ export class DemoDataSource implements DataSource {
   }
 
   #id(): Id {
-    const next = sharedDemoIds.get(this.#state) ?? 1000;
+    const next = Math.max(sharedDemoIds.get(this.#state) ?? 1000,
+      ...this.#state.visualProjects.map(project => /^\d+$/.test(project.id) ? Number(project.id) + 1 : 0));
     sharedDemoIds.set(this.#state, next + 1);
     return String(next);
   }
@@ -780,8 +876,18 @@ export class DemoDataSource implements DataSource {
     return this.#state.members.some((m) => m.id === id && m.status === 'active');
   }
 
+  #visualSource(link: VisualProjectLink): { public: boolean } | undefined {
+    if (!this.#canReadResource(link.kind, link.id) || this.#withdrawnForInteraction(link.kind, link.id)) return undefined;
+    const row = link.kind === 'assignment' ? this.#state.assignments.find((item) => item.id === link.id)
+      : link.kind === 'activity' ? this.#state.activities.find((item) => item.id === link.id)
+        : link.kind === 'note' ? this.#state.notes.find((item) => item.id === link.id) : this.#state.guides.find((item) => item.id === link.id);
+    if (!row || 'withdrawnAt' in row && row.withdrawnAt) return undefined;
+    return { public: link.kind !== 'note' || (row as Note).visibility === 'group' };
+  }
+
   #contentRow(kind: string, id: Id) {
-    return kind === 'note' ? this.#state.notes.find((row) => row.id === id)
+    return kind === 'visual_project' ? this.#state.visualProjects.find((row) => row.id === id)
+      : kind === 'note' ? this.#state.notes.find((row) => row.id === id)
       : kind === 'guide' ? this.#state.guides.find((row) => row.id === id)
         : kind === 'question' ? this.#state.questions.find((row) => row.id === id)
           : kind === 'answer' ? this.#state.answers.find((row) => row.id === id)
@@ -803,6 +909,10 @@ export class DemoDataSource implements DataSource {
     const me = this.#state.members.find((member) => member.id === this.#viewerId);
     if (me?.status !== 'active') return false;
     if (this.#trash.blocksRead(kind, id)) return false;
+    if (kind === 'visual_project') {
+      const project = this.#state.visualProjects.find((row) => row.id === id);
+      return Boolean(project && (project.authorId === me.id || project.visibility === 'group' && !project.archived));
+    }
     if (kind === 'assignment') return this.#state.assignments.some((row) => row.id === id);
     if (kind === 'activity') return this.#state.activities.some((row) => row.id === id);
     const row = this.#contentRow(kind, id); if (!row) return false;
@@ -814,6 +924,7 @@ export class DemoDataSource implements DataSource {
     return !withdrawn || this.#contentAuthors(kind, id).includes(me.id) || me.isCreator;
   }
   #withdrawnForInteraction(kind: string, id: Id): boolean {
+    if (kind === 'visual_project') return this.#state.visualProjects.find((row) => row.id === id)?.archived ?? false;
     if (this.#withdrawals.get(`${kind}:${id}`)?.withdrawnAt || this.#trash.blocksRead(kind, id)) return true;
     if (kind === 'answer') { const row = this.#state.answers.find((item) => item.id === id); return !!row && this.#withdrawnForInteraction('question', row.questionId); }
     if (kind === 'feed_comment') { const row = this.#feed.raw().feedComments.find((item) => item.id === id); return !!row && this.#withdrawnForInteraction('feed_post', row.postId); }
@@ -832,7 +943,8 @@ export class DemoDataSource implements DataSource {
   #changedExtra(kind: ResourceTargetKind | WithdrawableKind, id: Id) {
     const me = this.#activeMember(); const now = this.#now();
     const previousGuide = kind === 'guide' ? this.#state.guides.find((row) => row.id === id) : undefined;
-    if (kind === 'note') this.#state.notes = this.#state.notes.map((row) => row.id === id ? { ...row, version: row.version + 1, updatedAt: now } : row);
+    if (kind === 'visual_project') this.#state.visualProjects = this.#state.visualProjects.map((row) => row.id === id ? { ...row, version: row.version + 1, updatedAt: now.getTime() } : row);
+    else if (kind === 'note') this.#state.notes = this.#state.notes.map((row) => row.id === id ? { ...row, version: row.version + 1, updatedAt: now } : row);
     else if (kind === 'guide') this.#state.guides = this.#state.guides.map((row) => row.id === id ? { ...row, version: row.version + 1, updatedBy: me.id, updatedAt: now } : row);
     else if (kind === 'question') this.#state.questions = this.#state.questions.map((row) => row.id === id ? { ...row, version: (row.version ?? 1) + 1 } : row);
     else if (kind === 'answer') this.#state.answers = this.#state.answers.map((row) => row.id === id ? { ...row, version: (row.version ?? 1) + 1 } : row);
@@ -1288,10 +1400,21 @@ export class DemoDataSource implements DataSource {
   commentAcademic(kind: 'work' | 'evidence', id: Id, value: string) { return this.#academic.commentAcademic(kind, id, value); }
   saveActivityLinks(id: Id, assignments: Id[], notes: Id[], expectedVersion?: number) { return this.#academic.saveActivityLinks(id, assignments, notes, expectedVersion); }
   restorePageSnapshot(page: ProgressTargetKind, id: Id, version: number, expectedVersion: number) { return this.#academic.restorePageSnapshot(page, id, version, expectedVersion); }
-  attachResourceFile(kind: ResourceTargetKind, id: Id, file: File, expectedVersion?: number, transfer?: ResourceTransferOptions) {
+  async attachResourceFile(kind: ResourceTargetKind, id: Id, file: File, expectedVersion?: number, transfer?: ResourceTransferOptions) {
     this.#activeMember();
+    if (kind === 'visual_model') return this.#visualScenes.upload(id, file, expectedVersion, transfer);
     if (this.#chat.handles(kind)) return this.#chat.attachResourceFile(kind, id, file, expectedVersion, transfer);
     if (!this.#canReadResource(kind, id) || this.#withdrawnForInteraction(kind, id)) return Promise.reject(new Error('El recurso no está disponible.'));
+    if (kind === 'visual_project') {
+      return this.#visualScenes.transaction(async () => {
+        this.#extraTarget(kind, id, true);
+        const problem = visualProjectCoverError(file.name, file.type, file.size);
+        if (problem) throw new Error(problem);
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        if (detectImageType(bytes) !== file.type) throw new Error('La portada no contiene una imagen PNG, JPEG o WebP válida.');
+        return this.#academic.attachResourceFile(kind, id, file, expectedVersion, transfer);
+      });
+    }
     if ((kind === 'profile' || kind === 'profile_cover') && (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size <= 0 || file.size > 5 * 1024 * 1024)) return Promise.reject(new Error(kind === 'profile' ? 'La foto debe ser PNG, JPEG o WebP de hasta 5 MB.' : 'La portada debe ser PNG, JPEG o WebP de hasta 5 MB.'));
     return this.#academic.attachResourceFile(kind, id, file, expectedVersion, transfer);
   }
@@ -1300,18 +1423,29 @@ export class DemoDataSource implements DataSource {
     const file = this.getSnapshot().resourceFiles.find((row) => row.id === id);
     if (!file) throw new Error('El archivo no existe o no tienes acceso.'); return file;
   }
-  removeResourceFile(id: Id, expectedVersion?: number) { const file = this.#resourceFile(id); return this.#chat.handles(file.targetKind) ? this.#chat.removeResourceFile(id, expectedVersion) : this.#academic.removeResourceFile(id, expectedVersion); }
+  removeResourceFile(id: Id, expectedVersion?: number) { const file = this.#resourceFile(id); if (file.targetKind === 'visual_model') throw new Error('Libera los modelos desde la escena para comprobar todas sus vistas y pasos.'); return this.#chat.handles(file.targetKind) ? this.#chat.removeResourceFile(id, expectedVersion) : this.#academic.removeResourceFile(id, expectedVersion); }
   restoreResourceFile(id: Id, expectedVersion: number) { const file = this.#resourceFile(id); return this.#chat.handles(file.targetKind) ? this.#chat.restoreResourceFile(id, expectedVersion) : this.#academic.restoreResourceFile(id, expectedVersion); }
   async discardResourceUpload(_kind: ResourceTargetKind, _id: Id, _file: File): Promise<Id | undefined> {
     this.#activeMember();
     // La demo confirma de forma atómica: no reserva fragmentos remotos pendientes.
     return undefined;
   }
-  async downloadResourceFile(id: Id, transfer?: ResourceTransferOptions) { const file = this.#resourceFile(id); return this.#chat.handles(file.targetKind) ? this.#chat.downloadResourceFile(id, transfer) : this.#academic.downloadResourceFile(id, transfer); }
+  async downloadResourceFile(id: Id, transfer?: ResourceTransferOptions) {
+    const actor = this.#activeMember().id;
+    if (this.#visualScenes.ownsFile(id)) return this.#visualScenes.download(id, transfer);
+    const file = this.#resourceFile(id);
+    if (file.targetKind === 'visual_project' && file.removedAt) throw new Error('La portada fue retirada.');
+    const pending = this.#chat.handles(file.targetKind) ? this.#chat.downloadResourceFile(id, transfer) : this.#academic.downloadResourceFile(id, transfer);
+    if (file.targetKind !== 'visual_project') return pending;
+    const blob = await pending;
+    if (this.#activeMember().id !== actor) throw new Error('La sesión cambió. Vuelve a abrir el proyecto.');
+    this.#resourceFile(id);
+    return blob;
+  }
 
   createChatChannel(input: CreateChatChannelInput) { return this.#chat.createChatChannel(input); }
   setChatChannelArchived(id: Id, archived: boolean) { return this.#chat.setChatChannelArchived(id, archived); }
-  sendChannelMessage(id: Id, text: string, replyToId?: Id) { return this.#batch(() => { const messageId = this.#chat.sendChannelMessage(id, text, replyToId); this.#notifications.notifyMessage('channel', messageId); return messageId; }); }
+  sendChannelMessage(id: Id, text: string, replyToId?: Id) { return this.#batch(() => { const messageId = this.#chat.sendChannelMessage(id, text, replyToId); this.messageReceipts.track('channel', id, messageId); this.#notifications.notifyMessage('channel', messageId); return messageId; }); }
   markConversationRead(scope: MessageScope, conversationId: Id, messageId: Id) { return this.#batch(() => { this.#chat.markConversationRead(scope, conversationId, messageId); this.#notifications.suppressConversationNotifications(scope, conversationId); }); }
   setConversationMuted(scope: MessageScope, conversationId: Id, muted: boolean) { return this.#chat.setConversationMuted(scope, conversationId, muted); }
   setMemberBlocked(memberId: Id, blocked: boolean) { return this.#chat.setMemberBlocked(memberId, blocked); }
@@ -1386,6 +1520,7 @@ export class DemoDataSource implements DataSource {
       replyToId: this.#replyTo('group', me, replyToId),
     };
     this.#state.groupMessages = [...this.#state.groupMessages, message];
+    this.messageReceipts.track('group', 'general', message.id);
     this.#emit();
     this.#notifications.notifyMessage('group', message.id);
     return message.id;
@@ -1424,6 +1559,7 @@ export class DemoDataSource implements DataSource {
       replyToId: this.#replyTo('direct', me, replyToId, conversationId),
     };
     this.#state.directMessages = [...this.#state.directMessages, message];
+    this.messageReceipts.track('direct', conversationId, message.id);
     this.#emit();
     this.#notifications.notifyMessage('direct', message.id);
     return message.id;
@@ -1466,6 +1602,7 @@ export class DemoDataSource implements DataSource {
   }
 
   toggleReaction(scope: MessageScope, messageId: Id, emoji: string) {
+    emoji = normalizeReaction(emoji) ?? emoji;
     if (scope !== 'direct' && this.#withdrawals.get(`${scope}_message:${messageId}`)?.withdrawnAt) throw new Error('El mensaje está retirado.');
     if (scope === 'channel') return this.#chat.toggleReaction(scope, messageId, emoji);
     const me = this.#activeMember();
@@ -1545,33 +1682,32 @@ export class DemoDataSource implements DataSource {
 
   saveChatCommand(input: SaveChatCommandInput): Id {
     const me = this.#activeMember();
-    const name = normalizeCommandName(input.name);
-    const own = this.#state.chatCommands.filter((c) => c.ownerId === me.id && c.id !== input.id);
-    const problem = commandNameError(name, own.map((c) => c.name));
-    if (problem) throw new Error(problem);
-    const text = requireText(input.text, 'El texto del comando', 2000);
-    const description = input.description.trim().slice(0, 80);
-    if (input.id) {
-      const existing = this.#state.chatCommands.find((c) => c.id === input.id && c.ownerId === me.id);
-      if (!existing) throw new Error('El comando no existe.');
-      this.#state.chatCommands = this.#state.chatCommands.map((c) =>
-        c.id === input.id ? { ...c, name, description, text } : c,
-      );
-      this.#emit();
-      return existing.id;
+    const existing = input.id ? this.#state.chatCommands.find(c => c.id === input.id) : undefined;
+    if (input.id && (!existing || existing.ownerId !== me.id)) throw new Error('Solo el autor puede editar este comando. Puedes crear una copia personal.');
+    if (existing && input.expectedVersion !== undefined && input.expectedVersion !== (existing.version ?? 1)) throw new Error('El comando cambió. Actualiza la lista antes de guardar.');
+    const fields = cleanChatCommand({ ...input, visibility: input.visibility ?? existing?.visibility,
+      actionKind: input.actionKind ?? existing?.actionKind, resourceKind: input.resourceKind ?? existing?.resourceKind });
+    const other = this.#state.chatCommands.filter(c => c.id !== input.id);
+    if (other.some(c => c.ownerId === me.id && c.name === fields.name)) throw new Error(`Ya tienes un comando «/${fields.name}».`);
+    if (fields.visibility === 'classroom' && other.some(c => c.visibility === 'classroom' && c.name === fields.name)) throw new Error(`Ya existe un comando del salón «/${fields.name}». Elige otro nombre.`);
+    if (existing) {
+      this.#state.chatCommands = this.#state.chatCommands.map(c => c.id === existing.id ? { ...c, ...fields, version: (c.version ?? 1) + 1 } : c);
+      this.#emit(); return existing.id;
     }
-    const command: ChatCommand = { id: this.#id(), ownerId: me.id, name, description, text, createdAt: this.#now() };
+    const command: ChatCommand = { id: this.#id(), ownerId: me.id, ...fields, version: 1, createdAt: this.#now() };
     this.#state.chatCommands = [...this.#state.chatCommands, command];
-    this.#emit();
-    return command.id;
+    this.#emit(); return command.id;
   }
 
   removeChatCommand(commandId: Id) {
     const me = this.#activeMember();
-    if (!this.#state.chatCommands.some((c) => c.id === commandId && c.ownerId === me.id)) {
-      throw new Error('El comando no existe.');
+    const existing = this.#state.chatCommands.find(c => c.id === commandId);
+    if (!existing || (existing.ownerId !== me.id && !(me.isCreator && existing.visibility === 'classroom'))) throw new Error('El comando no existe o no puedes retirarlo.');
+    if (existing.ownerId !== me.id) {
+      this.#state.chatCommands = this.#state.chatCommands.map(c => c.id === commandId ? { ...c, visibility: 'personal', version: (c.version ?? 1) + 1 } : c);
+      this.#emit(); return;
     }
-    this.#state.chatCommands = this.#state.chatCommands.filter((c) => c.id !== commandId);
+    this.#state.chatCommands = this.#state.chatCommands.filter(c => c.id !== commandId);
     this.#emit();
   }
 

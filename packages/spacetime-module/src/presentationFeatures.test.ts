@@ -6,7 +6,7 @@ import type { PresentationAiDraft } from '../../core/src/presentationAi';
 import type { PresentationAudio } from '../../core/src/presentationMedia';
 vi.mock('spacetimedb/server', () => {
   const builder: unknown = new Proxy({}, { get: () => () => builder }); const handler = (...args: unknown[]) => args.at(-1);
-  return { SenderError: class SenderError extends Error {}, t: new Proxy({}, { get: () => () => builder }), table: () => ({ rowType: builder }), schema: () => ({ reducer: handler, procedure: handler, init: handler, clientConnected: handler, view: handler }) };
+  return { SenderError: class SenderError extends Error {}, t: new Proxy({}, { get: () => () => builder }), table: () => ({ rowType: builder }), schema: () => ({ reducer: handler, procedure: handler, init: handler, clientConnected: handler, clientDisconnected: handler, view: handler }) };
 });
 import { presentation_ai, presentation_media, complete_presentation_attempt, set_presentation_reviewer, archive_presentation_practice, type Ctx } from './index';
 import { purgePresentationAiSource } from './presentationAiHandlers';

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Identity, Timestamp } from 'spacetimedb';
-vi.mock('spacetimedb/server', () => { const builder: unknown = new Proxy({}, { get: () => () => builder }); const handler = (...args: unknown[]) => args.at(-1); return { SenderError: class SenderError extends Error {}, t: new Proxy({}, { get: () => () => builder }), table: () => ({ rowType: builder }), schema: () => ({ reducer: handler, procedure: handler, init: handler, clientConnected: handler, view: handler }) }; });
+vi.mock('spacetimedb/server', () => { const builder: unknown = new Proxy({}, { get: () => () => builder }); const handler = (...args: unknown[]) => args.at(-1); return { SenderError: class SenderError extends Error {}, t: new Proxy({}, { get: () => () => builder }), table: () => ({ rowType: builder }), schema: () => ({ reducer: handler, procedure: handler, init: handler, clientConnected: handler, clientDisconnected: handler, view: handler }) }; });
 import { create_teaching_practice, save_teaching_practice, set_teaching_reviewer, start_teaching_practice, complete_teaching_practice, reopen_teaching_practice, answer_teaching_question, teaching_save_v2, teaching_read_history, my_teaching_versions, type Ctx } from './index';
 type Row = Record<string, unknown>;
 const owner = Identity.fromString('a'.repeat(64)), reviewer = Identity.fromString('b'.repeat(64)), admin = Identity.fromString('c'.repeat(64));

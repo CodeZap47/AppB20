@@ -1,0 +1,48 @@
+.guide-wizard { --wizard-accent: var(--accent, #315bce); padding: clamp(18px, 3vw, 32px); border-radius: 18px; }
+.guide-wizard__header { max-width: 72ch; }
+.guide-wizard__eyebrow { color: var(--wizard-accent); font-size: .72rem; font-weight: 700; letter-spacing: .1em; }
+.guide-wizard__header h2 { margin: 8px 0; font-size: clamp(1.4rem, 2.6vw, 1.9rem); }
+.guide-wizard__header p { color: var(--muted); line-height: 1.65; }
+.guide-wizard h3[tabindex="-1"]:focus { outline: none; }
+.guide-wizard h4[tabindex="-1"]:focus { outline: none; }
+.guide-wizard__steps { list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 0; margin: 28px 0; }
+.guide-wizard__steps li { display: flex; gap: 9px; align-items: center; padding: 12px 8px; color: var(--muted); border-bottom: 2px solid var(--border); font-size: .84rem; }
+.guide-wizard__steps li > span { flex: none; display: grid; place-items: center; width: 26px; height: 26px; border: 1px solid var(--border); border-radius: 50%; font-size: .8rem; }
+.guide-wizard__steps li[aria-current] { color: var(--wizard-accent); border-color: var(--wizard-accent); font-weight: 650; }
+.guide-wizard__steps li[aria-current] > span { color: var(--surface, white); border-color: var(--wizard-accent); background: var(--wizard-accent); }
+.guide-wizard__steps li[data-complete=true] > span { color: var(--wizard-accent); }
+.guide-wizard__settings { font-size: .85rem; color: var(--muted); }
+.guide-wizard__types { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 20px 0; }
+.guide-wizard__types > button { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; min-height: 104px; padding: 18px; text-align: start; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+.guide-wizard__types > button[aria-pressed=true] { border: 2px solid var(--wizard-accent); padding: 17px; background: color-mix(in srgb, var(--wizard-accent) 6%, var(--surface)); }
+.guide-wizard__types > button > span { font-size: .85rem; font-weight: 400; color: var(--muted); line-height: 1.5; }
+.guide-wizard__scope { padding: 14px 16px; background: var(--bg); border-radius: 10px; font-size: .9rem; line-height: 1.6; }
+.guide-wizard__actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin: 24px 0 12px; }
+.guide-wizard__actions button { min-height: 44px; }
+.guide-wizard__drafts { border-top: 1px solid var(--border); padding-top: 18px; margin-top: 28px !important; }
+.guide-wizard__drafts > section > ul { padding-left: 20px; }
+.guide-wizard__drafts li { margin-block: 12px; }
+.guide-topic-review { min-width: 0; margin-block: 24px; }
+.guide-topic-review__heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+.guide-topic-review__heading h4 { margin: 0; font-size: 1.15rem; }
+.guide-topic-review__topics { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; list-style: none; padding: 0; }
+.guide-topic-review__topics > li { border: 1px solid var(--border); border-radius: 12px; padding: 16px; border-top: 3px solid var(--wizard-accent); }
+.guide-topic-review__topics > li[data-coverage=thin] { border-top-color: #b37a20; }
+.guide-topic-review__topics > li[data-coverage=missing] { border-top-color: #bc514c; }
+.guide-topic-review__topics h5 { margin: 12px 0 6px; font-size: .95rem; }
+.guide-topic-review__topics p, .guide-topic-review__topics summary { font-size: .85rem; line-height: 1.6; }
+.guide-topic-review__questions { padding: 0; border: 0; min-width: 0; }
+.guide-topic-review__questions > legend { font-weight: 650; margin-block: 12px; }
+.guide-topic-review__question { margin-block: 16px; padding: 18px; border-radius: 12px; background: var(--bg); }
+.guide-topic-review__question textarea { margin-block: 10px; }
+.guide-topic-review__question > small { color: var(--muted); }
+.guide-topic-review__ack { display: flex; align-items: flex-start; gap: 10px; margin: 18px 0; line-height: 1.6; }
+.guide-topic-review__ack input { flex: none; width: auto; margin-top: 5px; }
+.guide-topic-review__answered { border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+@media (max-width: 600px) {
+  .guide-wizard { padding: 16px; }
+  .guide-wizard__steps { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 20px 0; }
+  .guide-wizard__types { grid-template-columns: 1fr; }
+  .guide-wizard__types > button { min-height: 88px; }
+  .guide-wizard__actions > button { width: 100%; }
+}

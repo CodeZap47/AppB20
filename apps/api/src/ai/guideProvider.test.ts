@@ -23,6 +23,19 @@ describe('Proveedor Gemini para Guías', () => {
     await createGuideProvider().generate({ ...input, step: { ...input.step, kind: 'synthesis' }, summaries: [{ paragraphs: [{ text: 'Resumen fiel.', citations: [input.fragments[0]!.id] }] }] });
     expect(body).toContain('Resumen fiel.'); expect(body).not.toContain('Material académico compartido.'); expect(body).toContain(input.fragments[0]!.id);
   });
+  it('diagnostica el temario con esquema propio y distingue las aclaraciones del alumno al generar', async () => {
+    let body: Record<string, unknown> = {};
+    const transport = vi.fn(async (_url, init) => { body = JSON.parse(String(init?.body)); return Response.json({ candidates: [{ content: { parts: [{ text: '{}' }] }, finishReason: 'STOP' }] }); });
+    vi.stubGlobal('fetch', transport);
+    const clarified = { ...preparation, input: { ...preparation.input, guideType: 'quarter' as const, period: '8', clarifications: [{ questionId: 'q1', topic: 'Tema', question: '¿Qué ejemplo?', answer: 'El ciclo while visto en clase.' }] } };
+    await createGuideProvider().generate({ ...input, preparation: clarified, step: { ...input.step, kind: 'assessment' } });
+    expect(body.generationConfig).toMatchObject({ responseJsonSchema: { required: ['topics', 'questions'] } });
+    expect(JSON.stringify(body.contents)).toContain('Material académico compartido.'); expect(JSON.stringify(body.contents)).not.toContain('El ciclo while visto en clase.');
+    expect(JSON.stringify(body.systemInstruction)).toContain('frecuencia');
+    await createGuideProvider().generate({ ...input, preparation: clarified });
+    expect(JSON.stringify(body.contents)).toContain('studentClarifications'); expect(JSON.stringify(body.contents)).toContain('El ciclo while visto en clase.');
+    expect(JSON.stringify(body.systemInstruction)).toContain('no las atribuyas a los archivos'); expect(transport).toHaveBeenCalledTimes(2);
+  });
   it.each([401,429,503])('errores %s no se reintentan y no revelan el cuerpo', async (status) => {
     const transport = vi.fn(async () => Response.json({ error: { code: status, message: 'fixture-secret-detail', status: 'TEST' } }, { status })); vi.stubGlobal('fetch', transport);
     await expect(createGuideProvider().generate(input)).rejects.not.toThrow('fixture-secret-detail'); expect(transport).toHaveBeenCalledTimes(1);

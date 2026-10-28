@@ -1,499 +1,129 @@
-import { useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { Link } from 'react-router';
-import { commandNameError, MAX_STICKERS_PER_PACK, normalizeCommandName } from '@b20/core';
+import { useRef, useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router';
+import { Dialog, Heading, Modal, ModalOverlay } from 'react-aria-components';
+import { CHAT_RESOURCE_KINDS, commandNameError, normalizeCommandName, type ChatResourceKind } from '@b20/core';
 import { useDataSource, useSnapshot } from '../data/DataContext';
-import type { ChatCommand } from '../data/types';
+import type { ChatCommand, SaveChatCommandInput } from '../data/types';
 import { Empty } from '../components/Empty';
 import { Icon } from '../components/Icon';
-import { useAction } from '../components/useAction';
+import { ToolPage } from '../components/messaging/ChatToolLayout';
+import { ChatButton } from '../components/messaging/Messaging';
+import { RESOURCE_LABELS } from '../components/messaging/ChatResourceCreatePanel';
+import { commandConversation } from '../lib/commandNavigation';
 import { memberName } from '../lib/format';
-import { prepareStickers, type PreparedStickers } from '../lib/stickerImport';
-import { StickerImage } from '../components/StickerImage';
-import { FilePicker } from '../components/FilePicker';
-import { UploadFileList, type UploadFileItem } from '../components/uploads/UploadFileList';
-import '../components/uploads/consumers.css';
+import { useAction } from '../components/useAction';
+import '../components/messaging/commands.css';
+export { StickersPage } from './StickerToolsPage';
 
-function ToolHeader({ title, subtitle }: { title: string; subtitle: string }) {
-  return (
-    <header className="thread__header">
-      <Link
-        to="/m/mensajes/directos"
-        className="icon-button thread__back"
-        aria-label="Ver todas las conversaciones"
-      >
-        <Icon name="back" />
-      </Link>
-      <div className="thread__heading">
-        <h2>{title}</h2>
-        <p>{subtitle}</p>
-      </div>
-      <Link to="/m/mensajes" className="button secondary thread__action">
-        Volver al chat
-      </Link>
-    </header>
-  );
-}
+const EMPTY = { name: '', description: '', text: '', visibility: 'personal' as const,
+  actionKind: 'text' as const, resourceKind: 'tarea' as ChatResourceKind };
+type CommandForm = Omit<SaveChatCommandInput, 'id' | 'expectedVersion'> & { visibility: 'personal' | 'classroom'; actionKind: 'text' | 'create'; resourceKind: ChatResourceKind };
+const BUILT_INS = [
+  ...CHAT_RESOURCE_KINDS.map(kind => ({ name: kind, title: RESOURCE_LABELS[kind], detail: 'Busca una referencia o crea un recurso desde el chat.' })),
+  { name: 'sticker', title: 'Stickers', detail: 'Abre el selector para enviar un sticker.' },
+  { name: 'codigo', title: 'Código', detail: 'Inserta un bloque de código editable.' },
+];
 
-function ToolPage({
-  title,
-  subtitle,
-  children,
-}: {
-  title: string;
-  subtitle: string;
-  children: ReactNode;
-}) {
-  return (
-    <>
-      <ToolHeader title={title} subtitle={subtitle} />
-      <div className="chat-tool">{children}</div>
-    </>
-  );
-}
-
-/** Importar paquetes de stickers (de WhatsApp u otros) y decidir cuáles comparte el grupo. */
-export function StickersPage() {
-  const source = useDataSource();
-  const { me, members, stickerPacks, stickers } = useSnapshot();
-  const { error, run } = useAction();
-  const [prepared, setPrepared] = useState<PreparedStickers | null>(null);
-  const [name, setName] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState('');
-  const [rows, setRows] = useState<UploadFileItem[]>([]);
-  const [stage, setStage] = useState<'preparing' | 'importing'>();
-  const working = useRef(false);
-  const attempt = useRef<{ name: string; files: File[] } | null>(null);
-
-  const take = async (list: File[]) => {
-    if (!list.length || working.current || attempt.current) return;
-    working.current = true;
-    setDone('');
-    setPrepared(null);
-    setBusy(true);
-    setStage('preparing');
-    setRows(list.map((file, index) => ({ id: `sticker-${index}`, name: file.name, size: file.size, type: file.type, state: 'preparing', progress: 0 })));
-    try {
-      const result = await run(() => prepareStickers(list));
-      if (result) {
-        setPrepared(result);
-        setName((current) => current || result.packName || '');
-        setRows(result.files.map((file, index) => ({ id: `sticker-${index}`, name: file.name, size: file.size,
-          type: file.type, state: 'selected', progress: 0 })));
-      } else setRows((current) => current.map((item) => ({ ...item, state: 'failed', error: 'No se pudo preparar este paquete.' })));
-    } finally {
-      working.current = false;
-      setStage(undefined);
-      setBusy(false);
-    }
-  };
-
-  const submit = async (e?: FormEvent) => {
-    e?.preventDefault();
-    if (!prepared?.files.length || working.current || (!attempt.current && !name.trim())) return;
-    working.current = true;
-    attempt.current ??= { name: name.trim(), files: prepared.files };
-    const pending = attempt.current;
-    setBusy(true);
-    setStage('importing');
-    setRows((current) => current.map((item) => ({ ...item, state: 'preparing', progress: 0, error: undefined })));
-    try {
-      const imported = await run(async () => { await source.importStickers(pending.name, pending.files); return true; });
-      if (!imported) {
-        setRows((current) => current.map((item) => ({ ...item, state: 'failed', error: 'La importación no terminó. Reintenta el paquete completo.' })));
-        return;
-      }
-      const n = pending.files.length;
-      setDone(
-        `${n === 1 ? 'Se importó 1 sticker' : `Se importaron ${n} stickers`} en «${pending.name}». Por ahora solo tú lo ves.`,
-      );
-      setRows((current) => current.map((item) => ({ ...item, state: 'complete', progress: 100 })));
-      attempt.current = null;
-      setPrepared(null);
-      setName('');
-    } finally {
-      working.current = false;
-      setStage(undefined);
-      setBusy(false);
-    }
-  };
-
-  const mine = stickerPacks.filter((p) => p.ownerId === me?.id);
-  const shared = stickerPacks.filter((p) => p.ownerId !== me?.id);
-  const count = (packId: string) => stickers.filter((s) => s.packId === packId).length;
-  const cover = (packId: string) => stickers.filter((s) => s.packId === packId).slice(0, 4);
-
-  return (
-    <ToolPage
-      title="Stickers"
-      subtitle="Trae tus stickers de WhatsApp para usarlos en los chats del grupo"
-    >
-      <section className="panel">
-        <h3 className="label">Importar un paquete</h3>
-        <form className="form" onSubmit={(e) => void submit(e)}>
-          <div className="b20-upload b20-upload--stickers">
-            <FilePicker onFiles={(files) => { void take(files); }} disabled={busy || Boolean(attempt.current)}
-              accept=".webp,.png,.gif,.jpg,.jpeg,.wastickers,.zip,image/webp,image/png,image/gif,image/jpeg"
-              maxSize={Infinity} label="Importar stickers" hint={`Imágenes WebP, PNG, GIF o JPEG, hasta 1 MB cada una, o paquetes .wastickers y .zip. Máximo ${MAX_STICKERS_PER_PACK} stickers.`} />
-            <UploadFileList items={rows} onRetry={prepared && !busy ? () => { void submit(); } : undefined} />
-            {busy && <p role="status">{stage === 'preparing' ? 'Preparando stickers…' : 'Importando stickers…'}</p>}
-          </div>
-
-          {prepared && (
-            <>
-              {prepared.files.length > 0 && (
-                <div className="sticker-preview" aria-label="Stickers listos para importar">
-                  {prepared.files.map((f, i) => (
-                    <PreviewImage key={`${f.name}-${i}`} file={f} />
-                  ))}
-                </div>
-              )}
-              {prepared.skipped.length > 0 && (
-                <ul className="file-picker__rejected" role="alert">
-                  {prepared.skipped.map((problem) => (
-                    <li key={problem}>{problem}</li>
-                  ))}
-                </ul>
-              )}
-              {prepared.files.length > 0 && (
-                <>
-                  <label className="field">
-                    <span className="field__label">Nombre del paquete</span>
-                    <input
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Por ejemplo: Reacciones del salón"
-                      maxLength={60}
-                      required
-                      disabled={busy || Boolean(attempt.current)}
-                    />
-                  </label>
-                  <div className="form__actions">
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={() => { setPrepared(null); setRows([]); attempt.current = null; }}
-                      disabled={busy}
-                    >
-                      Descartar
-                    </button>
-                    <button type="submit" disabled={busy || !name.trim()}>
-                      {busy
-                        ? 'Importando…'
-                        : prepared.files.length === 1
-                          ? 'Importar 1 sticker'
-                          : `Importar ${prepared.files.length} stickers`}
-                    </button>
-                  </div>
-                </>
-              )}
-            </>
-          )}
-          {error && (
-            <p className="error" role="alert">
-              {error}
-            </p>
-          )}
-          {done && (
-            <p className="success" role="status">
-              <Icon name="check" size={16} /> {done}
-            </p>
-          )}
-        </form>
-
-        <details className="howto">
-          <summary>¿Cómo saco mis stickers de WhatsApp?</summary>
-          <dl>
-            <dt>Android</dt>
-            <dd>
-              Abre la app Archivos y entra a{' '}
-              <em>Android › media › com.whatsapp › WhatsApp › Media › WhatsApp Stickers</em>. Ahí
-              están como .webp: elige los que quieras desde este celular.
-            </dd>
-            <dt>Computadora (WhatsApp Web o Escritorio)</dt>
-            <dd>
-              Abre el chat donde está el sticker, haz clic derecho sobre él y elige «Guardar imagen
-              como…». Después suelta los archivos aquí.
-            </dd>
-            <dt>iPhone</dt>
-            <dd>
-              WhatsApp no guarda los stickers como archivos en el iPhone. Usa WhatsApp Web en una
-              computadora, o un paquete .wastickers.
-            </dd>
-            <dt>Paquetes .wastickers</dt>
-            <dd>
-              Son los que exportan las apps para crear stickers. Se importan completos, con su
-              nombre.
-            </dd>
-          </dl>
-          <p className="muted">
-            Los paquetes empiezan privados. Compártelos con el grupo solo si tienes derecho a
-            hacerlo.
-          </p>
-        </details>
-      </section>
-
-      <section>
-        <h3 className="label">Tus paquetes</h3>
-        {mine.length === 0 ? (
-          <p className="muted">Todavía no importas ninguno.</p>
-        ) : (
-          <ul className="packs">
-            {mine.map((p) => (
-              <li key={p.id} className="pack">
-                <span className="pack__cover" aria-hidden="true">
-                  {cover(p.id).map((s) => (
-                    <StickerImage key={s.id} id={s.id} size={40} alt="" />
-                  ))}
-                </span>
-                <span className="pack__body">
-                  <strong>{p.name}</strong>
-                  <span className="muted">
-                    {stickerCount(count(p.id))} · {p.shared ? 'Lo ve todo el grupo' : 'Solo tú'}
-                  </span>
-                </span>
-                <span className="pack__actions">
-                  <label className="switch">
-                    <input
-                      type="checkbox"
-                      checked={p.shared}
-                      onChange={(e) =>
-                        run(() => source.setStickerPackShared(p.id, e.target.checked))
-                      }
-                    />
-                    Compartir con el grupo
-                  </label>
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label={`Quitar el paquete ${p.name}`}
-                    title="Quitar paquete"
-                    onClick={() => {
-                      if (
-                        confirm(
-                          `¿Quitar «${p.name}»? Los mensajes donde ya se usó seguirán mostrándolo.`,
-                        )
-                      ) {
-                        run(() => source.removeStickerPack(p.id));
-                      }
-                    }}
-                  >
-                    <Icon name="trash" size={18} />
-                  </button>
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {shared.length > 0 && (
-        <section>
-          <h3 className="label">Compartidos por el grupo</h3>
-          <ul className="packs">
-            {shared.map((p) => (
-              <li key={p.id} className="pack">
-                <span className="pack__cover" aria-hidden="true">
-                  {cover(p.id).map((s) => (
-                    <StickerImage key={s.id} id={s.id} size={40} alt="" />
-                  ))}
-                </span>
-                <span className="pack__body">
-                  <strong>{p.name}</strong>
-                  <span className="muted">
-                    {stickerCount(count(p.id))} · de {memberName(members, p.ownerId)}
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-    </ToolPage>
-  );
-}
-
-const stickerCount = (n: number) => (n === 1 ? '1 sticker' : `${n} stickers`);
-
-function PreviewImage({ file }: { file: File }) {
-  const [url] = useState(() =>
-    typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : '',
-  );
-  return (
-    <img src={url} alt={file.name} width={64} height={64} onLoad={() => URL.revokeObjectURL(url)} />
-  );
-}
-
-const EMPTY = { name: '', description: '', text: '' };
-
-/** Comandos propios: escribir `/nombre` en cualquier chat inserta su texto. */
+/** Personal templates and shared shortcuts use the same live command catalogue. */
 export function CommandsPage() {
   const source = useDataSource();
-  const { chatCommands } = useSnapshot();
-  const { error, run } = useAction();
+  const navigate = useNavigate();
+  const { me, members, chatCommands } = useSnapshot();
+  const { error, pending, run } = useAction();
   const [editing, setEditing] = useState<ChatCommand | null>(null);
-  const [form, setForm] = useState(EMPTY);
+  const [form, setForm] = useState<CommandForm>(EMPTY);
+  const [notice, setNotice] = useState('');
+  const [removing, setRemoving] = useState<ChatCommand | null>(null);
+  const working = useRef(false);
+  const editorRef = useRef<HTMLElement>(null);
   const name = normalizeCommandName(form.name);
-  const nameProblem = form.name
-    ? commandNameError(
-        name,
-        chatCommands.filter((c) => c.id !== editing?.id).map((c) => c.name),
-      )
-    : undefined;
+  const taken = chatCommands.filter(c => c.id !== editing?.id && (c.ownerId === me?.id ||
+    (form.visibility === 'classroom' && c.visibility === 'classroom'))).map(c => c.name);
+  const nameProblem = form.name ? commandNameError(name, taken) : undefined;
   const sorted = [...chatCommands].sort((a, b) => a.name.localeCompare(b.name));
-
+  const reset = () => { setEditing(null); setForm(EMPTY); };
+  const focusEditor = () => requestAnimationFrame(() => {
+    editorRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    editorRef.current?.querySelector<HTMLInputElement>('input')?.focus();
+  });
   const startEdit = (command: ChatCommand) => {
-    setEditing(command);
-    setForm({ name: command.name, description: command.description, text: command.text });
+    setEditing(command); setNotice('');
+    setForm({ name: command.name, description: command.description, text: command.text,
+      visibility: command.visibility ?? 'personal', actionKind: command.actionKind ?? 'text', resourceKind: command.resourceKind ?? 'tarea' });
+    focusEditor();
+  };
+  const copy = (command: ChatCommand) => {
+    const ownNames = new Set(chatCommands.filter(c => c.ownerId === me?.id).map(c => c.name));
+    let copyName = command.name;
+    let suffix = 1;
+    while (ownNames.has(copyName)) copyName = `${command.name.slice(0, 17)}-copia${suffix++ === 1 ? '' : suffix - 1}`;
+    setEditing(null); setForm({ name: copyName, description: command.description, text: command.text,
+      visibility: 'personal', actionKind: command.actionKind ?? 'text', resourceKind: command.resourceKind ?? 'tarea' });
+    setNotice('Copia personal preparada. Revisa el nombre y guarda tu comando.'); focusEditor();
+  };
+  const tryCommand = (command: { name: string; id?: string }) => {
+    if (!me) return;
+    void navigate(commandConversation(me.id), { state: { messageCommand: command.name, commandId: command.id } });
+  };
+  const submit = async (event: FormEvent) => {
+    event.preventDefault(); if (working.current || nameProblem) return;
+    working.current = true;
+    try {
+      const result = await run(() => source.saveChatCommand({ id: editing?.id, ...form, name,
+        resourceKind: form.actionKind === 'create' ? form.resourceKind : undefined, expectedVersion: editing?.version }));
+      if (result) { setNotice(`/${name} guardado. Ya está disponible ${form.visibility === 'classroom' ? 'para el salón' : 'en tus chats'}.`); reset(); }
+    } finally { working.current = false; }
+  };
+  const remove = async () => {
+    if (!removing || working.current) return;
+    working.current = true;
+    try {
+      const id = removing.id;
+      if (await run(async () => { await source.removeChatCommand(id); return true; })) {
+        setRemoving(null); setNotice('Comando retirado. Los mensajes que ya se enviaron se conservan.');
+        if (editing?.id === id) reset();
+      }
+    } finally { working.current = false; }
   };
 
-  const reset = () => {
-    setEditing(null);
-    setForm(EMPTY);
-  };
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (await run(() => source.saveChatCommand({ id: editing?.id, ...form }))) reset();
-  };
-
-  return (
-    <ToolPage title="Comandos" subtitle="Atajos que escribes con «/» en cualquier chat">
-      <section className="panel">
-        <h3 className="label">Comandos de la app</h3>
-        <ul className="commands">
-          <li>
-            <code>/tarea</code> <code>/trabajo</code> <code>/clase</code> <code>/nota</code>{' '}
-            <code>/pregunta</code>
-            <span className="muted">
-              Cita algo de los otros módulos. Escribe una palabra después para buscar.
-            </span>
-          </li>
-          <li>
-            <code>/sticker</code>
-            <span className="muted">Abre tus stickers.</span>
-          </li>
-          <li>
-            <code>/codigo</code>
-            <span className="muted">Inserta un bloque de código.</span>
-          </li>
-        </ul>
+  return <ToolPage title="Comandos" subtitle="Cita recursos, crea desde el chat y guarda tus propios atajos">
+    <div className="chat-commands">
+      <section className="chat-command-section" aria-labelledby="builtin-commands-title">
+        <header><p className="label">Explora los atajos</p><h3 id="builtin-commands-title">Comandos de la app</h3><p className="muted">Escribe / en una conversación. Puedes elegir un recurso existente o crear uno sin salir del chat.</p></header>
+        <div className="chat-command-catalogue">{BUILT_INS.map(c => <article key={c.name} className="chat-command-card">
+          <div><code>/{c.name}</code><h4>{c.title}</h4><p>{c.detail}</p></div>
+          <ChatButton type="button" variant="secondary" onClick={() => tryCommand(c)}>Probar en el chat</ChatButton>
+        </article>)}</div>
       </section>
 
-      <section className="panel">
-        <h3 className="label">{editing ? `Editar /${editing.name}` : 'Crear un comando'}</h3>
-        <form className="form" onSubmit={submit}>
-          <div className="form__grid">
-            <label className="field">
-              <span className="field__label">Nombre</span>
-              <span className="command-input">
-                <span aria-hidden="true">/</span>
-                <input
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="saludo"
-                  maxLength={25}
-                  required
-                  aria-invalid={Boolean(nameProblem)}
-                />
-              </span>
-              <span className={nameProblem ? 'field__hint error' : 'field__hint'}>
-                {nameProblem ?? 'Minúsculas, números o guiones, sin espacios.'}
-              </span>
-            </label>
-            <label className="field">
-              <span className="field__label">
-                Descripción <span className="field__optional">opcional</span>
-              </span>
-              <input
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-                placeholder="Para qué sirve"
-                maxLength={80}
-              />
-            </label>
-          </div>
-          <label className="field">
-            <span className="field__label">Texto que inserta</span>
-            <textarea
-              value={form.text}
-              onChange={(e) => setForm({ ...form, text: e.target.value })}
-              rows={4}
-              maxLength={2000}
-              required
-            />
-            <span className="field__hint">
-              Puedes incluir enlaces o código. Después de insertarlo puedes editarlo antes de
-              enviar.
-            </span>
-          </label>
-          {error && (
-            <p className="error" role="alert">
-              {error}
-            </p>
-          )}
-          <div className="form__actions">
-            {editing && (
-              <button type="button" className="secondary" onClick={reset}>
-                Cancelar
-              </button>
-            )}
-            <button
-              type="submit"
-              disabled={!form.name || !form.text.trim() || Boolean(nameProblem)}
-            >
-              {editing ? 'Guardar cambios' : 'Crear comando'}
-            </button>
-          </div>
+      <section className="chat-command-section chat-command-editor" ref={editorRef} aria-labelledby="command-editor-title">
+        <header><p className="label">Tu propio atajo</p><h3 id="command-editor-title">{editing ? `Editar /${editing.name}` : 'Crear un comando'}</h3><p className="muted">Inserta una plantilla o abre el formulario de un recurso. El mensaje siempre queda listo para revisar antes de enviar.</p></header>
+        <form className="form" onSubmit={submit} aria-busy={pending}>
+          <fieldset disabled={pending} className="chat-command-fields">
+            <div className="form__grid">
+              <label className="field"><span className="field__label">Nombre</span><span className="command-input"><span aria-hidden="true">/</span><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="saludo" maxLength={25} required aria-invalid={Boolean(nameProblem)} /></span><span className={nameProblem ? 'field__hint error' : 'field__hint'}>{nameProblem ?? 'De 1 a 24 letras, números o guiones.'}</span></label>
+              <label className="field"><span className="field__label">Descripción <span className="field__optional">opcional</span></span><input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Para qué sirve" maxLength={80} /></label>
+            </div>
+            <div className="form__grid">
+              <label className="field"><span className="field__label">Quién puede usarlo</span><select value={form.visibility} onChange={e => setForm({ ...form, visibility: e.target.value as CommandForm['visibility'] })}><option value="personal">Solo yo</option><option value="classroom">Todo el salón</option></select><span className="field__hint">Solo el autor puede editarlo. Un administrador puede retirar un comando compartido.</span></label>
+              <label className="field"><span className="field__label">Qué hace</span><select value={form.actionKind} onChange={e => setForm({ ...form, actionKind: e.target.value as CommandForm['actionKind'] })}><option value="text">Insertar texto</option><option value="create">Crear un recurso</option></select></label>
+            </div>
+            {form.actionKind === 'text' ? <label className="field"><span className="field__label">Texto que inserta</span><textarea value={form.text} onChange={e => setForm({ ...form, text: e.target.value })} rows={4} maxLength={2000} required /><span className="field__hint">Admite enlaces y bloques de código. Puedes editarlo antes de enviar.</span></label> : <label className="field"><span className="field__label">Recurso que crea</span><select value={form.resourceKind} onChange={e => setForm({ ...form, resourceKind: e.target.value as ChatResourceKind })}>{CHAT_RESOURCE_KINDS.map(kind => <option key={kind} value={kind}>{RESOURCE_LABELS[kind]}</option>)}</select><span className="field__hint">Abre un formulario dentro del chat; no publica ni envía nada por sí solo.</span></label>}
+            <div className="chat-command-preview"><span className="label">Vista previa</span><strong>/{name || 'nombre'}</strong>{form.actionKind === 'text' ? <pre>{form.text || 'El texto de tu plantilla aparecerá aquí.'}</pre> : <p>Abre el formulario para crear {RESOURCE_LABELS[form.resourceKind].toLowerCase()} y vuelve al borrador.</p>}</div>
+          </fieldset>
+          {error && <p className="error" role="alert">{error}</p>}
+          <div className="form__actions">{editing && <ChatButton type="button" variant="secondary" onClick={reset} disabled={pending}>Cancelar edición</ChatButton>}<ChatButton type="submit" loading={pending} disabled={!form.name || (form.actionKind === 'text' && !form.text.trim()) || Boolean(nameProblem)}>{editing ? 'Guardar cambios' : 'Crear comando'}</ChatButton></div>
         </form>
       </section>
-
-      <section>
-        <h3 className="label">Tus comandos</h3>
-        {sorted.length === 0 ? (
-          <Empty icon="chat" title="Todavía no tienes comandos">
-            Crea uno para lo que escribes seguido: un saludo, el enlace del repositorio del equipo o
-            una plantilla.
-          </Empty>
-        ) : (
-          <ul className="packs">
-            {sorted.map((c) => (
-              <li key={c.id} className="pack">
-                <span className="pack__body">
-                  <strong>
-                    <code>/{c.name}</code>{' '}
-                    {c.description && <span className="muted">· {c.description}</span>}
-                  </strong>
-                  <span className="pack__text">{c.text}</span>
-                </span>
-                <span className="pack__actions">
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label={`Editar /${c.name}`}
-                    onClick={() => startEdit(c)}
-                  >
-                    <Icon name="edit" size={18} />
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label={`Borrar /${c.name}`}
-                    onClick={() => {
-                      if (confirm(`¿Borrar /${c.name}?`)) {
-                        run(() => source.removeChatCommand(c.id));
-                        if (editing?.id === c.id) reset();
-                      }
-                    }}
-                  >
-                    <Icon name="trash" size={18} />
-                  </button>
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
+      {notice && <p className="chat-command-notice" role="status">{notice}</p>}
+      <section className="chat-command-section" aria-labelledby="saved-commands-title"><header><p className="label">Listos para usar</p><h3 id="saved-commands-title">Tus comandos y los del salón</h3></header>
+        {sorted.length === 0 ? <Empty icon="slash" title="Crea tu primer comando">Guarda un saludo, un enlace o un atajo para crear recursos.</Empty> : <ul className="chat-command-list">{sorted.map(c => <li key={c.id} className="chat-command-card"><div><code>/{c.name}</code><span className="chat-command-badge">{c.visibility === 'classroom' ? 'Del salón' : 'Personal'}</span><p>{c.description || (c.actionKind === 'create' ? `Crear ${RESOURCE_LABELS[c.resourceKind ?? 'tarea'].toLowerCase()}` : c.text)}</p><small>{memberName(members, c.ownerId)} · {c.actionKind === 'create' ? 'Abre un formulario' : 'Plantilla de texto'}</small></div><div className="chat-command-actions">
+          <ChatButton type="button" variant="secondary" onClick={() => tryCommand(c)}>Usar</ChatButton><ChatButton type="button" variant="tertiary" onClick={() => copy(c)}>Copiar</ChatButton>
+          {c.ownerId === me?.id && <ChatButton type="button" variant="tertiary" onClick={() => startEdit(c)} aria-label={`Editar /${c.name}`}><Icon name="edit" size={16} /></ChatButton>}
+          {(c.ownerId === me?.id || (me?.isCreator && c.visibility === 'classroom')) && <ChatButton type="button" variant="tertiary" onClick={() => setRemoving(c)} aria-label={`Retirar /${c.name}`}><Icon name="trash" size={16} /></ChatButton>}
+        </div></li>)}</ul>}
       </section>
-    </ToolPage>
-  );
+    </div>
+    <ModalOverlay isOpen={Boolean(removing)} isDismissable={!pending} onOpenChange={open => { if (!open) setRemoving(null); }} className="b20-messaging messaging-confirm-overlay"><Modal className="messaging-confirm"><Dialog className="messaging-confirm__dialog"><Heading slot="title">Retirar /{removing?.name}</Heading><p>{removing?.visibility === 'classroom' ? 'Dejará de estar disponible para el salón.' : 'Se eliminará de tus comandos.'} Los mensajes enviados se conservan.</p>{error && <p className="error" role="alert">{error}</p>}<div className="messaging-confirm__actions"><ChatButton variant="secondary" onClick={() => setRemoving(null)} disabled={pending}>Cancelar</ChatButton><ChatButton variant="danger" loading={pending} onClick={() => void remove()}>Retirar comando</ChatButton></div></Dialog></Modal></ModalOverlay>
+  </ToolPage>;
 }

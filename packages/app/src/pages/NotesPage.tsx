@@ -1,6 +1,9 @@
+import { ShareToChatButton } from '../components/messaging/SharePostDialog';
+import type { ResourceFormContext } from '../components/messaging/resourceFormContext';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ExamMaterialLink } from '../components/ExamMaterialLink';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { RelatedVisualProjects } from '../components/RelatedVisualProjects';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import type { Member, Note, NoteSource, NoteVisibility, Subject } from '../data/types';
 import { Avatar } from '../components/Avatar';
@@ -335,7 +338,7 @@ export function NoteFormPage() {
   return <NoteForm key={noteId ?? 'nueva'} />;
 }
 
-function NoteForm() {
+export function NoteForm({ initialTitle, onSaved, onCancel, onBusyChange }: ResourceFormContext = {}) {
   const { noteId } = useParams();
   const [params] = useSearchParams();
   const source = useDataSource();
@@ -346,6 +349,7 @@ function NoteForm() {
   const { error, pending, run } = useAction();
   const queue = useResourceUploadQueue();
   const saved = useRef<{ id: string; version: number } | null>(null);
+  useEffect(() => { onBusyChange?.(pending || queue.busy); }, [pending, queue.busy, onBusyChange]);
   const submitting = useRef(false);
   const active = useRef(true);
   const [contentSaved, setContentSaved] = useState(false);
@@ -360,10 +364,10 @@ function NoteForm() {
     existing?.subjectId ?? preset ?? subjects[0]?.id ?? '',
   );
   const [topic, setTopic] = useState(existing?.topic ?? '');
-  const [title, setTitle] = useState(existing?.title ?? '');
+  const [title, setTitle] = useState(existing?.title ?? initialTitle ?? '');
   const [body, setBody] = useState(existing?.body ?? '');
   const [tags, setTags] = useState(existing?.tags.join(', ') ?? '');
-  const [visibility, setVisibility] = useState<NoteVisibility>(existing?.visibility ?? 'personal');
+  const [visibility, setVisibility] = useState<NoteVisibility>(existing?.visibility ?? (onSaved ? 'group' : 'personal'));
   const [noteSource, setNoteSource] = useState<NoteSource>(existing?.source ?? 'student');
   const [isFinal, setIsFinal] = useState(existing?.isFinal ?? false);
   const [termId, setTermId] = useState(existing?.termId ?? '');
@@ -440,7 +444,7 @@ function NoteForm() {
         }
         const target = saved.current;
         if ((await queue.upload('note', target.id, target.version)) && active.current) {
-          void navigate(`/m/notas/${target.id}`);
+          if (onSaved) onSaved(target.id, visibility === 'group'); else void navigate(`/m/notas/${target.id}`);
         }
       });
     } finally {
@@ -457,9 +461,9 @@ function NoteForm() {
 
   return (
     <div className="notes-page notes-page--compose">
-      <Link to={existing ? `/m/notas/${existing.id}` : '/m/notas'} className="back with-icon">
+      {onCancel ? <button type="button" className="back with-icon" onClick={onCancel} disabled={pending || queue.busy}><Icon name="back" size={16} /> Volver al chat</button> : <Link to={existing ? `/m/notas/${existing.id}` : '/m/notas'} className="back with-icon">
         <Icon name="back" size={16} /> {existing ? existing.title : 'Notas de clase'}
-      </Link>
+      </Link>}
       <header className="notes-header">
         <div>
           <p className="notes-eyebrow">
@@ -713,7 +717,7 @@ function NoteForm() {
               ? 'Solo tú puedes ver esta nota'
               : 'Esta nota es visible para el grupo'}
           </p>
-          <button type="button" className="secondary" onClick={() => void navigate(-1)}>
+          <button type="button" className="secondary" onClick={() => onCancel ? onCancel() : void navigate(-1)} disabled={pending || queue.busy}>
             Cancelar
           </button>
           <button
@@ -863,6 +867,7 @@ export function NotePage() {
           </div>
         )}
       </header>
+      {note.visibility === 'group' && !note.withdrawnAt && <ShareToChatButton target={{ kind: 'note', id: note.id }} />}
       {error && (
         <p className="error notes-notice" role="alert">
           {error}
@@ -947,6 +952,7 @@ export function NotePage() {
         </div>
 
         <aside className="notes-detail__side" aria-label="Herramientas de la nota">
+          {active && <RelatedVisualProjects kind="note" id={note.id} />}
           <section className="notes-surface notes-study">
             <p className="notes-eyebrow">Del apunte a la práctica</p>
             <h2>Estudiar con esta nota</h2>

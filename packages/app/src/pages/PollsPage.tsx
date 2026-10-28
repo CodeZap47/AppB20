@@ -1,3 +1,4 @@
+import { ResourceComments } from '../components/whatsNew/ResourceComments';
 import { useState, type CSSProperties, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { MAX_POLL_OPTIONS, type PollStatus } from '@b20/core';
@@ -331,6 +332,7 @@ function PollDetail({ poll, data }: { poll: Poll; data: Snapshot }) {
           {view.isOwner && view.status === 'open' && (
             <CancelPanel poll={poll} hasVotes={view.votes.length > 0} />
           )}
+          <ResourceComments target={{ kind: 'poll', id: poll.id }} title="Comentarios de la votación" />
         </div>
 
         <aside className="detail__side">

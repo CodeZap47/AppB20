@@ -1,3 +1,4 @@
+import { ShareToChatButton } from './messaging/SharePostDialog';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { formatBytes, WORK_KIND_LABEL } from '@b20/core';
@@ -148,6 +149,7 @@ export function AcademicComments({ kind, id }: { kind: 'work' | 'evidence'; id: 
     if (saved) setText('');
   };
   return <section className="academic-comments">
+    <ShareToChatButton target={{ kind, id }} />
     <h3 className="label">Comentarios ({comments.length})</h3>
     {comments.map((comment) => <article key={comment.id} className="academic-comment">
       <p className="muted"><strong>{memberName(members, comment.authorId)}</strong> · {formatTime(comment.createdAt)}</p>

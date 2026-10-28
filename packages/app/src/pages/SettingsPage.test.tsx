@@ -41,6 +41,33 @@ describe('Ajustes por pestañas', () => {
     expect(container.querySelector('input[type="date"]')).toBeNull();
   });
 
+  it('permite recorrer las secciones con el teclado y vincula cada panel con su pestaña', async () => {
+    await show('demo-2', '/ajustes?origen=perfil');
+    tab('Cuenta').focus();
+    await act(async () => tab('Cuenta').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })));
+    expect(location).toBe('/ajustes?origen=perfil&pestana=calendario');
+    expect(document.activeElement).toBe(tab('Calendario'));
+    const panel = container.querySelector('[role="tabpanel"]')!;
+    expect(panel.id).toBe(tab('Calendario').getAttribute('aria-controls'));
+    expect(panel.getAttribute('aria-labelledby')).toBe(tab('Calendario').id);
+    await act(async () => tab('Calendario').dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true })));
+    expect(document.activeElement).toBe(tab('IA'));
+    expect(tab('IA').getAttribute('tabindex')).toBe('0');
+    expect(tab('Cuenta').getAttribute('tabindex')).toBe('-1');
+    await act(async () => tab('IA').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })));
+    expect(document.activeElement).toBe(tab('Cuenta'));
+    await act(async () => tab('Cuenta').dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true })));
+    expect(document.activeElement).toBe(tab('Cuenta'));
+  });
+
+  it('explica desde Cuenta cómo personalizar la presentación del perfil', async () => {
+    await show('demo-2');
+    expect(container.textContent).toContain('Tu perfil también puede llevar tu estilo');
+    const customize = container.querySelector<HTMLAnchorElement>('a[href="/perfil/demo-2?personalizar=1"]');
+    expect(customize?.textContent).toContain('Personalizar mi perfil');
+    expect(container.textContent).toContain('Conoce las herramientas de B20');
+  });
+
   it('un administrador ve el resumen del grupo y puede editar el calendario', async () => {
     await show('demo-1', '/ajustes?pestana=admin');
     expect(tabs()).toContain('Administración');

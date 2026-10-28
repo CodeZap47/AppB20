@@ -5,6 +5,9 @@
   "description": "Plataforma colaborativa del grupo B20.",
   "version": "0.0.1",
   "minimum_chrome_version": "116",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; object-src 'self';"
+  },
   "action": {
     "default_title": "Abrir B20"
   },

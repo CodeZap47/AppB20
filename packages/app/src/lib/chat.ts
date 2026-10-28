@@ -1,3 +1,4 @@
+import type { MessageReceipt } from '../data/messageReceiptTypes';
 import type { Id, MessageFields } from '../data/types';
 
 const MENTION = /\[\[mencion:([A-Za-z0-9_-]{1,128})\]\]/g;
@@ -24,13 +25,17 @@ export function mentionParts(text: string): ({ kind: 'text'; text: string } | { 
 }
 
 /** Los avisos cuentan mensajes ajenos posteriores al último leído de esta conversación. */
-export function unreadMessages(messages: MessageFields[], meId: Id | undefined, readThroughId?: Id): MessageFields[] {
-  if (readThroughId && /^\d+$/.test(readThroughId) && messages.every((message) => /^\d+$/.test(message.id))) {
-    const through = BigInt(readThroughId);
-    return messages.filter((message) => BigInt(message.id) > through && message.senderId !== meId && !message.deletedAt);
-  }
+export function unreadMessages(messages: MessageFields[], meId: Id | undefined, readThroughId?: Id, receipts: readonly MessageReceipt[] = []): MessageFields[] {
+  const own = new Map(receipts.filter(row => row.recipientId === meId).map(row => [row.messageId, row]));
   const readIndex = readThroughId ? messages.findIndex((message) => message.id === readThroughId) : -1;
-  return messages.slice(readIndex + 1).filter((message) => message.senderId !== meId && !message.deletedAt);
+  const numeric = !!readThroughId && /^\d+$/.test(readThroughId) && messages.every(message => /^\d+$/.test(message.id));
+  return messages.filter((message, index) => {
+    if (message.senderId === meId || message.deletedAt) return false;
+    const receipt = own.get(message.id);
+    if (receipt?.readAt) return false;
+    if (receipt && receipt.tracked !== false) return true;
+    return numeric ? BigInt(message.id) > BigInt(readThroughId!) : index > readIndex;
+  });
 }
 
 export function chatTarget(scope: 'group' | 'direct' | 'channel'): 'group_message' | 'direct_message' | 'channel_message' {

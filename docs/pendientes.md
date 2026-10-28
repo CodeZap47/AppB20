@@ -40,8 +40,11 @@ Fuentes: [publicación de Administración](administracion-produccion-2026-10-24.
 
 ## 2. Módulos nuevos: quinta entrega
 
-- [ ] **Lenguaje de señales:** diccionario versionado, constructor, ejercicios
-  individuales y en parejas, historial privado y fuentes.
+- [x] **Lenguaje de señales (implementación local):** diccionario versionado, constructor,
+  ejercicios individuales y en parejas, historial privado, fichas y papelera.
+  [Registro de implementación](lenguaje-senales-entrega.md).
+- [x] **Publicar Lenguaje de señales:** servidor actualizado sin borrar datos y cliente publicado después, junto con Mensajes. [Recibo](mensajes-mejoras.md#recibo-de-publicación-del-26-de-octubre-de-2026).
+- [ ] **Aceptar Lenguaje de señales:** validar el recorrido con compañeros y dispositivos reales.
 - [ ] **Microproyectos:** propuestas, equipos, responsabilidades, tablero, materiales,
   código, demostración y cierre con contribuciones; integrar perfiles y oportunidades.
 - [ ] **Préstamo de materiales:** catálogo, disponibilidad, solicitudes y acuerdos

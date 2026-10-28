@@ -6,7 +6,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 vi.mock('spacetimedb/server', () => {
   const builder: unknown = new Proxy({}, { get: () => () => builder });
   const handler = (...args: unknown[]) => args.at(-1);
-  return { SenderError: class SenderError extends Error {}, t: new Proxy({}, { get: () => () => builder }), table: () => ({ rowType: builder }), schema: () => ({ reducer: handler, procedure: handler, init: handler, clientConnected: handler, view: handler }) };
+  return { SenderError: class SenderError extends Error {}, t: new Proxy({}, { get: () => () => builder }), table: () => ({ rowType: builder }), schema: () => ({ reducer: handler, procedure: handler, init: handler, clientConnected: handler, clientDisconnected: handler, view: handler }) };
 });
 import { begin_resource_upload, finalize_resource_upload, get_resource_manifest, put_resource_chunk, read_resource_chunk, resource_files, type Ctx } from './index';
 import { assertDirectAllowed, canReadTarget, channel, conversationAccess, createChatChannel, markConversationRead, reportFileReadable, reportMessage, sendChannelMessage, validateMentions } from './delivery2Handlers';

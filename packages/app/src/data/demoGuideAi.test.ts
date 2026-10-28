@@ -11,6 +11,34 @@ function setup() {
   return { source, input };
 }
 describe('borradores privados de Guías en la simulación', () => {
+  it('separa diagnóstico, respuestas y generación para una guía cuatrimestral', async () => {
+    const { source, input } = setup();
+    const initial = await source.prepareGuideAiDraft({ id: crypto.randomUUID(), input: { ...input, guideType: 'quarter', period: String(source.getSnapshot().subjects[0]!.period), reviewBeforeGenerate: true, topics: ['Tema', 'Tema ausente'] } });
+    const run = (draft: typeof initial) => source.runGuideAiStep(draft.id, { expectedRevision: draft.revision, fingerprint: draft.preparation.fingerprint, generationId: crypto.randomUUID(), confirmed: true });
+    const assessed = await run(initial); expect(assessed.result).toBeUndefined(); expect(assessed.assessment?.topics).toHaveLength(2); expect(assessed.steps[0]!.kind).toBe('assessment');
+    await expect(run(assessed)).rejects.toThrow('diagnóstico');
+    await expect(source.reviewGuideAiTopics(assessed.id, { expectedRevision: assessed.revision, answers: [], acknowledgeGaps: false })).rejects.toThrow('pendientes');
+    const reviewed = await source.reviewGuideAiTopics(assessed.id, { expectedRevision: assessed.revision, answers: [{ questionId: assessed.assessment!.questions[0]!.id, answer: 'Practicar el ciclo while.' }], acknowledgeGaps: true });
+    expect(reviewed.topicsReviewed).toBe(true); expect(reviewed.preparation.fingerprint).not.toBe(assessed.preparation.fingerprint);
+    let ready = await run(reviewed); expect(ready.result?.sections).toHaveLength(8);
+    const bareInput = { ...input, guideType: 'quarter' as const, period: String(source.getSnapshot().subjects[0]!.period), reviewBeforeGenerate: true, topics: ['Tema', 'Tema ausente'], maxOutputTokens: 1600 };
+    const refreshed = await source.refreshGuideAiDraft({ id: ready.id, expectedRevision: ready.revision, requestId: crypto.randomUUID(), input: bareInput });
+    expect(refreshed.preparation.input.clarifications).toEqual(reviewed.preparation.input.clarifications); expect(refreshed.preparation.input.topicReview).toEqual(reviewed.preparation.input.topicReview);
+    ready = await source.updateGuideAiDraft(ready.id, { expectedRevision: refreshed.revision, result: refreshed.result! });
+    const published = await source.publishGuideAiDraft({ id: ready.id, expectedRevision: ready.revision, requestId: crypto.randomUUID() });
+    expect(await source.getGuideAiProvenance(published.publishedGuideId!, 1)).toMatchObject({ guideType: 'quarter', clarifications: [{ answer: 'Practicar el ciclo while.' }] });
+    source.dispose();
+  });
+  it('guarda las respuestas anteriores al renovar el diagnóstico y las oculta si se pierde acceso', async () => {
+    const { source, input } = setup(); const initial = await source.prepareGuideAiDraft({ id: crypto.randomUUID(), input: { ...input, reviewBeforeGenerate: true } });
+    const assessed = await source.runGuideAiStep(initial.id, { expectedRevision: initial.revision, fingerprint: initial.preparation.fingerprint, generationId: crypto.randomUUID(), confirmed: true });
+    const reviewed = await source.reviewGuideAiTopics(initial.id, { expectedRevision: assessed.revision, answers: [{ questionId: assessed.assessment!.questions[0]!.id, answer: 'Practicar un ciclo while.' }], acknowledgeGaps: false });
+    const refreshed = await source.refreshGuideAiDraft({ id: initial.id, expectedRevision: reviewed.revision, requestId: crypto.randomUUID(), input: { ...input, reviewBeforeGenerate: true, maxOutputTokens: 1600 } });
+    expect(refreshed.previousClarifications).toMatchObject([{ answer: 'Practicar un ciclo while.' }]); expect(refreshed.preparation.input.clarifications).toBeUndefined(); expect(refreshed.assessment).toBeUndefined();
+    expect((await source.getGuideAiDraft(initial.id)).previousClarifications).toEqual(refreshed.previousClarifications); expect((await source.listGuideAiDrafts())[0]).not.toHaveProperty('previousClarifications');
+    const note = source.getSnapshot().notes.find((entry) => entry.id === input.sources[0]!.refId)!; source.withdrawContent('note', note.id, true, note.version);
+    const cancelled = await source.cancelGuideAiDraft(initial.id, refreshed.revision); expect(cancelled.previousClarifications).toBeUndefined(); source.dispose();
+  });
   it('aísla listas, transcripciones y contenido entre tres identidades sin puntos por generar', async () => {
     const { source, input } = setup(); const before = source.getSnapshot().guides.length;
     const draft = await source.prepareGuideAiDraft({ id: crypto.randomUUID(), input });
@@ -98,4 +126,26 @@ describe('borradores privados de Guías en la simulación', () => {
     const summary = (await source.listGuideAiDrafts())[0]!; const cancelled = await source.cancelGuideAiDraft(summary.id, summary.revision);
     expect(cancelled.result).toBeUndefined(); expect(cancelled.preparation.fragments).toEqual([]); expect(cancelled.steps.every((step) => step.result === undefined)).toBe(true); source.dispose();
   });
+});
+
+it('conserva notas personales propias en borrador y bloquea publicarlas para el grupo', async () => {
+  const { source, input } = setup(); const note = source.saveNote({ subjectId: input.subjectId, title: 'Mi material personal', topic: 'Tema', body: 'Contenido personal', visibility: 'personal', source: 'student', tags: [] });
+  const prepared = await source.prepareGuideAiDraft({ id: crypto.randomUUID(), input: { ...input, sources: [{ kind: 'note', refId: note, topics: ['Tema'], includeUnplaced: true }] } });
+  expect(prepared.preparation.sources[0]!.visibility).toBe('personal');
+  const ready = await source.runGuideAiStep(prepared.id, { expectedRevision: prepared.revision, fingerprint: prepared.preparation.fingerprint, generationId: crypto.randomUUID(), confirmed: true });
+  await expect(source.publishGuideAiDraft({ id: ready.id, expectedRevision: ready.revision, requestId: crypto.randomUUID() })).rejects.toThrow('personales');
+  source.setViewer('demo-2'); await expect(source.prepareGuideAiDraft({ id: crypto.randomUUID(), input: { ...input, sources: [{ kind: 'note', refId: note, topics: ['Tema'], includeUnplaced: true }] } })).rejects.toThrow('disponible'); source.dispose();
+});
+it('incorpora exámenes del módulo a guías manuales con referencias UUID y reintento idempotente', async () => {
+  const { source, input } = setup();
+  const preparation = await source.prepareExamMaterial({ subjectId: input.subjectId, topics: ['Tema'], sources: [{ kind: 'note', refId: input.sources[0]!.refId, topics: ['Tema'], includeUnplaced: true }], config: { questionCount: 2, types: ['single'], difficulty: 'basic' } });
+  const generation = await source.generateExamQuestions({ id: crypto.randomUUID(), preparationId: preparation.id, fingerprint: preparation.fingerprint, config: preparation.config, confirmed: true });
+  let exam = await source.examAction({ action: 'importGeneration', generationId: generation.id, title: 'Examen para repasar', requestId: crypto.randomUUID() });
+  exam = await source.examAction({ action: 'approveVersion', examId: exam.id, expectedRevision: exam.revision, version: exam.draft!.version, reviewedQuestionIds: exam.draft!.questions.map((question) => question.id) });
+  await source.examAction({ action: 'setVisibility', examId: exam.id, expectedRevision: exam.revision, visibility: 'group' });
+  const request = { subjectId: input.subjectId, guideType: 'quarter' as const, period: String(source.getSnapshot().subjects[0]!.period), title: 'Guía manual con examen', topics: ['Tema'], sources: [{ kind: 'exam' as const, refId: exam.id, examVersion: 1, includeSolutions: false, includeUnplaced: true, topics: ['Tema'] }], sections: ['Repaso manual', '', '', '', '', '', '', ''], requestId: crypto.randomUUID() };
+  const created = await source.createGuideFromMaterials(request); expect(await source.createGuideFromMaterials(request)).toEqual(created);
+  expect(await source.getGuideAiProvenance(created.id, created.version)).toMatchObject({ model: 'manual', sources: [{ kind: 'exam', refId: exam.id, examVersion: 1 }] });
+  source.setViewer('demo-2'); const allowed = await source.prepareGuideAiDraft({ id: crypto.randomUUID(), input: { ...input, sources: request.sources } }); expect(JSON.stringify(allowed.preparation.fragments)).not.toContain('Explicación ficticia sustentada');
+  source.dispose();
 });

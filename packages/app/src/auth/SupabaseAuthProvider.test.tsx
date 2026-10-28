@@ -143,6 +143,27 @@ describe('sesiones de Supabase', () => {
     expect(window.location.pathname + window.location.search + window.location.hash).toBe('/#/m/calendario');
   });
 
+  it.each([
+    '/#/m/preguntas/123?respuesta=456',
+    '/#/m/actividades/123?evidencia=456',
+  ])('conserva el recurso compartido y su selección tras el callback de acceso: %s', async (returnTo) => {
+    window.history.replaceState({}, '', '/auth/callback?code=shared-resource-once');
+    sessionStorage.setItem('b20.supabase.returnTo', returnTo);
+    state.exchange.mockImplementation(async () => {
+      state.listener?.('SIGNED_IN', session());
+      return { error: null };
+    });
+
+    await render();
+
+    expect(state.exchange).toHaveBeenCalledExactlyOnceWith('shared-resource-once');
+    expect(container.querySelector('output')?.textContent).toBe('one');
+    expect(window.location.pathname + window.location.search + window.location.hash).toBe(returnTo);
+    expect(window.location.search).toBe('');
+    expect(window.location.href).not.toContain('shared-resource-once');
+    expect(sessionStorage.getItem('b20.supabase.returnTo')).toBeNull();
+  });
+
   it('envía el enlace recuperable solo al servicio de activación y conserva el token fuera del retorno OAuth', async () => {
     const token = 'z'.repeat(43);
     window.history.replaceState({}, '', `/#/invitacion?token=${token}`);

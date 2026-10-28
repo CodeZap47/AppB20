@@ -46,6 +46,19 @@ const options = { uri: 'ws://localhost:3000', database: 'app-b20', token: 'test-
 describe('authenticated group connection', () => {
   beforeEach(() => vi.mocked(readSnapshot).mockReturnValue(emptySnapshot('ready')));
 
+  it('publica presencia solo después de cargar la caché y admitir la membresía, y la retira tras una baja', async () => {
+    const wire = transport(); const setAppPresence = vi.fn(async () => {});
+    (wire.connection as unknown as { reducers: object }).reducers = { setAppPresence };
+    const source = new SpacetimeDataSource({ ...options, presenceEnvironment: { isForeground: () => true, subscribe: () => () => {} } }, wire.factory);
+    source.connect(); wire.connected(); expect(setAppPresence).not.toHaveBeenCalled();
+    wire.applied(); expect(setAppPresence).not.toHaveBeenCalled();
+    const joined = emptySnapshot('ready'); joined.me = { id: 'member-1', displayName: 'Synthetic', status: 'active', isCreator: false, joinedAt: new Date() };
+    vi.mocked(readSnapshot).mockReturnValue(joined); wire.inserted(); await Promise.resolve();
+    expect(setAppPresence).toHaveBeenLastCalledWith({ active: true, revision: 1n });
+    vi.mocked(readSnapshot).mockReturnValue({ ...joined, me: { ...joined.me, status: 'removed' } }); wire.inserted(); await Promise.resolve();
+    expect(setAppPresence).toHaveBeenLastCalledWith({ active: false, revision: 2n }); source.disconnect();
+  });
+
   it('waits for subscriptions before allowing actions and never invents a member', () => {
     const wire = transport();
     const source = new SpacetimeDataSource(options, wire.factory);

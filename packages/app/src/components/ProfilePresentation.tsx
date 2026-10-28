@@ -347,7 +347,7 @@ export function ProfileEditor({ member, profile, onDone }: { member: Member; pro
     >
       <form className="profile-editor__form" onSubmit={submit} noValidate>
         <header className="profile-editor__header">
-          <h2 id="profile-editor-title">Editar perfil</h2>
+          <div><h2 id="profile-editor-title">Personaliza tu perfil</h2><p>Elige cómo te verá el grupo: portada, foto, presentación e intereses.</p></div>
           <button type="button" className="secondary profile-editor__close" aria-label="Cerrar" onClick={requestClose}>
             <Icon name="close" size={18} />
           </button>
@@ -367,6 +367,7 @@ export function ProfileEditor({ member, profile, onDone }: { member: Member; pro
                 : <Avatar member={{ ...member, photoUrl: undefined }} size={72} />}
               <strong>{previewName}</strong>
             </div>
+            <p className="profile-editor__preview-caption">Así se verá tu perfil en el grupo.</p>
           </div>
 
           <Section title="Portada" description="Elige un degradado o sube una imagen horizontal (se recomienda 1500 × 500).">

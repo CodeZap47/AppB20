@@ -3,7 +3,8 @@ import { Dialog, Modal, ModalOverlay } from 'react-aria-components';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import type { AdminContentEntry, AdminMember, AdminMembershipSnapshot, InvitationLink, InvitationLinkInput, LegacyInvitationLink } from '../data/membershipTypes';
 import { CONTENT_KIND_LABELS, contentImpactSignature } from '../data/membershipTypes';
-import { formatTime } from '../lib/format';
+import { formatTime, initials } from '../lib/format';
+import { Icon } from './Icon';
 import { useAction } from './useAction';
 import './membership.css';
 import { clearAdminAccessDraft, readAdminAccessDraft, writeAdminAccessDraft, type AdminAccessDraft } from '../data/adminAccessDraft';
@@ -16,9 +17,9 @@ const localDate = (value: number) => { const date = new Date(value); return new 
 type DialogState = { type: 'create' } | { type: 'configure' | 'revoke' | 'people'; link: InvitationLink } | { type: 'legacy-revoke'; link: LegacyInvitationLink } | { type: 'member' | 'history' | 'content'; member: AdminMember } | { type: 'block' } | { type: 'resume'; draft: AdminAccessDraft };
 
 function AdminModal({ title, children, close, busy = false }: { title: string; children: ReactNode; close(): void; busy?: boolean }) {
-  return <ModalOverlay isOpen isDismissable={!busy} onOpenChange={(open) => { if (!open && !busy) close(); }} className="membership-overlay">
+  return <ModalOverlay isOpen isDismissable={!busy} onOpenChange={(open) => { if (!open && !busy) close(); }} className="membership-overlay settings-admin-modal">
     <Modal className="membership-modal"><Dialog aria-label={title} className="membership-dialog">
-      <div className="row row--between"><h2>{title}</h2><button type="button" className="secondary" disabled={busy} aria-label="Cerrar diálogo" onClick={close}>Cerrar</button></div>
+      <div className="row row--between admin-dialog-heading"><h2>{title}</h2><button type="button" className="secondary" disabled={busy} aria-label="Cerrar diálogo" onClick={close}><Icon name="close" size={16} />Cerrar</button></div>
       {children}
     </Dialog></Modal>
   </ModalOverlay>;
@@ -56,19 +57,19 @@ export function MembershipManagement() {
     // El campo seleccionable sigue disponible sin bloquear otras acciones administrativas.
     if (navigator.clipboard) void navigator.clipboard.writeText(url).catch(() => {});
   };
-  if (!data) return <section className="panel settings" aria-label="Gestión de accesos"><p role="status">{loadError || 'Cargando enlaces e integrantes…'}</p>{loadError && <button onClick={() => void run(refresh)}>Reintentar</button>}</section>;
+  if (!data) return <section className="panel settings admin-surface admin-loading" aria-label="Gestión de accesos"><p role="status">{loadError || 'Cargando enlaces e integrantes…'}</p>{loadError && <button onClick={() => void run(refresh)}>Reintentar</button>}</section>;
   const needle = query.trim().toLocaleLowerCase('es-MX');
   const matches = (member: AdminMember) => `${member.displayName} ${member.email ?? ''} ${member.emails.join(' ')}`.toLocaleLowerCase('es-MX').includes(needle);
   const blocked = new Set(data.blockedEmails.map((row) => row.email));
   const members = data.members.filter((member) => matches(member) && (tab === 'blocked' ? member.status === 'blocked' || member.emails.some((email) => blocked.has(email)) : tab === 'removed' ? member.status === 'removed' && !member.emails.some((email) => blocked.has(email)) : member.status === 'active'));
   return <>
-    {resume && <section className="panel settings" aria-label="Operación pendiente"><p>Hay una operación administrativa pendiente en esta pestaña. Los cambios ya confirmados se conservan.</p><div className="row"><button type="button" onClick={() => setDialog({ type: 'resume', draft: resume })}>Retomar operación pendiente</button><button type="button" className="secondary" onClick={() => { if (snapshot.me) clearAdminAccessDraft(snapshot.me.id); setResume(undefined); }}>Descartar seguimiento</button></div></section>}
-    <section className="panel settings" aria-labelledby="admin-links-title">
-      <div className="row row--between"><h2 id="admin-links-title">Enlaces de invitación</h2><button type="button" onClick={() => setDialog({ type: 'create' })}>Crear enlace</button></div>
+    {resume && <section className="panel settings admin-surface admin-resume" aria-label="Operación pendiente"><p>Hay una operación administrativa pendiente en esta pestaña. Los cambios ya confirmados se conservan.</p><div className="row"><button type="button" onClick={() => setDialog({ type: 'resume', draft: resume })}>Retomar operación pendiente</button><button type="button" className="secondary" onClick={() => { if (snapshot.me) clearAdminAccessDraft(snapshot.me.id); setResume(undefined); }}>Descartar seguimiento</button></div></section>}
+    <section className="panel settings admin-surface admin-links" aria-labelledby="admin-links-title">
+      <div className="row row--between admin-panel-header"><div className="admin-panel-heading"><span className="settings-card-icon"><Icon name="copy" size={21} /></span><h2 id="admin-links-title">Enlaces de invitación</h2></div><button type="button" onClick={() => setDialog({ type: 'create' })}><Icon name="plus" size={16} />Crear enlace</button></div>
       <p className="muted">Cualquier persona con un correo verificado podrá entrar como integrante mientras el enlace esté vigente. Desactivarlo conserva los accesos existentes.</p>
-      {!data.links.length && <p>No hay enlaces de invitación.</p>}
+      {!data.links.length && <div className="admin-empty"><Icon name="copy" size={25} /><p>No hay enlaces de invitación.</p><span>Crea uno para que tus compañeros puedan incorporarse al grupo.</span></div>}
       <ul className="plain-list">{data.links.map((link) => <li key={link.id} className="membership-link">
-        <div><strong>{link.name}</strong> <span className="badge">{stateName(linkState(link))}</span><p className="field__hint">Creado {at(link.createdAt)} · {link.expiresAt === null ? 'Sin vencimiento' : `Vence ${at(link.expiresAt)}`} · {link.uses}{link.maxUses === null ? ' incorporaciones, sin límite' : ` de ${link.maxUses} incorporaciones`}</p></div>
+        <div><strong>{link.name}</strong> <span className={`badge admin-link-state admin-link-state--${linkState(link)}`}>{stateName(linkState(link))}</span><p className="field__hint">Creado {at(link.createdAt)} · {link.expiresAt === null ? 'Sin vencimiento' : `Vence ${at(link.expiresAt)}`} · {link.uses}{link.maxUses === null ? ' incorporaciones, sin límite' : ` de ${link.maxUses} incorporaciones`}</p></div>
         <div className="row membership-actions">
           <button type="button" className="secondary" disabled={pending || linkState(link) !== 'active'} onClick={() => void copy(link)}>Copiar</button>
           <button type="button" className="secondary" onClick={() => setDialog({ type: 'people', link })}>Ver integrantes</button>
@@ -79,22 +80,22 @@ export function MembershipManagement() {
       {copied && <label className="field">Enlace listo para copiar<input readOnly aria-label="Enlace listo para copiar" value={copied} onFocus={(event) => event.target.select()} /></label>}
       {error && <p className="error" role="alert">{error}</p>}
     </section>
-    {Boolean(data.legacyLinks?.length) && <section className="panel settings" aria-labelledby="admin-legacy-links-title">
-      <div className="row row--between"><h2 id="admin-legacy-links-title">Enlaces anteriores</h2><button type="button" onClick={() => setDialog({ type: 'create' })}>Crear enlace nuevo</button></div>
+    {Boolean(data.legacyLinks?.length) && <section className="panel settings admin-surface admin-legacy" aria-labelledby="admin-legacy-links-title">
+      <div className="row row--between admin-panel-header"><div className="admin-panel-heading"><span className="settings-card-icon"><Icon name="file" size={21} /></span><h2 id="admin-legacy-links-title">Enlaces anteriores</h2></div><button type="button" onClick={() => setDialog({ type: 'create' })}>Crear enlace nuevo</button></div>
       <p className="muted">Estos enlaces conservan su estado y sus usos. El sistema anterior solo guardaba una huella del enlace: su copia no está disponible. Para compartir otro, crea uno nuevo y desactiva el anterior si ya no debe admitir incorporaciones.</p>
       <p className="field__hint">Las incorporaciones anteriores sin una relación comprobable conservan «Origen desconocido».</p>
       <ul className="plain-list">{data.legacyLinks?.map((link) => <li key={link.id} className="membership-link">
-        <div><strong>{link.name}</strong> <span className="badge">{stateName(linkState(link))}</span><p className="field__hint">ID {link.id} · Creado {at(link.createdAt)} · Vence {at(link.expiresAt)} · {link.usedCount} de {link.maxUses} usos</p></div>
+        <div><strong>{link.name}</strong> <span className={`badge admin-link-state admin-link-state--${linkState(link)}`}>{stateName(linkState(link))}</span><p className="field__hint">ID {link.id} · Creado {at(link.createdAt)} · Vence {at(link.expiresAt)} · {link.usedCount} de {link.maxUses} usos</p></div>
         <button type="button" className="secondary" disabled={pending || linkState(link) !== 'active'} aria-label={`Desactivar ${link.name}`} onClick={() => setDialog({ type: 'legacy-revoke', link })}>Desactivar</button>
       </li>)}</ul>
     </section>}
-    <section className="panel settings" aria-labelledby="admin-people-title">
-      <div className="row row--between"><h2 id="admin-people-title">Integrantes y correos</h2><button type="button" className="secondary" onClick={() => setDialog({ type: 'block' })}>Bloquear correo</button></div>
+    <section className="panel settings admin-surface admin-people" aria-labelledby="admin-people-title">
+      <div className="row row--between admin-panel-header"><div className="admin-panel-heading"><span className="settings-card-icon"><Icon name="users" size={21} /></span><h2 id="admin-people-title">Integrantes y correos</h2></div><button type="button" className="secondary" onClick={() => setDialog({ type: 'block' })}>Bloquear correo</button></div>
       <div className="segmented membership-tabs" role="group" aria-label="Estado de integrantes">{[['active', 'Activos'], ['pending', 'Invitaciones pendientes'], ['removed', 'Dados de baja'], ['blocked', 'Correos bloqueados']].map(([value, label]) => <button type="button" key={value} aria-pressed={tab === value} onClick={() => setTab(value!)}>{label}</button>)}</div>
       <label className="field">Buscar por nombre o correo<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
       {tab === 'pending' ? <ul className="plain-list">{snapshot.invitations.filter((row) => row.email.includes(needle)).map((row) => <li key={row.email} className="membership-link"><span>{row.email} {row.isCreator && <span className="badge">Administración</span>}</span><button className="secondary" disabled={pending} onClick={() => void run(async () => { await source.revokeInvitation(row.email); await changed(); })}>Cancelar invitación</button></li>)}</ul> : <>
         <ul className="plain-list">{members.map((member) => <li key={member.identity} className="membership-link">
-          <div><strong>{member.displayName}</strong> {member.isCreator && <span className="badge">Administración</span>}<p className="field__hint">{member.email ?? 'Correo pendiente de vincular'} · {originName(member.origin)}</p></div>
+          <div className="admin-member-identity"><span className="admin-member-initials" aria-hidden="true">{initials(member.displayName)}</span><div><strong>{member.displayName}</strong> {member.isCreator && <span className="badge">Administración</span>}<p className="field__hint">{member.email ?? 'Correo pendiente de vincular'} · {originName(member.origin)}</p></div></div>
           <div className="row membership-actions"><button type="button" className="secondary" onClick={() => setDialog({ type: 'history', member })}>Historial</button>
             <button type="button" className="secondary" onClick={() => setDialog({ type: 'content', member })}>Gestionar aportes</button>
             {member.status === 'active' && member.identity !== snapshot.me?.id && <button type="button" className="secondary" onClick={() => setDialog({ type: 'member', member })}>Gestionar acceso</button>}
@@ -102,7 +103,7 @@ export function MembershipManagement() {
           </div>
         </li>)}</ul>
         {tab === 'blocked' && <ul className="plain-list">{data.blockedEmails.filter((row) => row.email.includes(needle)).map((row) => <li key={row.email} className="membership-link"><div><strong>{row.email}</strong><p className="field__hint">Bloqueado {at(row.blockedAt)} · {row.reason}</p></div><button type="button" className="secondary" disabled={pending} onClick={() => void run(async () => { await source.unblockEmail(row.email, crypto.randomUUID()); await changed(); })}>Desbloquear</button></li>)}</ul>}
-        {!members.length && tab !== 'blocked' && <p>No hay integrantes con estos filtros.</p>}
+        {!members.length && tab !== 'blocked' && <div className="admin-empty admin-empty--compact"><Icon name="search" size={24} /><p>No hay integrantes con estos filtros.</p><span>Prueba otro nombre, correo o estado.</span></div>}
       </>}
       <p className="field__hint">La baja permite regresar mediante una nueva invitación individual. Desbloquear un correo permite reinvitarlo, sin restaurar el acceso ni sus autorizaciones anteriores.</p>
     </section>

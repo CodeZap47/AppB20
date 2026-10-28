@@ -28,6 +28,7 @@ function connection(overrides: Record<string, unknown[]> = {}): Pick<DbConnectio
     'teachingPractices', 'myTeachingPersonal', 'teachingQuestions',
     'spacedCollections', 'spacedCards', 'spacedUnavailableCards', 'mySpacedEnrollments', 'mySpacedProgress', 'mySpacedReviews',
     ...('memberUploadStats' in overrides ? ['memberUploadStats'] : []),
+    ...('onlineMembers' in overrides ? ['onlineMembers'] : []),
   ];
   return { db: Object.fromEntries(names.map((name) => [name, table(
     overrides[name] ?? (name === 'myMember' || name === 'members' ? [member] : []),
@@ -35,6 +36,25 @@ function connection(overrides: Record<string, unknown[]> = {}): Pick<DbConnectio
 }
 
 describe('snapshot de SpacetimeDB', () => {
+  it('proyecta miembros conectados únicos y filtra bajas incluso durante la actualización de caché', () => {
+    const removed = '00000000000000000000000000000000000000000000000000000000000000cc';
+    const snapshot = readSnapshot(connection({ members: [member, { ...member, identity: identity(OTHER) }, { ...member, identity: identity(removed), status: 'removed' }],
+      onlineMembers: [{ memberId: identity() }, { memberId: identity() }, { memberId: identity(OTHER) }, { memberId: identity(removed) }, { memberId: identity('unknown') }] }), ID);
+    expect(snapshot.onlineMemberIds).toEqual([ID, OTHER]);
+    expect(PUBLIC_VIEWS).toContain('online_members'); expect(PUBLIC_VIEWS).not.toContain('app_presence_session');
+    expect(emptySnapshot('connecting').onlineMemberIds).toEqual([]); expect(emptySnapshot('offline').onlineMemberIds).toEqual([]);
+    expect(readSnapshot(connection({ myMember: [{ ...member, status: 'removed' }], onlineMembers: [{ memberId: identity(OTHER) }] }), ID).onlineMemberIds).toEqual([]);
+  });
+  it('conserva reacciones Unicode de canales sin interrumpir la conexión', () => {
+    const snapshot = readSnapshot(connection({ messageReactions: [
+      { scope: 'channel', messageId: 70n, member: identity(), emoji: '👍🏽' },
+      { scope: 'direct', messageId: 71n, member: identity(), emoji: '🇲🇽' },
+    ] }), ID);
+    expect(snapshot.reactions).toMatchObject([
+      { scope: 'channel', messageId: '70', emoji: '👍🏽' },
+      { scope: 'direct', messageId: '71', emoji: '🇲🇽' },
+    ]);
+  });
   it('acepta una membresía anterior solo con el vínculo propio de la sesión actual', () => {
     const linked = connection({ myAuthIdentity: [{ sessionIdentity: identity(OTHER), memberIdentity: identity() }] });
     expect(readSnapshot(linked, OTHER).me?.id).toBe(ID);

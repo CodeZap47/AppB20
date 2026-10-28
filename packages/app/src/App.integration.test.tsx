@@ -230,7 +230,7 @@ describe('integración real de Aprende enseñando en la aplicación', () => {
       await act(async () => target.click());
       expect(window.location.hash).toBe(`#/m/${module.id}`);
       expectHealthyPage();
-      expect(container.querySelector('.demo-banner')?.textContent).toContain('los cambios no se guardan ni se comparten');
+      expect(container.querySelector('.demo-banner')?.textContent).toContain('Este contenido no se comparte con tu grupo real');
       expect((await moduleLink(module.id)).getAttribute('aria-current'), module.id).toBe('page');
     }
     expect(desktop.querySelector('.b20-slim-account')?.textContent).toContain('Perfil simulado');

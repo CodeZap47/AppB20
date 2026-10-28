@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { AiError, aiUuid, validateGuideAiPrepareInput, validateGuideAiResult, validateGuideAiSummary,
+import { AiError, aiUuid, validateGuideAiAssessment, validateGuideAiPrepareInput, validateGuideAiResult, validateGuideAiSummary,
   type AiStatus, type GuideAiClaim, type GuideAiDraft } from '@b20/core';
 import { AiApiError } from './database.ts';
 import { canEncrypt, decryptAiKey } from './crypto.ts';
@@ -13,6 +13,7 @@ function model(value: string | undefined) { if (!value || !/^[\w.-]{1,200}$/.tes
 export function guideAiRoutes(options: { provider?: GuideProvider } = {}) {
   const app = new Hono<AiRouteContext>();
   app.get('/', async (c) => c.json(await c.get('ai').user(c.get('sessionToken'), 'guide_ai', { action: 'listDrafts' })));
+  app.post('/manual', async (c) => c.json(await c.get('ai').user(c.get('sessionToken'), 'guide_ai', { ...await readAiBody(c.req.raw, BODY_BYTES), action: 'createManualFromMaterials' }), 201));
   app.post('/prepare', async (c) => {
     const body = await readAiBody(c.req.raw, BODY_BYTES);
     return c.json(await c.get('ai').user(c.get('sessionToken'), 'guide_ai', { action: 'prepare', id: uuid(body.id), input: validateGuideAiPrepareInput(body.input), model: model(c.env.GEMINI_MODEL?.trim()) }), 201);
@@ -27,6 +28,7 @@ export function guideAiRoutes(options: { provider?: GuideProvider } = {}) {
     return c.json(await c.get('ai').user(c.get('sessionToken'), 'guide_ai', { ...body, action: 'reprepareDraft', input: validateGuideAiPrepareInput(body.input), id: uuid(c.req.param('id')), model: model(c.env.GEMINI_MODEL?.trim()) }));
   });
   app.post('/:id/cancel', async (c) => c.json(await c.get('ai').user(c.get('sessionToken'), 'guide_ai', { ...await readAiBody(c.req.raw, 4096), action: 'cancelDraft', id: uuid(c.req.param('id')) })));
+  app.post('/:id/review-topics', async (c) => c.json(await c.get('ai').user(c.get('sessionToken'), 'guide_ai', { ...await readAiBody(c.req.raw, 256 * 1024), action: 'reviewTopics', id: uuid(c.req.param('id')) })));
   app.post('/:id/publish', async (c) => c.json(await c.get('ai').user(c.get('sessionToken'), 'guide_ai', { ...await readAiBody(c.req.raw, 4096), action: 'publish', id: uuid(c.req.param('id')) })));
   app.post('/:id/step', async (c) => {
     const body = await readAiBody(c.req.raw, 4096); const id = uuid(c.req.param('id')); const generationId = uuid(body.generationId);
@@ -51,7 +53,7 @@ export function guideAiRoutes(options: { provider?: GuideProvider } = {}) {
         if (new TextEncoder().encode(output.text).byteLength > 256 * 1024) throw new AiProviderError('invalid_output', false, 'La respuesta superó el límite.');
         let result: unknown;
         try { result = JSON.parse(output.text); } catch { throw new AiProviderError('invalid_output', false, 'Gemini devolvió un resultado inválido.'); }
-        result = claim.step.kind === 'summary' ? validateGuideAiSummary(result, claim.fragments, Math.min(8000, Math.floor(32000 / Math.max(1, claim.draft.preparation.batches.length)))) : validateGuideAiResult(result,
+        result = claim.step.kind === 'assessment' ? validateGuideAiAssessment(result, { ...claim.draft.preparation, fragments: claim.fragments }) : claim.step.kind === 'summary' ? validateGuideAiSummary(result, claim.fragments, Math.min(8000, Math.floor(32000 / Math.max(1, claim.draft.preparation.batches.length)))) : validateGuideAiResult(result,
           { ...claim.draft.preparation, fragments: claim.fragments });
         terminal = { state: 'succeeded', result, usage: output.usage };
       } catch (error) {

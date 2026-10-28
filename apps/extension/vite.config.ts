@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 export default defineConfig({
   envDir: '../..',
   base: './',
+  worker: { format: 'es' },
   resolve: {
     alias: { '@b20-ui': fileURLToPath(new URL('../../packages/app/src/untitled', import.meta.url)) },
   },

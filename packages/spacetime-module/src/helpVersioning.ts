@@ -1,4 +1,5 @@
 import { memberIdentityFor } from './authIdentity';
+import { invalidateFeedShares } from './feedInteractionLifecycle';
 import { t, table, SenderError } from 'spacetimedb/server';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { cleanHelpPost, helpText, HELP_LIMITS, type HelpPostFields } from '../../core/src/help';
@@ -94,6 +95,7 @@ export function mutateHelp(ctx: Ctx, payload: string): string {
   } else {
     const reason = field(input.reason, 'El motivo', HELP_LIMITS.reason, post!.author.isEqual(memberIdentityFor(ctx)));
     post = { ...post!, status: 'withdrawn', withdrawnBy: memberIdentityFor(ctx), withdrawalReason: reason || undefined, updatedAt: ctx.timestamp };
+    invalidateFeedShares(ctx, 'help', post.id);
     ctx.db.helpPost.id.update(post); closePending(ctx, post.id, 'post_withdrawn');
   }
   capture(ctx, post!, previous + 1);

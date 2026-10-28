@@ -64,6 +64,7 @@ primera versión sin IA que también requiere comprobación con cuentas reales.
 | **Notas de clase** | Editor estructurado, sesión y parcial, relaciones, adjuntos e historial recuperable. Publicar una nota personal crea una copia independiente para el grupo. |
 | **Preguntas y respuestas** | Adjuntos privados, aclaraciones, utilidad por integrante y enlaces a notas/guías compartidas; aceptación y reapertura. |
 | **Guías de estudio** | Fuentes, cobertura, revisiones e historial recuperable; preparación local de PDF textual, DOCX, TXT, Markdown y código, con transcripción revisable y citas. Borradores privados con Gemini y publicación expresa; los formatos no admitidos se muestran como omisiones. |
+| **Laboratorio visual** | Catálogo de proyectos 3D, diseño y simulaciones, portadas privadas, relaciones académicas y directorio de proveedores. Fichas personales publicables al grupo, con archivo y restauración. [Alcance y validación](docs/laboratorio-visual.md). El editor 3D y la narración con IA corresponden a etapas posteriores. |
 | **Exámenes EX-2** | Generación, revisión y versiones; práctica, simulacro y resultados privados. Incluye preguntas de opción única y verdadero/falso. La preparación inicial usa las fuentes de EX-1 y sus adjuntos de texto UTF-8 compatibles; la extracción PDF/DOCX de Guías no se incorpora automáticamente a Exámenes. |
 | **Ayuda entre compañeros** | **Manual.** Ofertas y solicitudes de ayuda, contactos privados y conversación al aceptar el contacto. Pendiente de validación real. |
 | **Aprende enseñando** | Explicaciones, preguntas de un compañero invitado o propuestas por Gemini, reflexión privada y publicación voluntaria de una nota. Los borradores de IA requieren revisión y aceptación. |
@@ -88,9 +89,12 @@ conserva el alcance completo, incluidas las ampliaciones pendientes.
 
 ## Trabajo pendiente
 
-Quedan tres módulos sin implementar, previstos para la quinta entrega:
+Lenguaje de señales (3.11) está [implementado y publicado](docs/lenguaje-senales-entrega.md):
+diccionario, constructor, prácticas individuales y en pareja, fichas y papelera.
+Se publicó junto con las [mejoras de Mensajes](docs/mensajes-mejoras.md); su aceptación con el grupo y dispositivos sigue pendiente.
 
-- **3.11 Lenguaje de señales.**
+Quedan dos módulos sin implementar, previstos para la quinta entrega:
+
 - **7.6 Microproyectos.**
 - **7.11 Préstamo de materiales.**
 

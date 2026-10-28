@@ -8,6 +8,11 @@ import { PlatformContext } from '../../../packages/app/src/components/PlatformCo
 import { replayWelcomeTour } from '../../../packages/app/src/components/WelcomeTour';
 import { dayKey } from '../../../packages/app/src/lib/dueCalendar';
 import { seedFeedReview } from './feedReviewFixtures';
+import { seedModuleReview } from './moduleReviewFixtures';
+import { seedMessagesReview, seedMessageInfoReview } from './messagesReviewFixtures';
+import { seedPresenceReview } from './presenceReviewFixtures';
+import { seedReadingReview } from './readingReviewFixtures';
+import { seedVisualReview } from './visualReviewFixtures';
 import '@b20/app/styles.css';
 
 /** Separate comparison entry: synthetic data only, excluded from normal production builds. */
@@ -62,7 +67,27 @@ if (exampleNote) {
   exampleNote.assignmentIds = [exampleAssignment.id];
 }
 if (new URLSearchParams(window.location.search).get('feed-review') === '1') seedFeedReview(state);
-const source = new DemoDataSource(state, 'demo-1');
+if (new URLSearchParams(window.location.search).get('visual-review') === '1') seedVisualReview(state);
+if (new URLSearchParams(window.location.search).get('reading-review') === '1') seedReadingReview(state);
+const source = new DemoDataSource(state, 'demo-1', undefined, undefined, {
+  visualPersistenceKey: new URLSearchParams(window.location.search).get('scene-review') === '1' ? 'b20-visual-scene-review-v1' : undefined,
+});
+if (new URLSearchParams(window.location.search).get('presence-review') === '1') {
+  const dispose = seedPresenceReview(state, source);
+  window.addEventListener('beforeunload', dispose, { once: true });
+  import.meta.hot?.dispose(dispose);
+}
+if (new URLSearchParams(window.location.search).get('message-info-review') === '1') {
+  const dispose = seedMessageInfoReview(state, source);
+  window.addEventListener('beforeunload', dispose, { once: true });
+  import.meta.hot?.dispose(dispose);
+}
+if (new URLSearchParams(window.location.search).get('modules-review') === '1') seedModuleReview(state, source);
+if (new URLSearchParams(window.location.search).get('messages-review') === '1') {
+  const dispose = seedMessagesReview(state, source);
+  window.addEventListener('beforeunload', dispose, { once: true });
+  import.meta.hot?.dispose(() => { window.removeEventListener('beforeunload', dispose); dispose(); });
+}
 const previewPlatform = new URLSearchParams(window.location.search).get('compact') === '1'
   ? 'extension-panel' : 'web';
 source.saveMemberProfile({
@@ -105,7 +130,7 @@ createRoot(document.getElementById('root')!).render(
     <PlatformContext value={previewPlatform}>
       <DataProvider source={source}>
         <RouterProvider router={router} />
-        <PreviewTools />
+        {new URLSearchParams(window.location.search).get('reading-review') !== '1' && <PreviewTools />}
       </DataProvider>
     </PlatformContext>
   </ThemeProvider>,

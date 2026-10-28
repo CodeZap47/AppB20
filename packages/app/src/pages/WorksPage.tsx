@@ -1,7 +1,10 @@
+import type { ResourceFormContext } from '../components/messaging/resourceFormContext';
+import { ResourceComments } from '../components/whatsNew/ResourceComments';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { ExamMaterialLink } from '../components/ExamMaterialLink';
 import { AgentHelpLink } from '../components/AgentHelpLink';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
+import { RelatedVisualProjects } from '../components/RelatedVisualProjects';
 import {
   canEditWork,
   DEFAULT_WORK_KIND,
@@ -591,6 +594,7 @@ export function AssignmentPage() {
           )}
 
           <section className="panel"><ResourceSection kind="assignment" id={assignment.id} version={assignment.version} canEdit={Boolean(me)} title="Recursos de la consigna" /></section>
+          <RelatedVisualProjects kind="assignment" id={assignment.id} />
           <h2 className="section-title">
             Trabajos de cada alumno <span className="muted">{own.length}</span>
           </h2>
@@ -617,6 +621,7 @@ export function AssignmentPage() {
               Aquí aparecerá lo que suba cada alumno o equipo, cada uno por separado.
             </Empty>
           )}
+          <ResourceComments target={{ kind: 'assignment', id: assignment.id }} title="Comentarios de la tarea" />
         </div>
 
         <aside className="detail__side">
@@ -728,13 +733,14 @@ export function AssignmentFormPage() {
   return <AssignmentForm key={assignment?.id ?? 'nueva'} assignment={assignment} />;
 }
 
-function AssignmentForm({ assignment }: { assignment: Assignment | undefined }) {
+export function AssignmentForm({ assignment, initialTitle, onSaved, onCancel, onBusyChange }: { assignment?: Assignment } & ResourceFormContext) {
   const source = useDataSource();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const { members, subjects, terms, calendar } = useSnapshot();
   const { error, pending, run } = useAction();
   const queue = useResourceUploadQueue();
+  useEffect(() => { onBusyChange?.(pending || queue.busy); }, [pending, queue.busy, onBusyChange]);
   const submitting = useRef(false);
   const active = useRef(true);
   const savedParent = useRef<{ id: string; version: number } | null>(null);
@@ -770,7 +776,7 @@ function AssignmentForm({ assignment }: { assignment: Assignment | undefined }) 
   );
   const [newSubject, setNewSubject] = useState('');
   const [newTerm, setNewTerm] = useState('');
-  const [title, setTitle] = useState(assignment?.title ?? '');
+  const [title, setTitle] = useState(assignment?.title ?? initialTitle ?? '');
   const [dueDate, setDueDate] = useState(assignment?.dueDate ?? '');
   const [instructions, setInstructions] = useState(assignment?.instructions ?? '');
   const [topic, setTopic] = useState(assignment?.topic ?? '');
@@ -822,15 +828,15 @@ function AssignmentForm({ assignment }: { assignment: Assignment | undefined }) 
       const target = savedParent.current;
       if (!await queue.upload('assignment', target.id, target.version) || !active.current) return;
       rememberPeriod(period);
-      void navigate(`/m/tareas/${target.id}`);
+      if (onSaved) onSaved(target.id, true); else void navigate(`/m/tareas/${target.id}`);
     } finally { submitting.current = false; }
   };
 
   return (
     <>
-      <Link to={backTo} className="back with-icon">
+      {onCancel ? <button type="button" className="back with-icon" onClick={onCancel} disabled={pending || queue.busy}><Icon name="back" size={16} /> Volver al chat</button> : <Link to={backTo} className="back with-icon">
         <Icon name="back" size={16} /> {assignment ? assignment.title : 'Tareas y Actividades'}
-      </Link>
+      </Link>}
       <header className="page-header">
         <div>
           <h1>{assignment ? 'Editar página' : 'Nueva tarea o actividad'}</h1>
@@ -973,9 +979,7 @@ function AssignmentForm({ assignment }: { assignment: Assignment | undefined }) 
               Última edición de {memberName(members, assignment.updatedBy)}, {formatTime(assignment.updatedAt)}
             </span>
           )}
-          <Link to={backTo} className="button secondary">
-            Cancelar
-          </Link>
+          {onCancel ? <button type="button" className="secondary" onClick={onCancel} disabled={pending || queue.busy}>Cancelar</button> : <Link to={backTo} className="button secondary">Cancelar</Link>}
           <button type="submit" disabled={pending || queue.busy || (!saved && !changed && !queue.hasFiles)}>
             {pending || queue.busy ? 'Guardando…' : saved ? queue.pendingCount ? 'Reintentar archivos pendientes' : 'Continuar' : assignment ? 'Guardar versión nueva' : 'Crear página'}
           </button>
@@ -991,19 +995,20 @@ export function SubmitWorkPage() {
   return <SubmitWorkForAssignment key={assignmentId} assignmentId={assignmentId} />;
 }
 
-function SubmitWorkForAssignment({ assignmentId }: { assignmentId: string }) {
+export function SubmitWorkForAssignment({ assignmentId, initialTitle, onSaved, onCancel, onBusyChange }: { assignmentId: string } & ResourceFormContext) {
   const source = useDataSource();
   const navigate = useNavigate();
   const { me, assignments, members } = useSnapshot();
   const { error, pending, run } = useAction();
   const queue = useResourceUploadQueue();
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState(initialTitle ?? '');
   const [description, setDescription] = useState('');
   const [topic, setTopic] = useState('');
   const [status, setStatus] = useState<WorkPublicationStatus>('draft');
   const [coauthorIds, setCoauthorIds] = useState<string[]>([]);
   const [createdId, setCreatedId] = useState<string | null>(null);
   const savedParent = useRef<string | null>(null);
+  useEffect(() => { onBusyChange?.(pending || queue.busy); }, [pending, queue.busy, onBusyChange]);
   const submitting = useRef(false);
   const active = useRef(true);
   useEffect(() => {
@@ -1044,15 +1049,15 @@ function SubmitWorkForAssignment({ assignmentId }: { assignmentId: string }) {
       if (!active.current || !id) return;
       savedParent.current = id;
       setCreatedId(id);
-      if (await queue.upload('work', id, 1) && active.current) void navigate(`${backTo}?trabajo=${id}`);
+      if (await queue.upload('work', id, 1) && active.current) { if (onSaved) onSaved(id, true); else void navigate(`${backTo}?trabajo=${id}`); }
     } finally { submitting.current = false; }
   };
 
   return (
     <>
-      <Link to={backTo} className="back with-icon">
+      {onCancel ? <button type="button" className="back with-icon" onClick={onCancel} disabled={busy}><Icon name="back" size={16} /> Volver al chat</button> : <Link to={backTo} className="back with-icon">
         <Icon name="back" size={16} /> {assignment.title}
-      </Link>
+      </Link>}
       <header className="page-header">
         <div>
           <p className="eyebrow">{WORK_KIND_LABEL[assignment.kind]}</p>
@@ -1123,9 +1128,7 @@ function SubmitWorkForAssignment({ assignmentId }: { assignmentId: string }) {
         )}
         <div className="form__actions">
           {empty && <span className="muted form__note">Escribe una descripción o adjunta un archivo.</span>}
-          <Link to={backTo} className="button secondary">
-            Cancelar
-          </Link>
+          {onCancel ? <button type="button" className="secondary" onClick={onCancel} disabled={busy}>Cancelar</button> : <Link to={backTo} className="button secondary">Cancelar</Link>}
           <button type="submit" disabled={busy || (!createdId && empty)}>
             {busy ? 'Subiendo archivos…' : createdId ? queue.pendingCount ? 'Reintentar archivos pendientes' : 'Continuar' : 'Subir trabajo'}
           </button>

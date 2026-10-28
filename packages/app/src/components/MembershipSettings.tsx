@@ -7,6 +7,7 @@ import { useAction } from './useAction';
 import { DemoDataSource } from '../data/demo';
 import type { Invitation } from '../data/types';
 import { MembershipManagement } from './MembershipManagement';
+import { Icon } from './Icon';
 
 const RESEND_INTERVAL_MS = 10 * 60_000;
 
@@ -16,12 +17,18 @@ export function MembershipSettings() {
   const source = useDataSource();
   if (me?.status !== 'active' || !me.isCreator) return null;
   return (
-    <>
+    <div className="administration-page">
       <AdminSummary />
-      <InvitationsSection />
-      {typeof source.getAdminMembership === 'function' ? <MembershipManagement /> : <MembersSection />}
-      <CurriculumSection />
-    </>
+      <div className="administration-grid">
+        <InvitationsSection />
+        {typeof source.getAdminMembership === 'function' ? (
+          <MembershipManagement />
+        ) : (
+          <MembersSection />
+        )}
+        <CurriculumSection />
+      </div>
+    </div>
   );
 }
 
@@ -31,12 +38,47 @@ function AdminSummary() {
   const codes = new Set(subjects.map((s) => s.code));
   const loaded = CURRICULUM.filter((c) => codes.has(c.code)).length;
   return (
-    <section className="panel settings" aria-label="Resumen del grupo">
-      <dl className="facts settings-summary">
-        <div><dt>Integrantes activos</dt><dd>{active.length}</dd></div>
-        <div><dt>Administradores</dt><dd>{active.filter((m) => m.isCreator).length}</dd></div>
-        <div><dt>Invitaciones pendientes</dt><dd>{invitations.length}</dd></div>
-        <div><dt>Materias cargadas</dt><dd>{loaded} de {CURRICULUM.length}</dd></div>
+    <section className="admin-overview" aria-label="Resumen del grupo">
+      <dl className="admin-summary">
+        <div>
+          <dt>
+            <span className="admin-summary__icon">
+              <Icon name="users" size={20} />
+            </span>
+            Integrantes activos
+          </dt>
+          <dd>{active.length}</dd>
+        </div>
+        <div>
+          <dt>
+            <span className="admin-summary__icon">
+              <Icon name="lock" size={20} />
+            </span>
+            Administradores
+          </dt>
+          <dd>{active.filter((m) => m.isCreator).length}</dd>
+        </div>
+        <div>
+          <dt>
+            <span className="admin-summary__icon">
+              <Icon name="send" size={20} />
+            </span>
+            Invitaciones pendientes
+          </dt>
+          <dd>{invitations.length}</dd>
+        </div>
+        <div>
+          <dt>
+            <span className="admin-summary__icon">
+              <Icon name="book" size={20} />
+            </span>
+            Materias cargadas
+          </dt>
+          <dd>
+            {loaded}
+            <small> de {CURRICULUM.length}</small>
+          </dd>
+        </div>
       </dl>
     </section>
   );
@@ -61,17 +103,25 @@ function InvitationsSection() {
 
   const sorted = [...invitations].sort((a, b) => a.email.localeCompare(b.email));
   return (
-    <section className="panel settings" aria-labelledby="settings-invitations-title">
-      <h2 id="settings-invitations-title">
-        {simulated ? 'Invitaciones simuladas' : 'Invitaciones'}
-        {sorted.length > 0 && <span className="chip__count">{sorted.length}</span>}
-      </h2>
+    <section
+      className="panel settings admin-surface admin-invitations"
+      aria-labelledby="settings-invitations-title"
+    >
+      <div className="admin-panel-heading">
+        <span className="settings-card-icon">
+          <Icon name="send" size={21} />
+        </span>
+        <h2 id="settings-invitations-title">
+          {simulated ? 'Invitaciones simuladas' : 'Invitaciones'}
+          {sorted.length > 0 && <span className="chip__count">{sorted.length}</span>}
+        </h2>
+      </div>
       <p className="muted">
         {simulated
           ? 'Este formulario modifica datos de prueba: no envía invitaciones ni controla quién puede iniciar sesión.'
           : 'Invita un correo concreto o rehabilita a una persona dada de baja. El correo debe estar verificado; los enlaces reutilizables se administran por separado.'}
       </p>
-      <form className="form" onSubmit={submit}>
+      <form className="form admin-invitation-form" onSubmit={submit}>
         <label className="field">
           <span className="field__label">Correo</span>
           <input
@@ -103,22 +153,25 @@ function InvitationsSection() {
         </div>
       </form>
       {sorted.length > 0 ? (
-        <ul className="plain-list">
+        <ul className="plain-list admin-invitation-list">
           {sorted.map((i) => (
             <li key={i.email} className="row row--between">
               <span className="settings-person">
                 <span className="settings-person__name">{i.email}</span>
                 {i.isCreator && <span className="badge badge--admin">Administración</span>}
-                <span className="field__hint">
-                  Invitado el {formatMediumDate(i.createdAt)}
-                  {emailStatusText(i) && ` · ${emailStatusText(i)}`}
-                </span>
+                <span className="field__hint">Invitado el {formatMediumDate(i.createdAt)}</span>
+                {emailStatusText(i) && (
+                  <span className={`admin-email-state admin-email-state--${i.emailStatus}`}>
+                    {emailStatusText(i)}
+                  </span>
+                )}
               </span>
               <span className="row">
                 {canResend(i) && (
                   <button
                     type="button"
                     className="link-button"
+                    disabled={pending}
                     onClick={() => run(() => source.resendInvitationEmail(i.email))}
                   >
                     Reenviar
@@ -127,9 +180,11 @@ function InvitationsSection() {
                 <button
                   type="button"
                   className="link-button"
+                  disabled={pending}
                   onClick={() =>
-                    window.confirm(`¿Retirar la invitación de ${i.email}? Se cancela esta invitación. Para impedir también el ingreso mediante enlaces, bloquea su correo.`) &&
-                    run(() => source.revokeInvitation(i.email))
+                    window.confirm(
+                      `¿Retirar la invitación de ${i.email}? Se cancela esta invitación. Para impedir también el ingreso mediante enlaces, bloquea su correo.`,
+                    ) && run(() => source.revokeInvitation(i.email))
                   }
                 >
                   Retirar
@@ -139,7 +194,11 @@ function InvitationsSection() {
           ))}
         </ul>
       ) : (
-        <p className="field__hint">No hay invitaciones pendientes.</p>
+        <div className="admin-empty">
+          <Icon name="users" size={25} />
+          <p>No hay invitaciones pendientes.</p>
+          <span>Las nuevas invitaciones aparecerán aquí con su estado de envío.</span>
+        </div>
       )}
     </section>
   );
@@ -147,18 +206,27 @@ function InvitationsSection() {
 
 function emailStatusText(invitation: Invitation): string | undefined {
   switch (invitation.emailStatus) {
-    case 'pending': return 'Correo pendiente de envío';
-    case 'sent': return invitation.emailSentAt ? `Correo enviado el ${formatMediumDate(invitation.emailSentAt)}` : 'Correo enviado';
-    case 'failed': return 'No se pudo enviar el correo';
-    default: return undefined;
+    case 'pending':
+      return 'Correo pendiente de envío';
+    case 'sent':
+      return invitation.emailSentAt
+        ? `Correo enviado el ${formatMediumDate(invitation.emailSentAt)}`
+        : 'Correo enviado';
+    case 'failed':
+      return 'No se pudo enviar el correo';
+    default:
+      return undefined;
   }
 }
 
 /** Igual que el servidor: un envío fallido se reintenta ya; uno exitoso, tras 10 minutos. */
 function canResend(invitation: Invitation): boolean {
   if (invitation.emailStatus === 'failed') return true;
-  return invitation.emailStatus === 'sent' && !!invitation.emailRequestedAt
-    && Date.now() - invitation.emailRequestedAt.getTime() >= RESEND_INTERVAL_MS;
+  return (
+    invitation.emailStatus === 'sent' &&
+    !!invitation.emailRequestedAt &&
+    Date.now() - invitation.emailRequestedAt.getTime() >= RESEND_INTERVAL_MS
+  );
 }
 
 function MembersSection() {
@@ -171,10 +239,15 @@ function MembersSection() {
     .filter((m) => m.status === 'active')
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
   const needle = query.trim().toLocaleLowerCase('es-MX');
-  const shown = needle ? active.filter((m) => m.displayName.toLocaleLowerCase('es-MX').includes(needle)) : active;
+  const shown = needle
+    ? active.filter((m) => m.displayName.toLocaleLowerCase('es-MX').includes(needle))
+    : active;
 
   return (
-    <section className="panel settings" aria-labelledby="settings-members-title">
+    <section
+      className="panel settings admin-surface admin-people"
+      aria-labelledby="settings-members-title"
+    >
       <h2 id="settings-members-title">
         {simulated ? 'Integrantes simulados' : 'Integrantes'}
         <span className="chip__count">{active.length}</span>
@@ -187,7 +260,12 @@ function MembersSection() {
       {active.length > 6 && (
         <label className="field">
           <span className="field__label">Buscar integrante</span>
-          <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Nombre" />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Nombre"
+          />
         </label>
       )}
       {error && (
@@ -210,10 +288,11 @@ function MembersSection() {
                   type="button"
                   className="link-button"
                   onClick={() =>
-                    window.confirm(simulated
-                      ? `¿Dar de baja a ${m.displayName} en esta simulación?`
-                      : `¿Dar de baja a ${m.displayName}? Ya no podrá entrar; lo que publicó se conserva.`) &&
-                    run(() => source.removeMember(m.id))
+                    window.confirm(
+                      simulated
+                        ? `¿Dar de baja a ${m.displayName} en esta simulación?`
+                        : `¿Dar de baja a ${m.displayName}? Ya no podrá entrar; lo que publicó se conserva.`,
+                    ) && run(() => source.removeMember(m.id))
                   }
                 >
                   Dar de baja
@@ -238,9 +317,25 @@ function CurriculumSection() {
   const missing = CURRICULUM.length - loaded;
 
   return (
-    <section className="panel settings" aria-labelledby="settings-curriculum-title">
-      <h2 id="settings-curriculum-title">Plan de estudios</h2>
-      <progress className="settings-progress" max={CURRICULUM.length} value={loaded} aria-label="Materias cargadas" />
+    <section
+      className="panel settings admin-surface admin-curriculum"
+      aria-labelledby="settings-curriculum-title"
+    >
+      <div className="admin-panel-heading">
+        <span className="settings-card-icon">
+          <Icon name="book" size={21} />
+        </span>
+        <h2 id="settings-curriculum-title">Plan de estudios</h2>
+        <span className="badge">
+          {loaded} / {CURRICULUM.length}
+        </span>
+      </div>
+      <progress
+        className="settings-progress"
+        max={CURRICULUM.length}
+        value={loaded}
+        aria-label="Materias cargadas"
+      />
       <p className="muted">
         {missing
           ? `Faltan ${missing} de las ${CURRICULUM.length} materias del plan. Cárgalas para que aparezcan en los formularios, cada una con sus tres parciales.`

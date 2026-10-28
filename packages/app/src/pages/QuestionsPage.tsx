@@ -1,3 +1,5 @@
+import { ShareToChatButton } from '../components/messaging/SharePostDialog';
+import type { ResourceFormContext } from '../components/messaging/resourceFormContext';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { PERIOD_COUNT, periodLabel } from '@b20/core';
@@ -467,7 +469,7 @@ export function QuestionsPage() {
 }
 
 /** Formulario para preguntar, con sugerencias de dudas que ya existen (3.7). */
-export function AskQuestionPage() {
+export function AskQuestionPage({ initialTitle, onSaved, onCancel, onBusyChange }: ResourceFormContext = {}) {
   const source = useDataSource();
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -475,6 +477,7 @@ export function AskQuestionPage() {
   const { error, pending, run } = useAction();
   const queue = useResourceUploadQueue();
   const saved = useRef<{ id: string; version: number } | null>(null);
+  useEffect(() => { onBusyChange?.(pending || queue.busy); }, [pending, queue.busy, onBusyChange]);
   const submitting = useRef(false);
   const active = useRef(true);
   const [contentSaved, setContentSaved] = useState(false);
@@ -487,7 +490,7 @@ export function AskQuestionPage() {
   const periodSubjects = subjects.filter((s) => s.period === period).sort(bySubject);
   const [subjectId, setSubjectId] = useState(() => preset?.id ?? periodSubjects[0]?.id ?? '');
   const [topic, setTopic] = useState('');
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState(initialTitle ?? '');
   const [body, setBody] = useState('');
 
   if (!subjects.length) {
@@ -515,7 +518,7 @@ export function AskQuestionPage() {
         const target = saved.current;
         if (await queue.upload('question', target.id, target.version) && active.current) {
           rememberPeriod(period);
-          void navigate(`/m/preguntas/${target.id}`, { replace: true });
+          if (onSaved) onSaved(target.id, true); else void navigate(`/m/preguntas/${target.id}`, { replace: true });
         }
       });
     } finally { submitting.current = false; }
@@ -523,9 +526,9 @@ export function AskQuestionPage() {
 
   return (
     <>
-      <Link to="/m/preguntas" className="back with-icon">
+      {onCancel ? <button type="button" className="back with-icon" onClick={onCancel} disabled={pending || queue.busy}><Icon name="back" size={16} /> Volver al chat</button> : <Link to="/m/preguntas" className="back with-icon">
         <Icon name="back" size={16} /> Preguntas y respuestas
-      </Link>
+      </Link>}
       <header className="page-header">
         <div>
           <h1>Hacer una pregunta</h1>
@@ -639,9 +642,7 @@ export function AskQuestionPage() {
             </p>
           )}
           <div className="form__actions">
-            <Link to="/m/preguntas" className="button secondary">
-              Cancelar
-            </Link>
+            {onCancel ? <button type="button" className="secondary" onClick={onCancel} disabled={pending || queue.busy}>Cancelar</button> : <Link to="/m/preguntas" className="button secondary">Cancelar</Link>}
             <button type="submit" disabled={pending || queue.busy || !title.trim() || !subjectId}>
               {contentSaved ? queue.pendingCount ? 'Reintentar archivos pendientes' : 'Continuar' : 'Publicar pregunta'}
             </button>
@@ -704,7 +705,7 @@ function AnswerCard({
   const mine = useful.some((item) => item.memberId === meId);
   const canMark = meId && answer.authorId !== meId && !answer.withdrawnAt;
   return (
-    <article className={accepted ? 'panel qa-answer answer--accepted' : 'panel qa-answer'}>
+    <article className={accepted ? 'panel qa-answer answer--accepted' : 'panel qa-answer'} id={`respuesta-${answer.id}`} tabIndex={-1}>
       <header className="qa-answer__meta">
         <Avatar member={author} size={28} />
         <span className="qa-answer__who">
@@ -727,6 +728,7 @@ function AnswerCard({
         </p>
       )}
       <footer className="qa-answer__actions">
+        {!answer.withdrawnAt && <ShareToChatButton target={{ kind: 'answer', id: answer.id }} />}
         <span className="qa-answer__useful">
           {useful.length
             ? `Útil para ${useful.length} ${useful.length === 1 ? 'compañero' : 'compañeros'}`
@@ -757,8 +759,16 @@ export function QuestionPage() {
 
 function QuestionDetail() {
   const { questionId = '' } = useParams();
+  const [params] = useSearchParams();
   const source = useDataSource();
   const { me, questions, answers, members, subjects, notes, museumEntries, answerUsefulness } = useSnapshot();
+  const linkedAnswer = params.get('respuesta');
+  useEffect(() => {
+    if (!answers.some((entry) => entry.id === linkedAnswer && entry.questionId === questionId && !entry.withdrawnAt)) return;
+    const element = document.getElementById(`respuesta-${linkedAnswer}`);
+    element?.focus({ preventScroll: true });
+    element?.scrollIntoView?.({ block: 'center' });
+  }, [questionId, linkedAnswer, answers]);
   const { error, pending, run } = useAction();
   const [answer, setAnswer] = useState('');
   const queue = useResourceUploadQueue();
@@ -890,6 +900,7 @@ function QuestionDetail() {
       </header>
       <ContentWithdrawal kind="question" id={question.id} version={question.version ?? 1} withdrawnAt={question.withdrawnAt}
         canEdit={isAuthor || me?.isCreator} reasonRequired={!isAuthor} />
+      {!question.withdrawnAt && <ShareToChatButton target={{ kind: 'question', id: question.id }} />}
 
       <div className="detail">
         <div className="detail__main">

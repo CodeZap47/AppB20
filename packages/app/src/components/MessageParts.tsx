@@ -7,13 +7,15 @@ import { REACTIONS } from '@b20/core';
 import { useSnapshot } from '../data/DataContext';
 import type { Id, MessageReaction } from '../data/types';
 import { peopleList } from '../lib/format';
-import { resolveReference, type Reference } from '../lib/references';
+import { resolveReference, type LinkKind, type Reference } from '../lib/references';
+import { ChatPostCard } from './ChatPostCard';
 import { Icon, type IconName } from './Icon';
 import { StickerImage } from './StickerImage';
 import { ChatButton } from './messaging/Messaging';
+import { EmojiPicker } from './EmojiPicker';
 export { StickerImage } from './StickerImage';
 
-const REF_ICON: Record<Exclude<Reference['kind'], 'sticker'>, IconName> = {
+const REF_ICON: Record<LinkKind, IconName> = {
   tarea: 'folder',
   trabajo: 'upload',
   clase: 'users',
@@ -25,6 +27,7 @@ const REF_ICON: Record<Exclude<Reference['kind'], 'sticker'>, IconName> = {
 export function RefCard({ reference }: { reference: Reference }) {
   const data = useSnapshot();
   if (reference.kind === 'sticker') return <StickerImage id={reference.id} size={96} />;
+  if (reference.kind === 'recurso') return <ChatPostCard target={reference.target} />;
   const ref = resolveReference(reference, data);
   if (!ref) {
     return (
@@ -59,7 +62,7 @@ export function ReactionBar({
 }) {
   const { members } = useSnapshot();
   if (!reactions.length) return null;
-  const groups = REACTIONS.map((emoji) => ({
+  const groups = [...new Set(reactions.map((reaction) => reaction.emoji))].map((emoji) => ({
     emoji,
     people: reactions.filter((r) => r.emoji === emoji).map((r) => r.memberId),
   })).filter((g) => g.people.length > 0);
@@ -111,6 +114,7 @@ export function MessageMenu({
   actions: MenuAction[];
 }) {
   const [confirming, setConfirming] = useState<MenuAction | null>(null);
+  const [pickingEmoji, setPickingEmoji] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const closeConfirmation = () => {
     setConfirming(null);
@@ -142,6 +146,7 @@ export function MessageMenu({
                 />
               ))}
             </Dropdown.Section>}
+            {onReact && <Dropdown.Item id="more-reactions" label="Más reacciones" textValue="Más reacciones" onAction={() => setPickingEmoji(true)} />}
             {onReact && actions.length > 0 && <Dropdown.Separator />}
             <Dropdown.Section aria-label="Acciones">
               {actions.map((action) => (
@@ -159,6 +164,7 @@ export function MessageMenu({
           </Dropdown.Menu>
         </Dropdown.Popover>
       </Dropdown.Root>
+      {pickingEmoji && onReact && <EmojiPicker open onSelect={onReact} onClose={() => { setPickingEmoji(false); requestAnimationFrame(() => buttonRef.current?.focus()); }} />}
       <ModalOverlay isOpen={Boolean(confirming)} isDismissable onOpenChange={(open) => { if (!open) closeConfirmation(); }} className="b20-messaging messaging-confirm-overlay">
         <Modal className="messaging-confirm">
           <Dialog aria-label={confirming?.label ?? 'Confirmar acción'} className="messaging-confirm__dialog">

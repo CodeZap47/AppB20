@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useMatch, useNavigate, useParams } from 'react-router';
 import { useDataSource, useSnapshot } from '../data/DataContext';
 import { ChatAvatar, ChatButton } from '../components/messaging/Messaging';
@@ -14,9 +14,14 @@ import { matches } from '../lib/search';
 import { chatTarget, mentionedMembers, unreadMessages } from '../lib/chat';
 import { ConversationMute, MessageReportsPanel, ReportMessageForm } from '../components/ChatControls';
 import '../chat.css';
-import { TypingIndicator } from '../components/TypingIndicator';
+import { LiveDraftStack } from '../components/LiveDraftStack';
+import { useLiveDraft } from '../lib/useLiveDraft';
+import { NewConversation } from '../components/messaging/NewConversation';
+import { OnlineMembers } from '../components/messaging/OnlineMembers';
+import { ReadingComposerDock, ReadingComposerProvider, useReadingComposerDock } from '../components/messaging/ReadingComposerDock';
 import { useTyping } from '../lib/useTyping';
 import type { UploadFileItem } from '../components/uploads/UploadFileList';
+import { getChatTransfer } from '../lib/chatTransfers';
 
 const GROUP_NAME = 'Canal del salón';
 
@@ -87,14 +92,10 @@ function ConversationRow({
 function ConversationList() {
   const source = useDataSource();
   const navigate = useNavigate();
-  const { me, members, groupMessages, directConversations, directMessages, chatChannels, channelMessages, conversationStates, subjects } = useSnapshot();
+  const { me, members, groupMessages, directConversations, directMessages, chatChannels, channelMessages, conversationStates, messageReceipts } = useSnapshot();
   const { error, run } = useAction();
   const [query, setQuery] = useState('');
-  const [picking, setPicking] = useState(false);
-  const [creatingChannel, setCreatingChannel] = useState(false);
-  const [channelName, setChannelName] = useState('');
-  const [channelKind, setChannelKind] = useState<'subject' | 'topic' | 'project'>('topic');
-  const [subjectId, setSubjectId] = useState('');
+  const [creationMode, setCreationMode] = useState<'direct' | 'channel' | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const directs = useMemo(
@@ -123,7 +124,7 @@ function ConversationList() {
   const lastGroup = groupMessages.at(-1);
   const indicators = (scope: MessageScope, conversationId: string, messages: ChatMessage[]) => {
     const state = conversationStates.find((row) => row.scope === scope && row.conversationId === conversationId);
-    const unread = unreadMessages(messages, me?.id, state?.readThroughId);
+    const unread = unreadMessages(messages, me?.id, state?.readThroughId, messageReceipts?.filter(row => row.scope === scope && row.conversationId === conversationId));
     return { unread: unread.length, mentions: unread.filter((message) => me && mentionedMembers(message.text).includes(me.id)).length, muted: state?.muted };
   };
   const shownChannels = chatChannels.filter((channel) => matches(query, channel.name, channel.kind));
@@ -136,13 +137,12 @@ function ConversationList() {
       !directs.some((d) => d.otherId === m.id) &&
       matches(query, m.displayName),
   );
-  const showPeople = (picking || query.trim() !== '') && newPeople.length > 0;
+  const showPeople = query.trim() !== '' && newPeople.length > 0;
   const nothing = !showGroup && !shownDirects.length && !showPeople && !shownChannels.length;
 
   const start = async (memberId: string) => {
     const id = await run(() => source.openDirectConversation(memberId));
     if (!id) return;
-    setPicking(false);
     setQuery('');
     void navigate(`/m/mensajes/directos/${id}`);
   };
@@ -151,19 +151,7 @@ function ConversationList() {
     <aside className="chat__list" aria-label="Conversaciones">
       <header className="chat__list-header messaging-sidebar-heading">
         <div><p className="messaging-eyebrow">TU SALÓN</p><h1>Mensajes</h1></div>
-        <ChatButton
-          type="button"
-          variant="tertiary" className="icon-button"
-          aria-label={picking ? 'Cerrar la lista de compañeros' : 'Nueva conversación'}
-          title={picking ? 'Cerrar' : 'Nueva conversación'}
-          aria-expanded={picking}
-          onClick={() => {
-            setPicking(!picking);
-            if (!picking) searchRef.current?.focus();
-          }}
-        >
-          <Icon name={picking ? 'close' : 'plus'} />
-        </ChatButton>
+        <NewConversation mode={creationMode} onModeChange={setCreationMode} />
       </header>
       <label className="search">
         <Icon name="search" size={18} />
@@ -196,25 +184,14 @@ function ConversationList() {
             />
           </ul>
         )}
-        <div className="chat-channel-heading"><h2 className="chat__list-title">Canales</h2><ChatButton type="button" variant="tertiary" className="link-button" onClick={() => setCreatingChannel(!creatingChannel)}>{creatingChannel ? 'Cerrar' : 'Crear canal'}</ChatButton></div>
-        {creatingChannel && <form className="form chat-channel-form" onSubmit={(event) => {
-          event.preventDefault(); void run(async () => {
-            const id = await source.createChatChannel({ name: channelName, kind: channelKind, subjectId: channelKind === 'subject' ? subjectId : undefined });
-            setCreatingChannel(false); setChannelName(''); setSubjectId(''); void navigate(`/m/mensajes/canales/${id}`);
-          });
-        }}>
-          <label className="field"><span className="field__label">Nombre del canal</span><input value={channelName} maxLength={80} required onChange={(event) => setChannelName(event.target.value)} /></label>
-          <label className="field"><span className="field__label">Tipo de canal</span><select value={channelKind} onChange={(event) => setChannelKind(event.target.value as typeof channelKind)}><option value="subject">Materia</option><option value="topic">Tema</option><option value="project">Proyecto</option></select></label>
-          {channelKind === 'subject' && <label className="field"><span className="field__label">Materia</span><select value={subjectId} required onChange={(event) => setSubjectId(event.target.value)}><option value="">Elige una materia</option>{subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}</select></label>}
-          <p className="field__hint">Todos los integrantes activos del salón pueden leer el canal.</p><ChatButton type="submit">Crear canal</ChatButton>
-        </form>}
+        <div className="chat-channel-heading"><h2 className="chat__list-title">Canales</h2><ChatButton type="button" variant="tertiary" className="link-button" onClick={() => setCreationMode('channel')}>Crear canal</ChatButton></div>
         {shownChannels.length > 0 && <ul className="convs">{shownChannels.map((channel) => {
           const messages = channelMessages.filter((message) => message.channelId === channel.id);
           const last = messages.at(-1);
           return <ConversationRow key={channel.id} to={`/m/mensajes/canales/${channel.id}`} avatar={<GroupAvatar name={channel.name} />} name={`${channel.name}${channel.archivedAt ? ' · Archivado' : ''}`} last={last} preview={previewOf(last, true)} {...indicators('channel', channel.id, messages)} />;
         })}</ul>}
 
-        {(shownDirects.length > 0 || (!query && !picking)) && (
+        {(shownDirects.length > 0 || !query) && (
           <>
             <h2 className="chat__list-title">Directos</h2>
             {shownDirects.length ? (
@@ -234,7 +211,7 @@ function ConversationList() {
             ) : (
               <p className="muted chat__list-note">
                 Aún no tienes conversaciones directas.{' '}
-                <ChatButton type="button" variant="tertiary" className="link-button" onClick={() => setPicking(true)}>
+                <ChatButton type="button" variant="tertiary" className="link-button" onClick={() => setCreationMode('direct')}>
                   Escríbele a un compañero
                 </ChatButton>
               </p>
@@ -261,9 +238,6 @@ function ConversationList() {
           </>
         )}
 
-        {picking && !query && !newPeople.length && (
-          <p className="muted chat__list-note">Ya tienes una conversación con cada compañero.</p>
-        )}
         {nothing && query && (
           <p className="muted chat__list-note">Sin resultados para «{query.trim()}».</p>
         )}
@@ -323,23 +297,29 @@ function ThreadNotice({ title, children }: { title: string; children: ReactNode 
 function useThread(scope: MessageScope, conversationId: string, sendNew: (text: string, replyToId?: string) => string | Promise<string>) {
   const source = useDataSource();
   const onTyping = useTyping(scope, conversationId);
+  const onLiveDraftChange = useLiveDraft(scope, conversationId);
   const { me, members, conversationStates } = useSnapshot();
+  const reading = useReadingComposerDock(`${me?.id}:${scope}:${conversationId}`, () => {
+    onTyping(false);
+    onLiveDraftChange('');
+  });
   const { error, run } = useAction();
   const readAction = useAction();
   const [mode, setMode] = useState<ComposerMode | undefined>();
   const [report, setReport] = useState<ChatMessage | null>(null);
-  const [uploadItems, setUploadItems] = useState<UploadFileItem[]>([]);
-  const [retryingAttachments, setRetryingAttachments] = useState(false);
-  const upload = useRef<{ id: string; files: File[]; next: number; version: number } | null>(null);
-  const controller = useRef<AbortController | null>(null);
-  const sending = useRef(false);
+  const transfer = getChatTransfer(`${me?.id}:${scope}:${conversationId}`);
+  const { items: uploadItems, retrying: retryingAttachments, busy: transferring } = useSyncExternalStore(transfer.subscribe, transfer.getSnapshot);
+  const { upload, controller, sending, setItems: setUploadItems, setRetrying: setRetryingAttachments } = transfer;
   const generation = useRef(0);
   useEffect(() => {
     generation.current++;
-    controller.current?.abort(); upload.current = null; setMode(undefined); setReport(null); setRetryingAttachments(false); setUploadItems([]);
-    sending.current = false;
-    return () => { generation.current++; controller.current?.abort(); upload.current = null; };
-  }, [scope, conversationId, me?.id]);
+    setMode(undefined); setReport(null);
+    return () => {
+      generation.current++;
+      controller.current?.abort();
+      if (upload.current) setRetryingAttachments(true);
+    };
+  }, [scope, conversationId, me?.id, transfer]);
   const lastRead = conversationStates.find((row) => row.scope === scope && row.conversationId === conversationId)?.readThroughId;
   const requestedRead = useRef<string | undefined>(undefined);
   useEffect(() => { requestedRead.current = undefined; }, [scope, conversationId]);
@@ -353,13 +333,15 @@ function useThread(scope: MessageScope, conversationId: string, sendNew: (text: 
   }, [source, scope, conversationId, lastRead]);
 
   const handlers: MessageHandlers = {
-    onReply: (message) =>
+    onReply: (message) => {
+      reading.control.reveal(true);
       setMode({
         kind: 'reply',
         message,
         name: message.senderId === me?.id ? 'ti' : memberName(members, message.senderId),
-      }),
-    onEdit: (message) => setMode({ kind: 'edit', message }),
+      });
+    },
+    onEdit: (message) => { reading.control.reveal(true); setMode({ kind: 'edit', message }); },
     onDelete: (message) => {
       run(() => source.deleteMessage(scope, message.id));
       if (mode?.message.id === message.id) setMode(undefined);
@@ -369,10 +351,12 @@ function useThread(scope: MessageScope, conversationId: string, sendNew: (text: 
   };
 
   const onSend = async (text: string, files: File[] = []) => {
-    if (sending.current) return false;
+    if (sending.current || !transfer.active) return false;
     sending.current = true;
+    transfer.setBusy(true);
     const requestedGeneration = generation.current;
     onTyping(false);
+    onLiveDraftChange('');
     try {
       const ok =
         (await run(async () => {
@@ -380,10 +364,14 @@ function useThread(scope: MessageScope, conversationId: string, sendNew: (text: 
           else {
             if (!upload.current) {
               const id = await sendNew(text || 'Archivo adjunto', mode?.kind === 'reply' ? mode.message.id : undefined);
-              if (generation.current !== requestedGeneration) return false;
+              if (!transfer.active) return false;
               if (files.length) upload.current = { id, files, next: 0, version: 1 };
               setUploadItems(files.map((file, index) => ({ id: `attachment-${index}`, name: file.name, size: file.size,
                 type: file.type, progress: 0, state: 'queued' })));
+              if (generation.current !== requestedGeneration) {
+                if (files.length) { setRetryingAttachments(true); return false; }
+                return true;
+              }
             }
             if (upload.current) {
               const current = new AbortController(); controller.current = current;
@@ -415,10 +403,11 @@ function useThread(scope: MessageScope, conversationId: string, sendNew: (text: 
                 }
                 upload.current = null; setRetryingAttachments(false);
               } catch (failure) {
-                if (upload.current !== pending || generation.current !== requestedGeneration) return false;
+                if (upload.current !== pending || !transfer.active) return false;
                 if (current.signal.aborted) {
                   setUploadItems((items) => items.map((item, index) => index >= pending.next ? { ...item, state: 'cancelled' } : item));
                   setRetryingAttachments(true);
+                  if (generation.current !== requestedGeneration) return false;
                   throw failure;
                 } else {
                   setUploadItems((items) => items.map((item, index) => index === pending.next ? { ...item, state: 'failed',
@@ -432,12 +421,13 @@ function useThread(scope: MessageScope, conversationId: string, sendNew: (text: 
         })) ?? false;
       if (ok) setMode(undefined);
       return ok;
-    } finally { if (generation.current === requestedGeneration) sending.current = false; }
+    } finally { sending.current = false; transfer.setBusy(false); }
   };
 
   const discardAttachments = async () => {
-    if (sending.current || !upload.current) return false;
+    if (sending.current || !upload.current || !transfer.active) return false;
     sending.current = true;
+    transfer.setBusy(true);
     const pending = upload.current;
     const requestedGeneration = generation.current;
     try {
@@ -455,16 +445,19 @@ function useThread(scope: MessageScope, conversationId: string, sendNew: (text: 
         setRetryingAttachments(false);
         return true;
       })) ?? false;
-    } finally { if (generation.current === requestedGeneration) sending.current = false; }
+    } finally { sending.current = false; transfer.setBusy(false); }
   };
 
-  const extras = <>
-    <TypingIndicator scope={scope} conversationId={conversationId} />
+  useEffect(() => {
+    if (error || readAction.error || retryingAttachments) reading.control.reveal();
+  }, [error, readAction.error, retryingAttachments, reading.control.reveal]);
+  const extras = <LiveDraftStack scope={scope} conversationId={conversationId} />;
+  const notices = <>
     {retryingAttachments && <p className="chat-transfer" role="status">El mensaje ya se envió. Pulsa «Reintentar adjuntos» para continuar la misma subida sin duplicarlo.</p>}
     {report && <ReportMessageForm scope={scope} message={report} onClose={() => setReport(null)} />}
   </>;
-  return { error: error ?? readAction.error, handlers, mode, onSend, onTyping, onReadThrough, retryingAttachments, uploadItems,
-    cancelAttachments: () => controller.current?.abort(), discardAttachments, extras, cancel: () => setMode(undefined) };
+  return { error: error ?? readAction.error, handlers, mode, onSend, onTyping, onLiveDraftChange, onReadThrough, retryingAttachments, transferring, uploadItems, reading,
+    cancelAttachments: () => controller.current?.abort(), discardAttachments, extras, notices, cancel: () => setMode(undefined) };
 }
 
 export function ChannelThread() {
@@ -478,34 +471,37 @@ export function ChannelThread() {
   if (!channel) return <ThreadNotice title="Canal no disponible">No existe o no tienes acceso. <Link to="/m/mensajes/directos">Volver a las conversaciones</Link></ThreadNotice>;
   const label = channel.kind === 'subject' ? subjects.find((subject) => subject.id === channel.subjectId)?.name ?? 'Materia' : channel.kind === 'project' ? 'Proyecto' : 'Tema';
   const canArchive = me?.id === channel.createdBy || me?.isCreator;
-  return <>
+  return <ReadingComposerProvider state={thread.reading}>
     <ThreadHeader avatar={<GroupAvatar name={channel.name} />} title={channel.name} subtitle={`${label} · lo ve todo el grupo${channel.archivedAt ? ' · Archivado' : ''}`} action={<div className="chat-thread-controls">
       <ConversationMute scope="channel" conversationId={channel.id} />
       {canArchive && <ChatButton type="button" variant="secondary" className="button secondary" disabled={pending} onClick={() => void run(() => source.setChatChannelArchived(channel.id, !channel.archivedAt))}>{channel.archivedAt ? 'Reabrir canal' : 'Archivar canal'}</ChatButton>}
     </div>} />
-    <MessageList key={channel.id} messages={messages} members={members} meId={me?.id} showSenders scope="channel" handlers={thread.handlers} onReadThrough={thread.onReadThrough}
+    <MessageList key={channel.id} messages={messages} members={members} meId={me?.id} showSenders scope="channel" conversationId={channel.id} handlers={thread.handlers} onReadThrough={thread.onReadThrough}
+      composerHidden={thread.reading.hidden} composerLocked={thread.reading.locked} onComposerVisibilityChange={thread.reading.onVisibilityChange}
       empty={<ThreadNotice title="El canal está en silencio">Comparte el primer mensaje sobre {channel.name}.</ThreadNotice>} />
     {error && <p className="error" role="alert">{error}</p>}
-    {thread.extras}
+    {thread.notices}
     {channel.archivedAt && <p className="chat-transfer">Canal archivado. Puedes consultar el historial y descargar sus adjuntos.</p>}
-    <Composer key={`${me?.id}:canal:${channel.id}`} draftKey={`${me?.id}:canal:${channel.id}`} placeholder={`Escribe en ${channel.name}`} error={thread.error} onSend={thread.onSend} onTyping={thread.onTyping} mode={thread.mode} onCancelMode={thread.cancel}
+    <ReadingComposerDock state={thread.reading}>
+    {thread.extras}
+    <Composer key={`${me?.id}:canal:${channel.id}`} draftKey={`${me?.id}:canal:${channel.id}`} placeholder={`Escribe en ${channel.name}`} error={thread.error} onSend={thread.onSend} onTyping={thread.onTyping} onLiveDraftChange={thread.onLiveDraftChange} mode={thread.mode} onCancelMode={thread.cancel}
       attachments retryingAttachments={thread.retryingAttachments} uploadItems={thread.uploadItems} onCancelAttachments={thread.cancelAttachments} onDiscardAttachments={thread.discardAttachments}
-      disabled={Boolean(channel.archivedAt)} mentionMemberIds={members.filter((member) => member.status === 'active').map((member) => member.id)} />
-  </>;
+      disabled={Boolean(channel.archivedAt) || thread.transferring} mentionMemberIds={members.filter((member) => member.status === 'active').map((member) => member.id)} />
+    </ReadingComposerDock>
+  </ReadingComposerProvider>;
 }
 
 export function GroupThread() {
   const source = useDataSource();
   const { me, members, groupMessages } = useSnapshot();
   const thread = useThread('group', 'general', (text, replyToId) => source.sendGroupMessage(text, replyToId));
-  const count = members.filter((m) => m.status === 'active').length;
 
   return (
-    <>
+    <ReadingComposerProvider state={thread.reading}>
       <ThreadHeader
         avatar={<GroupAvatar />}
         title={GROUP_NAME}
-        subtitle={`${count} ${count === 1 ? 'integrante' : 'integrantes'} · lo ve todo el grupo`}
+        subtitle={<OnlineMembers />}
         action={<ConversationMute scope="group" conversationId="general" />}
       />
       <MessageList
@@ -516,27 +512,32 @@ export function GroupThread() {
         scope="group"
         handlers={thread.handlers}
         onReadThrough={thread.onReadThrough}
+        composerHidden={thread.reading.hidden} composerLocked={thread.reading.locked} onComposerVisibilityChange={thread.reading.onVisibilityChange}
         empty={
           <ThreadNotice title="El canal está en silencio">
             Escribe el primer mensaje para todo el salón.
           </ThreadNotice>
         }
       />
+      {thread.notices}
+      <ReadingComposerDock state={thread.reading}>
       {thread.extras}
       <Composer
         key={me?.id}
         draftKey={`${me?.id}:grupo`}
         placeholder="Escribe al grupo"
         error={thread.error}
-        onSend={thread.onSend} onTyping={thread.onTyping}
+        onSend={thread.onSend} onTyping={thread.onTyping} onLiveDraftChange={thread.onLiveDraftChange}
         mode={thread.mode}
         onCancelMode={thread.cancel}
         attachments
+        disabled={thread.transferring}
         retryingAttachments={thread.retryingAttachments}
         uploadItems={thread.uploadItems} onCancelAttachments={thread.cancelAttachments} onDiscardAttachments={thread.discardAttachments}
         mentionMemberIds={members.filter((member) => member.status === 'active').map((member) => member.id)}
       />
-    </>
+      </ReadingComposerDock>
+    </ReadingComposerProvider>
   );
 }
 
@@ -580,7 +581,7 @@ export function DirectThread() {
   const blocked = blockedMembers.some((row) => row.memberId === otherId);
 
   return (
-    <>
+    <ReadingComposerProvider state={thread.reading}>
       <ThreadHeader
         avatar={<ChatAvatar name={name} src={other?.photoUrl} size="sm" />}
         title={<Link to={`/perfil/${otherId}`}>{name}</Link>}
@@ -603,8 +604,10 @@ export function DirectThread() {
         meId={me?.id}
         showSenders={false}
         scope="direct"
+        conversationId={conversation.id}
         handlers={thread.handlers}
         onReadThrough={thread.onReadThrough}
+        composerHidden={thread.reading.hidden} composerLocked={thread.reading.locked} onComposerVisibilityChange={thread.reading.onVisibilityChange}
         empty={
           <ThreadNotice title={`Saluda a ${name}`}>
             Todavía no se han escrito. Lo que envíes aquí queda entre ustedes dos.
@@ -613,21 +616,24 @@ export function DirectThread() {
       />
       {error && <p role="alert" className="error">{error}</p>}
       {blocked && <p className="chat-transfer">Bloqueaste a este compañero. El historial se conserva; desbloquéalo para volver a enviar mensajes.</p>}
+      {thread.notices}
+      <ReadingComposerDock state={thread.reading}>
       {thread.extras}
       <Composer
         key={draftKey}
         draftKey={draftKey}
         placeholder={`Escribe a ${name}`}
         error={thread.error}
-        onSend={thread.onSend} onTyping={thread.onTyping}
+        onSend={thread.onSend} onTyping={thread.onTyping} onLiveDraftChange={thread.onLiveDraftChange}
         mode={thread.mode}
         onCancelMode={thread.cancel}
         attachments
         retryingAttachments={thread.retryingAttachments}
         uploadItems={thread.uploadItems} onCancelAttachments={thread.cancelAttachments} onDiscardAttachments={thread.discardAttachments}
-        disabled={blocked}
+        disabled={blocked || thread.transferring}
         mentionMemberIds={conversation.participantIds}
       />
-    </>
+      </ReadingComposerDock>
+    </ReadingComposerProvider>
   );
 }

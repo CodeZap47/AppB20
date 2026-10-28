@@ -1,4 +1,4 @@
-import { celebrationDate, type ExamSummary, type FeedTargetKind } from '@b20/core';
+import { celebrationDate, rankingFeedId, type ExamSummary, type FeedTargetKind } from '@b20/core';
 import type { Assignment, Birthday, FeedPost, Id, Note, Snapshot } from '../data/types';
 import { formatDate, memberName, parseDay } from './format';
 import { unreadMessages as unreadChatMessages } from './chat';
@@ -298,6 +298,7 @@ function rankingNews(snapshot: Snapshot, now: Date): NewsItem[] {
   return leaderChanges(snapshot, now).map((change) => ({
     key: `rk${change.memberId}-${change.at.getTime()}`,
     kind: 'ranking',
+    resource: { kind: 'ranking', id: rankingFeedId(change) },
     subjectId: undefined,
     actorId: change.memberId,
     text: change.tiedWith.length
@@ -448,18 +449,18 @@ export function unreadMessages(snapshot: Snapshot, _since?: Date) {
   if (!meId) return { group: 0, direct: [], channels: [] };
   const stateOf = (scope: 'group' | 'direct' | 'channel', id: Id) =>
     (snapshot.conversationStates ?? []).find((state) => state.scope === scope && state.conversationId === id);
-  const group = unreadChatMessages(snapshot.groupMessages, meId, stateOf('group', 'general')?.readThroughId);
+  const group = unreadChatMessages(snapshot.groupMessages, meId, stateOf('group', 'general')?.readThroughId, snapshot.messageReceipts?.filter(row => row.scope === 'group'));
   const direct = snapshot.directConversations
     .filter((c) => Boolean(meId && c.participantIds.includes(meId)))
     .map((c) => ({
       conversation: c,
       otherId: c.participantIds.find((id) => id !== meId) ?? c.participantIds[0],
-      count: unreadChatMessages(snapshot.directMessages.filter((m) => m.conversationId === c.id), meId, stateOf('direct', c.id)?.readThroughId).length,
+      count: unreadChatMessages(snapshot.directMessages.filter((m) => m.conversationId === c.id), meId, stateOf('direct', c.id)?.readThroughId, snapshot.messageReceipts?.filter(row => row.scope === 'direct' && row.conversationId === c.id)).length,
     }))
     .filter((c) => c.count > 0);
   const channels = (snapshot.chatChannels ?? []).filter((channel) => !channel.archivedAt).map((channel) => ({
     channel,
-    count: unreadChatMessages((snapshot.channelMessages ?? []).filter((message) => message.channelId === channel.id), meId, stateOf('channel', channel.id)?.readThroughId).length,
+    count: unreadChatMessages((snapshot.channelMessages ?? []).filter((message) => message.channelId === channel.id), meId, stateOf('channel', channel.id)?.readThroughId, snapshot.messageReceipts?.filter(row => row.scope === 'channel' && row.conversationId === channel.id)).length,
   })).filter((entry) => entry.count > 0);
   return { group: group.length, direct, channels };
 }

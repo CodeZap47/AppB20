@@ -5,15 +5,17 @@ import type { MessageScope } from '../data/types';
 export function TypingIndicator({
   scope,
   conversationId,
+  excludeMemberIds = [],
 }: {
   scope: MessageScope;
   conversationId: string;
+  excludeMemberIds?: readonly string[];
 }) {
   const { me, members, typingPresence = [], blockedMembers } = useSnapshot();
   const [now, setNow] = useState(Date.now);
   const candidates = typingPresence.filter(
     (row) =>
-      row.scope === scope && row.conversationId === conversationId && row.memberId !== me?.id,
+      row.scope === scope && row.conversationId === conversationId && row.memberId !== me?.id && !excludeMemberIds.includes(row.memberId),
   );
   const hasCandidates = candidates.length > 0;
   useEffect(() => {

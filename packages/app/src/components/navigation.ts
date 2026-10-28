@@ -1,7 +1,7 @@
 import type { FC } from 'react';
 import { navigableModules, type ModuleInfo } from '@b20/core';
 import {
-  Award01, BarChartSquare02, BookOpen01, CalendarHeart01, CheckDone01,
+  Award01, BarChartSquare02, BookOpen01, CalendarHeart01, CheckDone01, Cube01,
   Download01, File02, GraduationHat01, HelpCircle, HomeLine, LifeBuoy01,
   MessageChatCircle, NotificationBox, PresentationChart01, RefreshCw01, Settings01, Stars01, User01, Users01,
 } from '@untitledui/icons';
@@ -10,7 +10,7 @@ import type { NavItemType } from '@b20-ui/components/application/app-navigation/
 type NavigationIcon = FC<{ className?: string }>;
 export type NavigationItem = NavItemType & { icon: NavigationIcon };
 
-const STUDY_MODULES = ['calendario', 'materias', 'tareas', 'notas', 'preguntas', 'guias', 'retos', 'revision-codigo', 'museo-bugs', 'aprende-ensenando', 'repaso', 'salas', 'exposiciones', 'examenes', 'agente'];
+const STUDY_MODULES = ['calendario', 'materias', 'tareas', 'notas', 'preguntas', 'guias', 'retos', 'revision-codigo', 'museo-bugs', 'aprende-ensenando', 'repaso', 'salas', 'exposiciones', 'examenes', 'senales', 'agente'];
 const COMMUNITY_MODULES = ['perfiles', 'cumpleanos', 'votaciones', 'ayuda', 'oportunidades', 'leaderboard'];
 const MODULE_ICONS: Record<string, NavigationIcon> = {
   calendario: CalendarHeart01,
@@ -30,6 +30,7 @@ const MODULE_ICONS: Record<string, NavigationIcon> = {
   exposiciones: PresentationChart01,
   examenes: CheckDone01,
   agente: Stars01,
+  senales: MessageChatCircle,
   perfiles: User01,
   cumpleanos: CalendarHeart01,
   votaciones: BarChartSquare02,
@@ -54,6 +55,7 @@ export function buildNavigation(modules: readonly ModuleInfo[] = navigableModule
   const study = links(STUDY_MODULES);
   const community = links(COMMUNITY_MODULES);
   if (study.length) items.push({ label: 'Estudio', icon: BookOpen01, items: study });
+  if (byId.has('laboratorio-visual')) items.push({ label: byId.get('laboratorio-visual')!.title, href: '/m/laboratorio-visual', icon: Cube01 });
   if (community.length) items.push({ label: 'Comunidad', icon: Users01, items: community });
   return {
     items,

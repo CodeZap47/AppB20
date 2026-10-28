@@ -1,4 +1,4 @@
-import { WORK_KIND_LABEL } from '@b20/core';
+import { WORK_KIND_LABEL, decodeChatPostRef, encodeChatPostRef, type ChatPostRef } from '@b20/core';
 import type { Id, Snapshot } from '../data/types';
 import { formatDate, memberName, parseDay } from './format';
 import { matches } from './search';
@@ -21,10 +21,12 @@ export type ReferenceKind = (typeof REFERENCE_KINDS)[number];
 /** Las que se muestran como tarjeta con enlace (todas menos los stickers). */
 export type LinkKind = Exclude<ReferenceKind, 'sticker'>;
 
-export interface Reference {
+export interface LegacyReference {
   kind: ReferenceKind;
   id: Id;
 }
+export type Reference = LegacyReference | { kind: 'recurso'; id: string; target: ChatPostRef };
+export const postReference = (target: ChatPostRef): Reference => ({ kind: 'recurso', id: encodeChatPostRef(target), target });
 
 export const LINK_KINDS: Record<LinkKind, { label: string; command: string; hint: string }> = {
   tarea: {
@@ -50,9 +52,9 @@ export const LINK_KINDS: Record<LinkKind, { label: string; command: string; hint
   },
 };
 
-const TOKEN = /\[\[(tarea|trabajo|clase|nota|pregunta|sticker):([A-Za-z0-9_-]{1,40})\]\]/g;
+const TOKEN = /\[\[(?:(tarea|trabajo|clase|nota|pregunta|sticker):([A-Za-z0-9_-]{1,40})|recurso:([A-Za-z0-9_-]{1,1536}))\]\]/g;
 
-export function formatReference(kind: ReferenceKind, id: Id): string {
+export function formatReference(kind: ReferenceKind | 'recurso', id: Id): string {
   return `[[${kind}:${id}]]`;
 }
 
@@ -61,10 +63,12 @@ export function referencesIn(text: string): Reference[] {
   const seen = new Set<string>();
   const refs: Reference[] = [];
   for (const match of text.matchAll(TOKEN)) {
-    const key = `${match[1]}:${match[2]}`;
+    const target = match[3] ? decodeChatPostRef(match[3]) : undefined;
+    if (match[3] && !target) continue;
+    const key = match[3] ? `recurso:${match[3]}` : `${match[1]}:${match[2]}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    refs.push({ kind: match[1] as ReferenceKind, id: match[2] as Id });
+    refs.push(target ? { kind: 'recurso', id: match[3]!, target } : { kind: match[1] as ReferenceKind, id: match[2] as Id });
   }
   return refs;
 }
@@ -72,7 +76,7 @@ export function referencesIn(text: string): Reference[] {
 /** El texto sin las referencias, para mostrarlas aparte como tarjetas. */
 export function stripReferences(text: string): string {
   return text
-    .replace(TOKEN, '')
+    .replace(TOKEN, (token, _kind: string, _id: string, encoded: string | undefined) => encoded && !decodeChatPostRef(encoded) ? token : '')
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
@@ -95,7 +99,7 @@ export interface ResolvedReference {
 
 /** Datos para la tarjeta de una referencia, o undefined si no existe o no tienes acceso. */
 export function resolveReference(ref: Reference, data: Snapshot): ResolvedReference | undefined {
-  if (ref.kind === 'sticker') return undefined;
+  if (ref.kind === 'sticker' || ref.kind === 'recurso') return undefined;
   const subject = (id: Id | undefined) => data.subjects.find((s) => s.id === id)?.name ?? '';
   const term = (id: Id | undefined) => data.terms.find((t) => t.id === id)?.name ?? '';
   const join = (...parts: string[]) => parts.filter(Boolean).join(' · ');

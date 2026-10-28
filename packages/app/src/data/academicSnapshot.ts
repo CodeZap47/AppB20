@@ -21,7 +21,7 @@ export function enrichAcademicSnapshot(connection: Pick<DbConnection, 'db'>, sna
   const workReviews = rows(db.workReviews).map((row) => ({ id: row.id.toString(), workId: row.workId.toString(),
     version: row.version, workVersion: row.version, reviewerId: row.reviewer.toHexString(), comment: row.comment, createdAt: row.createdAt.toDate() }));
   const newFiles: ResourceFile[] = rows(db.resourceFiles).map((row) => ({ id: row.id,
-    targetKind: checked(row.targetKind, ['assignment', 'activity', 'work', 'evidence', 'note', 'guide', 'question', 'answer', 'profile', 'profile_cover', 'group_message', 'direct_message', 'channel_message']), targetId: row.targetId.toString(),
+    targetKind: checked(row.targetKind, ['assignment', 'activity', 'work', 'evidence', 'note', 'guide', 'question', 'answer', 'profile', 'profile_cover', 'visual_project', 'group_message', 'direct_message', 'channel_message']), targetId: row.targetId.toString(),
     name: row.name, size: size(row.size), contentType: row.contentType, uploadedBy: row.uploadedBy.toHexString(),
     createdAt: row.createdAt.toDate(), removedAt: row.removedAt?.toDate() }));
   const mirrored = new Set(newFiles.map((file) => file.id));

@@ -16,6 +16,7 @@ import { memberIdentityFor, authIdentityLink, allowedAuthIssuer } from './authId
 import { schema, SenderError, t, table, type ReducerCtx } from 'spacetimedb/server';
 import { ScheduleAt, Timestamp } from 'spacetimedb';
 import { sha256 } from '@noble/hashes/sha2.js';
+import { normalizeReaction } from '../../core/src/messages';
 import { nextSpacedSchedule, type SpacedRating } from '../../core/src/spaced';
 import { displayNameError } from '../../core/src/profiles';
 import { normalizePresentationConfiguration, normalizePresentationBody, normalizePresentationObservations,
@@ -58,9 +59,19 @@ import { trashTables } from './trashTables';
 import * as trash from './trashHandlers';
 import { practiceTables, codingChallenge, challengeHint, challengeProgress, challengeSolution, challengeComment, codeReview, codeReviewVersion, codeReviewComment } from './practiceTables';
 import * as practice from './practiceHandlers';
+import { signalsTables, signalExpiry, signalSnapshotRow } from './signalsTables';
+import * as signals from './signalsHandlers';
+import { visualProjectTables, visualProjectViewRow } from './visualProjectTables';
+import * as visualProjects from './visualProjectHandlers';
+import { visualSceneTables, visualAssetExpiry } from './visualSceneTables';
+import * as visualScenes from './visualSceneHandlers';
 import { community4Tables, museumEntry, museumRevision, opportunity, opportunityRevision, opportunityInterest, opportunityFeedback } from './community4Tables';
 import * as community4 from './community4Handlers';
 import { feedTables, feedReaction, feedPost, feedComment } from './feedTables';
+import { feedInteractionTables } from './feedInteractionTables';
+import * as feedInteractions from './feedInteractionHandlers';
+import * as chatPosts from './chatPostHandlers';
+import { invalidateFeedShares } from './feedInteractionLifecycle';
 import { adminContentEntryType, adminContentResult } from './adminContentTables';
 import { readAdminContentEntries } from './contentInventory';
 import { moderateContentItem, readAdminContentResult } from './adminContentHandlers';
@@ -73,11 +84,21 @@ import { agentAiDispatch } from './agentAiHandlers';
 import * as agent from './agentHandlers';
 import * as helpVersioning from './helpVersioning';
 import { guideAiTables } from './guideAiTables';
+import { guideMaterialsTables } from './guideMaterialsTables';
+import { guideMaterialsResponse } from './guideMaterialsHandlers';
 import { guideAiResponse, guideAiSourceAvailability } from './guideAiHandlers';
 import { examTables } from './examTables';
 import { examResponse } from './examHandlers';
 import { chatTyping, memberOnboarding, engagementTables } from './engagementTables';
 import { completeOnboarding, setTyping, typingVisible } from './engagementHandlers';
+import { messageReceiptTables, messageReceipt, messageReceiptTracking, myMessageReceiptRow } from './messageReceiptTables';
+import { trackMessageRecipients, acknowledgeMessages, receiptVisible, trackingVisible } from './messageReceiptHandlers';
+import { chatLiveDraft, chatLivePreference, chatLiveDraftExpiry, liveDraftTables } from './liveDraftTables';
+import { setLiveDraft, setLiveDraftSharing, liveDraftVisible, disconnectLiveDrafts, expireLiveDrafts } from './liveDraftHandlers';
+import { appPresenceTables, appPresenceExpiry, onlineMemberRow } from './appPresenceTables';
+import { setAppPresence, onlineMembers, disconnectAppPresence, expireAppPresence } from './appPresenceHandlers';
+import { chatCommandDetail } from './chatCommandTables';
+import * as chatCommands from './chatCommandHandlers';
 
 // ---------------------------------------------------------------------------
 // Tablas
@@ -344,7 +365,7 @@ const sticker = table(
   },
 );
 
-/** Atajo propio para el chat: `/nombre` inserta `text`. Solo lo ve su dueño. */
+/** Command content keeps legacy IDs; additive metadata controls sharing and form actions. */
 const chatCommand = table(
   { name: 'chat_command' },
   {
@@ -825,10 +846,17 @@ const retentionExpiry = table({ name: 'retention_expiry' }, {
 
 const spacetimedb = schema({
   ...engagementTables,
+  ...liveDraftTables,
+  ...appPresenceTables,
+  ...messageReceiptTables,
   ...agentTables,
   ...practiceTables,
+  ...signalsTables,
+  ...visualProjectTables,
+  ...visualSceneTables,
   ...community4Tables,
   ...feedTables,
+  ...feedInteractionTables,
   ...helpVersionTables,
   ...teachingVersionTables,
   ...aiTables, ...examEvaluationTables, ...examSpacedTables, ...documentTables, ...presentationFeatureTables,
@@ -842,6 +870,7 @@ const spacetimedb = schema({
   presentationPractice, presentationAttempt, presentationPersonal, presentationQuestion, presentationFeedback,
   ...examTables,
   ...guideAiTables,
+  ...guideMaterialsTables,
   ...delivery2Tables,
   noteEdition,
   ...roomsTables,
@@ -870,6 +899,7 @@ const spacetimedb = schema({
   stickerPack,
   sticker,
   chatCommand,
+  chatCommandDetail,
   birthday,
   changeLog,
   activity,
@@ -1025,6 +1055,26 @@ export const my_onboarding = spacetimedb.view({ name: 'my_onboarding', public: t
 export const typing_presence = spacetimedb.view({ name: 'typing_presence', public: true }, t.array(chatTyping.rowType),
   (ctx) => [...ctx.db.chatTyping.iter()].filter((row) => typingVisible(ctx.db, memberIdentityFor(ctx), row)));
 
+export const set_live_draft = spacetimedb.reducer(
+  { scope: t.string(), conversationId: t.string(), text: t.string(), revision: t.u64() }, setLiveDraft,
+);
+export const set_live_draft_sharing = spacetimedb.reducer({ enabled: t.bool() }, setLiveDraftSharing);
+export const live_drafts = spacetimedb.view({ name: 'live_drafts', public: true }, t.array(chatLiveDraft.rowType),
+  (ctx) => [...ctx.db.chatLiveDraft.iter()].filter((row) => liveDraftVisible(ctx.db, memberIdentityFor(ctx), row)));
+export const my_live_draft_preference = spacetimedb.view({ name: 'my_live_draft_preference', public: true }, t.array(chatLivePreference.rowType),
+  (ctx) => isActive(ctx.db, memberIdentityFor(ctx)) ? [...ctx.db.chatLivePreference.iter()].filter((row) => row.memberId.isEqual(memberIdentityFor(ctx))) : []);
+export const expire_live_drafts = spacetimedb.reducer({ onSchedule: chatLiveDraftExpiry }, { event: chatLiveDraftExpiry.rowType },
+  (ctx, { event }) => expireLiveDrafts(ctx, event));
+export const set_app_presence = spacetimedb.reducer({ active: t.bool(), revision: t.u64() }, setAppPresence);
+export const online_members = spacetimedb.view({ name: 'online_members', public: true }, t.array(onlineMemberRow),
+  (ctx) => onlineMembers(ctx.db, memberIdentityFor(ctx)));
+export const expire_app_presence = spacetimedb.reducer({ onSchedule: appPresenceExpiry }, { event: appPresenceExpiry.rowType },
+  (ctx, { event }) => expireAppPresence(ctx, event));
+export const on_disconnect = spacetimedb.clientDisconnected((ctx) => {
+  disconnectLiveDrafts(ctx);
+  disconnectAppPresence(ctx);
+});
+
 /**
  * El propietario puede configurar/invitar desde la CLI. Los demás necesitan un ID token
  * emitido para un cliente autorizado; una sesión todavía no concede la membresía.
@@ -1032,7 +1082,7 @@ export const typing_presence = spacetimedb.view({ name: 'typing_presence', publi
 export const on_connect = spacetimedb.clientConnected((ctx) => {
   // HTTP /call también ejecuta el ciclo de conexión. La identidad técnica solo llega a los
   // handlers que la aceptan expresamente; no adquiere membresía ni puede leer vistas del grupo.
-  if (isOwner(ctx) || isAuthSetup(ctx) || isFileService(ctx) || ai.isAiService(ctx) || notifications.isNotificationService(ctx) || trash.isMaintenanceService(ctx)) return;
+  if (isOwner(ctx) || isAuthSetup(ctx) || isFileService(ctx) || ai.isAiService(ctx) || notifications.isNotificationService(ctx) || trash.isMaintenanceService(ctx) || feedInteractions.isFeedShareService(ctx)) return;
   const email = verifiedEmail(ctx);
   // Una cuenta bloqueada puede consultar únicamente su estado para mostrar la baja.
   // Un histórico activo aún sin vínculo comprobado no obtiene una conexión de lectura.
@@ -1538,21 +1588,10 @@ export const remove_work_file = spacetimedb.reducer({ fileId: t.u64() }, (ctx) =
 // ---------------------------------------------------------------------------
 
 /** Deben coincidir con `REACTIONS`, `EDIT_WINDOW_MS` y los límites de stickers de `@b20/core`. */
-const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 const EDIT_WINDOW_MICROS = 15n * 60n * 1_000_000n;
 const MAX_STICKERS_PER_PACK = 30;
 const MAX_STICKER_BYTES = 1024n * 1024n;
 const STICKER_TYPES = ['image/webp', 'image/png', 'image/gif', 'image/jpeg'];
-const BUILT_IN_COMMANDS = [
-  'tarea',
-  'trabajo',
-  'clase',
-  'nota',
-  'pregunta',
-  'sticker',
-  'codigo',
-  'comandos',
-];
 const STICKER_TOKEN = /\[\[sticker:(\d{1,20})\]\]/g;
 
 /**
@@ -1603,6 +1642,7 @@ export const send_group_message = spacetimedb.reducer(
       deletedAt: undefined,
       deletedBy: undefined,
     });
+    trackMessageRecipients(ctx, 'group', 'general', message.id);
     notifications.emitMessageNotifications(ctx, 'group', message.id);
   },
 );
@@ -1695,7 +1735,8 @@ export const toggle_reaction = spacetimedb.reducer(
   { scope: t.string(), messageId: t.u64(), emoji: t.string() },
   (ctx, { scope, messageId, emoji }) => {
     activeMember(ctx);
-    if (!REACTIONS.includes(emoji)) throw new SenderError('Esa reacción no está disponible.');
+    const canonicalEmoji = normalizeReaction(emoji);
+    if (!canonicalEmoji) throw new SenderError('Esa reacción no está disponible.');
     const { row } = readableMessage(ctx, scope, messageId);
     if (scope !== 'direct' && delivery2.withdrawn(ctx.db, `${scope}_message`, messageId)) throw new SenderError('El mensaje está retirado.');
     if (row.deletedAt) throw new SenderError('No se puede reaccionar a un mensaje eliminado.');
@@ -1703,8 +1744,8 @@ export const toggle_reaction = spacetimedb.reducer(
       (r) => r.scope === scope && r.member.isEqual(memberIdentityFor(ctx)),
     );
     if (current) ctx.db.messageReaction.id.delete(current.id);
-    if (current?.emoji !== emoji) {
-      ctx.db.messageReaction.insert({ id: 0n, scope, messageId, member: memberIdentityFor(ctx), emoji });
+    if (!current || normalizeReaction(current.emoji) !== canonicalEmoji) {
+      ctx.db.messageReaction.insert({ id: 0n, scope, messageId, member: memberIdentityFor(ctx), emoji: canonicalEmoji });
     }
   },
 );
@@ -1782,52 +1823,16 @@ export const remove_sticker_pack = spacetimedb.reducer({ packId: t.u64() }, (ctx
   ctx.db.stickerPack.id.delete(packId);
 });
 
-function commandName(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .toLowerCase()
-    .trim()
-    .replace(/^\/+/, '');
-}
-
 export const save_chat_command = spacetimedb.reducer(
   { id: t.u64().optional(), name: t.string(), description: t.string(), text: t.string() },
-  (ctx, { id, name, description, text }) => {
-    activeMember(ctx);
-    const clean = commandName(name);
-    if (!/^[a-z0-9][a-z0-9-]{0,23}$/.test(clean)) {
-      throw new SenderError('Usa de 1 a 24 letras sin acentos, números o guiones, sin espacios.');
-    }
-    if (BUILT_IN_COMMANDS.includes(clean))
-      throw new SenderError(`«/${clean}» ya es un comando de la app.`);
-    const own = [...ctx.db.chatCommand.owner.filter(memberIdentityFor(ctx))];
-    if (own.some((c) => c.name === clean && c.id !== id))
-      throw new SenderError(`Ya tienes un comando «/${clean}».`);
-    const fields = {
-      name: clean,
-      description: description.trim().slice(0, 80),
-      text: requireText(text, 'El texto del comando', 2000),
-    };
-    if (id !== undefined) {
-      const existing = own.find((c) => c.id === id);
-      if (!existing) throw new SenderError('El comando no existe.');
-      ctx.db.chatCommand.id.update({ ...existing, ...fields });
-    } else {
-      ctx.db.chatCommand.insert({ id: 0n, owner: memberIdentityFor(ctx), ...fields, createdAt: ctx.timestamp });
-    }
-  },
+  chatCommands.saveChatCommand,
 );
-
-export const remove_chat_command = spacetimedb.reducer(
-  { commandId: t.u64() },
-  (ctx, { commandId }) => {
-    activeMember(ctx);
-    const row = ctx.db.chatCommand.id.find(commandId);
-    if (!row || !row.owner.isEqual(memberIdentityFor(ctx))) throw new SenderError('El comando no existe.');
-    ctx.db.chatCommand.id.delete(commandId);
-  },
+export const save_chat_command_v2 = spacetimedb.reducer(
+  { id: t.u64().optional(), name: t.string(), description: t.string(), text: t.string(),
+    visibility: t.string(), actionKind: t.string(), resourceKind: t.string().optional(), expectedVersion: t.u32().optional() },
+  chatCommands.saveChatCommand,
 );
+export const remove_chat_command = spacetimedb.reducer({ commandId: t.u64() }, chatCommands.removeChatCommand);
 
 function orderedPair(a: Ctx['sender'], b: Ctx['sender']) {
   return a.toHexString() < b.toHexString() ? [a, b] : [b, a];
@@ -1879,6 +1884,7 @@ export const send_direct_message = spacetimedb.reducer(
       deletedAt: undefined,
       deletedBy: undefined,
     });
+    trackMessageRecipients(ctx, 'direct', conversationId.toString(), message.id);
     notifications.emitMessageNotifications(ctx, 'direct', message.id);
   },
 );
@@ -2331,6 +2337,7 @@ export const cancel_poll = spacetimedb.reducer(
       cancelledAt: ctx.timestamp,
       cancelReason: requireText(reason, 'La razón', MAX_POLL_NOTE_LENGTH),
     });
+    invalidateFeedShares(ctx, 'poll', pollId);
     log(ctx, 'cancelar', 'poll', pollId);
   },
 );
@@ -2678,6 +2685,7 @@ export const withdraw_help_post = spacetimedb.reducer(
     if (!own) requireCreator(ctx);
     const withdrawalReason = optionalHelpText(reason, 'El motivo', 500);
     if (!own && !withdrawalReason) throw new SenderError('Indica el motivo de la retirada.');
+    invalidateFeedShares(ctx, 'help', postId);
     ctx.db.helpPost.id.update({
       ...post,
       status: 'withdrawn',
@@ -2864,8 +2872,10 @@ function optionalText(value: string, name: string, limit: number) {
 
 function setWorkDetail(ctx: Ctx, workId: bigint, topic: string, status: string, actor = memberIdentityFor(ctx)) {
   const detail = { workId, topic: optionalText(topic, 'El tema', 120), status: workStatus(status), updatedBy: actor };
-  if (ctx.db.workDetail.workId.find(workId)) ctx.db.workDetail.workId.update(detail);
+  const previous = ctx.db.workDetail.workId.find(workId);
+  if (previous) ctx.db.workDetail.workId.update(detail);
   else ctx.db.workDetail.insert(detail);
+  if (detail.status === 'draft' && previous?.status !== 'draft') invalidateFeedShares(ctx, 'work', workId);
 }
 
 function setAssignmentTopic(ctx: Ctx, assignmentId: bigint, topic: string) {
@@ -3214,6 +3224,7 @@ function removeResource(ctx: Ctx, fileId: string, expectedVersion: number) {
   }
   const file = ctx.db.resourceFile.id.find(fileId);
   if (!file || file.removedAt !== undefined) throw new SenderError('El archivo no está en la versión actual.');
+  if (file.targetKind === 'visual_model') throw new SenderError('Libera este modelo desde los archivos sin uso de su escena.');
   requireTargetWriter(ctx, file.targetKind, file.targetId);
   expectVersion(targetVersion(ctx, file.targetKind, file.targetId), expectedVersion);
   saveTargetBaseline(ctx, file.targetKind, file.targetId);
@@ -3235,6 +3246,7 @@ export const restore_resource_file = spacetimedb.reducer(
     activeMember(ctx);
     const file = ctx.db.resourceFile.id.find(fileId);
     if (!file) throw new SenderError('El archivo no existe.');
+    if (file.targetKind === 'visual_model') throw new SenderError('Libera este modelo desde los archivos sin uso de su escena.');
     if (file.targetKind !== 'evidence') {
       throw new SenderError('Este archivo se restaura desde el historial de su trabajo o página.');
     }
@@ -3266,6 +3278,9 @@ export const backfill_academic_v2 = spacetimedb.reducer((ctx) => {
   }
   if (!ctx.db.academicMigration.id.find(2)) ctx.db.academicMigration.insert({ id: 2, completedAt: ctx.timestamp });
 });
+
+export const guide_materials = spacetimedb.procedure({ payload: t.string() }, t.string(),
+  (ctx, { payload }) => ctx.withTx((tx) => guideMaterialsResponse(tx, payload)));
 
 export const guide_ai = spacetimedb.procedure({ payload: t.string() }, t.string(),
   (ctx, { payload }) => ctx.withTx((tx) => guideAiResponse(tx, payload)));
@@ -3342,6 +3357,7 @@ export const authorize_file_upload = spacetimedb.procedure(
   { targetKind: t.string(), targetId: t.u64(), expectedVersion: t.u32(), uploadId: t.string() }, t.string(),
   (ctx, { targetKind, targetId, expectedVersion, uploadId }) => ctx.withTx((tx) => {
     activeMember(tx); resourceKind(targetKind); requireTargetWriter(tx, targetKind, targetId);
+    if (targetKind === 'visual_project' || targetKind === 'visual_model') throw new SenderError('Los archivos del laboratorio usan almacenamiento nativo.');
     if (tx.db.resourceUpload.id.find(uploadId)) throw new SenderError('Esta subida usa almacenamiento de SpacetimeDB.');
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uploadId)) {
       throw new SenderError('Identificador de subida inválido.');
@@ -3385,6 +3401,7 @@ export const finalize_file_upload = spacetimedb.reducer(
   (ctx, input) => {
     requireFileService(ctx);
     const { actor, targetKind, targetId, expectedVersion, uploadId } = input;
+    if (targetKind === 'visual_project' || targetKind === 'visual_model') throw new SenderError('Los archivos del laboratorio usan almacenamiento nativo.');
     if (ctx.db.resourceUpload.id.find(uploadId)) throw new SenderError('Esta subida usa almacenamiento de SpacetimeDB.');
     const intent = ctx.db.fileUploadIntent.id.find(uploadId);
     if (!intent || hexIdentity(intent.actor.toHexString()) !== hexIdentity(actor) ||
@@ -3424,6 +3441,11 @@ function readableResource(tx: Ctx, fileId: string) {
     }
     const file = tx.db.resourceFile.id.find(fileId);
     if (!file) throw new SenderError('El archivo no existe.');
+    // A shared note or report never grants independent access to a private/replaced visual cover.
+    if (file.targetKind === 'visual_project' && !visualProjects.visualProjectCoverVisible(tx.db, memberIdentityFor(tx), file)) {
+      throw new SenderError('No tienes acceso a esta portada.');
+    }
+    if (file.targetKind === 'visual_model' && !visualScenes.visualModelFileVisible(tx.db, memberIdentityFor(tx), file)) throw new SenderError('No tienes acceso a este modelo.');
     if (delivery2.reportFileReadable(tx.db, memberIdentityFor(tx), fileId) || delivery2.referencedFileReadable(tx.db, memberIdentityFor(tx), fileId)) return file;
     trash.assertRetentionReadable(tx, file.targetKind, file.targetId);
     if (delivery2.withdrawnIncludingParent(tx.db, file.targetKind, file.targetId)) throw new SenderError('El contenido está retirado y sus archivos no se pueden descargar.');
@@ -3513,7 +3535,7 @@ export const begin_resource_upload = spacetimedb.reducer({
     throw new SenderError('Identificador de subida inválido.');
   }
   if (input.bytes <= 0n || input.bytes > MAX_FILE_BYTES) throw new SenderError('El archivo debe medir entre 1 byte y 50 MB.');
-  if (delivery2.PROFILE_IMAGE_KINDS.includes(input.targetKind) && (input.bytes > 5n * 1024n * 1024n || !['image/png', 'image/jpeg', 'image/webp'].includes(input.mime))) {
+  if ((delivery2.PROFILE_IMAGE_KINDS.includes(input.targetKind) || input.targetKind === 'visual_project') && (input.bytes > 5n * 1024n * 1024n || !['image/png', 'image/jpeg', 'image/webp'].includes(input.mime))) {
     throw new SenderError(input.targetKind === 'profile' ? 'Usa una foto PNG, JPEG o WebP de hasta 5 MiB.' : 'Usa una portada PNG, JPEG o WebP de hasta 5 MiB.');
   }
   if (!/^[a-f0-9]{64}$/.test(input.sha256)) throw new SenderError('Comprobación SHA-256 inválida.');
@@ -3528,6 +3550,7 @@ export const begin_resource_upload = spacetimedb.reducer({
     pendingUpload(ctx, input.uploadId);
     return;
   }
+  if (input.targetKind === 'visual_model') visualScenes.validateVisualModelUpload(ctx, input.targetId, name, mime);
   if (ctx.db.resourceFile.id.find(input.uploadId) || ctx.db.fileUploadIntent.id.find(input.uploadId)) {
     throw new SenderError('Identificador de subida ocupado.');
   }
@@ -3578,7 +3601,7 @@ export const finalize_resource_upload = spacetimedb.reducer({ uploadId: t.string
   }
   const actual = Array.from(hash.digest(), (byte) => byte.toString(16).padStart(2, '0')).join('');
   if (actual !== upload.sha256) throw new SenderError('El archivo no supera la comprobación de integridad.');
-  if (delivery2.PROFILE_IMAGE_KINDS.includes(upload.targetKind)) {
+  if (delivery2.PROFILE_IMAGE_KINDS.includes(upload.targetKind) || upload.targetKind === 'visual_project') {
     const head = ctx.db.resourceChunk.id.find(`${uploadId}:0`)!.bytes;
     const png = head.length >= 8 && [137, 80, 78, 71, 13, 10, 26, 10].every((b, i) => head[i] === b);
     const jpeg = head.length >= 3 && head[0] === 255 && head[1] === 216 && head[2] === 255;
@@ -3587,6 +3610,7 @@ export const finalize_resource_upload = spacetimedb.reducer({ uploadId: t.string
       throw new SenderError('El contenido de la imagen no coincide con su tipo.');
     }
   }
+  if (upload.targetKind === 'visual_model') visualScenes.finalizeVisualModelUpload(ctx, { assetId: upload.targetId, fileId: uploadId, bytes: upload.bytes, sha256: upload.sha256, chunkCount: upload.chunkCount });
   saveTargetBaseline(ctx, upload.targetKind, upload.targetId);
   ctx.db.resourceFile.insert({ id: uploadId, targetKind: upload.targetKind, targetId: upload.targetId,
     name: upload.name, contentType: upload.mime, size: upload.bytes, storageKey: `stdb:${uploadId}`,
@@ -3942,6 +3966,7 @@ export const archive_spaced_collection = spacetimedb.reducer(
     if (!row.ownerId.isEqual(memberIdentityFor(ctx))) throw new SenderError('Solo su creador puede archivar la colección.');
     requireSpacedVersion(row.version, expectedVersion);
     if (row.archived === archived) return;
+    if (archived) invalidateFeedShares(ctx, 'spaced', collectionId);
     ctx.db.spacedCollection.id.update({ ...row, archived, version: row.version + 1,
       updatedAt: ctx.timestamp, updatedBy: memberIdentityFor(ctx) });
   },
@@ -3988,6 +4013,7 @@ export const archive_spaced_card = spacetimedb.reducer(
     requireSpacedVersion(row.version, expectedVersion);
     if (row.archived === archived) return;
     preserveSpacedLearning(ctx, row, row.version + 1);
+    if (archived) invalidateFeedShares(ctx, 'spaced_card', cardId);
     ctx.db.spacedCard.id.update({ ...row, archived, version: row.version + 1,
       updatedAt: ctx.timestamp, updatedBy: memberIdentityFor(ctx) });
   },
@@ -4274,6 +4300,35 @@ export const publish_teaching_explanation = spacetimedb.reducer(
 
 export type ViewDb = Parameters<Parameters<typeof spacetimedb.view>[2]>[0]['db'];
 
+/** Visual projects expose metadata and links only to the author or their group. */
+export const get_visual_scene = spacetimedb.procedure({ projectId: t.u64() }, t.string(),
+  (ctx, { projectId }) => ctx.withTx(tx => visualScenes.getVisualScene(tx, projectId)));
+export const create_visual_model_asset = spacetimedb.procedure({ projectId: t.u64(), requestId: t.string(), name: t.string() }, t.string(),
+  (ctx, input) => ctx.withTx(tx => visualScenes.createVisualModelAsset(tx, input)));
+export const save_visual_scene = spacetimedb.reducer({ projectId: t.u64(), expectedVersion: t.u32(), requestId: t.string(), payload: t.string() }, visualScenes.saveVisualScene);
+export const discard_visual_model_assets = spacetimedb.reducer({ projectId: t.u64(), assets: t.string() }, visualScenes.discardVisualModelAssets);
+export const expire_visual_model_asset = spacetimedb.reducer({ onSchedule: visualAssetExpiry }, { event: visualAssetExpiry.rowType },
+  (ctx, { event }) => visualScenes.expireVisualModelAsset(ctx, event));
+
+export const save_visual_project = spacetimedb.reducer({
+  projectId: t.u64().optional(), expectedVersion: t.u32().optional(), requestId: t.string(), payload: t.string(),
+}, (ctx, input) => { visualProjects.saveVisualProject(ctx, input); });
+export const set_visual_project_visibility = spacetimedb.reducer({
+  projectId: t.u64(), visibility: t.string(), expectedVersion: t.u32(),
+}, visualProjects.setVisualProjectVisibility);
+export const archive_visual_project = spacetimedb.reducer({
+  projectId: t.u64(), archived: t.bool(), expectedVersion: t.u32(),
+}, visualProjects.archiveVisualProject);
+export const visual_projects = spacetimedb.view({ name: 'visual_projects', public: true }, t.array(visualProjectViewRow),
+  (ctx) => visualProjects.visualProjects(ctx.db, memberIdentityFor(ctx)));
+
+/** Signals expose only a membership-filtered projection, never their private records. */
+export const signal_action = spacetimedb.reducer({ payload: t.string() }, signals.signalAction);
+export const signal_snapshot = spacetimedb.view({ name: 'signal_snapshot', public: true }, t.array(signalSnapshotRow),
+  (ctx) => signals.signalSnapshot(ctx.db, memberIdentityFor(ctx)));
+export const expire_signals = spacetimedb.reducer({ onSchedule: signalExpiry }, { event: signalExpiry.rowType },
+  (ctx, { event }) => signals.expireSignals(ctx, event));
+
 // Salas: la ficha y la conversación tienen vistas independientes para que una
 // invitación pendiente nunca entregue materiales ni historial privado.
 const ROOM_METADATA = { title: t.string(), topic: t.string(), objective: t.string(), startsAt: t.timestamp(),
@@ -4366,6 +4421,8 @@ const resourceFileInfo = t.object('ResourceFileInfo', {
 export const resource_files = spacetimedb.view(
   { name: 'resource_files', public: true }, t.array(resourceFileInfo),
   (ctx) => isActive(ctx.db, memberIdentityFor(ctx)) ? [...ctx.db.resourceFile.iter()].filter((file) => {
+    if (file.targetKind === 'visual_model') return visualScenes.visualModelFileVisible(ctx.db, memberIdentityFor(ctx), file);
+    if (file.targetKind === 'visual_project') return visualProjects.visualProjectCoverVisible(ctx.db, memberIdentityFor(ctx), file);
     if (delivery2.reportFileReadable(ctx.db, memberIdentityFor(ctx), file.id) || delivery2.referencedFileReadable(ctx.db, memberIdentityFor(ctx), file.id)) return true;
     if (delivery2.withdrawn(ctx.db, file.targetKind, file.targetId)) return false;
     if (!delivery2.canReadTarget(ctx.db, memberIdentityFor(ctx), file.targetKind, file.targetId)) return false;
@@ -4604,12 +4661,15 @@ export const change_history = spacetimedb.view(
       return ctx.db.member.identity.find(memberIdentityFor(ctx))?.isCreator === true;
     }
     const kind = r.entity === 'study_guide' ? 'guide' : r.entity;
-    if (['note', 'guide', 'question', 'answer', 'work', 'evidence'].includes(kind) && /^\d+$/.test(r.entityId)) {
+    if (r.entity === 'visual_scene') return /^\d+$/.test(r.entityId) && visualProjects.visualProjectReadable(ctx.db, memberIdentityFor(ctx), BigInt(r.entityId));
+    if (['note', 'guide', 'question', 'answer', 'work', 'evidence', 'visual_project', 'visual_model'].includes(kind) && /^\d+$/.test(r.entityId)) {
       return delivery2.canReadTarget(ctx.db, memberIdentityFor(ctx), kind, BigInt(r.entityId));
     }
     if (r.entity === 'resource_file') {
       const file = ctx.db.resourceFile.id.find(r.entityId);
       if (!file || !delivery2.canReadTarget(ctx.db, memberIdentityFor(ctx), file.targetKind, file.targetId)) return false;
+      if (file.targetKind === 'visual_model') return visualScenes.visualModelFileVisible(ctx.db, memberIdentityFor(ctx), file);
+      if (file.targetKind === 'visual_project') return visualProjects.visualProjectCoverVisible(ctx.db, memberIdentityFor(ctx), file);
       if (delivery2.PROFILE_IMAGE_KINDS.includes(file.targetKind)) return delivery2.profileImageVisible(ctx.db, memberIdentityFor(ctx), file);
       return true;
     }
@@ -4699,7 +4759,17 @@ export const stickers = spacetimedb.view(
 export const my_chat_commands = spacetimedb.view(
   { name: 'my_chat_commands', public: true },
   t.array(chatCommand.rowType),
-  (ctx) => (isActive(ctx.db, memberIdentityFor(ctx)) ? [...ctx.db.chatCommand.owner.filter(memberIdentityFor(ctx))] : []),
+  (ctx) => (isActive(ctx.db, memberIdentityFor(ctx)) ? [...ctx.db.chatCommand.owner.filter(memberIdentityFor(ctx))]
+    .filter(row => ctx.db.chatCommandDetail.commandId.find(row.id)?.actionKind !== 'create') : []),
+);
+
+export const available_chat_commands = spacetimedb.view(
+  { name: 'available_chat_commands', public: true }, t.array(chatCommand.rowType),
+  (ctx) => [...ctx.db.chatCommand.iter()].filter(row => chatCommands.commandReadable(ctx.db, memberIdentityFor(ctx), row.id)),
+);
+export const chat_command_details = spacetimedb.view(
+  { name: 'chat_command_details', public: true }, t.array(chatCommandDetail.rowType),
+  (ctx) => [...ctx.db.chatCommandDetail.iter()].filter(row => chatCommands.commandReadable(ctx.db, memberIdentityFor(ctx), row.commandId)),
 );
 
 export const activities = spacetimedb.view(
@@ -4830,6 +4900,7 @@ export const set_chat_channel_archived = spacetimedb.reducer({ channelId: t.u64(
 });
 export const send_channel_message = spacetimedb.reducer({ channelId: t.u64(), text: t.string(), replyToId: t.u64().optional() }, (ctx, input) => {
   const messageId = delivery2.sendChannelMessage(ctx, input);
+  trackMessageRecipients(ctx, 'channel', input.channelId.toString(), messageId);
   notifications.emitMessageNotifications(ctx, 'channel', messageId);
 });
 export const mark_conversation_read = spacetimedb.reducer({ scope: t.string(), conversationId: t.string(), messageId: t.u64() }, (ctx, input) => { delivery2.markConversationRead(ctx, input); notifications.suppressConversationNotifications(ctx, input.scope, input.conversationId); });
@@ -5062,6 +5133,15 @@ export const edit_feed_post = spacetimedb.reducer({ postId: t.u64(), text: t.str
 export const delete_feed_post = spacetimedb.reducer({ postId: t.u64() }, feed.deleteFeedPost);
 export const comment_feed_post = spacetimedb.reducer({ postId: t.u64(), text: t.string(), requestId: t.string() }, feed.commentFeedPost);
 export const delete_feed_comment = spacetimedb.reducer({ commentId: t.u64() }, feed.deleteFeedComment);
+export const feed_thread = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => feedInteractions.feedThread(tx, payload)));
+export const chat_post_action = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => chatPosts.chatPostAction(tx, payload)));
+export const configure_feed_share_service = spacetimedb.reducer({ identity: t.identity(), enabled: t.bool() }, (ctx, input) => {
+  if (!isOwner(ctx)) throw new SenderError('Solo el propietario configura el servicio de vistas previas.');
+  feedInteractions.configureFeedShareService(ctx, input);
+});
+export const feed_share_action = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => feedInteractions.feedShareAction(tx, payload)));
+export const feed_share_preview = spacetimedb.procedure({ tokenHash: t.string() }, t.string(), (ctx, { tokenHash }) => ctx.withTx((tx) => feedInteractions.feedSharePreview(tx, tokenHash)));
+
 export const feed_reactions = spacetimedb.view({ name: 'feed_reactions', public: true }, t.array(feedReaction.rowType), ctx => [...ctx.db.feedReaction.iter()].filter(row => isActive(ctx.db, row.member) && feed.feedTargetReadable(ctx.db, memberIdentityFor(ctx), row.targetKind, row.targetId)));
 export const feed_posts = spacetimedb.view({ name: 'feed_posts', public: true }, t.array(feedPost.rowType), ctx => [...ctx.db.feedPost.iter()].filter(row => feed.postReadable(ctx.db, memberIdentityFor(ctx), row.id)));
 export const feed_comments = spacetimedb.view({ name: 'feed_comments', public: true }, t.array(feedComment.rowType), ctx => [...ctx.db.feedComment.iter()].filter(row => feed.commentReadable(ctx.db, memberIdentityFor(ctx), row)));
@@ -5101,3 +5181,10 @@ export const presentation_ai = spacetimedb.procedure({ payload: t.string() }, t.
 export const presentation_media = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => presentationMediaResponse(tx, payload)));
 
 export const exam_evaluation_ai = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => examEvaluationResponse(tx, payload)));
+
+/** Only the current recipient can acknowledge; only the sender sees the audience. */
+export const acknowledge_message_delivery = spacetimedb.reducer({ scope: t.string(), conversationId: t.string(), messageIds: t.array(t.u64()) }, (ctx, input) => acknowledgeMessages(ctx, input, false));
+export const mark_messages_seen = spacetimedb.reducer({ scope: t.string(), conversationId: t.string(), messageIds: t.array(t.u64()) }, (ctx, input) => acknowledgeMessages(ctx, input, true));
+export const my_message_receipts = spacetimedb.view({ name: 'my_message_receipts', public: true }, t.array(myMessageReceiptRow), (ctx) => [...ctx.db.messageReceipt.recipient.filter(memberIdentityFor(ctx))].filter(row => receiptVisible(ctx.db, memberIdentityFor(ctx), row, false)).map(row => ({ ...row, tracked: !!ctx.db.messageReceiptTracking.key.find(row.messageKey) })));
+export const message_receipt_details = spacetimedb.view({ name: 'message_receipt_details', public: true }, t.array(messageReceipt.rowType), (ctx) => [...ctx.db.messageReceipt.sender.filter(memberIdentityFor(ctx))].filter(row => receiptVisible(ctx.db, memberIdentityFor(ctx), row, true)));
+export const message_receipt_tracking = spacetimedb.view({ name: 'message_receipt_tracking', public: true }, t.array(messageReceiptTracking.rowType), (ctx) => [...ctx.db.messageReceiptTracking.sender.filter(memberIdentityFor(ctx))].filter(row => trackingVisible(ctx.db, memberIdentityFor(ctx), row)));

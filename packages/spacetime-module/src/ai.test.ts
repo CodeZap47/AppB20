@@ -7,7 +7,7 @@ vi.mock('spacetimedb/server', () => {
   const builder: unknown = new Proxy({}, { get: () => () => builder });
   const handler = (...args: unknown[]) => args.at(-1);
   return { SenderError: class SenderError extends Error {}, t: new Proxy({}, { get: () => () => builder }),
-    table: () => ({ rowType: builder }), schema: () => ({ reducer: handler, procedure: handler, init: handler, clientConnected: handler, view: handler }) };
+    table: () => ({ rowType: builder }), schema: () => ({ reducer: handler, procedure: handler, init: handler, clientConnected: handler, clientDisconnected: handler, view: handler }) };
 });
 import { ai_status, ai_key_status, ai_set_consent, ai_authorize_key, ai_commit_key, ai_delete_key, ai_prepare,
   ai_authorize_generation, ai_claim_generation, ai_finish_generation, ai_get_generation, ai_publish_generation, ai_list_generations, on_connect, set_ai_service, set_file_service } from './index';

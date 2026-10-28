@@ -5,7 +5,7 @@ Arquitectura elegida para completar el proyecto con SpacetimeDB y Cloudflare. La
 
 **Estado publicado, 21 de octubre de 2026:** Maincloud, el Worker compartido y la web/PWA
 incluyen cuarta entrega, Guías, Exámenes EX-2, Exposiciones y mensajería. La
-[matriz de estado](estado-del-proyecto.md) distingue los tres módulos pendientes,
+[matriz de estado](estado-del-proyecto.md) distingue los dos módulos pendientes de implementación, la entrega local de Señales,
 las ampliaciones y la aceptación real; los [recibos de sincronización](sincronizacion-2026-10-21.md)
 documentan el código publicado y la conservación de datos.
 
@@ -308,8 +308,10 @@ el procedimiento habitual; la implementación local no publica ni elimina datos.
 
 ## Alcance y estado de la primera entrega
 
-La incorporación del módulo 3.11 al catálogo no implementa su pantalla. Su alcance funcional
-se conserva íntegro en la definición y su primera incorporación corresponde a la etapa 3.
+Lenguaje de señales (3.11) tiene [implementación local](lenguaje-senales-entrega.md) en
+`/m/senales`, con motor compartido entre demo y servidor, entidades privadas y proyección
+autorizada. El catálogo local lo habilita; publicación y aceptación siguen pendientes.
+Su alcance funcional se conserva en la definición y corresponde a la etapa 3 del catálogo.
 Ayuda, Aprende enseñando y Repaso ya tienen implementación manual local; sus integraciones
 pendientes y las pruebas reales se reflejan en [estado-del-proyecto.md](estado-del-proyecto.md).
 

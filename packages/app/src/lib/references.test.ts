@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createDemoState, DemoDataSource } from '../data/demo';
 import {
   formatReference,
+  postReference,
   messagePreview,
   referencesIn,
   resolveReference,
@@ -11,6 +12,15 @@ import {
 } from './references';
 
 describe('referencias en mensajes', () => {
+  it('mezcla publicaciones versionadas con referencias históricas sin romper identificadores compuestos', () => {
+    const post = postReference({ kind: 'ranking', id: `parcial:1:1:2026-08-31|${'a'.repeat(64)}|1234567890000` });
+    const token = formatReference(post.kind, post.id);
+    expect(referencesIn(`Mira [[tarea:t1]] ${token} ${token}`)).toEqual([{ kind: 'tarea', id: 't1' }, post]);
+    expect(stripReferences(`Texto ${token} [[nota:n1]]`)).toBe('Texto');
+    expect(messagePreview({ text: token })).toBe('1 referencia');
+    expect(referencesIn('[[recurso:abcde]]')).toEqual([]);
+    expect(stripReferences('[[recurso:abcde]]')).toBe('[[recurso:abcde]]');
+  });
   it('encuentra cada referencia una vez y en orden', () => {
     const text = `Miren ${formatReference('tarea', 't1')} y ${formatReference('nota', 'n1')} ${formatReference('tarea', 't1')}`;
     expect(referencesIn(text)).toEqual([

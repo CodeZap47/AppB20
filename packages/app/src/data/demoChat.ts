@@ -1,4 +1,4 @@
-import { canDeleteMessage, canEditMessage, fileSizeError, isReaction } from '@b20/core';
+import { canDeleteMessage, canEditMessage, fileSizeError, isReaction, normalizeReaction } from '@b20/core';
 import type { DirectConversation, DirectMessage, GroupMessage, Id, Member, MessageFields, MessageReaction, MessageScope, ResourceFile, ResourceTargetKind, ResourceTransferOptions, Snapshot, Subject } from './types';
 import type { ChatChannel, ChannelMessage, ConversationState, CreateChatChannelInput, MessageReport, ReportMessageInput } from './chatTypes';
 import { chatTarget, mentionedMembers } from '../lib/chat';
@@ -71,6 +71,28 @@ export class DemoChatStore {
     if (typing) this.presence.set(key, { memberId: me.id, scope, conversationId, expiresAt: new Date(now.getTime() + 7000) });
     else this.presence.delete(key);
     this.ctx.emit();
+  }
+
+  liveDraftVisible(viewerId: Id, row: { memberId: Id; scope: MessageScope; conversationId: Id }): boolean {
+    const state = this.ctx.state();
+    if (![viewerId, row.memberId].every((id) => state.members.some((member) => member.id === id && member.status === 'active'))) return false;
+    if (this.blocks.some((block) => (block.ownerId === viewerId && block.memberId === row.memberId) || (block.ownerId === row.memberId && block.memberId === viewerId))) return false;
+    if (row.scope === 'group') return row.conversationId === 'general';
+    if (row.scope === 'channel') return this.channels.some((channel) => channel.id === row.conversationId && !channel.archivedAt);
+    return state.directConversations.some((chat) => chat.id === row.conversationId && chat.participantIds.includes(viewerId) && chat.participantIds.includes(row.memberId)
+      && chat.participantIds.every((id) => state.members.some((member) => member.id === id && member.status === 'active')));
+  }
+
+  receiptMessage(scope: MessageScope, id: Id, viewer: Id) {
+    if (!this.ctx.state().members.some(member => member.id === viewer && member.status === 'active')) return;
+    const message = scope === 'group' ? this.ctx.state().groupMessages.find(row => row.id === id)
+      : scope === 'direct' ? this.ctx.state().directMessages.find(row => row.id === id) : this.messages.find(row => row.id === id);
+    if (!message || message.deletedAt || this.ctx.available?.(`${scope}_message`, id) === false) return;
+    const conversationId = scope === 'direct' ? (message as DirectMessage).conversationId : scope === 'channel' ? (message as ChannelMessage).channelId : 'general';
+    if (scope === 'channel' && !this.channels.some(channel => channel.id === conversationId)) return;
+    const direct = scope === 'direct' ? this.ctx.state().directConversations.find(chat => chat.id === conversationId) : undefined;
+    if (scope === 'direct' && (!direct?.participantIds.includes(viewer) || this.blocks.some(block => direct.participantIds.includes(block.ownerId) && direct.participantIds.includes(block.memberId)))) return;
+    return { message, conversationId, recipients: direct?.participantIds ?? this.ctx.state().members.filter(member => member.status === 'active').map(member => member.id) };
   }
 
   handles(kind: string): boolean { return ['group_message', 'direct_message', 'channel_message'].includes(kind); }
@@ -184,6 +206,7 @@ export class DemoChatStore {
     this.ctx.state().reactions = this.ctx.state().reactions.filter((reaction) => reaction.scope !== scope || reaction.messageId !== id); this.ctx.emit();
   }
   toggleReaction(scope: MessageScope, id: Id, emoji: string) {
+    emoji = normalizeReaction(emoji) ?? emoji;
     const me = this.ctx.active(); const row = this.message(scope, id);
     if (this.ctx.available?.(`${scope}_message`, id) === false) throw new Error('El mensaje está retirado.');
     if (scope !== 'channel' || row.deletedAt || !isReaction(emoji)) throw new Error('No puedes reaccionar a este mensaje.');

@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Identity, setGlobalLogLevel } from 'spacetimedb';
 import { DbConnection } from '../packages/app/src/module_bindings';
+import { createAiDatabase } from '../apps/api/src/ai/database';
+import type { GuideExamMaterial, GuideExamMaterialDetail, GuideMaterialSelection, GuideMaterialSelectionSummary } from '../packages/core/src/guideMaterials';
+import type { ExamDetail } from '../packages/core/src/exams';
+import type { AiGenerationConfig, AiPreparation } from '../packages/core/src/ai';
 import { AI_CONSENT_VERSION } from '../packages/core/src/ai';
 import { GUIDE_SECTIONS } from '../packages/core/src/guides';
 import type { GuideAiClaim, GuideAiDraft, GuideAiDraftSummary, GuideAiResult, GuideAiPrepareInput, GuideAiProvenance } from '../packages/core/src/guideAi';
@@ -68,6 +72,9 @@ export async function runSmoke(options: Options) {
   setGlobalLogLevel('error'); const pool = clients(options); const checks: string[] = [];
   const guide = async <T>(connection: DbConnection, action: string, body: Record<string, unknown> = {}) =>
     JSON.parse(await connection.procedures.guideAi({ payload: JSON.stringify({ action, ...body }) })) as T;
+  const materialDatabase = createAiDatabase({ SPACETIMEDB_URI: options.address, SPACETIMEDB_MODULE: options.database } as Parameters<typeof createAiDatabase>[0]);
+  const materials = <T>(token: string, action: string, body: Record<string, unknown> = {}) => materialDatabase.user<T>(token, 'guide_materials', { action, ...body });
+  const exam = async <T>(connection: DbConnection, request: Record<string, unknown>) => { const result = JSON.parse(await connection.procedures.examAction({ payload: JSON.stringify(request) })); if (result?.ok === false) throw new Error(String(result.message)); return result as T; };
   const current = (connection: DbConnection, id: bigint) => [...connection.db.studyGuides.iter()].find((row) => row.id === id)!;
   try {
     let owner: DbConnection, author: DbConnection, reviewer: DbConnection;
@@ -94,11 +101,33 @@ export async function runSmoke(options: Options) {
     };
     const noteId = await addNote('Synthetic loops', 'Un ciclo repite instrucciones mientras se cumple una condición.');
     const secondId = await addNote('Synthetic conditions', 'Una condición decide qué instrucciones se ejecutan.');
-    const privateId = await addNote('Synthetic private input', 'Este contenido no se permite en guías.', 'personal');
+    const privateId = await addNote('Synthetic private input', 'SENTINELA_PERSONAL: contenido solo del autor para su borrador privado.', 'personal');
     const selection = (ids: bigint[]): GuideAiPrepareInput => ({ purpose: 'study_guide', subjectId: String(subjectId), termId: String(termId),
       title: 'Synthetic generated guide', topics: ['Ciclos'], maxOutputTokens: 1500,
       sources: ids.map((refId) => ({ kind: 'note', refId: String(refId), topics: ['Ciclos'], includeUnplaced: false })) });
-    await assert.rejects(guide(author, 'prepare', { id: randomUUID(), input: selection([privateId]), model: 'synthetic-no-network' }));
+    const privateDraft = await guide<GuideAiDraft>(author, 'prepare', { id: randomUUID(), input: selection([privateId]), model: 'synthetic-no-network' });
+    assert.equal(privateDraft.preparation.sources[0]!.visibility, 'personal');
+    assert.ok(JSON.stringify(privateDraft.preparation.fragments).includes('SENTINELA_PERSONAL'));
+    await assert.rejects(guide(reviewer, 'prepare', { id: randomUUID(), input: selection([privateId]), model: 'synthetic-no-network' }));
+    await assert.rejects(guide(author, 'createManualFromMaterials', { ...selection([privateId]), guideType: 'partial', period: '1', sections: GUIDE_SECTIONS.map(() => 'Borrador personal'), requestId: randomUUID() }));
+    await author.reducers.createTerm({ subjectId, name: 'Synthetic second term', position: 2 });
+    const otherTermId = [...author.db.terms.iter()].find((row) => row.subjectId === subjectId && row.position === 2)!.id;
+    await author.reducers.saveNoteV2({ ...noteFields, termId: otherTermId, noteId: undefined, expectedVersion: undefined, title: 'Synthetic other partial', body: 'Contenido de otro parcial expresamente elegido.' });
+    const otherPartialId = [...author.db.notes.iter()].find((row) => row.title === 'Synthetic other partial')!.id;
+    await assert.rejects(guide(author, 'prepare', { id: randomUUID(), input: selection([otherPartialId]), model: 'synthetic-no-network' }));
+    const crossInput = selection([otherPartialId]); crossInput.sources[0]!.includeOutsideTerm = true;
+    assert.equal((await guide<GuideAiDraft>(author, 'prepare', { id: randomUUID(), input: crossInput, model: 'synthetic-no-network' })).preparation.sources[0]!.includeOutsideTerm, true);
+    const materialSelectionId = randomUUID();
+    let materialSelection = await materials<GuideMaterialSelection>(options.tokens[1]!, 'saveSelection', { input: { id: materialSelectionId, expectedRevision: 0, subjectId: String(subjectId), termId: String(termId), guideType: 'partial', title: 'Selección sintética persistente', topicsText: 'Ciclos', sources: [...selection([noteId, privateId]).sources, crossInput.sources[0]!], chosenFileIds: [], manualSections: GUIDE_SECTIONS.map(() => 'Texto manual conservado.') } });
+    assert.equal(materialSelection.sources.length, 3);
+    assert.equal((await materials<GuideMaterialSelection>(options.tokens[1]!, 'getSelection', { id: materialSelectionId })).manualSections![0], 'Texto manual conservado.');
+    assert.ok((await materials<GuideMaterialSelectionSummary[]>(options.tokens[1]!, 'listSelections')).some((row) => row.id === materialSelectionId && row.materialCount === 3));
+    assert.ok(!JSON.stringify(await materials(options.tokens[1]!, 'listSelections')).includes('SENTINELA_PERSONAL'));
+    await assert.rejects(materials(options.tokens[2]!, 'getSelection', { id: materialSelectionId }));
+    assert.deepEqual(await materials(options.tokens[2]!, 'listSelections'), []);
+    await assert.rejects(materials(options.tokens[3]!, 'listSelections'));
+    await assert.rejects(materials(options.tokens[1]!, 'saveSelection', { input: { ...materialSelection, expectedRevision: 0 } }));
+    checks.push('materiales personales solo del dueño, otro parcial requiere selección expresa, selección privada guardada con CAS y listas sin contenido');
 
     const technicalResponse = await fetch(`${options.address}/v1/identity`, { method: 'POST' });
     assert.ok(technicalResponse.ok); const technical = await technicalResponse.json() as { identity: string; token: string };
@@ -115,9 +144,44 @@ export async function runSmoke(options: Options) {
     };
     const actor = await configureKey(author); const reviewerActor = await configureKey(reviewer);
     assert.equal(JSON.parse(await owner.procedures.aiKeyStatus({ payload: '{}' })).configured, false);
-    for (const table of ['ai_key', 'guide_ai_draft', 'guide_ai_transcription']) await assert.rejects(subscribe(author, [table]));
+    for (const table of ['ai_key', 'guide_ai_draft', 'guide_ai_transcription', 'guide_material_selection']) await assert.rejects(subscribe(author, [table]));
     await assert.rejects(guide(author, 'claimStep', { actor, id: randomUUID(), generationId: randomUUID() }));
     checks.push('tres miembros sintéticos, persona no invitada, claves cifradas y tablas privadas sin suscripciones');
+
+    // A separate owner reservation keeps the existing author quota scenario unchanged.
+    const ownerActor = await configureKey(owner);
+    const examConfig: AiGenerationConfig = { purpose: 'questions', questionCount: 1, types: ['single'], difficulty: 'basic' };
+    const examPreparation = JSON.parse(await owner.procedures.aiPrepare({ payload: JSON.stringify({ id: randomUUID(), subjectId: String(subjectId), termId: String(termId), topics: ['Ciclos'], sources: selection([noteId]).sources, config: examConfig, model: 'synthetic-no-network' }) })) as AiPreparation;
+    assert.equal(examPreparation.canGenerate, true);
+    const examGenerationId = randomUUID();
+    await owner.procedures.aiAuthorizeGeneration({ payload: JSON.stringify({ id: examGenerationId, preparationId: examPreparation.id, fingerprint: examPreparation.fingerprint, config: examConfig, model: examPreparation.model, confirmed: true, allowNew: true }) });
+    const examClaim = JSON.parse(await service.procedures.aiClaimGeneration({ payload: JSON.stringify({ id: examGenerationId, actor: ownerActor }) }));
+    assert.equal(examClaim.claimed, true);
+    await service.procedures.aiFinishGeneration({ payload: JSON.stringify({ id: examGenerationId, actor: ownerActor, state: 'succeeded', result: { questions: [{ id: 'guide-exam-question', type: 'single', text: 'SENTINELA_EXAMEN: ¿qué hace un ciclo?', options: [{ id: 'a', text: 'Repite instrucciones' }, { id: 'b', text: 'Borra todo' }, { id: 'c', text: 'Cierra la app' }, { id: 'd', text: 'Envía correo' }], correctOptionId: 'a', explanation: 'SENTINELA_SOLUCION_PRIVADA: repite instrucciones mientras se cumple la condición.', topic: 'Ciclos', citations: examPreparation.fragments.map((fragment) => fragment.id) }] }, usage: { inputTokens: 100, outputTokens: 100 } }) });
+    let examDetail = await exam<ExamDetail>(owner, { action: 'importGeneration', generationId: examGenerationId, title: 'Synthetic selectable exam', requestId: randomUUID() });
+    const selectableExamId = examDetail.id;
+    assert.ok((await materials<GuideExamMaterial[]>(options.tokens[0]!, 'listExams', { subjectId: String(subjectId) })).some((row) => row.id === selectableExamId && row.visibility === 'personal'));
+    assert.ok(!(await materials<GuideExamMaterial[]>(options.tokens[1]!, 'listExams', { subjectId: String(subjectId) })).some((row) => row.id === selectableExamId));
+    examDetail = await exam<ExamDetail>(owner, { action: 'approveVersion', examId: selectableExamId, expectedRevision: examDetail.revision, version: examDetail.draft!.version, reviewedQuestionIds: examDetail.draft!.questions.map((question) => question.id) });
+    examDetail = await exam<ExamDetail>(owner, { action: 'setVisibility', examId: selectableExamId, expectedRevision: examDetail.revision, visibility: 'group' });
+    const publicExam = await materials<GuideExamMaterialDetail>(options.tokens[1]!, 'getExam', { examId: selectableExamId, version: 1, includeSolutions: true });
+    assert.ok(publicExam.text.includes('SENTINELA_EXAMEN')); assert.ok(!publicExam.text.includes('SENTINELA_SOLUCION_PRIVADA')); assert.equal(publicExam.canIncludeSolutions, false);
+    const ownExam = await materials<GuideExamMaterialDetail>(options.tokens[0]!, 'getExam', { examId: selectableExamId, version: 1, includeSolutions: true });
+    assert.ok(ownExam.text.includes('SENTINELA_SOLUCION_PRIVADA')); assert.equal(ownExam.visibility, 'personal');
+    const examRef = { kind: 'exam' as const, refId: selectableExamId, examVersion: 1, includeSolutions: false, includeUnplaced: false, topics: ['Ciclos'] };
+    materialSelection = await materials<GuideMaterialSelection>(options.tokens[1]!, 'saveSelection', { input: { ...materialSelection, expectedRevision: materialSelection.revision, sources: [...materialSelection.sources, examRef] } });
+    const manualRequest = { ...selection([]), title: 'Synthetic manual guide with exam', guideType: 'partial', period: '1', sources: [examRef], sections: ['Guía manual con referencia al examen.', '', '', '', '', '', '', ''], requestId: randomUUID() };
+    const manualGuide = await guide<{ id: string; version: number }>(author, 'createManualFromMaterials', manualRequest);
+    assert.deepEqual(await guide(author, 'createManualFromMaterials', manualRequest), manualGuide);
+    const manualOrigins = await guide<GuideAiProvenance>(reviewer, 'getProvenance', { guideId: manualGuide.id, version: manualGuide.version });
+    assert.equal(manualOrigins.model, 'manual'); assert.equal(manualOrigins.sources[0]!.kind, 'exam'); assert.equal(manualOrigins.sources[0]!.refId, selectableExamId);
+    const manyIds: bigint[] = [];
+    for (let index = 0; index < 31; index++) manyIds.push(await addNote(`Synthetic material batch ${index}`, Array.from({ length: 70 }, (_, line) => `Material ${index}, línea ${line}: ${'contenido académico '.repeat(4)}`).join('\n')));
+    const bigMaterialDraft = await guide<GuideAiDraft>(author, 'prepare', { id: randomUUID(), input: { ...selection(manyIds), reviewBeforeGenerate: true }, model: 'synthetic-no-network' });
+    assert.equal(bigMaterialDraft.preparation.sources.length, 31); assert.ok(bigMaterialDraft.preparation.fragments.reduce((size, fragment) => size + fragment.text.length, 0) > 120_000);
+    assert.equal(bigMaterialDraft.steps[0]!.kind, 'summary'); assert.equal(bigMaterialDraft.steps.at(-2)!.kind, 'assessment'); assert.equal(bigMaterialDraft.steps.at(-1)!.kind, 'synthesis');
+    checks.push('examen real UUID del módulo en catálogo autorizado y guía manual idempotente; solucionario protegido; 31 materiales completos preparados por lotes sin proveedor');
+
 
     await subscribe(author, ['questions', 'answers']);
     await author.reducers.askQuestion({ subjectId, topic: 'Ciclos', title: 'Synthetic public question', body: '¿Cuándo termina un ciclo?' });
@@ -133,11 +197,11 @@ export async function runSmoke(options: Options) {
     const ex1Input = { subjectId: String(subjectId), termId: String(termId), topics: ['Ciclos'], model: 'synthetic-no-network' };
     const ordinaryPreparation = JSON.parse(await author.procedures.aiPrepare({ payload: JSON.stringify({ ...ex1Input, id: randomUUID(), sources: selection([noteId]).sources }) }));
     assert.equal(ordinaryPreparation.canGenerate, true);
-    const rejectedEx1Question = JSON.parse(await author.procedures.aiPrepare({ payload: JSON.stringify({ ...ex1Input, id: randomUUID(), sources: questionInput.sources }) }));
-    assert.equal(rejectedEx1Question.ok, false);
-    assert.equal(rejectedEx1Question.code, 'invalid');
-    assert.match(rejectedEx1Question.message, /selección de fuentes/);
-    checks.push('preguntas con respuestas públicas y selección expresa sin parcial solo amplían Guías, manteniendo el contrato EX-1');
+    const ex1Question = JSON.parse(await author.procedures.aiPrepare({ payload: JSON.stringify({ ...ex1Input, id: randomUUID(), sources: questionInput.sources }) }));
+    assert.equal(ex1Question.canGenerate, true);
+    assert.ok(ex1Question.fragments.some((fragment: { text: string }) => fragment.text.includes('¿Cuándo termina un ciclo?')));
+    assert.ok(!JSON.stringify(ex1Question.fragments).includes('deja de cumplirse'));
+    checks.push('preguntas con respuestas públicas y selección expresa sin parcial en Guías; EX-1 conserva el cuerpo sin añadir respuestas no seleccionadas');
 
     const bytes = new TextEncoder().encode('Documento compartido: ejemplo de un ciclo.\nRepetir hasta terminar.');
     const fileId = randomUUID();
@@ -155,6 +219,8 @@ export async function runSmoke(options: Options) {
     await guide(author, 'saveTranscription', transcription);
     await guide(author, 'saveTranscription', transcription);
     await assert.rejects(guide(owner, 'getTranscription', { id: transcriptionId }));
+    materialSelection = await materials<GuideMaterialSelection>(options.tokens[1]!, 'saveSelection', { input: { ...materialSelection, expectedRevision: materialSelection.revision, sources: materialSelection.sources.map((ref) => ref.kind === 'note' && ref.refId === String(noteId) ? { ...ref, transcriptionIds: [transcriptionId] } : ref), chosenFileIds: [fileId] } });
+    assert.ok(materialSelection.transcriptions.some((row) => row.id === transcriptionId && row.fileId === fileId));
     const input = selection([noteId, secondId]); input.sources[0]!.transcriptionIds = [transcriptionId];
     const prepare = (person: DbConnection, selected = input) => guide<GuideAiDraft>(person, 'prepare', { id: randomUUID(), input: selected, model: 'synthetic-no-network' });
     let draft = await prepare(author);
@@ -167,8 +233,8 @@ export async function runSmoke(options: Options) {
     checks.push('adjunto nativo íntegro, transcripción revisada ligada a huella y versión, borrador privado y listas sin contenido');
 
     let syntheticCalls = 0;
-    const resultFor = (value: GuideAiDraft): GuideAiResult => ({ title: value.title,
-      sections: GUIDE_SECTIONS.map((section) => ({ id: section.id, content: `Contenido sintético de ${section.title}.`, citations: value.preparation.fragments.map((fragment) => fragment.id) })) });
+    const resultFor = (value: GuideAiDraft, fragments = value.preparation.fragments): GuideAiResult => ({ title: value.title,
+      sections: GUIDE_SECTIONS.map((section) => ({ id: section.id, content: `Contenido sintético de ${section.title}.`, citations: fragments.map((fragment) => fragment.id) })) });
     const authorize = async (person: DbConnection, value: GuideAiDraft, generationId = randomUUID()) => {
       const authorized = await guide<{ draft: GuideAiDraft }>(person, 'authorizeStep', { id: value.id, expectedRevision: value.revision,
         generationId, fingerprint: value.preparation.fingerprint, model: value.preparation.model, allowNew: true, confirmed: true });
@@ -180,7 +246,7 @@ export async function runSmoke(options: Options) {
         guide<GuideAiClaim>(service, 'claimStep', { id: value.id, actor: personActor, generationId: authorized.generationId })]);
       assert.equal(claims.filter((claim) => claim.claimed).length, 1);
       const claim = claims.find((value) => value.claimed)!; syntheticCalls += 1;
-      const result = claim.step!.kind === 'summary' ? { paragraphs: [{ text: 'Resumen sintético del lote.', citations: claim.fragments!.map((fragment) => fragment.id) }] } : resultFor(claim.draft);
+      const result = claim.step!.kind === 'summary' ? { paragraphs: [{ text: 'Resumen sintético del lote.', citations: claim.fragments!.map((fragment) => fragment.id) }] } : resultFor(claim.draft, claim.fragments);
       return guide<GuideAiDraft>(service, 'finishStep', { id: value.id, actor: personActor, generationId: authorized.generationId, state: 'succeeded', result, usage: { inputTokens: 100, outputTokens: 100 } });
     };
     draft = await step(author, actor, draft); assert.equal(draft.state, 'ready');
@@ -240,12 +306,25 @@ export async function runSmoke(options: Options) {
     assert.equal(large.completedSteps, 1); assert.equal(large.revision, largeRevision);
     assert.equal((await guide<GuideAiDraft>(author, 'getDraft', { id: draftId })).state, 'published');
     assert.equal(current(author, guideId).version, 5);
+    const recoveredMaterials = await materials<GuideMaterialSelection>(options.tokens[1]!, 'getSelection', { id: materialSelectionId });
+    assert.equal(recoveredMaterials.revision, materialSelection.revision); assert.equal(recoveredMaterials.sources.length, 4);
+    assert.ok(recoveredMaterials.sources.some((ref) => ref.kind === 'exam' && ref.refId === selectableExamId));
+    assert.equal(recoveredMaterials.manualSections![0], 'Texto manual conservado.');
+    assert.ok(recoveredMaterials.chosenFileIds.includes(fileId));
+    assert.ok(recoveredMaterials.transcriptions.some((row) => row.id === transcriptionId && row.fileId === fileId && row.targetVersion === info.targetVersion));
+    await assert.rejects(materials(options.tokens[2]!, 'getSelection', { id: materialSelectionId }));
+    const recoveredBig = await guide<GuideAiDraft>(author, 'getDraft', { id: bigMaterialDraft.id });
+    assert.equal(recoveredBig.preparation.sources.length, 31); assert.equal(recoveredBig.completedSteps, 0);
+    const recoveredExam = await materials<GuideExamMaterialDetail>(options.tokens[1]!, 'getExam', { examId: selectableExamId, version: 1 });
+    assert.ok(recoveredExam.text.includes('SENTINELA_EXAMEN')); assert.ok(!recoveredExam.text.includes('SENTINELA_SOLUCION_PRIVADA'));
+    checks.push('reinicio conserva selección agregada, texto manual, exámenes y 31 fuentes; mantiene aislamiento de borradores entre personas');
+
     const resumedStep = async (value: GuideAiDraft) => {
       const authorized = await authorize(author, value);
       const claim = await guide<GuideAiClaim>(resumedService, 'claimStep', { id: value.id, actor, generationId: authorized.generationId });
       assert.equal(claim.claimed, true); syntheticCalls += 1;
       if (claim.step!.kind === 'synthesis') assert.equal(claim.summaries!.length, 2);
-      const result = claim.step!.kind === 'summary' ? { paragraphs: [{ text: 'Segundo resumen persistido.', citations: claim.fragments!.map((fragment) => fragment.id) }] } : resultFor(claim.draft);
+      const result = claim.step!.kind === 'summary' ? { paragraphs: [{ text: 'Segundo resumen persistido.', citations: claim.fragments!.map((fragment) => fragment.id) }] } : resultFor(claim.draft, claim.fragments);
       return guide<GuideAiDraft>(resumedService, 'finishStep', { id: value.id, actor, generationId: authorized.generationId, state: 'succeeded', result });
     };
     large = await resumedStep(large); large = await resumedStep(large); assert.equal(large.state, 'ready');
@@ -287,7 +366,7 @@ export async function runSmoke(options: Options) {
     const evidenceCitations = evidenceClaim.fragments!.filter((fragment) => fragment.origins.some((origin) => origin.kind === 'evidence')).map((fragment) => fragment.id);
     assert.ok(evidenceCitations.length);
     evidenceDraft = await guide<GuideAiDraft>(resumedService, 'finishStep', { id: evidenceDraft.id, actor: reviewerActor, generationId: evidenceAuthorization.generationId,
-      state: 'succeeded', result: { ...resultFor(evidenceClaim.draft), sections: resultFor(evidenceClaim.draft).sections.map((section) => ({ ...section, citations: evidenceCitations })) } });
+      state: 'succeeded', result: { ...resultFor(evidenceClaim.draft, evidenceClaim.fragments), sections: resultFor(evidenceClaim.draft, evidenceClaim.fragments).sections.map((section) => ({ ...section, citations: evidenceCitations })) } });
     evidenceDraft = await guide<GuideAiDraft>(reviewer, 'publish', { id: evidenceDraft.id, expectedRevision: evidenceDraft.revision, requestId: randomUUID() });
     const evidenceGuideId = BigInt(evidenceDraft.publishedGuideId!);
     await until(() => [...author.db.guideAiSourceAvailability.iter()].some((row) => row.guideId === evidenceGuideId && row.available), 'evidencia citada disponible');
@@ -307,6 +386,6 @@ export async function runSmoke(options: Options) {
     await owner.reducers.removeMember({ identity: reviewer.identity! });
     await assert.rejects(guide(reviewer, 'listDrafts'));
     checks.push('citas inexistentes rechazan el resultado, retirada revalida acceso a texto derivado y baja impide consultar borradores');
-    return { checks, migrationRehearsed: !!options.baseline, syntheticProviderCalls: syntheticCalls, realGeminiCalls: 0 };
+    return { localServer: options.address, isolatedDatabase: options.database, checks, migrationRehearsed: !!options.baseline, syntheticProviderCalls: syntheticCalls + 1, syntheticGuideSteps: syntheticCalls, syntheticExamGenerations: 1, realGeminiCalls: 0 };
   } finally { pool.close(); }
 }

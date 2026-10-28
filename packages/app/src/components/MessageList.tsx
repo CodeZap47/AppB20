@@ -1,6 +1,4 @@
 import {
-  useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -20,6 +18,9 @@ import { MessageMenu, ReactionBar, RefCard, StickerImage, type MenuAction } from
 import { MessageText } from './MessageText';
 import { ResourceDownloads } from './AcademicTools';
 import { chatTarget } from '../lib/chat';
+import { useVisibleMessageReceipts } from '../lib/useVisibleMessageReceipts';
+import { MessageInfoPanel } from './MessageInfoPanel';
+import { useReadingScroll } from '../lib/useReadingScroll';
 
 /** Lo que se puede hacer con un mensaje desde la conversación. */
 export interface MessageHandlers {
@@ -30,9 +31,6 @@ export interface MessageHandlers {
   onReport?: (message: ChatMessage) => void;
 }
 
-/** Distancia al final (px) dentro de la cual se considera que sigues leyendo lo último. */
-const NEAR_BOTTOM = 80;
-
 export function MessageList({
   messages,
   members,
@@ -42,6 +40,10 @@ export function MessageList({
   scope,
   handlers,
   onReadThrough,
+  conversationId = 'general',
+  composerHidden = false,
+  composerLocked = false,
+  onComposerVisibilityChange,
 }: {
   messages: ChatMessage[];
   members: Member[];
@@ -51,17 +53,23 @@ export function MessageList({
   empty: ReactNode;
   scope: MessageScope;
   handlers: MessageHandlers;
-  /** Solo al llegar al final con la página visible. */
+  conversationId?: Id;
+  /** Cursor de compatibilidad para los mensajes anteriores al seguimiento. */
   onReadThrough?: (messageId: Id) => void;
+  composerHidden?: boolean;
+  composerLocked?: boolean;
+  onComposerVisibilityChange?: (hidden: boolean, focus?: boolean, history?: HTMLElement) => boolean | void;
 }) {
   const { me, reactions, resourceFiles } = useSnapshot();
+  const [infoId, setInfoId] = useState<Id | null>(null);
   const [flash, setFlash] = useState<Id | null>(null);
   const byId = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
   const domId = (id: Id) => `msg-${scope}-${id}`;
 
   // Ir al mensaje citado y resaltarlo un momento.
   const jumpTo = (id: Id) => {
-    document.getElementById(domId(id))?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const node = document.getElementById(domId(id));
+    if (node) reading.quote(node);
     setFlash(id);
     window.setTimeout(() => setFlash((current) => (current === id ? null : current)), 1600);
   };
@@ -75,6 +83,7 @@ export function MessageList({
     const replied = m.replyToId ? byId.get(m.replyToId) : undefined;
     const actions: MenuAction[] = [];
     if (!m.deletedAt) {
+      if (mine) actions.push({ icon: 'info', label: 'Información del mensaje', onSelect: () => setInfoId(m.id) });
       actions.push({ icon: 'reply', label: 'Responder', onSelect: () => handlers.onReply(m) });
       if (text && typeof navigator !== 'undefined' && navigator.clipboard) {
         actions.push({
@@ -110,6 +119,7 @@ export function MessageList({
       <div
         key={m.id}
         id={domId(m.id)}
+        data-message-id={m.id}
         className={['msg', flash === m.id && 'msg--flash'].filter(Boolean).join(' ')}
       >
         <ChatBubble
@@ -176,72 +186,21 @@ export function MessageList({
   };
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const atBottom = useRef(true);
-  const seenCount = useRef(messages.length);
-  const [away, setAway] = useState(false);
-  const [unseen, setUnseen] = useState(0);
+  const spacerRef = useRef<HTMLDivElement>(null);
   const days = useMemo(() => groupByDay(messages), [messages]);
   const last = messages.at(-1);
-  const readLatest = () => {
-    if (atBottom.current && last && document.visibilityState === 'visible') onReadThrough?.(last.id);
-  };
-
-  useEffect(() => {
-    readLatest();
-    document.addEventListener('visibilitychange', readLatest);
-    window.addEventListener('focus', readLatest);
-    return () => {
-      document.removeEventListener('visibilitychange', readLatest);
-      window.removeEventListener('focus', readLatest);
-    };
-  }, [last?.id, onReadThrough]);
-
-  const toBottom = (smooth = false) => {
-    const el = scrollRef.current;
-    if (!el) return;
-    if (smooth && el.scrollTo) void el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-    else el.scrollTop = el.scrollHeight;
-  };
-
-  // Al llegar mensajes: baja solo si ya estabas al final o si lo escribiste tú; si estás
-  // leyendo algo anterior, no te mueve y avisa cuántos hay nuevos.
-  useLayoutEffect(() => {
-    const added = messages.length - seenCount.current;
-    seenCount.current = messages.length;
-    if (added <= 0 || atBottom.current || last?.senderId === meId) {
-      toBottom();
-      setUnseen(0);
-    } else {
-      setUnseen((n) => n + added);
-    }
-  }, [messages.length, last?.id]);
-
-  // Si cambia el alto disponible (crece el cuadro de texto, aparece el teclado), sigue al final.
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(() => {
-      if (atBottom.current) el.scrollTop = el.scrollHeight;
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  const onScroll = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const near = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM;
-    atBottom.current = near;
-    setAway(!near);
-    if (near) { setUnseen(0); readLatest(); }
-  };
+  const reading = useReadingScroll({ root: scrollRef, spacer: spacerRef, identity: `${meId}:${scope}:${conversationId}`,
+    hidden: composerHidden, locked: composerLocked, changeVisibility: onComposerVisibilityChange,
+    count: messages.length, lastId: last?.id, own: Boolean(meId && last?.senderId === meId) });
+  const { away, unseen } = reading;
+  const infoMessage = infoId ? byId.get(infoId) : undefined;
+  useVisibleMessageReceipts({ scope, conversationId, messages, root: scrollRef, enabled: !infoMessage, onLegacyRead: onReadThrough });
 
   return (
     <div className="thread__body">
       <div
         className="thread__scroll"
         ref={scrollRef}
-        onScroll={onScroll}
         role="log"
         aria-label="Mensajes"
         tabIndex={0}
@@ -292,17 +251,20 @@ export function MessageList({
             })}
           </section>
         ))}
+        <div ref={spacerRef} data-reading-spacer aria-hidden="true" style={{ flex: '0 0 auto', overflowAnchor: 'none' }} />
       </div>
-      {away && (
-        <ChatButton variant="secondary" type="button" className="thread__jump" onClick={() => toBottom(true)}>
+      {infoMessage && !infoMessage.deletedAt && <MessageInfoPanel scope={scope} message={infoMessage} onClose={() => setInfoId(null)} />}
+      {(away || composerHidden) && <div className="thread__navigation" style={{ position: 'absolute', right: '1rem', bottom: '.75rem', display: 'flex', flexWrap: 'wrap', maxWidth: 'calc(100% - 2rem)', justifyContent: 'flex-end', gap: 8, alignItems: 'center', zIndex: 2 }}>
+        {composerHidden && <ChatButton variant="secondary" type="button" className="thread__jump" style={{ position: 'static' }} onClick={reading.showComposer}><Icon name="edit" size={16} /><span>Escribir mensaje</span></ChatButton>}
+        {away && <ChatButton variant="secondary" type="button" className="thread__jump" style={{ position: 'static' }} onClick={() => reading.latest(true)}>
           <Icon name="down" size={18} />
           {unseen > 0 ? (
             <span>{unseen === 1 ? '1 mensaje nuevo' : `${unseen} mensajes nuevos`}</span>
           ) : (
             <span className="sr-only">Ir al último mensaje</span>
           )}
-        </ChatButton>
-      )}
+        </ChatButton>}
+      </div>}
     </div>
   );
 }

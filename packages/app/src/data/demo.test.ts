@@ -367,7 +367,9 @@ describe('notas, actividades y preguntas', () => {
       expect(mine().map((r) => r.emoji)).toEqual(['😂']);
       data.toggleReaction('group', 'g9', '😂');
       expect(mine()).toHaveLength(0);
-      expect(() => data.toggleReaction('group', 'g9', '🍕')).toThrow('no está disponible');
+      data.toggleReaction('group', 'g9', '🍕');
+      expect(mine().map((r) => r.emoji)).toEqual(['🍕']);
+      expect(() => data.toggleReaction('group', 'g9', 'hola')).toThrow('no está disponible');
     });
 
     it('las reacciones de un 1 a 1 solo las ven sus participantes', () => {

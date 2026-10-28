@@ -365,6 +365,22 @@ export const AppConfig = __t.object("AppConfig", {
 });
 export type AppConfig = __Infer<typeof AppConfig>;
 
+export const AppPresenceExpiry = __t.object("AppPresenceExpiry", {
+  id: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  expiresAt: __t.timestamp(),
+});
+export type AppPresenceExpiry = __Infer<typeof AppPresenceExpiry>;
+
+export const AppPresenceSession = __t.object("AppPresenceSession", {
+  connectionId: __t.string(),
+  memberId: __t.identity(),
+  active: __t.bool(),
+  revision: __t.u64(),
+  expiresAt: __t.timestamp(),
+});
+export type AppPresenceSession = __Infer<typeof AppPresenceSession>;
+
 export const Assignment = __t.object("Assignment", {
   id: __t.u64(),
   subjectId: __t.u64(),
@@ -406,6 +422,9 @@ export const AuthIdentityLink = __t.object("AuthIdentityLink", {
   createdAt: __t.timestamp(),
 });
 export type AuthIdentityLink = __Infer<typeof AuthIdentityLink>;
+
+export const AvailableChatCommands = __t.object("AvailableChatCommands", {});
+export type AvailableChatCommands = __Infer<typeof AvailableChatCommands>;
 
 export const Birthday = __t.object("Birthday", {
   identity: __t.identity(),
@@ -524,6 +543,46 @@ export const ChatCommand = __t.object("ChatCommand", {
   createdAt: __t.timestamp(),
 });
 export type ChatCommand = __Infer<typeof ChatCommand>;
+
+export const ChatCommandDetail = __t.object("ChatCommandDetail", {
+  commandId: __t.u64(),
+  shared: __t.bool(),
+  actionKind: __t.string(),
+  resourceKind: __t.option(__t.string()),
+  version: __t.u32(),
+  updatedAt: __t.timestamp(),
+});
+export type ChatCommandDetail = __Infer<typeof ChatCommandDetail>;
+
+export const ChatCommandDetails = __t.object("ChatCommandDetails", {});
+export type ChatCommandDetails = __Infer<typeof ChatCommandDetails>;
+
+export const ChatLiveDraft = __t.object("ChatLiveDraft", {
+  key: __t.string(),
+  connectionId: __t.string(),
+  memberId: __t.identity(),
+  scope: __t.string(),
+  conversationId: __t.string(),
+  text: __t.string(),
+  revision: __t.u64(),
+  updatedAt: __t.timestamp(),
+  expiresAt: __t.timestamp(),
+});
+export type ChatLiveDraft = __Infer<typeof ChatLiveDraft>;
+
+export const ChatLiveDraftExpiry = __t.object("ChatLiveDraftExpiry", {
+  id: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  expiresAt: __t.timestamp(),
+});
+export type ChatLiveDraftExpiry = __Infer<typeof ChatLiveDraftExpiry>;
+
+export const ChatLivePreference = __t.object("ChatLivePreference", {
+  memberId: __t.identity(),
+  enabled: __t.bool(),
+  updatedAt: __t.timestamp(),
+});
+export type ChatLivePreference = __Infer<typeof ChatLivePreference>;
 
 export const ChatTyping = __t.object("ChatTyping", {
   key: __t.string(),
@@ -885,6 +944,45 @@ export type FeedReaction = __Infer<typeof FeedReaction>;
 export const FeedReactions = __t.object("FeedReactions", {});
 export type FeedReactions = __Infer<typeof FeedReactions>;
 
+export const FeedShare = __t.object("FeedShare", {
+  id: __t.u64(),
+  tokenHash: __t.string(),
+  target: __t.string(),
+  targetKind: __t.string(),
+  targetId: __t.string(),
+  createdBy: __t.identity(),
+  createdAt: __t.timestamp(),
+  revokedAt: __t.option(__t.timestamp()),
+  invalidatedAt: __t.option(__t.timestamp()),
+});
+export type FeedShare = __Infer<typeof FeedShare>;
+
+export const FeedShareServiceConfig = __t.object("FeedShareServiceConfig", {
+  id: __t.u8(),
+  identity: __t.identity(),
+  enabled: __t.bool(),
+});
+export type FeedShareServiceConfig = __Infer<typeof FeedShareServiceConfig>;
+
+export const FeedThreadComment = __t.object("FeedThreadComment", {
+  id: __t.u64(),
+  target: __t.string(),
+  author: __t.identity(),
+  text: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type FeedThreadComment = __Infer<typeof FeedThreadComment>;
+
+export const FeedThreadReceipt = __t.object("FeedThreadReceipt", {
+  key: __t.string(),
+  target: __t.string(),
+  actor: __t.identity(),
+  requestHash: __t.string(),
+  commentId: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type FeedThreadReceipt = __Infer<typeof FeedThreadReceipt>;
+
 export const FileServiceConfig = __t.object("FileServiceConfig", {
   id: __t.u32(),
   identity: __t.identity(),
@@ -1180,6 +1278,9 @@ export const LastSeen = __t.object("LastSeen", {
 });
 export type LastSeen = __Infer<typeof LastSeen>;
 
+export const LiveDrafts = __t.object("LiveDrafts", {});
+export type LiveDrafts = __Infer<typeof LiveDrafts>;
+
 export const MaintenanceService = __t.object("MaintenanceService", {
   id: __t.u32(),
   identity: __t.identity(),
@@ -1305,6 +1406,35 @@ export type MessageReaction = __Infer<typeof MessageReaction>;
 export const MessageReactions = __t.object("MessageReactions", {});
 export type MessageReactions = __Infer<typeof MessageReactions>;
 
+export const MessageReceipt = __t.object("MessageReceipt", {
+  key: __t.string(),
+  messageKey: __t.string(),
+  scope: __t.string(),
+  conversationId: __t.string(),
+  messageId: __t.u64(),
+  sender: __t.identity(),
+  recipient: __t.identity(),
+  deliveredAt: __t.option(__t.timestamp()),
+  readAt: __t.option(__t.timestamp()),
+});
+export type MessageReceipt = __Infer<typeof MessageReceipt>;
+
+export const MessageReceiptCohort = __t.object("MessageReceiptCohort", {
+  key: __t.string(),
+  scope: __t.string(),
+  conversationId: __t.string(),
+  messageId: __t.u64(),
+  sender: __t.identity(),
+  startedAt: __t.timestamp(),
+});
+export type MessageReceiptCohort = __Infer<typeof MessageReceiptCohort>;
+
+export const MessageReceiptDetails = __t.object("MessageReceiptDetails", {});
+export type MessageReceiptDetails = __Infer<typeof MessageReceiptDetails>;
+
+export const MessageReceiptTracking = __t.object("MessageReceiptTracking", {});
+export type MessageReceiptTracking = __Infer<typeof MessageReceiptTracking>;
+
 export const MessageReport = __t.object("MessageReport", {
   id: __t.u64(),
   reporter: __t.identity(),
@@ -1415,8 +1545,28 @@ export type MyHelpRoomLinks = __Infer<typeof MyHelpRoomLinks>;
 export const MyLastSeen = __t.object("MyLastSeen", {});
 export type MyLastSeen = __Infer<typeof MyLastSeen>;
 
+export const MyLiveDraftPreference = __t.object("MyLiveDraftPreference", {});
+export type MyLiveDraftPreference = __Infer<typeof MyLiveDraftPreference>;
+
 export const MyMember = __t.object("MyMember", {});
 export type MyMember = __Infer<typeof MyMember>;
+
+export const MyMessageReceipt = __t.object("MyMessageReceipt", {
+  key: __t.string(),
+  messageKey: __t.string(),
+  scope: __t.string(),
+  conversationId: __t.string(),
+  messageId: __t.u64(),
+  sender: __t.identity(),
+  recipient: __t.identity(),
+  deliveredAt: __t.option(__t.timestamp()),
+  readAt: __t.option(__t.timestamp()),
+  tracked: __t.bool(),
+});
+export type MyMessageReceipt = __Infer<typeof MyMessageReceipt>;
+
+export const MyMessageReceipts = __t.object("MyMessageReceipts", {});
+export type MyMessageReceipts = __Infer<typeof MyMessageReceipts>;
 
 export const MyMessageReports = __t.object("MyMessageReports", {});
 export type MyMessageReports = __Infer<typeof MyMessageReports>;
@@ -1632,6 +1782,14 @@ export const NotificationServiceConfig = __t.object("NotificationServiceConfig",
   enabled: __t.bool(),
 });
 export type NotificationServiceConfig = __Infer<typeof NotificationServiceConfig>;
+
+export const OnlineMember = __t.object("OnlineMember", {
+  memberId: __t.identity(),
+});
+export type OnlineMember = __Infer<typeof OnlineMember>;
+
+export const OnlineMembers = __t.object("OnlineMembers", {});
+export type OnlineMembers = __Infer<typeof OnlineMembers>;
 
 export const Opportunities = __t.object("Opportunities", {});
 export type Opportunities = __Infer<typeof Opportunities>;
@@ -2169,6 +2327,29 @@ export type RoomTimer = __Infer<typeof RoomTimer>;
 export const RoomTimers = __t.object("RoomTimers", {});
 export type RoomTimers = __Infer<typeof RoomTimers>;
 
+export const SignalExpiry = __t.object("SignalExpiry", {
+  id: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  at: __t.u64(),
+});
+export type SignalExpiry = __Infer<typeof SignalExpiry>;
+
+export const SignalRecord = __t.object("SignalRecord", {
+  key: __t.string(),
+  collection: __t.string(),
+  json: __t.string(),
+});
+export type SignalRecord = __Infer<typeof SignalRecord>;
+
+export const SignalSnapshot = __t.object("SignalSnapshot", {});
+export type SignalSnapshot = __Infer<typeof SignalSnapshot>;
+
+export const SignalSnapshotRow = __t.object("SignalSnapshotRow", {
+  id: __t.string(),
+  json: __t.string(),
+});
+export type SignalSnapshotRow = __Infer<typeof SignalSnapshotRow>;
+
 export const SpacedCard = __t.object("SpacedCard", {
   id: __t.u64(),
   collectionId: __t.u64(),
@@ -2491,6 +2672,68 @@ export const VersionGuideSource = __t.object("VersionGuideSource", {
   addedAt: __t.option(__t.timestamp()),
 });
 export type VersionGuideSource = __Infer<typeof VersionGuideSource>;
+
+export const VisualAssetExpiry = __t.object("VisualAssetExpiry", {
+  id: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  assetId: __t.u64(),
+  generation: __t.u32(),
+});
+export type VisualAssetExpiry = __Infer<typeof VisualAssetExpiry>;
+
+export const VisualModelAsset = __t.object("VisualModelAsset", {
+  id: __t.u64(),
+  projectId: __t.u64(),
+  requestKey: __t.string(),
+  name: __t.string(),
+  state: __t.string(),
+  version: __t.u32(),
+  fileId: __t.option(__t.string()),
+  sha256: __t.option(__t.string()),
+  bytes: __t.option(__t.u64()),
+  manifest: __t.option(__t.string()),
+  createdAt: __t.timestamp(),
+  unreferencedSince: __t.option(__t.timestamp()),
+  generation: __t.u32(),
+});
+export type VisualModelAsset = __Infer<typeof VisualModelAsset>;
+
+export const VisualProject = __t.object("VisualProject", {
+  id: __t.u64(),
+  author: __t.identity(),
+  requestKey: __t.string(),
+  requestId: __t.string(),
+  creationMetadata: __t.string(),
+  metadata: __t.string(),
+  visibility: __t.string(),
+  archived: __t.bool(),
+  version: __t.u32(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type VisualProject = __Infer<typeof VisualProject>;
+
+export const VisualProjectViewRow = __t.object("VisualProjectViewRow", {
+  id: __t.u64(),
+  json: __t.string(),
+  requestId: __t.string(),
+});
+export type VisualProjectViewRow = __Infer<typeof VisualProjectViewRow>;
+
+export const VisualProjects = __t.object("VisualProjects", {});
+export type VisualProjects = __Infer<typeof VisualProjects>;
+
+export const VisualScene = __t.object("VisualScene", {
+  projectId: __t.u64(),
+  schemaVersion: __t.u32(),
+  document: __t.string(),
+  version: __t.u32(),
+  requestKey: __t.string(),
+  requestPayload: __t.string(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type VisualScene = __Infer<typeof VisualScene>;
 
 export const Work = __t.object("Work", {
   id: __t.u64(),

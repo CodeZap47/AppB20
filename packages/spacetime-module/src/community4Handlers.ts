@@ -1,4 +1,5 @@
 import { memberIdentityFor } from './authIdentity';
+import { invalidateFeedShares } from './feedInteractionLifecycle';
 import { SenderError } from 'spacetimedb/server';
 import { cleanMuseum, cleanOpportunity, opportunityExpired, type MuseumFields, type OpportunityFields } from '../../core/src/community4';
 import { activeMember, expectVersion, isActive, log, requireSubject, requireText, type Ctx, type ViewDb } from './moduleContext';
@@ -93,6 +94,7 @@ export function withdrawOpportunity(ctx: Ctx, input: { opportunityId: bigint; ex
   const reason = input.withdrawn ? (own ? input.reason.trim() : requireText(input.reason, 'El motivo', 1000)) : '';
   if (reason.length > 1000) throw new SenderError('El motivo excede 1000 caracteres.');
   const next = { ...row, withdrawn: input.withdrawn, withdrawalReason: reason, version: row.version + 1, updatedBy: memberIdentityFor(ctx), updatedAt: ctx.timestamp };
+  if (input.withdrawn) invalidateFeedShares(ctx, 'opportunity', row.id);
   ctx.db.opportunity.id.update(next); revision(ctx, next); log(ctx, input.withdrawn ? 'withdraw' : 'restore', 'opportunity', row.id);
 }
 export function setOpportunityInterest(ctx: Ctx, input: { opportunityId: bigint; interested: boolean; seekingTeam: boolean; shareContact: boolean; expectedVersion: number }) {

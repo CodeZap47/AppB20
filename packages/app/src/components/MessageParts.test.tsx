@@ -76,4 +76,11 @@ describe('menú de mensaje de Untitled UI', () => {
     expect(react).toHaveBeenCalledExactlyOnceWith('👍');
     expect(document.querySelector('[role="menu"]')).toBeNull();
   });
+
+  it('abre el selector completo desde Más reacciones', async () => {
+    await click(trigger());
+    await click(item('Más reacciones'));
+    expect(document.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('Todas las reacciones');
+    expect(document.querySelector('[aria-label="Buscar emoji"]')).not.toBeNull();
+  });
 });

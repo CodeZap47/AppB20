@@ -8,7 +8,7 @@ vi.mock('spacetimedb/server', () => {
   return {
     SenderError: class SenderError extends Error {}, t: new Proxy({}, { get: () => () => builder }),
     table: () => ({ rowType: builder }),
-    schema: () => ({ reducer: handler, procedure: handler, init: handler, clientConnected: handler, view: handler }),
+    schema: () => ({ reducer: handler, procedure: handler, init: handler, clientConnected: handler, clientDisconnected: handler, view: handler }),
   };
 });
 

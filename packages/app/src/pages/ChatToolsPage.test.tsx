@@ -101,4 +101,71 @@ describe('importación de stickers con el cargador compartido', () => {
     expect(container.textContent).toContain('Se importó 1 sticker');
     expect(container.querySelector('[role="alert"]')).toBeNull();
   });
+  it('quita una miniatura antes de importar y libera sus imágenes al descartar', async () => {
+    const one = new File(['png'], 'uno.png', { type: 'image/png' });
+    const two = new File(['png'], 'dos.png', { type: 'image/png' });
+    await show(); await choose([one, two]);
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Quitar de la selección uno.png"]')!.click());
+    expect(container.querySelector('[aria-label="Stickers listos para importar"]')?.textContent).not.toContain('uno.png');
+    expect(URL.revokeObjectURL).toHaveBeenCalled();
+    await submit();
+    expect(source.importStickers).toHaveBeenCalledExactlyOnceWith('Reacciones', [two]);
+  });
+
+  it('presenta ayuda por plataforma con pasos desplegables y copia la ruta de Android', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    await show();
+    const guide = container.querySelector('.sticker-help')!;
+    expect(guide.querySelectorAll('details')).toHaveLength(4);
+    expect(guide.querySelectorAll('ol')).toHaveLength(4);
+    await act(async () => guide.querySelector<HTMLButtonElement>('[aria-label="Copiar ruta de Android"]')!.click());
+    expect(writeText).toHaveBeenCalledExactlyOnceWith('Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Stickers');
+    expect(guide.querySelector('[role="status"]')?.textContent).toBe('Ruta copiada.');
+  });
+
+  it('actualiza la imagen correcta cuando dos stickers tienen el mismo nombre', async () => {
+    const one = new File(['uno'], 'reaccion.png', { type: 'image/png' });
+    const two = new File(['dos'], 'reaccion.png', { type: 'image/png' });
+    vi.mocked(URL.createObjectURL).mockImplementation((file) => file === one ? 'blob:uno' : 'blob:dos');
+    await show(); await choose([one, two]);
+    const remove = [...container.querySelectorAll<HTMLButtonElement>('[aria-label="Quitar de la selección reaccion.png"]')];
+    expect(remove).toHaveLength(2);
+    await act(async () => remove[0]!.click());
+    expect(container.querySelector('.sticker-preview img')?.getAttribute('src')).toBe('blob:dos');
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:uno');
+    await submit();
+    expect(source.importStickers).toHaveBeenCalledExactlyOnceWith('Reacciones', [two]);
+  });
+
+  it('muestra una alternativa manual si no se puede copiar la ruta', async () => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
+    await show();
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Copiar ruta de Android"]')!.click());
+    const guide = container.querySelector('.sticker-help')!;
+    expect(guide.querySelector('[role="alert"]')?.textContent).toContain('copiarla manualmente');
+    expect(guide.querySelector('code')?.textContent).toBe('Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Stickers');
+  });
+
+  it('bloquea cambios simultáneos del mismo paquete y deja reintentar un fallo al compartir', async () => {
+    const snapshot = source.getSnapshot();
+    snapshot.me = { id: 'owner', displayName: 'Yo', status: 'active', isCreator: false, joinedAt: new Date() };
+    snapshot.stickerPacks = [{ id: 'pack', ownerId: 'owner', name: 'Favoritos', shared: false, createdAt: new Date() }];
+    let reject!: (error: Error) => void;
+    source.setStickerPackShared = vi.fn().mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; })).mockResolvedValue(undefined);
+    await show();
+    const checkbox = container.querySelector<HTMLInputElement>('[aria-label="Compartir Favoritos con el grupo"]')!;
+    await act(async () => { checkbox.click(); checkbox.click(); });
+    expect(source.setStickerPackShared).toHaveBeenCalledExactlyOnceWith('pack', true);
+    expect(checkbox.disabled).toBe(true);
+    expect(container.querySelector<HTMLButtonElement>('[aria-label="Quitar el paquete Favoritos"]')!.disabled).toBe(true);
+    await act(async () => reject(new Error('Sin conexión')));
+    expect(container.querySelector('.sticker-library [role="alert"]')?.textContent).toBe('Sin conexión');
+    expect(checkbox.disabled).toBe(false);
+    expect(checkbox.checked).toBe(false);
+    await act(async () => checkbox.click());
+    expect(source.setStickerPackShared).toHaveBeenCalledTimes(2);
+    expect(container.querySelector('.sticker-library [role="alert"]')).toBeNull();
+  });
+
 });

@@ -1,11 +1,13 @@
 import { memberIdentityFor } from './authIdentity';
+import { visualProjectReadable } from './visualProjectHandlers';
+import { requireVisualModelWriter, visualModelReadable } from './visualSceneHandlers';
 import { SenderError } from 'spacetimedb/server';
 import { Identity } from 'spacetimedb';
 import { retentionBlocksRead } from './trashHandlers';
 import { activeMember, attachmentIds, isActive, messageText, readableMessage,
   requireGuide, requireSubject, requireText, type Ctx, type ViewDb } from './moduleContext';
 
-export const extraKinds = ['note', 'guide', 'question', 'answer', 'feed_post', 'feed_comment', 'group_message', 'direct_message', 'channel_message', 'profile', 'profile_cover'] as const;
+export const extraKinds = ['note', 'guide', 'question', 'answer', 'feed_post', 'feed_comment', 'group_message', 'direct_message', 'channel_message', 'profile', 'profile_cover', 'visual_project', 'visual_model'] as const;
 /** Archivos de imagen de un perfil: la foto y la portada. Su destino es el id del perfil. */
 export const PROFILE_IMAGE_KINDS: readonly string[] = ['profile', 'profile_cover'];
 
@@ -29,6 +31,8 @@ export function withdrawnIncludingParent(db: ViewDb, kind: string, id: bigint): 
   return false;
 }
 export function contentOwner(db: ViewDb, kind: string, id: bigint) {
+  if (kind === 'visual_model') { const asset = db.visualModelAsset.id.find(id); return asset && db.visualProject.id.find(asset.projectId)?.author; }
+  if (kind === 'visual_project') return db.visualProject.id.find(id)?.author;
   if (kind === 'note') return db.note.id.find(id)?.author;
   if (kind === 'guide') return db.studyGuide.id.find(id)?.createdBy;
   if (kind === 'question') return db.question.id.find(id)?.author;
@@ -48,6 +52,8 @@ function statusReadable(db: ViewDb, sender: Ctx['sender'], kind: string, id: big
 export function canReadTarget(db: ViewDb, sender: Ctx['sender'], kind: string, id: bigint): boolean {
   if (!isActive(db, sender)) return false;
   if (retentionBlocksRead(db, kind, id)) return false;
+  if (kind === 'visual_model') return visualModelReadable(db, sender, id);
+  if (kind === 'visual_project') return visualProjectReadable(db, sender, id);
   if (kind === 'note') {
     const row = db.note.id.find(id);
     return !!row && (row.author.isEqual(sender) || row.visibility === 'group') && statusReadable(db, sender, kind, id);
@@ -100,6 +106,10 @@ export function referencedFileReadable(db: ViewDb, sender: Ctx['sender'], fileId
   return [...db.pageSnapshot.iter()].some((row) => row.attachmentIds?.includes(fileId) && readable(row.page, row.pageId));
 }
 export function extraVersion(ctx: Ctx, kind: string, id: bigint): number {
+  if (kind === 'visual_model') { const asset = ctx.db.visualModelAsset.id.find(id); if (!asset || asset.state === 'purged') throw new SenderError('El modelo no está disponible.'); return asset.version; }
+  if (kind === 'visual_project') {
+    const row = ctx.db.visualProject.id.find(id); if (!row) throw new SenderError('El proyecto no existe.'); return row.version;
+  }
   if (kind === 'note') {
     const row = ctx.db.note.id.find(id); if (!row) throw new SenderError('La nota no existe.'); return row.version;
   }
@@ -115,9 +125,14 @@ export function extraVersion(ctx: Ctx, kind: string, id: bigint): number {
   return ctx.db.resourceVersion.key.find(`${kind}:${id}`)?.version ?? 1;
 }
 export function extraWriter(ctx: Ctx, kind: string, id: bigint, actor: Ctx['sender']) {
+  if (kind === 'visual_model') { requireVisualModelWriter(ctx, id, actor); return; }
   if (!canReadTarget(ctx.db, actor, kind, id) || withdrawnIncludingParent(ctx.db, kind, id)) throw new SenderError('El recurso no está disponible.');
   let owner;
-  if (kind === 'note') owner = ctx.db.note.id.find(id)?.author;
+  if (kind === 'visual_project') {
+    const project = ctx.db.visualProject.id.find(id)!;
+    if (project.archived) throw new SenderError('Restaura el proyecto antes de cambiar su portada.');
+    owner = project.author;
+  } else if (kind === 'note') owner = ctx.db.note.id.find(id)?.author;
   else if (kind === 'question') owner = ctx.db.question.id.find(id)?.author;
   else if (kind === 'answer') owner = ctx.db.answer.id.find(id)?.author;
   else if (PROFILE_IMAGE_KINDS.includes(kind)) owner = ctx.db.memberProfile.id.find(id)?.memberId;
@@ -165,8 +180,12 @@ export function captureGuide(ctx: Ctx, id: bigint, actor?: Ctx['sender'], restor
     attachmentIds: attachmentIds(ctx, 'guide', id), editedBy: actor ?? row.updatedBy, editedAt: row.updatedAt, restoredFromVersion });
 }
 export function bumpExtra(ctx: Ctx, kind: string, id: bigint, actor = memberIdentityFor(ctx)) {
+  // Native model finalization advances only its asset, never the independent saved scene.
+  if (kind === 'visual_model') return;
   const version = extraVersion(ctx, kind, id) + 1;
-  if (kind === 'note') {
+  if (kind === 'visual_project') {
+    ctx.db.visualProject.id.update({ ...ctx.db.visualProject.id.find(id)!, version, updatedAt: ctx.timestamp });
+  } else if (kind === 'note') {
     ctx.db.note.id.update({ ...ctx.db.note.id.find(id)!, version, updatedAt: ctx.timestamp }); captureNote(ctx, id, actor);
   } else if (kind === 'guide') {
     ctx.db.studyGuide.id.update({ ...requireGuide(ctx, id), version, updatedBy: actor, updatedAt: ctx.timestamp }); captureGuide(ctx, id, actor);

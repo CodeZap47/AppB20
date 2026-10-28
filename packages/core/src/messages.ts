@@ -1,3 +1,5 @@
+import { EMOJI_SEQUENCES } from './emojiSequences';
+
 /**
  * Reglas de los mensajes (grupo y 1 a 1): editar, eliminar, reaccionar, stickers y comandos.
  * El módulo de SpacetimeDB repite estas validaciones; aquí sirven a la interfaz y a pruebas.
@@ -6,12 +8,20 @@
 /** Tiempo para corregir un mensaje después de enviarlo. */
 export const EDIT_WINDOW_MS = 15 * 60_000;
 
-/** Reacciones disponibles: un conjunto corto para que se lean igual en todas las pantallas. */
+/** Accesos rápidos; el selector y la validación admiten todo el catálogo Unicode. */
 export const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'] as const;
-export type Reaction = (typeof REACTIONS)[number];
+export type Reaction = string;
+
+const canonicalEmojis = new Map(EMOJI_SEQUENCES.map((emoji) => [emoji.replace(/\uFE0F/g, ''), emoji]));
+
+/** One complete emoji, including ZWJ, flags and skin tones; accept keyboard presentation variants. */
+export function normalizeReaction(value: string): string | undefined {
+  if (!value || value.length > 128) return undefined;
+  return canonicalEmojis.get(value.replace(/\uFE0F/g, ''));
+}
 
 export function isReaction(value: string): value is Reaction {
-  return (REACTIONS as readonly string[]).includes(value);
+  return normalizeReaction(value) !== undefined;
 }
 
 interface MessageLike {

@@ -8,9 +8,9 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { useSnapshot } from '../data/DataContext';
-import { fileSizeError } from '@b20/core';
+import { fileSizeError, type ChatPostRef, type ChatResourceKind } from '@b20/core';
 import type { Id } from '../data/types';
 import type { ChatMessage } from '../lib/messages';
 import {
@@ -21,6 +21,7 @@ import {
   resolveReference,
   searchReferences,
   stripReferences,
+  postReference,
   type LinkKind,
   type Reference,
 } from '../lib/references';
@@ -32,9 +33,14 @@ import { ChatButton, ChatTextArea } from './messaging/Messaging';
 import { FilePicker } from './FilePicker';
 import { UploadFileList, type UploadFileItem } from './uploads/UploadFileList';
 import './uploads/consumers.css';
-
-/** Borradores por conversación: cambiar de chat no borra lo que estabas escribiendo. */
-const drafts = new Map<string, string>();
+import { ChatResourceCreatePanel } from './messaging/ChatResourceCreatePanel';
+import { rememberCommandConversation } from '../lib/commandNavigation';
+import { memberName } from '../lib/format';
+import { confirmChatDraft, consumeChatShareIntent, getChatDraft, rememberChatSend, saveChatDraft, subscribeChatDraft } from '../lib/chatDrafts';
+import type { ChatPostShareIntent } from './messaging/SharePostDialog';
+import { ChatPostPicker } from './messaging/ChatPostPicker';
+import { ChatPostDraftChip } from './messaging/ChatPostDraftChip';
+import { useReadingComposer } from './messaging/ReadingComposerDock';
 
 /** En pantallas táctiles Enter agrega un salto de línea; se envía con el botón. */
 function isTouch(): boolean {
@@ -95,6 +101,7 @@ export function Composer({
   onCancelAttachments,
   onDiscardAttachments,
   onTyping,
+  onLiveDraftChange,
 }: {
   placeholder: string;
   /** Resuelve `true` si se envió; si no, el texto se queda en el campo. */
@@ -114,16 +121,27 @@ export function Composer({
   onCancelAttachments?: () => void;
   onDiscardAttachments?: () => Promise<boolean>;
   onTyping?: (typing: boolean) => void;
+  onLiveDraftChange?: (text: string) => void;
 }) {
   const data = useSnapshot();
   const navigate = useNavigate();
+  const location = useLocation();
+  const reading = useReadingComposer();
+  const readingRef = useRef(reading);
+  readingRef.current = reading;
   const menuId = useId();
-  const [text, setText] = useState(() => drafts.get(draftKey) ?? '');
-  const [refs, setRefs] = useState<Reference[]>([]);
+  const [text, setText] = useState(() => getChatDraft(draftKey).text);
+  const [refs, setRefs] = useState<Reference[]>(() => getChatDraft(draftKey).refs);
+  const [creating, setCreating] = useState<{ kind: ChatResourceKind; title: string }>();
+  const [commandNotice, setCommandNotice] = useState('');
+  const commandBase = useRef<{ text: string; refs: Reference[] } | undefined>(undefined);
+  const creationBase = useRef<{ text: string; refs: Reference[] }>({ text: '', refs: [] });
+  const appliedIntent = useRef<string | undefined>(undefined);
   const [active, setActive] = useState(0);
   const [dismissed, setDismissed] = useState(false);
   const [stickers, setStickers] = useState(false);
-  const [files, setFiles] = useState<File[]>([]);
+  const [pickingPosts, setPickingPosts] = useState(false);
+  const [files, setFiles] = useState<File[]>(() => getChatDraft(draftKey).files);
   const [fileError, setFileError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false);
@@ -133,6 +151,39 @@ export function Composer({
   const remaining = maxLength - text.length;
   const attachmentsBlocked = disabled || sending || retryingAttachments || Boolean(editing);
   const attachmentPanelId = `${menuId}-attachments`;
+  const restoring = useRef(false);
+  const currentDraftKey = useRef(draftKey);
+  currentDraftKey.current = draftKey;
+  const mounted = useRef(true);
+  const readingEpoch = useRef(0);
+  const presenceCallbacks = useRef({ onTyping, onLiveDraftChange });
+  presenceCallbacks.current = { onTyping, onLiveDraftChange };
+  const imeLock = `${menuId}:ime`;
+  const toolsLock = `${menuId}:tools`;
+  const registerInput = reading?.registerInput;
+  const setReadingLocked = reading?.setLocked;
+  useLayoutEffect(() => {
+    registerInput?.(inputRef.current);
+    return () => registerInput?.(null);
+  }, [registerInput]);
+  useLayoutEffect(() => {
+    if (!reading?.hidden) return;
+    readingEpoch.current++;
+    if (document.activeElement === inputRef.current) inputRef.current?.blur();
+    presenceCallbacks.current.onTyping?.(false);
+    presenceCallbacks.current.onLiveDraftChange?.('');
+  }, [reading?.hidden]);
+  useEffect(() => () => setReadingLocked?.(imeLock, false), [setReadingLocked, imeLock]);
+  const focusComposer = () => {
+    if (readingRef.current) readingRef.current.reveal(true);
+    else inputRef.current?.focus({ preventScroll: true });
+  };
+  const refocusVisibleComposer = (epoch: number) => {
+    if (readingEpoch.current === epoch && !readingRef.current?.hidden) inputRef.current?.focus({ preventScroll: true });
+  };
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => subscribeChatDraft(draftKey, (next) => { if (!editing) { setText(next.text); setRefs(next.refs); setFiles(next.files); } }), [draftKey, Boolean(editing)]);
+  useEffect(() => { if (data.me) rememberCommandConversation(data.me.id, location.pathname); }, [data.me?.id, location.pathname]);
 
   const takeFiles = (list: File[]) => {
     if (attachmentsBlocked) return;
@@ -160,31 +211,41 @@ export function Composer({
   // El cuadro crece con el texto hasta el máximo que fija el CSS.
   useLayoutEffect(() => {
     const el = inputRef.current;
-    if (!el) return;
+    if (!el || reading?.hidden) return;
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
-  }, [text]);
+  }, [text, reading?.hidden]);
 
   // Al editar, el cuadro toma el texto del mensaje; al salir, vuelve el borrador.
   useEffect(() => {
+    restoring.current = true;
     if (editing) {
       setText(stripReferences(editing.text));
       setRefs(referencesIn(editing.text).filter((r) => r.kind !== 'sticker'));
     } else {
-      setText(drafts.get(draftKey) ?? '');
-      setRefs([]);
+      const draft = getChatDraft(draftKey);
+      setText(draft.text);
+      setRefs(draft.refs);
+      setFiles(draft.files);
     }
-    if (mode) inputRef.current?.focus();
-  }, [editing?.id, mode?.kind, mode?.message.id]);
+    if (mode) focusComposer();
+  }, [draftKey, editing?.id, mode?.kind, mode?.message.id]);
+  useEffect(() => {
+    if (error || fileError || retryingAttachments) readingRef.current?.reveal(false);
+  }, [error, fileError, retryingAttachments]);
+  useEffect(() => {
+    if (restoring.current) { restoring.current = false; return; }
+    if (!editing) saveChatDraft(draftKey, { text, refs, files });
+  }, [draftKey, text, refs, files, editing]);
 
   const update = (value: string) => {
     onTyping?.(Boolean(value.trim()) && !disabled);
+    onLiveDraftChange?.(value);
     setText(value);
     setDismissed(false);
     setActive(0);
     if (editing) return;
-    if (value) drafts.set(draftKey, value);
-    else drafts.delete(draftKey);
+    saveChatDraft(draftKey, { text: value, refs, files });
   };
 
   const compose = (body: string, references: Reference[]) =>
@@ -194,30 +255,36 @@ export function Composer({
 
   const send = async () => {
     if (disabled || sendingRef.current) return;
+    const focusEpoch = readingEpoch.current;
     const message = compose(text, refs);
     if (!message && !files.length) return;
     sendingRef.current = true;
     setSending(true);
+    const sent = editing ? undefined : rememberChatSend(draftKey, { text, refs, files }, retryingAttachments);
     try {
       if (await onSend(message, files)) {
-        update('');
-        setRefs([]);
-        setFiles([]);
-        setFileError(null);
+        const next = sent ? confirmChatDraft(draftKey, sent) : undefined;
+        if (mounted.current && currentDraftKey.current === draftKey) {
+          if (next) { setText(next.text); setRefs(next.refs); setFiles(next.files); }
+          else onCancelMode?.();
+          onTyping?.(false); onLiveDraftChange?.('');
+          setCommandNotice(''); setFileError(null);
+        }
       }
     } finally { sendingRef.current = false; setSending(false); }
-    inputRef.current?.focus();
+    refocusVisibleComposer(focusEpoch);
   };
 
   const sendSticker = (id: Id) => {
     if (disabled || retryingAttachments || sendingRef.current) return;
+    const focusEpoch = readingEpoch.current;
     setStickers(false);
     sendingRef.current = true;
     setSending(true);
     void onSend(formatReference('sticker', id)).finally(() => {
       sendingRef.current = false;
       setSending(false);
-      inputRef.current?.focus();
+      refocusVisibleComposer(focusEpoch);
     });
   };
 
@@ -225,8 +292,12 @@ export function Composer({
     if (sendingRef.current || !onDiscardAttachments) return;
     sendingRef.current = true;
     setSending(true);
+    const sent = rememberChatSend(draftKey, { text, refs, files }, true);
     try {
-      if (await onDiscardAttachments()) { update(''); setRefs([]); setFiles([]); setFileError(null); }
+      if (await onDiscardAttachments()) {
+        const next = confirmChatDraft(draftKey, sent);
+        if (mounted.current && currentDraftKey.current === draftKey) { setText(next.text); setRefs(next.refs); setFiles(next.files); setFileError(null); }
+      }
     } finally { sendingRef.current = false; setSending(false); }
   };
 
@@ -234,9 +305,59 @@ export function Composer({
     setRefs((current) =>
       current.some((r) => r.kind === ref.kind && r.id === ref.id) ? current : [...current, ref],
     );
-    update('');
-    inputRef.current?.focus();
+    update(commandBase.current?.text ?? '');
+    commandBase.current = undefined;
+    focusComposer();
   };
+  const addPostRef = (target: ChatPostRef) => {
+    const reference = postReference(target);
+    setRefs((current) => current.some((item) => item.kind === reference.kind && item.id === reference.id) ? current : [...current, reference]);
+    setCommandNotice('Publicación añadida al borrador. Puedes escribir un comentario antes de enviarla.');
+    focusComposer();
+  };
+
+  useEffect(() => {
+    const state = location.state as { chatPostShare?: ChatPostShareIntent } | null;
+    const intent = state?.chatPostShare;
+    if (!intent || !data.me || disabled) return;
+    if (editing) { setCommandNotice('Termina o cancela la edición para añadir la publicación al borrador.'); return; }
+    if (intent.memberId === data.me.id && consumeChatShareIntent(data.me.id, intent.id)) {
+      try { addPostRef(intent.target); }
+      catch { setCommandNotice('La publicación no está disponible. Tu borrador se conservó.'); }
+    }
+    const { chatPostShare: _used, ...rest } = state!;
+    void navigate({ pathname: location.pathname, search: location.search, hash: location.hash }, { replace: true, state: Object.keys(rest).length ? rest : null });
+  }, [location.key, data.me?.id, disabled, editing]);
+
+  const openCreate = (kind: ChatResourceKind, title = '') => {
+    creationBase.current = commandBase.current ?? { text: parseSlash(text) ? '' : text, refs: [...refs] };
+    setCreating({ kind, title });
+    onTyping?.(false); onLiveDraftChange?.('');
+  };
+  const finishCreate = (id?: string, shareable = false) => {
+    const base = creationBase.current;
+    update(base.text);
+    setRefs(id && shareable && creating ? [...base.refs.filter(r => r.kind !== creating.kind || r.id !== id), { kind: creating.kind, id }] : base.refs);
+    setCommandNotice(id ? shareable ? 'Recurso creado. La referencia está en tu borrador; envíala cuando quieras.' : 'Nota personal guardada. No se añadió al mensaje porque solo tú puedes verla.' : '');
+    setCreating(undefined); commandBase.current = undefined;
+    requestAnimationFrame(focusComposer);
+  };
+
+  useEffect(() => {
+    const intent = location.state as { messageCommand?: string; commandId?: string } | null;
+    if (!intent?.messageCommand || appliedIntent.current === location.key || disabled) return;
+    appliedIntent.current = location.key;
+    const command = intent.commandId ? data.chatCommands.find(c => c.id === intent.commandId) : undefined;
+    if (intent.commandId && !command) setCommandNotice('El comando ya no está disponible. Tu borrador se conservó.');
+    else if (command?.actionKind === 'create' && command.resourceKind) openCreate(command.resourceKind);
+    else if (command) update([text.trim(), command.text].filter(Boolean).join('\n'));
+    else {
+      commandBase.current = { text, refs: [...refs] };
+      update(`/${intent.messageCommand}${intent.messageCommand in LINK_KINDS ? ' ' : ''}`);
+    }
+    void navigate(location.pathname, { replace: true, state: null });
+    focusComposer();
+  }, [location.key]);
 
   // Menú de «/»: primero los comandos; con un comando de referencia y un espacio, sus resultados.
   const slash = dismissed || editing ? undefined : parseSlash(text);
@@ -251,6 +372,8 @@ export function Composer({
       hint: [r.label, r.context].filter(Boolean).join(' · '),
       run: () => addRef({ kind: r.kind, id: r.id }),
     }));
+    refOptions.push({ key: `create:${linkKind}`, title: `Crear ${LINK_KINDS[linkKind].label.toLowerCase()}`,
+      hint: 'Completa el formulario aquí y vuelve al borrador', run: () => openCreate(linkKind, slash.query) });
   } else if (slash && !slash.spaced) {
     const all: CommandOption[] = [
       ...(Object.keys(LINK_KINDS) as LinkKind[]).map((kind) => ({
@@ -282,13 +405,16 @@ export function Composer({
       },
       ...data.chatCommands
         .slice()
-        .sort((a, b) => a.name.localeCompare(b.name))
+        .sort((a, b) => Number(b.ownerId === data.me?.id) - Number(a.ownerId === data.me?.id) || a.name.localeCompare(b.name))
         .map((c) => ({
           key: `propio:${c.id}`,
           name: c.name,
-          hint: c.description || 'Tu comando',
+          hint: [c.description || (c.actionKind === 'create' ? 'Abrir formulario de creación' : 'Insertar texto'), c.visibility === 'classroom' ? 'Del salón' : 'Personal', memberName(data.members, c.ownerId)].join(' · '),
           icon: 'slash' as IconName,
-          run: () => update(c.text),
+          run: () => {
+            if (c.actionKind === 'create' && c.resourceKind) openCreate(c.resourceKind);
+            else { update([commandBase.current?.text, c.text].filter(Boolean).join('\n')); commandBase.current = undefined; }
+          },
         })),
       {
         key: 'comandos',
@@ -305,6 +431,11 @@ export function Composer({
     : commandOptions;
   const menuOpen = Boolean(slash) && (options.length > 0 || Boolean(linkKind && slash?.spaced));
   const current = Math.min(active, Math.max(0, options.length - 1));
+  const readingToolsOpen = Boolean(creating || pickingPosts || stickers || menuOpen);
+  useLayoutEffect(() => {
+    setReadingLocked?.(toolsLock, readingToolsOpen);
+    return () => setReadingLocked?.(toolsLock, false);
+  }, [setReadingLocked, toolsLock, readingToolsOpen]);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -330,6 +461,7 @@ export function Composer({
       }
       if (e.key === 'Escape') {
         e.preventDefault();
+        if (commandBase.current) { update(commandBase.current.text); commandBase.current = undefined; }
         setDismissed(true);
         return;
       }
@@ -348,13 +480,14 @@ export function Composer({
   const optionId = (i: number) => `${menuId}-${i}`;
 
   return (
-    <form className="composer messaging-composer" onSubmit={submit} aria-label="Escribir mensaje" aria-busy={sending}
+    <><form className="composer messaging-composer" onSubmit={submit} aria-label="Escribir mensaje" aria-busy={sending}
       onDragEnter={revealAttachments} onDragOver={revealAttachments} onDrop={dropAttachments}>
       {error && (
         <p className="composer__error error" role="alert">
           {error}
         </p>
       )}
+      {commandNotice && <p className="chat-command-notice" role="status">{commandNotice}</p>}
       {fileError && <p className="composer__error error" role="alert">{fileError}</p>}
       {attachments && (attachmentsOpen || files.length > 0 || uploadItems.length > 0) && <section id={attachmentPanelId} className="b20-upload b20-upload--composer" aria-label="Archivos adjuntos">
         <FilePicker onFiles={takeFiles} disabled={attachmentsBlocked} label="Adjuntar archivos" />
@@ -394,6 +527,7 @@ export function Composer({
       {refs.length > 0 && (
         <ul className="composer__refs" aria-label="Referencias que se enviarán">
           {refs.map((r) => {
+            if (r.kind === 'recurso') return <ChatPostDraftChip key={`${r.kind}:${r.id}`} target={r.target} onRemove={() => setRefs((current) => current.filter((item) => item !== r))} />;
             const resolved = resolveReference(r, data);
             return (
               <li key={`${r.kind}:${r.id}`} className="ref-chip">
@@ -438,7 +572,7 @@ export function Composer({
               </span>
             </button>
           ))}
-          {linkKind && slash.spaced && refOptions.length === 0 && (
+          {linkKind && slash.spaced && refOptions.length === 1 && refOptions[0]?.key.startsWith('create:') && (
             <p className="slash-menu__empty">Nada coincide. Prueba con otra palabra.</p>
           )}
           {commandOptions.map((o, i) => (
@@ -478,7 +612,9 @@ export function Composer({
           placeholder={placeholder}
           value={text}
           onChange={(e) => update(e.target.value)}
-          onBlur={() => onTyping?.(false)}
+          onBlur={() => { onTyping?.(false); onLiveDraftChange?.(''); }}
+          onCompositionStart={() => setReadingLocked?.(imeLock, true)}
+          onCompositionEnd={() => setReadingLocked?.(imeLock, false)}
           onKeyDown={onKeyDown}
           maxLength={maxLength}
           disabled={disabled || sending || retryingAttachments}
@@ -497,6 +633,14 @@ export function Composer({
         <ChatButton variant="tertiary"
           type="button"
           className="icon-button composer__tool"
+          aria-label="Publicaciones y materiales"
+          title="Publicaciones y materiales"
+          onClick={() => { setPickingPosts(true); onLiveDraftChange?.(''); }}
+          disabled={disabled || sending || retryingAttachments || Boolean(editing)}
+        ><Icon name="folder" /></ChatButton>
+        <ChatButton variant="tertiary"
+          type="button"
+          className="icon-button composer__tool"
           aria-label="Stickers"
           title="Stickers"
           aria-expanded={stickers}
@@ -511,8 +655,9 @@ export function Composer({
           aria-label="Comandos y referencias"
           title="Comandos y referencias (/)"
           onClick={() => {
+            if (!parseSlash(text)) commandBase.current = { text, refs: [...refs] };
             update('/');
-            inputRef.current?.focus();
+            focusComposer();
           }}
           disabled={disabled || sending || retryingAttachments || Boolean(editing)}
         >
@@ -537,7 +682,7 @@ export function Composer({
         <select aria-label="Mencionar a un compañero" value="" disabled={disabled || sending || retryingAttachments} onChange={(event) => {
           if (!event.target.value) return;
           update(`${text}${text && !text.endsWith(' ') ? ' ' : ''}${mentionToken(event.target.value)} `);
-          inputRef.current?.focus();
+          focusComposer();
         }}>
           <option value="">@ Mencionar</option>
           {data.members.filter((member) => member.status === 'active' && mentionMemberIds.includes(member.id)).map((member) => <option value={member.id} key={member.id}>{member.displayName}</option>)}
@@ -556,6 +701,8 @@ export function Composer({
         )}
       </p>
     </form>
+    {creating && <ChatResourceCreatePanel kind={creating.kind} initialTitle={creating.title} onCreated={(id, shareable) => finishCreate(id, shareable)} onClose={() => finishCreate()} />}
+    {pickingPosts && <ChatPostPicker onPick={addPostRef} onClose={() => { setPickingPosts(false); requestAnimationFrame(focusComposer); }} />}</>
   );
 }
 

@@ -3,6 +3,7 @@ import { AI_LIMITS, aiHash, buildAiPreparation, examAttemptOrder, examPreparedSo
   type ExamBankSummary, type ExamBankDetail, type ExamVariantPlan, type ExamAttempt, type ExamDetail, type ExamDraft, type ExamGenerationSummary, type ExamSourceIssue, type ExamSummary } from '@b20/core';
 import { aiCandidateKey, aiSourceCandidates } from '../lib/aiSources';
 import type { Snapshot } from './types';
+import type { GuideExamMaterial, GuideExamMaterialDetail } from '@b20/core';
 import type { ExamActions, ExamActionResponse } from './examTypes';
 interface Context { getDocumentTranscription?: import('./documentTypes').DocumentActions['getDocumentTranscription']; resolveReviewedTranscription?: import('./documentTypes').DocumentActions['getDocumentTranscription']; snapshot(): Snapshot; now(): Date; sendToSpaced?(request: Extract<ExamActionRequest, {action:'sendToSpaced'}>): Promise<{collectionId:string;cardId:string;created:boolean}> }
 interface Version { draft: ExamDraft; sourceRevisions: Record<string, string>; purgedQuestionIds?: string[]; unavailableDocumentIds?: string[] }
@@ -19,6 +20,41 @@ export class DemoExamStore implements ExamActions {
   private exams = new Map<string, StoredExam>(); private attempts = new Map<string, StoredAttempt>(); private requests = new Map<string, { actor: string; hash: string; examId: string; attemptId?: string }>();
   private shared?: SharedExams;
   constructor(private ctx: Context, sharedKey?: object) { if (sharedKey) { let shared = sharedExams.get(sharedKey); if (!shared) { shared = { evaluations: this.evaluations, bank: this.bank, references: 0, prepared: this.prepared, generated: this.generated, exams: this.exams, attempts: this.attempts, requests: this.requests }; sharedExams.set(sharedKey, shared); } shared.references++; this.shared = shared; this.bank = shared.bank; this.evaluations = shared.evaluations; this.prepared = shared.prepared; this.generated = shared.generated; this.exams = shared.exams; this.attempts = shared.attempts; this.requests = shared.requests; } }
+  /** Authorized content projection for guides; never starts, expires or changes an attempt. */
+  async listGuideExamMaterials(subjectId: string): Promise<GuideExamMaterial[]> {
+    this.actor(); await this.reviewedDocuments(); const rows: GuideExamMaterial[] = [];
+    for (const exam of this.exams.values()) {
+      if (exam.summary.archived || exam.summary.subjectId !== subjectId || !(exam.summary.ownerId === this.actor() || exam.summary.visibility === 'group' && exam.summary.readyVersion)) continue;
+      const number = exam.summary.ownerId === this.actor() ? exam.summary.draftVersion ?? exam.summary.readyVersion : exam.summary.readyVersion;
+      if (!number) continue;
+      try { const { text: _text, fields: _fields, omissions: _omissions, ...summary } = this.guideExamMaterial(exam.summary.id, number); rows.push(summary); }
+      catch { const version = this.version(exam, number); rows.push({ id: exam.summary.id, title: version.draft.title, subjectId, termId: exam.summary.termId, version: number,
+        topics: version.draft.preparation.topics, ownerId: exam.summary.ownerId, visibility: exam.summary.visibility, canIncludeSolutions: false,
+        sourceIssues: [{ state: 'unavailable', message: 'Una fuente del examen dejó de estar disponible.' }] }); }
+    }
+    return rows.sort((a, b) => a.title.localeCompare(b.title, 'es'));
+  }
+  async getGuideExamMaterial(examId: string, version: number, includeSolutions = false): Promise<GuideExamMaterialDetail> {
+    await this.reviewedDocuments(); return this.guideExamMaterial(examId, version, includeSolutions);
+  }
+  private guideExamMaterial(examId: string, number: number, includeSolutions = false): GuideExamMaterialDetail {
+    const actor = this.actor(), exam = this.access(examId), version = this.version(exam, number);
+    if (exam.summary.archived || exam.summary.ownerId !== actor && (number !== exam.summary.readyVersion || version.draft.state !== 'ready')) throw new Error('El examen no está disponible para esta guía.');
+    this.readable(version);
+    const allowed = (question: AiQuestion) => exam.summary.ownerId === actor || [...this.attempts.values()].some((attempt) => attempt.actor === actor && attempt.exam.summary.id === examId && attempt.value.examVersion === number
+      && (attempt.value.state === 'closed' || attempt.value.mode === 'practice' && question.type !== 'open' && attempt.value.answers.some((answer) => answer.questionId === question.id && answer.confirmed)));
+    const fields: { name: string; text: string }[] = [];
+    for (const question of version.draft.questions) {
+      fields.push({ name: `pregunta:${question.id}`, text: `${question.topic}: ${question.text}` });
+      if (question.options.length) fields.push({ name: `opciones:${question.id}`, text: question.options.map((option) => `${option.id}. ${option.text}`).join('\n') });
+      if (includeSolutions && allowed(question)) fields.push({ name: `solucion:${question.id}`, text: [question.correctOptionId ? `Opción correcta: ${question.correctOptionId}` : '', question.explanation, question.referenceAnswer ?? '', question.rubric ? JSON.stringify(question.rubric) : ''].filter(Boolean).join('\n') });
+    }
+    const hidden = includeSolutions ? version.draft.questions.filter((question) => !allowed(question)).length : 0;
+    return structuredClone({ id: examId, title: version.draft.title, subjectId: exam.summary.subjectId, termId: exam.summary.termId, version: number,
+      topics: version.draft.preparation.topics, ownerId: exam.summary.ownerId, visibility: includeSolutions || exam.summary.visibility === 'personal' || version.draft.hasPersonalSources || version.draft.state !== 'ready' ? 'personal' : 'group',
+      canIncludeSolutions: version.draft.questions.some(allowed), sourceIssues: this.issues(version).map(({ state, message }) => ({ state, message })),
+      fields, text: fields.map((field) => field.text).join('\n\n'), omissions: hidden ? [`${hidden} soluciones ocultas por permisos; no se incluyeron.`] : [] });
+  }
   private actor() { const me = this.ctx.snapshot().me; if (me?.status !== 'active') throw new Error('Necesitas acceso vigente al grupo.'); return me.id; }
   private now() { return this.ctx.now().getTime(); }
   private sourceUnavailable(version: { draft: Pick<ExamDraft, 'preparation'>; unavailableDocumentIds?: string[] }, ref: AiPreparation['sources'][number], data = this.ctx.snapshot(), fragment?: AiPreparation['fragments'][number]) {

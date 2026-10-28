@@ -15,6 +15,9 @@ interface AcademicState {
   notes: Note[];
 }
 
+/** Visual covers follow their demo project across sessions sharing the same state. */
+const sharedVisualCovers = new WeakMap<AcademicState, { files: ResourceFile[]; blobs: Map<Id, Blob> }>();
+
 interface Context {
   extraTarget?(kind: ResourceTargetKind, id: Id, editable: boolean): { version?: number };
   captureExtra?(kind: ResourceTargetKind, id: Id): void;
@@ -56,6 +59,17 @@ export class DemoAcademicStore {
 
   constructor(private ctx: Context) {}
 
+  private visualCovers() {
+    const state = this.ctx.state();
+    const covers = sharedVisualCovers.get(state) ?? { files: [], blobs: new Map<Id, Blob>() };
+    sharedVisualCovers.set(state, covers);
+    return covers;
+  }
+  visualCoverState() { const value = this.visualCovers(); return { files: [...value.files], blobs: new Map(value.blobs) }; }
+  restoreVisualCovers(files: ResourceFile[], blobs: Map<Id, Blob>) {
+    const value = this.visualCovers(); value.files = files; value.blobs = blobs;
+  }
+
   resources(): ResourceFile[] {
     const ownIds = new Set(this.files.map((file) => file.id));
     return [
@@ -63,6 +77,7 @@ export class DemoAcademicStore {
         ...file, id: `legacy:${file.id}`, targetKind: 'work', targetId: file.workId,
       })),
       ...this.files,
+      ...this.visualCovers().files,
     ];
   }
 
@@ -329,12 +344,19 @@ export class DemoAcademicStore {
     else if (kind === 'assignment' || kind === 'activity') this.capturePage(kind, id);
     else this.ctx.captureExtra?.(kind, id);
     const fileId = crypto.randomUUID();
-    const url = typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : undefined;
+    const url = kind !== 'visual_project' && typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : undefined;
     if (url) this.urls.add(url);
-    this.blobs.set(fileId, file);
-    this.files = [...this.files, { id: fileId, targetKind: kind, targetId: id, name, size: file.size,
+    const entry: ResourceFile = { id: fileId, targetKind: kind, targetId: id, name, size: file.size,
       contentType: file.type || 'application/octet-stream', uploadedBy: this.ctx.active().id,
-      createdAt: this.ctx.now(), url }];
+      createdAt: this.ctx.now(), url };
+    if (kind === 'visual_project') {
+      const covers = this.visualCovers();
+      covers.files = [...covers.files, entry];
+      covers.blobs.set(fileId, file);
+    } else {
+      this.blobs.set(fileId, file);
+      this.files = [...this.files, entry];
+    }
     this.changedFiles(kind, id);
     transfer.onProgress?.(file.size, file.size);
     return fileId;
@@ -349,7 +371,10 @@ export class DemoAcademicStore {
     else if (file.targetKind === 'evidence') this.capturePage('activity', (row as Evidence).activityId);
     else if (file.targetKind === 'assignment' || file.targetKind === 'activity') this.capturePage(file.targetKind, file.targetId);
     else this.ctx.captureExtra?.(file.targetKind, file.targetId);
-    this.files = [...this.files.filter((entry) => entry.id !== fileId), { ...file, removedAt: this.ctx.now() }];
+    if (file.targetKind === 'visual_project') {
+      const covers = this.visualCovers();
+      covers.files = covers.files.map((entry) => entry.id === fileId ? { ...file, removedAt: this.ctx.now() } : entry);
+    } else this.files = [...this.files.filter((entry) => entry.id !== fileId), { ...file, removedAt: this.ctx.now() }];
     this.changedFiles(file.targetKind, file.targetId);
   }
 
@@ -371,7 +396,7 @@ export class DemoAcademicStore {
     this.ctx.active();
     const file = this.resources().find((entry) => entry.id === fileId);
     if (!file) throw new Error('El archivo no existe.');
-    const blob = this.blobs.get(fileId);
+    const blob = file.targetKind === 'visual_project' ? this.visualCovers().blobs.get(fileId) : this.blobs.get(fileId);
     if (blob) { transfer.onProgress?.(blob.size, blob.size); return blob; }
     if (!file.url) throw new Error('Este archivo de ejemplo no tiene contenido descargable.');
     const response = await fetch(file.url, { signal: transfer.signal });

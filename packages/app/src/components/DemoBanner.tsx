@@ -18,7 +18,7 @@ export function DemoBanner() {
 
   return (
     <div className="demo-banner" role="status">
-      <span>{session?.status === 'signedIn' && 'Tu sesión es real. '}Estás usando datos de prueba: los cambios no se guardan ni se comparten.</span>
+      <span>{session?.status === 'signedIn' && 'Tu sesión es real. '}Estás usando datos de prueba. Este contenido no se comparte con tu grupo real.</span>
       <label>
         Perfil simulado{' '}
         <select value={source.viewerId} onChange={(e) => source.setViewer(e.target.value)}>

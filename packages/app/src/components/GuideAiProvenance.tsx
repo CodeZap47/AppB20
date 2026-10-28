@@ -20,8 +20,9 @@ export function GuideAiProvenance({ guideId, version }: { guideId: string; versi
     return () => { active = false; };
   }, [source, guideId, version, signature]);
   if (!result) return null;
-  return <details className="ai-preview guide-ai-provenance"><summary>Procedencia de IA y citas de esta versión</summary>
-    <p>Contenido originado en un borrador con <strong>{result.model}</strong>. Cada cita corresponde al texto y la versión conservados.</p>
+  return <details className="ai-preview guide-ai-provenance"><summary>Materiales agregados y procedencia de esta versión</summary>
+    <p>{result.model === 'manual' ? 'Guía redactada manualmente con los materiales seleccionados.' : <>Contenido originado en un borrador con <strong>{result.model}</strong>. Cada cita corresponde al texto y la versión conservados.</>}</p>
+    <ul aria-label="Materiales utilizados en la guía">{result.sources.map((entry) => <li key={`${entry.kind}:${entry.refId}`}><strong>{entry.title}</strong> · {GUIDE_AI_SOURCE_LABELS[entry.kind]} · versión {entry.version} · {entry.termId ? data.terms.find((term) => term.id === entry.termId)?.name ?? 'Parcial' : 'Sin parcial'}{entry.status === 'pending' && <span> · {entry.reason || 'Pendiente de integrar'}</span>}</li>)}</ul>
     {result.editedAfterGeneration && <p className="ai-notice">Esta versión fue editada después de generarse. Las citas conservan la procedencia original; revisa su correspondencia con los cambios.</p>}
     {result.citations.map((section) => <div key={section.id}><h4>{GUIDE_SECTIONS.find((entry) => entry.id === section.id)?.title}</h4>
       {section.citations.map((id) => { const fragment = result.fragments.find((entry) => entry.id === id); if (!fragment) return null;

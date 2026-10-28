@@ -32,9 +32,10 @@ describe('editar y eliminar mensajes', () => {
     expect(canDeleteMessage('a', { ...message, deletedAt: sentAt }, 'group', true)).toBe(false);
   });
 
-  it('acepta solo las reacciones de la lista', () => {
+  it('acepta secuencias emoji completas y rechaza texto o varios emojis', () => {
     expect(isReaction('👍')).toBe(true);
-    expect(isReaction('🍕')).toBe(false);
+    for (const emoji of ['🍕', '👍🏽', '👨‍👩‍👧‍👦', '🇲🇽', '❤', '1️⃣']) expect(isReaction(emoji)).toBe(true);
+    for (const invalid of ['', 'hola', '👍👍', '🇲', 'abc👍', '🏻a']) expect(isReaction(invalid)).toBe(false);
   });
 });
 

@@ -2,6 +2,11 @@ import { guideCoverage, WORK_KIND_LABEL, type GuideSourceKind } from '@b20/core'
 import type { GuideSource, GuideSourceRef, Id, Snapshot, StudyGuide } from '../data/types';
 import { authorsLabel } from './works';
 
+/** El alcance se guarda con el parcial; sin parcial abarca toda la materia del cuatrimestre. */
+export function guideScopeLabel(guide: Pick<StudyGuide, 'termId'>, data: Pick<Snapshot, 'terms'>): string {
+  return guide.termId ? data.terms.find((term) => term.id === guide.termId)?.name ?? 'Parcial' : 'Cuatrimestre completo';
+}
+
 /** Cómo se ve una fuente en la guía: qué es, cómo se llama, de dónde sale y su versión actual. */
 export interface SourceInfo extends GuideSourceRef {
   label: string;
@@ -110,8 +115,8 @@ export function describeSource(ref: GuideSourceRef, data: Snapshot): SourceInfo 
 
 /**
  * Material de la materia que puede citarse. `matched` es del mismo parcial (se propone
- * marcado); `unplaced` no tiene parcial (apuntes, preguntas, trabajos sin clasificar) y se
- * ofrece sin marcar para no meterlo en la guía equivocada. Lo de otros parciales no aparece.
+ * marcado); en una guía cuatrimestral propone todos los parciales de la materia.
+ * `unplaced` no tiene parcial y se ofrece sin marcar para revisar si corresponde.
  */
 export function candidateSources(
   subjectId: Id,
@@ -144,8 +149,8 @@ export function candidateSources(
     .map((ref) => describeSource(ref, data))
     .filter((info): info is SourceInfo => Boolean(info));
   return {
-    matched: termId ? infos.filter((i) => i.termId === termId) : [],
-    unplaced: infos.filter((i) => !i.termId || !termId),
+    matched: infos.filter((i) => termId ? i.termId === termId : Boolean(i.termId)),
+    unplaced: infos.filter((i) => !i.termId),
   };
 }
 
@@ -162,7 +167,7 @@ export function guideStatus(guide: StudyGuide, data: Snapshot) {
     // cualquier parcial de su materia, igual que candidateSources.
     const placementIssue = info?.subjectId !== undefined && info.subjectId !== guide.subjectId
       ? 'La fuente ahora pertenece a otra materia. Revisa su clasificación o quítala de esta guía.'
-      : info && guide.termId && info.termId && info.termId !== guide.termId
+      : info && guide.termId && info.termId && info.termId !== guide.termId && cited?.available !== true
         ? 'La fuente ahora pertenece a otro parcial. Revisa su clasificación o quítala de esta guía.'
         : undefined;
     const reason = placementIssue ?? (!info ? 'La fuente ya no está disponible para esta guía.' : undefined)

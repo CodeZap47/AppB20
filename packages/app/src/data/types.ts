@@ -1,3 +1,4 @@
+import type { MessageReceipt, MessageReceiptSource } from './messageReceiptTypes';
 /**
  * Tipos de datos que usa la interfaz. Reflejan las vistas del módulo SpacetimeDB
  * (`packages/spacetime-module`), con identidades e ids como texto para simplificar la UI.
@@ -21,12 +22,17 @@ import type {
   SpacedSourceKind,
   SpacedVisibility,
   OriginContributionKind,
+  VisualProject, VisualProjectInput, VisualProjectVisibility, VisualScene, VisualSceneInput, VisualModelAsset,
 } from '@b20/core';
 
 import type { PresentationActions, PresentationsSnapshot } from './presentationTypes';
 import type { PracticeActions, PracticeSnapshot } from './practiceTypes';
+import type { SignalCommand, SignalsSnapshot } from '@b20/core';
 import type { Community4Actions, Community4Snapshot } from './community4Types';
 import type { FeedActions, FeedSnapshot } from './feedTypes';
+import type { FeedInteractionActions } from './feedInteractionTypes';
+import type { ChatPostActions } from './chatPostActions';
+export type * from './feedInteractionTypes';
 import type { MembershipActions, AdminContentEntry, AdminContentResult } from './membershipTypes';
 export type * from './membershipTypes';
 import type { AgentActions, AgentAiActions, AgentSnapshot } from './agentTypes';
@@ -35,6 +41,8 @@ export type * from './community4Types';
 export type * from './feedTypes';
 export type * from './agentTypes';
 export type * from './presentationTypes';
+
+export type { VisualProject, VisualProjectInput, VisualProjectLink, VisualProjectResource, VisualProjectKind, VisualProjectVisibility } from '@b20/core';
 
 export type Id = string;
 import type { Delivery2Actions, ChatChannel, ChannelMessage, ConversationState, BlockedMember, MessageReport,
@@ -47,6 +55,8 @@ export type * from './trashTypes';
 export type * from './notificationTypes';
 export type * from './roomTypes';
 import type { GuideAiActions } from './guideAiTypes';
+import type { GuideMaterialsActions } from './guideMaterialsTypes';
+export type * from './guideMaterialsTypes';
 export type * from './guideAiTypes';
 import type { DocumentActions } from './documentTypes';
 import type { ExamActions } from './examTypes';
@@ -365,7 +375,7 @@ export type ProgressTargetKind = 'assignment' | 'activity';
 export type ProgressStatus = 'pending' | 'in_progress' | 'done';
 export type WorkPublicationStatus = 'draft' | 'final';
 export type WorkStatus = WorkPublicationStatus | 'reviewed';
-export type ResourceTargetKind = ProgressTargetKind | 'work' | 'evidence' | 'note' | 'guide' | 'question' | 'answer' | 'profile' | 'profile_cover' | 'group_message' | 'direct_message' | 'channel_message';
+export type ResourceTargetKind = ProgressTargetKind | 'work' | 'evidence' | 'note' | 'guide' | 'question' | 'answer' | 'profile' | 'profile_cover' | 'visual_project' | 'visual_model' | 'group_message' | 'direct_message' | 'channel_message';
 
 /** Se obtiene exclusivamente a través de la vista privada del alumno. */
 export interface AcademicProgress {
@@ -518,7 +528,7 @@ export interface Sticker {
   createdAt: Date;
 }
 
-/** Atajo propio: escribir `/nombre` en el chat inserta su texto. Solo lo ve su dueño. */
+/** Atajo personal o del salón: inserta una plantilla o abre un formulario dentro del chat. */
 export interface ChatCommand {
   id: Id;
   ownerId: Id;
@@ -526,6 +536,11 @@ export interface ChatCommand {
   description: string;
   text: string;
   createdAt: Date;
+  /** Legacy commands without metadata remain personal text templates. */
+  visibility?: 'personal' | 'classroom';
+  actionKind?: 'text' | 'create';
+  resourceKind?: 'tarea' | 'trabajo' | 'clase' | 'nota' | 'pregunta';
+  version?: number;
 }
 
 export interface DirectConversation {
@@ -744,6 +759,12 @@ export interface PollVote {
 
 /** Lo que el usuario actual puede ver, igual que las vistas del servidor. */
 export interface Snapshot extends StudyRoomsSnapshot, NotificationsSnapshot, PresentationsSnapshot, PracticeSnapshot, Community4Snapshot, FeedSnapshot, AgentSnapshot {
+  /** Unique active members with at least one visible, foreground app session. */
+  onlineMemberIds: Id[];
+  /** Account preference; provisional text lives in the isolated liveDrafts store. */
+  liveDraftSharingEnabled?: boolean;
+  signals: SignalsSnapshot;
+  visualProjects: VisualProject[];
   /** Vistas exclusivas de Administración; no incluyen datos personales privados. */
   adminContentEntries?: AdminContentEntry[];
   adminContentResults?: AdminContentResult[];
@@ -754,6 +775,7 @@ export interface Snapshot extends StudyRoomsSnapshot, NotificationsSnapshot, Pre
   chatChannels: ChatChannel[];
   channelMessages: ChannelMessage[];
   conversationStates: ConversationState[];
+  messageReceipts?: MessageReceipt[];
   blockedMembers: BlockedMember[];
   messageReports: MessageReport[];
   memberProfiles: MemberProfile[];
@@ -862,8 +884,17 @@ export interface PublishWorkInput {
 export type MaybePromise<T> = T | Promise<T>;
 
 /** Acciones: corresponden uno a uno con los reducers del módulo. */
-export interface Actions extends MembershipActions, Delivery2Actions, StudyRoomActions, NotificationActions, TrashActions, PresentationActions, PracticeActions, Community4Actions, FeedActions, GuideAiActions, ExamActions, DocumentActions, AgentActions, AgentAiActions {
+export interface Actions extends MembershipActions, Delivery2Actions, StudyRoomActions, NotificationActions, TrashActions, PresentationActions, PracticeActions, Community4Actions, FeedActions, FeedInteractionActions, ChatPostActions, GuideAiActions, GuideMaterialsActions, ExamActions, DocumentActions, AgentActions, AgentAiActions {
+  getVisualScene(projectId: Id): Promise<VisualScene>;
+  saveVisualScene(input: VisualSceneInput): Promise<VisualScene>;
+  createVisualModelAsset(projectId: Id, requestId: string, name: string): Promise<VisualModelAsset>;
+  discardVisualModelAssets(projectId: Id, assets: { id: Id; expectedVersion: number }[]): Promise<void>;
+  saveVisualProject(input: VisualProjectInput): Promise<Id>;
+  setVisualProjectVisibility(id: Id, visibility: VisualProjectVisibility, expectedVersion: number): Promise<void>;
+  archiveVisualProject(id: Id, archived: boolean, expectedVersion: number): Promise<void>;
+  signalAction(command: SignalCommand): MaybePromise<string | undefined>;
   setTyping(scope: MessageScope, conversationId: Id, typing: boolean): MaybePromise<void>;
+  setLiveDraftSharing(enabled: boolean): MaybePromise<void>;
   completeOnboarding(): MaybePromise<void>;
   replaceSpacedCardSource(cardId: Id, expectedVersion: number, sourceKind: SpacedSourceKind, sourceId: Id): MaybePromise<void>;
   saveSpacedCollection(input: SpacedCollectionInput): MaybePromise<Id>;
@@ -1026,6 +1057,10 @@ export interface SaveChatCommandInput {
   name: string;
   description: string;
   text: string;
+  visibility?: 'personal' | 'classroom';
+  actionKind?: 'text' | 'create';
+  resourceKind?: 'tarea' | 'trabajo' | 'clase' | 'nota' | 'pregunta';
+  expectedVersion?: number;
 }
 
 export interface PollInput {
@@ -1077,6 +1112,8 @@ export interface AskQuestionInput {
 }
 
 export interface DataSource extends Actions {
+  readonly messageReceipts?: MessageReceiptSource;
+  readonly liveDrafts: import('./liveDraftTypes').LiveDraftSource;
   /** Nombre visible de la fuente, por ejemplo «Datos de prueba». */
   readonly label: string;
   getSnapshot(): Snapshot;

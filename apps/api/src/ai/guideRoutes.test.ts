@@ -31,7 +31,9 @@ const db: AiDatabase = {
     }
     if (payload.action === 'getDraft') return draft as T;
     if (payload.action === 'listDrafts') return [{ id: draft.id, title: draft.title, state: draft.state }] as T;
+    if (payload.action === 'createManualFromMaterials') { expect(payload.sections).toEqual(['Manual', '', '', '', '', '', '', '']); return { id: '80', version: 1 } as T; }
     if (payload.action === 'prepare') { expect(payload.model).toBe(preparation.model); return draft as T; }
+    if (payload.action === 'reviewTopics') { expect(payload.answers).toEqual([{ questionId: 'q1', answer: 'Ejemplo del docente.' }]); draft.topicsReviewed = true; return draft as T; }
     throw new Error('Unexpected action');
   },
   async service<T>(procedure: string, raw: unknown) {
@@ -44,8 +46,8 @@ const db: AiDatabase = {
     }
     if (payload.action === 'finishStep') {
       finishes++; if (finishFailure) throw new Error('Lost confirmation');
-      draft.state = payload.state === 'succeeded' ? 'ready' : payload.state as 'failed' | 'unknown'; draft.steps[0]!.state = payload.state as 'succeeded' | 'failed' | 'unknown';
-      if (payload.result) draft.result = payload.result as GuideAiDraft['result']; return draft as T;
+      draft.state = payload.state === 'succeeded' ? draft.steps[0]!.kind === 'assessment' ? 'prepared' : 'ready' : payload.state as 'failed' | 'unknown'; draft.steps[0]!.state = payload.state as 'succeeded' | 'failed' | 'unknown';
+      if (payload.result) { if (draft.steps[0]!.kind === 'assessment') draft.assessment = payload.result as GuideAiDraft['assessment']; else draft.result = payload.result as GuideAiDraft['result']; } return draft as T;
     }
     throw new Error('Unexpected service action');
   },
@@ -53,7 +55,7 @@ const db: AiDatabase = {
 const app = () => createWorkerApp({ auth: { ...auth, isActiveMember: async () => active }, aiDatabase: () => db, guideProvider: { async generate(input) {
   calls++; expect(input.apiKey).toBe('fixture-no-real-api-key'); expect(input.preparation.input.maxOutputTokens).toBe(1500);
   if (scenario === 'timeout') throw new DOMException('private provider text', 'TimeoutError');
-  return { text: scenario === 'invalid-json' ? 'NOT JSON' : JSON.stringify(success()) };
+  return { text: scenario === 'invalid-json' ? 'NOT JSON' : JSON.stringify(input.step.kind === 'assessment' ? { topics: [{ topic: 'Tema', coverage: 'thin', reason: 'Falta un ejemplo.', citations: [scenario === 'invalid-cite' ? 'inventada' : preparation.fragments[0]!.id] }], questions: [{ id: 'q1', topic: 'Tema', question: '¿Qué ejemplo pidió el docente?' }] } : success()) };
 } } });
 const request = (body: unknown) => new Request(`https://worker.test/ai/study-guides/${draftId}/step`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 const payload = () => ({ expectedRevision: draft.revision, generationId, fingerprint: preparation.fingerprint, confirmed: true });
@@ -87,6 +89,21 @@ beforeAll(async () => {
 afterAll(async () => { await runtime?.dispose(); });
 beforeEach(() => { calls = 0; finishes = 0; claimed = false; access = true; active = true; finishFailure = false; scenario = 'valid'; draft = { id: draftId, revision: 1, title: 'Guía', subjectId: '1', state: 'prepared', createdAt: Date.now(), updatedAt: Date.now(), completedSteps: 0, totalSteps: 1, preparation, steps: [{ id: 'direct', kind: 'direct', state: 'pending' }] }; });
 describe('API autenticada Guías con Gemini simulado', () => {
+  it('crea guías manuales con materiales sin modelo, clave ni llamada al proveedor', async () => {
+    const response = await app().fetch(new Request('https://worker.test/ai/study-guides/manual', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...preparation.input, sections: ['Manual', '', '', '', '', '', '', ''], requestId: draftId }) }), { ...env, GEMINI_MODEL: undefined, AI_ENABLED: 'false' });
+    expect(response.status).toBe(201); expect(await response.json()).toEqual({ id: '80', version: 1 }); expect(calls).toBe(0); expect(claimed).toBe(false);
+  });
+  it('valida diagnóstico y registra respuestas antes de la generación posterior', async () => {
+    draft.steps = [{ id: 'assessment', kind: 'assessment', state: 'pending' }];
+    const response = await app().fetch(request(payload()), env); expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ state: 'prepared', assessment: { questions: [{ id: 'q1' }] } }); expect(draft.result).toBeUndefined();
+    const reviewed = await app().fetch(new Request(`https://worker.test/ai/study-guides/${draftId}/review-topics`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ expectedRevision: draft.revision, answers: [{ questionId: 'q1', answer: 'Ejemplo del docente.' }], acknowledgeGaps: false }) }), env);
+    expect(reviewed.status).toBe(200); expect(await reviewed.json()).toMatchObject({ topicsReviewed: true }); expect(calls).toBe(1);
+  });
+  it('rechaza citas inventadas del diagnóstico sin aceptarlo como guía generada', async () => {
+    draft.steps = [{ id: 'assessment', kind: 'assessment', state: 'pending' }]; scenario = 'invalid-cite';
+    const response = await app().fetch(request(payload()), env); expect(response.status).toBe(200); expect(draft.state).toBe('failed'); expect(draft.assessment).toBeUndefined(); expect(draft.result).toBeUndefined(); expect(calls).toBe(1);
+  });
   it('runtime Cloudflare completo funciona sin R2 y confirma un único envío persistente', async () => {
     const body = payload();
     const options = { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) };

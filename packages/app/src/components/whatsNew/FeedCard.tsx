@@ -5,11 +5,13 @@ import { useDataSource } from '../../data/DataContext';
 import type { FeedComment, FeedPost, FeedReaction, Snapshot } from '../../data/types';
 import { formatClock, memberName } from '../../lib/format';
 import { getFeedPresentation } from '../../lib/feedPresentation';
+import { feedInteractionTarget } from '../../lib/feedInteractionTargets';
 import type { NewsItem } from '../../lib/whatsNew';
 import { Avatar } from '../Avatar';
 import { Icon } from '../Icon';
 import { useAction } from '../useAction';
-import { CommentThread } from './CommentThread';
+import { ResourceComments } from './ResourceComments';
+import { ShareOptionsDialog } from './ShareOptionsDialog';
 import { FeedActions } from './FeedActions';
 import { FeedContent } from './FeedContent';
 import { ReactionBar } from './ReactionBar';
@@ -27,11 +29,12 @@ interface Props {
   highlighted?: boolean;
 }
 
-export function FeedCard({ item, snapshot, sharedExams, isNew, now, reactions, post, comments, highlighted }: Props) {
+export function FeedCard({ item, snapshot, sharedExams, isNew, now, reactions, post, highlighted }: Props) {
   const source = useDataSource();
   const { error, pending, run } = useAction();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
+  const [sharing, setSharing] = useState<{ source: typeof source; actorId: string | undefined; targetKey: string }>();
   const lock = useRef(false);
   const { members, subjects, me } = snapshot;
   const presentation = getFeedPresentation(item, snapshot, sharedExams);
@@ -40,6 +43,8 @@ export function FeedCard({ item, snapshot, sharedExams, isNew, now, reactions, p
   const writable = snapshot.connection === 'ready' && me?.status === 'active';
   const when = relativeTime(item.at, now) ?? formatClock(item.at);
   const target = item.target;
+  const interactionTarget = feedInteractionTarget(item);
+  const interactionKey = interactionTarget ? `${interactionTarget.kind}:${interactionTarget.id}` : '';
   const mutate = async (action: () => Promise<unknown> | unknown) => {
     if (lock.current || !writable) return;
     lock.current = true;
@@ -97,11 +102,12 @@ export function FeedCard({ item, snapshot, sharedExams, isNew, now, reactions, p
       <footer className="feed-card__foot">
         {target && <ReactionBar reactions={reactions} members={members} meId={me?.id} disabled={pending || !writable}
           onReact={(emoji) => void mutate(() => source.toggleFeedReaction({ targetKind: target.kind, targetId: target.id, emoji }))} />}
-        {post ? <span className="feed-card__comment-count"><Icon name="chat" size={15} />{comments.length} {comments.length === 1 ? 'comentario' : 'comentarios'}</span>
-          : <Link to={item.link} className="feed-card__open">{presentation.cta}<Icon name="forward" size={15} /></Link>}
+        {interactionTarget && <button type="button" className="feed-card__share" disabled={!writable || (typeof source.resolveChatPosts !== 'function' && typeof source.createFeedShare !== 'function')} onClick={() => setSharing({ source, actorId: me?.id, targetKey: interactionKey })}><Icon name="forward" size={15} />Compartir</button>}
+        {!post && <Link to={item.link} className="feed-card__open">{presentation.cta}<Icon name="forward" size={15} /></Link>}
       </footer>
       {error && <p className="error" role="alert">{error}</p>}
-      {post && <CommentThread key={`${me?.id}:${post.id}`} post={post} comments={comments} members={members} me={me} />}
+      {interactionTarget && <ResourceComments target={interactionTarget} initiallyOpen={false} share={false} />}
+      {sharing?.source === source && sharing.actorId === me?.id && sharing.targetKey === interactionKey && interactionTarget && <ShareOptionsDialog key={`${me?.id}:${interactionKey}`} target={interactionTarget} onClose={() => setSharing(undefined)} />}
     </article>
   );
 }

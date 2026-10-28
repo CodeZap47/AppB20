@@ -2,6 +2,7 @@ import { Identity, Timestamp } from 'spacetimedb';
 import { SenderError } from 'spacetimedb/server';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { memberIdentityFor } from './authIdentity';
+import { invalidateFeedShares } from './feedInteractionLifecycle';
 import { log, type Ctx, type ViewDb } from './moduleContext';
 import { cancelInvitationEmail } from './invitationEmailHandlers';
 import { removeGroupMember } from './roomsHandlers';
@@ -297,6 +298,7 @@ export function removeMember(ctx: Ctx, identity: Person, options: { block?: bool
   }
   if (row.status === 'active') {
     ctx.db.member.identity.update({ ...row, status: 'removed' });
+    invalidateFeedShares(ctx, 'member', identity.toHexString());
     removeGroupMember(ctx, identity);
   }
   // El agente y otros datos privados se conservan; sus handlers exigen membresía activa.

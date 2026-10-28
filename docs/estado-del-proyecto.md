@@ -6,6 +6,10 @@ separa implementación, publicación y aceptación con personas y dispositivos r
 
 ## Ampliaciones locales del 26 de octubre de 2026
 
+Lenguaje de señales (3.11) está [implementado y publicado](lenguaje-senales-entrega.md):
+diccionario versionado, constructor, ejercicios individuales y en parejas, fichas privadas
+con fuentes y papelera. Se publicó junto con las [mejoras de Mensajes](mensajes-mejoras.md) el 26 de octubre; la aceptación con el grupo sigue pendiente.
+
 Exámenes EX-3A/B/C/D y Exposiciones con Gemini y audio están implementados localmente. Incluyen nuevas fuentes, documentos/OCR, banco/variantes, respuestas abiertas y evaluación asistida; esquemas, preguntas, comentarios, transcripción y audio privado. [Alcance y preparación de publicación](examenes-exposiciones-ampliaciones.md). La publicación y la aceptación humana siguen pendientes; las tablas inferiores describen la versión publicada y las ampliaciones que todavía falta llevar a producción.
 
 ## Publicación comprobada
@@ -33,11 +37,10 @@ no implica por sí sola que falte publicar el código.
 
 ## Módulos completos pendientes: entrega 5
 
-Estos son los tres módulos del catálogo que todavía no tienen una implementación disponible.
+Estos son los dos módulos del catálogo que todavía no tienen una implementación local.
 
 | Sección | Módulo | Trabajo por implementar |
 | --- | --- | --- |
-| 3.11 | Lenguaje de señales | Diccionario versionado para los tres medios definidos, constructor, ejercicios individuales y en parejas, historial privado y fichas con fuentes. |
 | 7.6 | Microproyectos | Propuestas, participación, integrantes y responsabilidades, tablero propio, vínculos a materiales y código, demostración y cierre con contribuciones. |
 | 7.11 | Préstamo de materiales | Catálogo con propietario y disponibilidad, solicitud y acuerdo privado, reserva, entrega y devolución; impedir dos préstamos activos del mismo objeto. |
 
@@ -66,7 +69,7 @@ No se cuentan como módulos completos pendientes ni como requisitos para cerrar 
 
 | Sección | Implementación publicada o planificada | Trabajo pendiente | Próximo paso |
 | --- | --- | --- | --- |
-| 3.1 Mensajes y stickers | Publicados: canales, directos con archivos privados, menciones, lectura, silencio, bloqueo, reportes selectivos y stickers nativos; nueva interfaz Untitled UI. Avisos y Web Push configurados. | Aceptación con el grupo y recepción real en dispositivos compatibles. | Validación humana y de dispositivos. |
+| 3.1 Mensajes y stickers | Publicados: chat integrado, nuevos diálogos, importador y ayuda de stickers, comandos personales/compartidos y creación de recursos dentro del chat, reacciones Unicode y texto de escritura en vivo con permisos y desactivación de cuenta. Conserva canales, directos, archivos, menciones, lectura, silencio, bloqueo y reportes. [Recibo](mensajes-mejoras.md). | Aceptación con el grupo, teclado y dispositivos reales, recepción de avisos y medición de latencia de red. | Validación humana y de dispositivos. |
 | 3.2 Tareas y Actividades | Parcial publicado: consignas compartidas, trabajos por alumno/equipo, avance privado, estados, revisiones e historial de trabajos. | Cerrar la validación de permisos, coautorías, historial y archivos con el grupo y resolver los huecos que identifique ese recorrido. | Validación y cierre del recorrido. |
 | 3.3 Actividades de clase | Publicadas dentro de Tareas: evidencias, comentarios, vínculos y recuperación de adjuntos retirados por su autor. | Verificar archivos, versiones y permisos por equipo. La recuperación de adjuntos no implica historial completo del texto. | Validación del recorrido. |
 | 3.4 Notas de clase | Publicadas: editor estructurado, imágenes privadas bajo demanda, sesión/parcial, vínculos y versiones; publicar una nota personal crea una copia independiente. | Aceptación con el grupo. | Validación humana. |
@@ -76,7 +79,7 @@ No se cuentan como módulos completos pendientes ni como requisitos para cerrar 
 | 3.8 Votaciones | Publicadas: nominales con elegibles y cierre, novedades y recordatorios; planificador configurado. | Validar recordatorios y recepción con datos y dispositivos reales. | Validación de extremo a extremo. |
 | 3.9 Perfiles | Publicados: presentación voluntaria, foto privada, intereses, conocimientos, portafolio HTTPS, materias, equipo, archivo académico y contribuciones. | Aceptación con materiales de cada alumno; integración de microproyectos cuando exista 7.6. | Validación humana; entrega 5 para microproyectos. |
 | 3.10 Cumpleaños | Publicados: día/mes voluntarios, calendario mensual/anual, 29 de febrero, zona, preferencias y deduplicación; planificador configurado. | Validar preferencias y recepción real con el grupo. | Validación humana y de dispositivos. |
-| 3.11 Lenguaje de señales | Pendiente: presente en catálogo, sin pantalla propia. | Implementar el módulo descrito en la tabla de entrega 5. | Entrega 5. |
+| 3.11 Lenguaje de señales | Publicado: diccionario/versiones, constructor, prácticas de tres medios, parejas, historial privado, fichas con fuentes y papelera. [Detalle](lenguaje-senales-entrega.md). | Aceptación con el grupo y dispositivos reales. | Validación humana y de dispositivos. |
 | 3.12 Exámenes de estudio | EX-2 publicado: configuración, Gemini BYOK, borradores/revisión/versiones, práctica/simulacro, reloj del servidor y resultados privados. [Registro](examenes-entrega.md). | Prueba real de Gemini y aceptación con titulares de cuentas/dispositivos. EX-3 es una ampliación posterior separada. | Aceptación de EX-2; priorización de EX-3. |
 
 ## Funciones adicionales (sección 7)

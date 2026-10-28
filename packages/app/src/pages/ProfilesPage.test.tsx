@@ -111,6 +111,44 @@ function note(id: string, authorId: string): Note {
 }
 
 describe('directorio de perfiles y archivos subidos', () => {
+  it('explica la personalización y conserva el acceso al perfil propio al buscar a otra persona', async () => {
+    await mount();
+    const hint = container.querySelector('.profile-customization')!;
+    expect(hint.textContent).toContain('portada y tu foto');
+    expect(hint.textContent).toContain('Así te verá el grupo en Perfiles');
+    expect(hint.querySelector('a')?.getAttribute('href')).toBe('/perfil/me?personalizar=1');
+    expect(cardFor(me.id).querySelector('a[aria-label="Personalizar mi perfil"]')?.getAttribute('href')).toBe('/perfil/me?personalizar=1');
+    await search('Ana');
+    expect(cardIds()).toEqual(['ana']);
+    expect(hint.querySelector('a')?.getAttribute('href')).toBe('/perfil/me?personalizar=1');
+    expect(source.downloadResourceFile).not.toHaveBeenCalled();
+  });
+
+  it('abre la personalización desde el directorio y retira la indicación al cerrar el editor', async () => {
+    const router = await mount();
+    await act(async () => container.querySelector<HTMLAnchorElement>('.profile-customization a')!.click());
+    expect(container.querySelector('dialog.profile-editor h2')?.textContent).toBe('Personaliza tu perfil');
+    expect(router.state.location.search).toBe('?personalizar=1');
+    await act(async () => container.querySelector<HTMLButtonElement>('dialog button[aria-label="Cerrar"]')!.click());
+    expect(container.querySelector('dialog.profile-editor')).toBeNull();
+    expect(router.state.location.search).toBe('');
+    await act(async () => router.navigate('/perfil/me?q=apuntes'));
+    expect(container.querySelector('dialog.profile-editor')).toBeNull();
+  });
+
+  it('solo abre el editor por enlace en el perfil propio y conserva los demás parámetros al cerrar', async () => {
+    const router = await mount('/perfil/ana?personalizar=1');
+    expect(container.querySelector('dialog.profile-editor')).toBeNull();
+    expect(container.textContent).not.toContain('Personalizar perfil');
+    await act(async () => router.navigate('/perfil/me?personalizar=1&q=apuntes&pestana=notas'));
+    expect(container.querySelector('dialog.profile-editor')).not.toBeNull();
+    await act(async () => container.querySelector<HTMLButtonElement>('dialog button[aria-label="Cerrar"]')!.click());
+    const query = new URLSearchParams(router.state.location.search);
+    expect(query.has('personalizar')).toBe(false);
+    expect(query.get('q')).toBe('apuntes');
+    expect(query.get('pestana')).toBe('notas');
+  });
+
   it('muestra tamaños legibles en KB, MB y GB, y cero para quien no ha subido archivos', async () => {
     // El agregado del servidor es la autoridad, aunque el snapshot visible sea parcial.
     snapshot.resourceFiles = [{

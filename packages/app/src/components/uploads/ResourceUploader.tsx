@@ -16,6 +16,7 @@ interface Destination { kind: ResourceTargetKind; id: string; version: number }
 
 export function resourceVersion(data: Snapshot, kind: ResourceTargetKind, id: string): number {
   const rows: readonly { id: string; version?: number }[] = kind === 'assignment' ? data.assignments
+    : kind === 'visual_project' ? data.visualProjects
     : kind === 'activity' ? data.activities : kind === 'work' ? data.works : kind === 'evidence' ? data.evidences
     : kind === 'note' ? data.notes : kind === 'guide' ? data.guides : kind === 'question' ? data.questions
     : kind === 'answer' ? data.answers : kind === 'group_message' ? data.groupMessages

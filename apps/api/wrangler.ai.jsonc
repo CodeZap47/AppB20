@@ -56,6 +56,7 @@
   "secrets": {
     "required": [
       "AI_SERVICE_TOKEN",
+      "SHARE_SERVICE_TOKEN",
       "AI_MASTER_KEYS_JSON",
       "NOTIFICATION_SERVICE_TOKEN",
       "VAPID_PRIVATE_KEY",

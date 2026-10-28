@@ -54,6 +54,7 @@ export default defineConfig(({ mode }) => {
     preview: fileURLToPath(new URL('./design-preview.html', import.meta.url)),
   } } } : undefined,
   envDir: '../..',
+  worker: { format: 'es' },
   resolve: {
     alias: { '@b20-ui': fileURLToPath(new URL('../../packages/app/src/untitled', import.meta.url)) },
   },
@@ -69,7 +70,7 @@ export default defineConfig(({ mode }) => {
         filename: 'sw.ts',
         // El bundle principal ya supera los 2 MiB predeterminados; sin esto el build falla
         // y la app dejaría de funcionar sin conexión. Dividir el bundle permitiría bajarlo.
-        injectManifest: { maximumFileSizeToCacheInBytes: 4 * 1024 * 1024 },
+        injectManifest: { maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, globPatterns: ['**/*.{js,css,html,wasm}'] },
         includeAssets: ['icons/icon.svg'],
         manifest: {
           name: 'App B20',

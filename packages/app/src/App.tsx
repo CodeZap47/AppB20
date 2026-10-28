@@ -33,6 +33,9 @@ import { AskQuestionPage, QuestionPage, QuestionsPage } from './pages/QuestionsP
 import { TeachingFormPage, TeachingPage, TeachingPracticePage } from './pages/TeachingPage';
 import { RoomFormPage, RoomPage, RoomsPage } from './pages/RoomsPage';
 import { AgentPage } from './pages/AgentPage';
+import { SignalsPage } from './pages/SignalsPage';
+import { VisualProjectsPage, VisualProjectFormPage, VisualProjectPage } from './pages/VisualProjectsPage';
+import { VisualScenePage } from './pages/VisualScenePage';
 import { SpacedPage, SpacedCollectionPage, SpacedCollectionFormPage, SpacedCardFormPage, SpacedSessionPage } from './pages/SpacedPage';
 import { PresentationsPage, PresentationFormPage, PresentationPracticePage, PresentationAttemptPage } from './pages/PresentationsPage';
 import { ExamsPage, ExamCreatePage } from './pages/ExamsPage';
@@ -45,7 +48,8 @@ import { AuthFrame } from './auth/AuthFrame';
 import { useDataSource, useSnapshot } from './data/DataContext';
 import { SpacetimeDataSource } from './data/spacetime';
 import { config } from './config';
-import { PlatformContext } from './components/PlatformContext';
+import { PlatformContext, usePlatform } from './components/PlatformContext';
+import { browserAppPresenceEnvironment } from './data/appPresenceStore';
 import { DataProvider } from './data/DataContext';
 import { createDemoState, DemoDataSource } from './data/demo';
 import type { Platform } from './platform';
@@ -84,6 +88,12 @@ export const routes: RouteObject[] = [
           { path: 'm/inicio', element: <WhatsNewPage /> },
           { path: 'modulos', element: <HomePage /> },
           { path: 'm/calendario', element: <AssignmentCalendarPage /> },
+          { path: 'm/laboratorio-visual', element: <VisualProjectsPage /> },
+          { path: 'm/laboratorio-visual/nuevo', element: <VisualProjectFormPage /> },
+          { path: 'm/laboratorio-visual/:projectId/editar', element: <VisualProjectFormPage /> },
+          { path: 'm/laboratorio-visual/:projectId/escena', element: <VisualScenePage /> },
+          { path: 'm/laboratorio-visual/:projectId/escena/editar', element: <VisualScenePage editing /> },
+          { path: 'm/laboratorio-visual/:projectId', element: <VisualProjectPage /> },
           { path: 'm/materias', element: <SubjectsPage /> },
           { path: 'm/materias/:subjectId', element: <SubjectsPage /> },
           {
@@ -134,6 +144,7 @@ export const routes: RouteObject[] = [
           { path: 'm/salas/:roomId', element: <RoomPage /> },
           { path: 'm/salas/:roomId/editar', element: <RoomFormPage /> },
           { path: 'm/agente', element: <AgentPage /> },
+          { path: 'm/senales', element: <SignalsPage /> },
           { path: 'm/repaso', element: <SpacedPage /> },
           { path: 'm/repaso/nueva', element: <SpacedCollectionFormPage /> },
           { path: 'm/repaso/colecciones/:collectionId', element: <SpacedCollectionPage /> },
@@ -245,13 +256,14 @@ function MembershipGate() {
 }
 
 function DemoApp({ subject }: { subject: string }) {
+  const platform = usePlatform();
   const [owned, setOwned] = useState<{ subject: string; data: DemoDataSource } | null>(null);
   useEffect(() => {
     // StrictMode ejecuta setup/cleanup/setup: cada setup debe poseer una fuente nueva.
-    const data = new DemoDataSource(createDemoState(), 'demo-1');
+    const data = new DemoDataSource(createDemoState(), 'demo-1', undefined, browserAppPresenceEnvironment(platform === 'android'), { visualPersistenceKey: 'b20-visual-lab-demo-v1' });
     setOwned({ subject, data });
     return () => data.dispose();
-  }, [subject, createDemoState]);
+  }, [subject, createDemoState, platform]);
   if (!owned || owned.subject !== subject) {
     return <AuthFrame title="Todo listo para explorar" busy>
       <p className="auth-loading" role="status"><span className="auth-spinner" aria-hidden="true" />Preparando datos de prueba…</p>

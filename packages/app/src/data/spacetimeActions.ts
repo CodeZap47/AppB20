@@ -1,5 +1,8 @@
+import { createVisualProjectsActions } from './visualProjectsActions';
+import { createVisualSceneActions } from './visualSceneActions';
+import { createSignalsActions } from './signalsActions';
 import type { DocumentActions } from './documentTypes';
-import { CURRICULUM } from '@b20/core';
+import { CURRICULUM, normalizeCommandName } from '@b20/core';
 import { createPresentationActions } from './presentationActions';
 import { createStudyRoomActions } from './roomsActions';
 import { createTrashActions } from './trashSnapshot';
@@ -7,6 +10,8 @@ import { createNotificationActions } from './notificationActions';
 import { createPracticeActions } from './practiceActions';
 import { createCommunity4Actions } from './community4Actions';
 import { createFeedActions } from './feedActions';
+import { createFeedInteractionActions, type FeedShareClientOptions } from './feedInteractionActions';
+import { createChatPostActions } from './chatPostActions';
 import { createAgentActions } from './agentActions';
 import { helpResponse } from './helpResponse';
 import { inviteLinkUrl, newInviteCode } from '../auth/inviteLink';
@@ -14,6 +19,7 @@ import { Identity, Timestamp } from 'spacetimedb';
 import type { DbConnection } from '../module_bindings';
 import type { ResourceTargetKind } from './types';
 import type { GuideAiActions } from './guideAiTypes';
+import type { GuideMaterialsActions } from './guideMaterialsTypes';
 import type { AgentAiActions } from './agentTypes';
 import type { ExamActions } from './examTypes';
 import type { MembershipActions } from './membershipTypes';
@@ -43,7 +49,7 @@ const teachingUpdate = (input: SaveTeachingPracticeInput) => ({
 });
 
 /** Los reducers confirman los permisos en el servidor; nunca se modifica la caché de forma optimista. */
-export function createSpacetimeActions(getConnection: () => DbConnection, identity: () => string, files?: ResourceTransport): Omit<Actions, keyof DocumentActions | keyof GuideAiActions | keyof ExamActions | keyof AgentAiActions | keyof MembershipActions> {
+export function createSpacetimeActions(getConnection: () => DbConnection, identity: () => string, files?: ResourceTransport, sharing?: FeedShareClientOptions): Omit<Actions, keyof DocumentActions | keyof GuideAiActions | keyof GuideMaterialsActions | keyof ExamActions | keyof AgentAiActions | keyof MembershipActions> {
   const stickers = new StickerTransport(getConnection, identity);
   let queue = Promise.resolve();
   function serial<T>(task: () => Promise<T>): Promise<T> {
@@ -69,8 +75,14 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
   }
   const own = (value: Identity, author: string) => value.toHexString() === author;
   const versionFor = (kind: ResourceTargetKind, targetId: string): number => {
+    if (kind === 'visual_model') throw new Error('Vuelve a abrir la escena para comprobar la versión del modelo.');
     const db = getConnection().db;
     const target = id(targetId);
+    if (kind === 'visual_project') {
+      const row = [...db.visualProjects.iter()].find((entry) => entry.id === target);
+      if (!row) throw new Error('Actualiza la página para comprobar la versión del proyecto.');
+      return (JSON.parse(row.json) as { version: number }).version;
+    }
     if (kind === 'evidence') return [...db.evidenceDetails.iter()].find((row) => row.evidenceId === target)?.version ?? 1;
     if (kind === 'note' || kind === 'guide' || kind === 'profile' || kind === 'profile_cover') {
       const row = kind === 'note' ? [...db.notes.iter()].find((r) => r.id === target)
@@ -112,11 +124,17 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
   };
 
   return {
+    ...createVisualProjectsActions(getConnection, identity),
+    ...createVisualSceneActions(getConnection, identity),
+    ...createSignalsActions(getConnection, identity),
     setTyping: (scope, conversationId, typing) => getConnection().reducers.setTyping({ scope, conversationId, typing }),
+    setLiveDraftSharing: (enabled) => getConnection().reducers.setLiveDraftSharing({ enabled }),
     completeOnboarding: () => getConnection().reducers.completeOnboarding({}),
     ...createPracticeActions(getConnection, identity),
     ...createCommunity4Actions(getConnection),
     ...createFeedActions(getConnection),
+    ...createFeedInteractionActions(getConnection, sharing),
+    ...createChatPostActions(getConnection),
     ...createAgentActions(getConnection),
     ...createPresentationActions(getConnection, identity),
     ...createStudyRoomActions(getConnection, identity),
@@ -311,9 +329,14 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
     downloadSticker: (stickerId) => stickers.download(stickerId),
     setStickerPackShared: (packId, shared) => getConnection().reducers.setStickerPackShared({ packId: id(packId), shared }),
     removeStickerPack: (packId) => getConnection().reducers.removeStickerPack({ packId: id(packId) }),
-    saveChatCommand: (input) => input.id ? getConnection().reducers.saveChatCommand({ ...input, id: id(input.id) }).then(() => input.id!) :
-      create((c) => c.db.myChatCommands.iter(), (c) => c.reducers.saveChatCommand({ ...input, id: undefined }),
-        (row, author) => own(row.owner, author) && row.name === input.name.toLowerCase().trim().replace(/^\/+/, '')),
+    saveChatCommand: (input) => {
+      const fields = { ...input, name: normalizeCommandName(input.name), visibility: input.visibility ?? 'personal',
+        actionKind: input.actionKind ?? 'text', resourceKind: input.resourceKind, expectedVersion: input.expectedVersion,
+        id: optionalId(input.id) };
+      return input.id ? getConnection().reducers.saveChatCommandV2(fields).then(() => input.id!) :
+        create(c => c.db.availableChatCommands.iter(), c => c.reducers.saveChatCommandV2(fields),
+          (row, author) => own(row.owner, author) && row.name === fields.name);
+    },
     removeChatCommand: (commandId) => getConnection().reducers.removeChatCommand({ commandId: id(commandId) }),
     shareBirthday: (day, month, remind) => getConnection().reducers.shareBirthday({ day, month, remind }),
     withdrawBirthday: () => getConnection().reducers.withdrawBirthday({}),

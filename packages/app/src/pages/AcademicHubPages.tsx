@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { RelatedVisualProjects } from '../components/RelatedVisualProjects';
 import { currentTerm, WORK_KIND_LABEL } from '@b20/core';
 import { useSnapshot } from '../data/DataContext';
 import type { Assignment, Note } from '../data/types';
@@ -506,6 +507,7 @@ export function SubjectsPage() {
           )}
         </section>
       </div>
+      {subject && <RelatedVisualProjects subjectId={subject.id} />}
     </>
   );
 }

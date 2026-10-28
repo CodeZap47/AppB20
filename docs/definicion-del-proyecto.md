@@ -12,9 +12,11 @@ La revisión sincronizada `f16e8f5` reúne la cuarta entrega, Exámenes EX-2 y m
 
 | Sección | Módulo | Alcance por implementar |
 | --- | --- | --- |
-| 3.11 | Lenguaje de señales | Diccionario versionado, constructor, prácticas, parejas e historial privado. |
 | 7.6 | Microproyectos | Propuestas, participación, responsabilidades, tablero, demostración y cierre. |
 | 7.11 | Préstamo de materiales | Catálogo, acuerdo privado, reserva, entrega y devolución sin préstamos simultáneos del mismo objeto. |
+
+Lenguaje de señales (3.11) tiene [implementación local del 26 de octubre](lenguaje-senales-entrega.md),
+pendiente de publicación y aceptación. Su alcance continúa en la sección 3.11.
 
 **Ampliaciones pendientes de módulos existentes:** audio y Gemini en Exposiciones (7.10); resumen opcional con IA en «¿Qué me perdí?» (7.1); revisión opcional con IA en Revisión de código (7.5). Exposiciones ya tiene su versión por texto publicada: no es un cuarto módulo completo pendiente.
 
@@ -309,7 +311,11 @@ Los trabajos sin parcial asignado aparecerán como **sin clasificar**, para no i
 
 ### 3.11. Lenguaje de señales y recursos para intercambiar respuestas
 
-**Estado actual:** módulo pendiente de implementación, previsto para la entrega 5; su entrada en el catálogo no implica que tenga pantalla disponible.
+**Estado actual:** implementado localmente para la entrega 5: diccionario, constructor,
+prácticas, parejas, fichas y papelera. [Registro de implementación](lenguaje-senales-entrega.md).
+Publicación y aceptación con compañeros pendientes.
+
+**Plan de implementación:** [pantallas, datos, permisos e hitos SE-1 a SE-6](lenguaje-senales.md).
 
 **Idea del módulo:** crear y aprender un lenguaje compartido para comunicar respuestas breves mediante lápices o plumas, zapateadas y golpes de nudillos. Incluir un apartado de respuestas preparadas, como anotaciones en borradores.
 
@@ -514,7 +520,7 @@ Cada trabajo enlazará materia, parcial y autores para reutilizarse en el archiv
 
 El alcance reúne doce módulos base —incluidos perfiles, cumpleaños, Exámenes de estudio y el módulo experimental de señales— y las doce funciones adicionales de la sección 7. La prioridad es el archivo colaborativo y el aprendizaje, con comunicación del grupo y 1 a 1. Web/PWA para iPhone, APK Android y extensión Chrome son formas de acceso al mismo producto, no tres proyectos con datos separados.
 
-Las etapas siguientes conservan la organización original del alcance. El estado vigente es el del resumen inicial y la [matriz de requisitos](estado-del-proyecto.md): los únicos módulos completos pendientes son 3.11, 7.6 y 7.11, previstos para la entrega 5; las mejoras de módulos publicados y su aceptación se registran por separado.
+Las etapas siguientes conservan la organización original del alcance. El estado vigente es el del resumen inicial y la [matriz de requisitos](estado-del-proyecto.md): los módulos completos pendientes de implementación son 7.6 y 7.11, previstos para la entrega 5; Lenguaje de señales (3.11) tiene implementación local pendiente de publicación; las mejoras de módulos publicados y su aceptación se registran por separado.
 
 ### Etapa 0. Validación y prototipo técnico
 
@@ -931,6 +937,6 @@ Todas las ideas están incluidas en el proyecto. La siguiente distribución orga
 
 **Principio rector confirmado:** una herramienta útil para aprender y colaborar, recopilar los trabajos compartidos y convertirlos en apoyo para tareas y preparación de parciales. La transparencia del grupo debe coexistir con protección técnica básica y autoría clara.
 
-**Estado de las entregas:** la [sincronización del 21 de octubre de 2026](sincronizacion-2026-10-21.md) acredita la publicación conjunta en Maincloud, Worker y web/PWA. Quedan tres módulos completos de la entrega 5, las ampliaciones identificadas y la aceptación real. La compilación de la extensión no acredita su distribución ni la del APK; instalación, autenticación, actualizaciones y recepción de push requieren pruebas en dispositivos reales. El APK Android cerrado conserva el requisito pendiente de push nativo compatible con la restricción de proveedores.
+**Estado de las entregas:** la [sincronización del 21 de octubre de 2026](sincronizacion-2026-10-21.md) acredita la publicación conjunta en Maincloud, Worker y web/PWA. Quedan la publicación de Lenguaje de señales (3.11), la implementación de Microproyectos (7.6) y Préstamos (7.11), las ampliaciones identificadas y la aceptación real. La compilación de la extensión no acredita su distribución ni la del APK; instalación, autenticación, actualizaciones y recepción de push requieren pruebas en dispositivos reales. El APK Android cerrado conserva el requisito pendiente de push nativo compatible con la restricción de proveedores.
 
 ---

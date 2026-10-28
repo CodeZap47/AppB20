@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { emptySnapshot } from '../data/spacetimeSnapshot';
 import type { GuideSource, Snapshot, StudyGuide } from '../data/types';
-import { candidateSources, guideStatus, isOutdated } from './guides';
+import { candidateSources, guideScopeLabel, guideStatus, isOutdated } from './guides';
 
 const at = new Date('2026-10-20T12:00:00Z');
 const guide: StudyGuide = { id: 'g1', subjectId: 's1', termId: 'p1', title: 'Guía', topics: ['Ciclos'],
@@ -19,6 +19,25 @@ function fixture(): Snapshot {
 }
 
 describe('vigencia de fuentes de una guía', () => {
+  it('mantiene cobertura de otros parciales cuando su procedencia confirma la selección disponible', () => {
+    const data = fixture(); data.assignments[0]!.termId = 'p2';
+    data.guideAiSourceAvailability = [{ sourceId: source.id, guideId: guide.id, guideVersion: guide.version, available: true, outdated: false, reason: '' }];
+    expect(guideStatus(guide, data)).toMatchObject({ covered: 1, processed: 1, pending: 0 });
+    data.guideAiSourceAvailability[0]!.available = false;
+    expect(guideStatus(guide, data)).toMatchObject({ covered: 0, pending: 1 });
+  });
+  it('una guía cuatrimestral propone material de varios parciales y deja sin clasificar para revisión expresa', () => {
+    const data = fixture();
+    data.assignments.push({ ...data.assignments[0]!, id: 't2', termId: 'p2', title: 'Segundo parcial' },
+      { ...data.assignments[0]!, id: 't3', termId: undefined, title: 'Sin clasificar' });
+    const sources = candidateSources('s1', undefined, data);
+    expect(sources.matched.filter((item) => item.kind === 'tarea').map((item) => item.refId)).toEqual(['t1', 't2']);
+    expect(sources.unplaced.map((item) => item.refId)).toEqual(['t3']);
+    expect(candidateSources('s1', 'p1', data).matched.some((item) => item.refId === 't2')).toBe(false);
+    expect(guideScopeLabel({ termId: undefined }, data)).toBe('Cuatrimestre completo');
+    expect(guideScopeLabel({ termId: 'unknown' }, data)).toBe('Parcial');
+  });
+
   it('reclasificar la consigna fuera de materia invalida cobertura sin cambiar la versión del trabajo', () => {
     const data = fixture();
     data.assignments = data.assignments.map((row) => ({ ...row, subjectId: 's2', termId: 'p2', version: 2 }));
