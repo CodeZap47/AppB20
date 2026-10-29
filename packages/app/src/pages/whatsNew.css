@@ -44,11 +44,16 @@
 .whats-new-page .feed-composer__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 12px; }
 .whats-new-page .feed-composer__actions select { margin-right: auto; max-width: 100%; font-size: .8rem; }
 .whats-new-page .feed-composer__count { font-size: .75rem; font-variant-numeric: tabular-nums; }
-.whats-new-page .feed-composer__shortcuts { display: flex; flex-wrap: wrap; gap: 8px 20px; padding-top: 15px; margin-top: 15px; border-top: 1px solid #edf0f5; }
-.whats-new-page .feed-composer__shortcuts a { display: inline-flex; align-items: center; gap: 7px; font-size: .75rem; color: var(--muted); text-decoration: none; font-weight: 600; }
-.whats-new-page .feed-composer__shortcuts a:hover { color: var(--accent); }
-.whats-new-page .feed-composer__shortcuts a:nth-child(2) .icon { color: #7b55a7; }
-.whats-new-page .feed-composer__shortcuts a:nth-child(3) .icon { color: #287767; }
+.whats-new-page .feed-composer__shortcuts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding-top: 15px; margin-top: 15px; border-top: 1px solid #edf0f5; }
+.whats-new-page .feed-composer__shortcuts-title { grid-column: 1 / -1; margin: 0 0 3px; color: var(--muted); font-size: .75rem; font-weight: 600; }
+.whats-new-page .feed-composer__shortcut { display: flex; align-items: center; gap: 9px; min-width: 0; min-height: 48px; padding: 10px; border: 1px solid #e6ebf3; border-radius: 9px; background: var(--feed-soft); color: var(--text); font-size: .76rem; line-height: 1.45; text-decoration: none; font-weight: 600; }
+.whats-new-page .feed-composer__shortcut > span { min-width: 0; overflow-wrap: anywhere; }
+.whats-new-page .feed-composer__shortcut-icon { width: 18px; height: 18px; flex: none; color: var(--accent); }
+.whats-new-page .feed-composer__shortcut[data-module='notas'] .feed-composer__shortcut-icon { color: #7b55a7; }
+.whats-new-page .feed-composer__shortcut[data-module='preguntas'] .feed-composer__shortcut-icon { color: #287767; }
+.whats-new-page .feed-composer__shortcut:hover { color: var(--accent); border-color: #c8d6ec; background: #edf3fd; }
+.whats-new-page .feed-composer__shortcut:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.whats-new-page .feed-composer__shortcut[aria-disabled='true'] { opacity: .55; cursor: default; }
 .whats-new-page .feed-filter-panel { margin: 24px 0 20px; }
 .whats-new-page .feed-filter-panel__head { justify-content: space-between; margin: 0 0 14px; gap: 10px; }
 .whats-new-page .feed-filter-panel__head h2 { margin: 0; font-size: .95rem; }
@@ -215,10 +220,12 @@
 .whats-new-page .news-modules { font-size: .78rem; }
 
 @media (max-width: 1023px) {
+  .whats-new-page .feed-composer__shortcuts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .whats-new-page .detail--feed { grid-template-columns: minmax(0, 740px); }
   .whats-new-page .detail--feed > .detail__side { display: none; }
 }
 .shell--compact .whats-new-page .detail--feed { grid-template-columns: minmax(0, 1fr); }
+.shell--compact .whats-new-page .feed-composer__shortcuts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 @media (max-width: 600px) {
   .whats-new-page .feed-page-header { align-items: flex-start; gap: 14px; }
   .whats-new-page .feed-page-header > .row { width: 100%; justify-content: space-between; gap: 8px; }
@@ -233,8 +240,8 @@
   .whats-new-page .feed-content--guide, .whats-new-page .feed-content--document, .whats-new-page .feed-content--spaced, .whats-new-page .feed-content--opportunity, .whats-new-page .feed-content--exam { padding: 15px; }
   .whats-new-page .feed-content--museum .feed-content__blocks { grid-template-columns: 1fr; }
   .whats-new-page .feed-composer__row > .avatar, .whats-new-page .feed-composer__row > img { display: none; }
-  .whats-new-page .feed-composer__shortcuts { gap: 8px 14px; }
-  .whats-new-page .feed-composer__shortcuts a { font-size: .7rem; }
+  .whats-new-page .feed-composer__shortcuts { gap: 8px; }
+  .whats-new-page .feed-composer__shortcut { gap: 7px; font-size: .75rem; }
   .whats-new-page .comment-form > .avatar, .whats-new-page .comment-form > img { display: none; }
   .whats-new-page .feed-card__open { font-size: .7rem; }
   .whats-new-page .feed-facts { gap: 12px 18px; }

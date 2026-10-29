@@ -367,7 +367,9 @@ export function NoteForm({ initialTitle, onSaved, onCancel, onBusyChange }: Reso
   const [title, setTitle] = useState(existing?.title ?? initialTitle ?? '');
   const [body, setBody] = useState(existing?.body ?? '');
   const [tags, setTags] = useState(existing?.tags.join(', ') ?? '');
-  const [visibility, setVisibility] = useState<NoteVisibility>(existing?.visibility ?? (onSaved ? 'group' : 'personal'));
+  const [visibility, setVisibility] = useState<NoteVisibility>(() =>
+    existing?.visibility ?? (onSaved || (!noteId && params.get('visibilidad') === 'grupo') ? 'group' : 'personal'),
+  );
   const [noteSource, setNoteSource] = useState<NoteSource>(existing?.source ?? 'student');
   const [isFinal, setIsFinal] = useState(existing?.isFinal ?? false);
   const [termId, setTermId] = useState(existing?.termId ?? '');

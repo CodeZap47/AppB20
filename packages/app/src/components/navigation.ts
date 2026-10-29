@@ -39,6 +39,11 @@ const MODULE_ICONS: Record<string, NavigationIcon> = {
   leaderboard: Award01,
 };
 
+/** Los módulos nuevos pueden usar el icono genérico hasta definir uno propio. */
+export function getModuleIcon(moduleId: string): NavigationIcon {
+  return MODULE_ICONS[moduleId] ?? File02;
+}
+
 /** The catalog owns availability and labels; this configuration only groups destinations. */
 export function buildNavigation(modules: readonly ModuleInfo[] = navigableModules()): {
   items: NavigationItem[];
@@ -47,7 +52,7 @@ export function buildNavigation(modules: readonly ModuleInfo[] = navigableModule
   const byId = new Map(modules.map((module) => [module.id, module]));
   const links = (ids: string[]) => ids.flatMap((id) => {
     const module = byId.get(id);
-    return module ? [{ label: module.title, href: `/m/${module.id}`, icon: MODULE_ICONS[id] }] : [];
+    return module ? [{ label: module.title, href: `/m/${module.id}`, icon: getModuleIcon(id) }] : [];
   });
   const items: NavigationItem[] = [];
   if (byId.has('inicio')) items.push({ label: 'Inicio', href: '/m/inicio', icon: HomeLine });

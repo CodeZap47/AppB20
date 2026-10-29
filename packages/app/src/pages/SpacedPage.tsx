@@ -181,7 +181,9 @@ function CollectionForm({ data, collection }: { data: Snapshot; collection?: Spa
   const [title, setTitle] = useState(collection?.title ?? '');
   const [subjectId, setSubjectId] = useState(collection?.subjectId ?? data.subjects.find((s) => s.id === params.get('materia'))?.id ?? data.subjects[0]?.id ?? '');
   const [termId, setTermId] = useState(collection?.termId ?? '');
-  const [visibility, setVisibility] = useState<'personal' | 'group'>(collection?.visibility ?? 'personal');
+  const [visibility, setVisibility] = useState<'personal' | 'group'>(() =>
+    collection?.visibility ?? (params.get('visibilidad') === 'grupo' ? 'group' : 'personal'),
+  );
   const [expectedVersion, setExpectedVersion] = useState(collection?.version);
   const { error, pending, run } = useAction();
   const busy = useRef(false);

@@ -1,5 +1,5 @@
 import { ResourceComments } from '../components/whatsNew/ResourceComments';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { OPPORTUNITY_KINDS, OPPORTUNITY_MODALITIES, opportunityExpired, type OpportunityFields } from '@b20/core';
 import { useDataSource, useSnapshot } from '../data/DataContext';
@@ -11,12 +11,20 @@ const feedbackLabel: Record<string, string> = { correction: 'Corrección', broke
 const blank: OpportunityFields = { kind: 'event', title: '', topic: '', modality: 'online', sourceUrl: '', organizer: '', requirements: '', costKnown: false, cost: '' };
 function OpportunityEditor({ entry, done }: { entry?: Opportunity; done(): void }) {
   const source = useDataSource(), base = useSnapshot(), action = useAction(); const [fields, setFields] = useState<OpportunityFields>(entry ?? blank); const [requestId] = useState(() => crypto.randomUUID());
-  async function submit(e: FormEvent) { e.preventDefault(); const ok = await action.run(async () => { if (entry) await source.updateOpportunity({ opportunityId: entry.id, expectedVersion: entry.version, fields }); else await source.createOpportunity({ fields, requestId }); return true; }); if (ok) done(); }
-  return <form className="panel form-grid" onSubmit={submit}><h2>{entry ? 'Editar oportunidad' : 'Compartir oportunidad'}</h2><label>Tipo<select value={fields.kind} onChange={(e) => setFields({ ...fields, kind: e.target.value })}>{OPPORTUNITY_KINDS.map((v) => <option key={v} value={v}>{kindLabel[v]}</option>)}</select></label>
-    {(['title', 'topic', 'organizer'] as const).map((key) => <label key={key}>{({ title: 'Título', topic: 'Tema', organizer: 'Organizador' })[key]}<input required maxLength={200} value={fields[key]} onChange={(e) => setFields({ ...fields, [key]: e.target.value })} /></label>)}
-    <label>Modalidad<select value={fields.modality} onChange={(e) => setFields({ ...fields, modality: e.target.value })}>{OPPORTUNITY_MODALITIES.map((v) => <option key={v} value={v}>{modeLabel[v]}</option>)}</select></label><label>Fuente oficial HTTPS<input type="url" required value={fields.sourceUrl} onChange={(e) => setFields({ ...fields, sourceUrl: e.target.value })} /></label><label>Requisitos<textarea required maxLength={4000} value={fields.requirements} onChange={(e) => setFields({ ...fields, requirements: e.target.value })} /></label>
-    <label>Fecha límite (vacía si no se conoce)<input type="datetime-local" value={fields.deadline ? new Date(Date.parse(fields.deadline) - new Date(fields.deadline).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''} onChange={(e) => setFields({ ...fields, deadline: e.target.value ? new Date(e.target.value).toISOString() : undefined })} /></label><label><input type="checkbox" checked={fields.costKnown} onChange={(e) => setFields({ ...fields, costKnown: e.target.checked })} /> Conozco el costo</label>{fields.costKnown && <label>Costo y moneda (o «Gratis»)<input required maxLength={300} value={fields.cost} onChange={(e) => setFields({ ...fields, cost: e.target.value })} /></label>}
-    <label>Sala abierta para coordinarse (opcional)<select value={fields.roomId ?? ''} onChange={(e) => setFields({ ...fields, roomId: e.target.value || undefined })}><option value="">Sin sala vinculada</option>{base.studyRooms.filter((r) => r.visibility === 'group' && ['scheduled', 'active'].includes(r.status)).map((r) => <option value={r.id} key={r.id}>{r.title}</option>)}</select></label><p className="muted">Publicación manual. Revisa los requisitos y la fuente; el interés aquí no te inscribe ante el organizador.</p>{action.error && <p role="alert">{action.error}</p>}<div className="actions"><button disabled={action.pending}>Guardar oportunidad</button><button type="button" onClick={done}>Cancelar</button></div></form>;
+  const saving = useRef(false); const mounted = useRef(false); const onDone = useRef(done);
+  useEffect(() => { onDone.current = done; }, [done]);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const locked = action.pending || base.connection !== 'ready';
+  async function submit(e: FormEvent) { e.preventDefault();
+    const current = source.getSnapshot();
+    if (saving.current || current.connection !== 'ready' || current.me?.status !== 'active' || current.me.id !== base.me?.id) return;
+    saving.current = true;
+    const ok = await action.run(async () => { if (entry) await source.updateOpportunity({ opportunityId: entry.id, expectedVersion: entry.version, fields }); else await source.createOpportunity({ fields, requestId }); return true; }); saving.current = false; if (ok && mounted.current && source.getSnapshot().me?.id === base.me?.id && source.getSnapshot().me?.status === 'active') onDone.current(); }
+  return <form className="panel form-grid" aria-busy={action.pending} onSubmit={submit}><h2>{entry ? 'Editar oportunidad' : 'Compartir oportunidad'}</h2><label>Tipo<select disabled={locked} value={fields.kind} onChange={(e) => setFields({ ...fields, kind: e.target.value })}>{OPPORTUNITY_KINDS.map((v) => <option key={v} value={v}>{kindLabel[v]}</option>)}</select></label>
+    {(['title', 'topic', 'organizer'] as const).map((key) => <label key={key}>{({ title: 'Título', topic: 'Tema', organizer: 'Organizador' })[key]}<input disabled={locked} required maxLength={200} value={fields[key]} onChange={(e) => setFields({ ...fields, [key]: e.target.value })} /></label>)}
+    <label>Modalidad<select disabled={locked} value={fields.modality} onChange={(e) => setFields({ ...fields, modality: e.target.value })}>{OPPORTUNITY_MODALITIES.map((v) => <option key={v} value={v}>{modeLabel[v]}</option>)}</select></label><label>Fuente oficial HTTPS<input disabled={locked} type="url" required value={fields.sourceUrl} onChange={(e) => setFields({ ...fields, sourceUrl: e.target.value })} /></label><label>Requisitos<textarea disabled={locked} required maxLength={4000} value={fields.requirements} onChange={(e) => setFields({ ...fields, requirements: e.target.value })} /></label>
+    <label>Fecha límite (vacía si no se conoce)<input disabled={locked} type="datetime-local" value={fields.deadline ? new Date(Date.parse(fields.deadline) - new Date(fields.deadline).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''} onChange={(e) => setFields({ ...fields, deadline: e.target.value ? new Date(e.target.value).toISOString() : undefined })} /></label><label><input disabled={locked} type="checkbox" checked={fields.costKnown} onChange={(e) => setFields({ ...fields, costKnown: e.target.checked })} /> Conozco el costo</label>{fields.costKnown && <label>Costo y moneda (o «Gratis»)<input disabled={locked} required maxLength={300} value={fields.cost} onChange={(e) => setFields({ ...fields, cost: e.target.value })} /></label>}
+    <label>Sala abierta para coordinarse (opcional)<select disabled={locked} value={fields.roomId ?? ''} onChange={(e) => setFields({ ...fields, roomId: e.target.value || undefined })}><option value="">Sin sala vinculada</option>{base.studyRooms.filter((r) => r.visibility === 'group' && ['scheduled', 'active'].includes(r.status)).map((r) => <option value={r.id} key={r.id}>{r.title}</option>)}</select></label><p className="muted">Publicación manual. Revisa los requisitos y la fuente; el interés aquí no te inscribe ante el organizador.</p>{base.connection !== 'ready' && <p role="status">Tu borrador sigue aquí. Podrás guardarlo al reconectar.</p>}{action.error && <p role="alert">{action.error}</p>}<div className="actions"><button disabled={locked}>Guardar oportunidad</button><button disabled={action.pending} type="button" onClick={done}>Cancelar</button></div></form>;
 }
 function OpportunityCard({ row, edit }: { row: Opportunity; edit(): void }) {
   const source = useDataSource(), base = useSnapshot(), action = useAction(); const [team, setTeam] = useState(() => base.opportunityInterests.find((r) => r.opportunityId === row.id && r.memberId === base.me?.id)?.seekingTeam ?? false), [contact, setContact] = useState(() => base.opportunityInterests.find((r) => r.opportunityId === row.id && r.memberId === base.me?.id)?.shareContact ?? false), [feedback, setFeedback] = useState(''), [kind, setKind] = useState<'correction' | 'broken_link' | 'outdated'>('correction'), [resolution, setResolution] = useState(''), [reason, setReason] = useState('');
@@ -37,17 +45,34 @@ function OpportunityCard({ row, edit }: { row: Opportunity; edit(): void }) {
 }
 export function OpportunitiesPage() {
   const base = useSnapshot();
-  return <OpportunitiesAccountPage key={base.me?.id ?? 'inactive'} />;
+  return <OpportunitiesAccountPage key={`${base.me?.id ?? 'inactive'}:${base.me?.status ?? 'none'}`} />;
 }
 function OpportunitiesAccountPage() {
-  const [searchParams] = useSearchParams(); const linkedId = searchParams.get('oportunidad');
+  const [searchParams, setSearchParams] = useSearchParams(); const linkedId = searchParams.get('oportunidad');
+  const creating = searchParams.get('crear') === '1';
   const base = useSnapshot(); const linkedOpportunity = base.opportunities.find((entry) => entry.id === linkedId && !entry.withdrawn);
   useEffect(() => { if (!linkedOpportunity) return; const element = document.getElementById(`oportunidad-${linkedOpportunity.id}`); element?.focus({ preventScroll: true }); element?.scrollIntoView?.({ block: 'center' }); }, [linkedId, Boolean(linkedOpportunity)]);
-  const [editing, setEditing] = useState<Opportunity | null | undefined>(); const [search, setSearch] = useState(''), [kind, setKind] = useState(''), [mode, setMode] = useState(''), [view, setView] = useState('current');
+  const [editing, setEditing] = useState<Opportunity>();
+  const [creationReady, setCreationReady] = useState(creating && base.connection === 'ready');
+  useEffect(() => {
+    if (!creating) setCreationReady(false);
+    else { setEditing(undefined); if (base.connection === 'ready') setCreationReady(true); }
+  }, [creating, base.connection]);
+  function finishEditing() {
+    setEditing(undefined);
+    if (creating) setSearchParams((current) => { const next = new URLSearchParams(current); next.delete('crear'); return next; }, { replace: true });
+  }
+  function create() { setEditing(undefined); setSearchParams((current) => { const next = new URLSearchParams(current); next.set('crear', '1'); return next; }); }
+  function edit(entry: Opportunity) {
+    if (creating) setSearchParams((current) => { const next = new URLSearchParams(current); next.delete('crear'); return next; }, { replace: true });
+    setEditing(entry);
+  }
+  const showCreate = creating && (creationReady || base.connection === 'ready'); const [search, setSearch] = useState(''), [kind, setKind] = useState(''), [mode, setMode] = useState(''), [view, setView] = useState('current');
   if (base.me?.status !== 'active') return <p>Necesitas una membresía activa para consultar oportunidades.</p>;
   const shown = base.opportunities.filter((r) => (!kind || r.kind === kind) && (!mode || r.modality === mode) && `${r.title} ${r.topic} ${r.organizer}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()) && (view === 'all' || view === 'mine' ? view !== 'mine' || r.authorId === base.me!.id : !r.withdrawn && (r.id === linkedId || (view === 'expired' ? opportunityExpired(r, new Date()) : !opportunityExpired(r, new Date())))));
-  return <div className="page"><header className="page-header"><h1>Radar de oportunidades</h1><p>Convocatorias compartidas manualmente por el grupo, con fuente y plazos visibles.</p><button onClick={() => setEditing(null)}>Compartir oportunidad</button></header>{editing !== undefined && <OpportunityEditor key={editing?.id ?? 'new'} entry={editing ?? undefined} done={() => setEditing(undefined)} />}
+  return <div className="page"><header className="page-header"><h1>Radar de oportunidades</h1><p>Convocatorias compartidas manualmente por el grupo, con fuente y plazos visibles.</p><button disabled={base.connection !== 'ready'} onClick={create}>Compartir oportunidad</button></header>{(showCreate || (!creating && editing)) && <OpportunityEditor key={creating ? 'new' : editing!.id} entry={creating ? undefined : editing} done={finishEditing} />}
+    {creating && !showCreate && <p role="status">Conectando para abrir una nueva oportunidad…</p>}
     <div className="filters"><label>Buscar por tema, título u organizador<input value={search} onChange={(e) => setSearch(e.target.value)} /></label><label>Tipo<select value={kind} onChange={(e) => setKind(e.target.value)}><option value="">Todos</option>{OPPORTUNITY_KINDS.map((v) => <option key={v} value={v}>{kindLabel[v]}</option>)}</select></label><label>Modalidad<select value={mode} onChange={(e) => setMode(e.target.value)}><option value="">Todas</option>{OPPORTUNITY_MODALITIES.map((v) => <option key={v} value={v}>{modeLabel[v]}</option>)}</select></label><label>Mostrar<select value={view} onChange={(e) => setView(e.target.value)}><option value="current">Vigentes</option><option value="expired">Vencidas</option><option value="all">Todas las disponibles</option><option value="mine">Mis publicaciones</option></select></label></div>
-    {!shown.length && <p>No hay oportunidades para estos filtros.</p>}{shown.map((row) => <OpportunityCard key={row.id} row={row} edit={() => setEditing(row)} />)}
+    {!shown.length && <p>No hay oportunidades para estos filtros.</p>}{shown.map((row) => <OpportunityCard key={row.id} row={row} edit={() => { if (base.connection === 'ready') edit(row); }} />)}
   </div>;
 }
