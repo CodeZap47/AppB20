@@ -363,7 +363,9 @@ function NoteForm() {
   const [title, setTitle] = useState(existing?.title ?? '');
   const [body, setBody] = useState(existing?.body ?? '');
   const [tags, setTags] = useState(existing?.tags.join(', ') ?? '');
-  const [visibility, setVisibility] = useState<NoteVisibility>(existing?.visibility ?? 'personal');
+  const [visibility, setVisibility] = useState<NoteVisibility>(() =>
+    existing?.visibility ?? (!noteId && params.get('visibilidad') === 'grupo' ? 'group' : 'personal'),
+  );
   const [noteSource, setNoteSource] = useState<NoteSource>(existing?.source ?? 'student');
   const [isFinal, setIsFinal] = useState(existing?.isFinal ?? false);
   const [termId, setTermId] = useState(existing?.termId ?? '');

@@ -61,6 +61,9 @@ import * as practice from './practiceHandlers';
 import { community4Tables, museumEntry, museumRevision, opportunity, opportunityRevision, opportunityInterest, opportunityFeedback } from './community4Tables';
 import * as community4 from './community4Handlers';
 import { feedTables, feedReaction, feedPost, feedComment } from './feedTables';
+import { feedInteractionTables } from './feedInteractionTables';
+import * as feedInteractions from './feedInteractionHandlers';
+import { invalidateFeedShares } from './feedInteractionLifecycle';
 import { adminContentEntryType, adminContentResult } from './adminContentTables';
 import { readAdminContentEntries } from './contentInventory';
 import { moderateContentItem, readAdminContentResult } from './adminContentHandlers';
@@ -829,6 +832,7 @@ const spacetimedb = schema({
   ...practiceTables,
   ...community4Tables,
   ...feedTables,
+  ...feedInteractionTables,
   ...helpVersionTables,
   ...teachingVersionTables,
   ...aiTables, ...examEvaluationTables, ...examSpacedTables, ...documentTables, ...presentationFeatureTables,
@@ -1032,7 +1036,7 @@ export const typing_presence = spacetimedb.view({ name: 'typing_presence', publi
 export const on_connect = spacetimedb.clientConnected((ctx) => {
   // HTTP /call también ejecuta el ciclo de conexión. La identidad técnica solo llega a los
   // handlers que la aceptan expresamente; no adquiere membresía ni puede leer vistas del grupo.
-  if (isOwner(ctx) || isAuthSetup(ctx) || isFileService(ctx) || ai.isAiService(ctx) || notifications.isNotificationService(ctx) || trash.isMaintenanceService(ctx)) return;
+  if (isOwner(ctx) || isAuthSetup(ctx) || isFileService(ctx) || ai.isAiService(ctx) || notifications.isNotificationService(ctx) || trash.isMaintenanceService(ctx) || feedInteractions.isFeedShareService(ctx)) return;
   const email = verifiedEmail(ctx);
   // Una cuenta bloqueada puede consultar únicamente su estado para mostrar la baja.
   // Un histórico activo aún sin vínculo comprobado no obtiene una conexión de lectura.
@@ -2331,6 +2335,7 @@ export const cancel_poll = spacetimedb.reducer(
       cancelledAt: ctx.timestamp,
       cancelReason: requireText(reason, 'La razón', MAX_POLL_NOTE_LENGTH),
     });
+    invalidateFeedShares(ctx, 'poll', pollId);
     log(ctx, 'cancelar', 'poll', pollId);
   },
 );
@@ -2678,6 +2683,7 @@ export const withdraw_help_post = spacetimedb.reducer(
     if (!own) requireCreator(ctx);
     const withdrawalReason = optionalHelpText(reason, 'El motivo', 500);
     if (!own && !withdrawalReason) throw new SenderError('Indica el motivo de la retirada.');
+    invalidateFeedShares(ctx, 'help', postId);
     ctx.db.helpPost.id.update({
       ...post,
       status: 'withdrawn',
@@ -2864,8 +2870,10 @@ function optionalText(value: string, name: string, limit: number) {
 
 function setWorkDetail(ctx: Ctx, workId: bigint, topic: string, status: string, actor = memberIdentityFor(ctx)) {
   const detail = { workId, topic: optionalText(topic, 'El tema', 120), status: workStatus(status), updatedBy: actor };
-  if (ctx.db.workDetail.workId.find(workId)) ctx.db.workDetail.workId.update(detail);
+  const previous = ctx.db.workDetail.workId.find(workId);
+  if (previous) ctx.db.workDetail.workId.update(detail);
   else ctx.db.workDetail.insert(detail);
+  if (detail.status === 'draft' && previous?.status !== 'draft') invalidateFeedShares(ctx, 'work', workId);
 }
 
 function setAssignmentTopic(ctx: Ctx, assignmentId: bigint, topic: string) {
@@ -3942,6 +3950,7 @@ export const archive_spaced_collection = spacetimedb.reducer(
     if (!row.ownerId.isEqual(memberIdentityFor(ctx))) throw new SenderError('Solo su creador puede archivar la colección.');
     requireSpacedVersion(row.version, expectedVersion);
     if (row.archived === archived) return;
+    if (archived) invalidateFeedShares(ctx, 'spaced', collectionId);
     ctx.db.spacedCollection.id.update({ ...row, archived, version: row.version + 1,
       updatedAt: ctx.timestamp, updatedBy: memberIdentityFor(ctx) });
   },
@@ -3988,6 +3997,7 @@ export const archive_spaced_card = spacetimedb.reducer(
     requireSpacedVersion(row.version, expectedVersion);
     if (row.archived === archived) return;
     preserveSpacedLearning(ctx, row, row.version + 1);
+    if (archived) invalidateFeedShares(ctx, 'spaced_card', cardId);
     ctx.db.spacedCard.id.update({ ...row, archived, version: row.version + 1,
       updatedAt: ctx.timestamp, updatedBy: memberIdentityFor(ctx) });
   },
@@ -5062,6 +5072,14 @@ export const edit_feed_post = spacetimedb.reducer({ postId: t.u64(), text: t.str
 export const delete_feed_post = spacetimedb.reducer({ postId: t.u64() }, feed.deleteFeedPost);
 export const comment_feed_post = spacetimedb.reducer({ postId: t.u64(), text: t.string(), requestId: t.string() }, feed.commentFeedPost);
 export const delete_feed_comment = spacetimedb.reducer({ commentId: t.u64() }, feed.deleteFeedComment);
+export const feed_thread = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => feedInteractions.feedThread(tx, payload)));
+export const configure_feed_share_service = spacetimedb.reducer({ identity: t.identity(), enabled: t.bool() }, (ctx, input) => {
+  if (!isOwner(ctx)) throw new SenderError('Solo el propietario configura el servicio de vistas previas.');
+  feedInteractions.configureFeedShareService(ctx, input);
+});
+export const feed_share_action = spacetimedb.procedure({ payload: t.string() }, t.string(), (ctx, { payload }) => ctx.withTx((tx) => feedInteractions.feedShareAction(tx, payload)));
+export const feed_share_preview = spacetimedb.procedure({ tokenHash: t.string() }, t.string(), (ctx, { tokenHash }) => ctx.withTx((tx) => feedInteractions.feedSharePreview(tx, tokenHash)));
+
 export const feed_reactions = spacetimedb.view({ name: 'feed_reactions', public: true }, t.array(feedReaction.rowType), ctx => [...ctx.db.feedReaction.iter()].filter(row => isActive(ctx.db, row.member) && feed.feedTargetReadable(ctx.db, memberIdentityFor(ctx), row.targetKind, row.targetId)));
 export const feed_posts = spacetimedb.view({ name: 'feed_posts', public: true }, t.array(feedPost.rowType), ctx => [...ctx.db.feedPost.iter()].filter(row => feed.postReadable(ctx.db, memberIdentityFor(ctx), row.id)));
 export const feed_comments = spacetimedb.view({ name: 'feed_comments', public: true }, t.array(feedComment.rowType), ctx => [...ctx.db.feedComment.iter()].filter(row => feed.commentReadable(ctx.db, memberIdentityFor(ctx), row)));

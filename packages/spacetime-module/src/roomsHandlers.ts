@@ -1,4 +1,5 @@
 import { memberIdentityFor } from './authIdentity';
+import { invalidateFeedShares } from './feedInteractionLifecycle';
 import { SenderError } from 'spacetimedb/server';
 import { Timestamp } from 'spacetimedb';
 import { activeMember, expectVersion, isActive, log, requireSubject, requireText, type Ctx, type ViewDb } from './moduleContext';
@@ -180,6 +181,7 @@ export function setRoomStatus(ctx: Ctx, input: { roomId: bigint; status: string;
   if (input.status === 'active' && room.status !== 'scheduled') throw new SenderError('La sesión ya comenzó.');
   if (input.status === 'completed' && room.status !== 'active') throw new SenderError('Comienza la sesión antes de finalizarla.');
   ctx.db.studyRoom.id.update({ ...room, status: input.status, version: room.version + 1, updatedAt: ctx.timestamp });
+  if (input.status === 'cancelled') invalidateFeedShares(ctx, 'room', room.id);
   if (input.status !== 'active') stopTimer(ctx, room.id);
 }
 export function setMaterial(ctx: Ctx, input: { roomId: bigint; kind: string; sourceId: bigint; enabled: boolean }) {
@@ -283,6 +285,7 @@ export function removeGroupMember(ctx: Ctx, person: Identity) {
   }
   for (const room of ctx.db.studyRoom.iter()) {
     if (room.organizer.isEqual(person) && activeStatuses.includes(room.status)) {
+      invalidateFeedShares(ctx, 'room', room.id);
       ctx.db.studyRoom.id.update({ ...room, status: 'cancelled', version: room.version + 1,
         participantCount: countMembers(ctx.db, room.id), updatedAt: ctx.timestamp });
       stopTimer(ctx, room.id);

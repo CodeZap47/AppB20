@@ -106,8 +106,9 @@ describe('primera vista: Feed y Clásica', () => {
     await act(async () => [...card.querySelectorAll<HTMLButtonElement>('.reaction-picker button')].find((b) => b.textContent === '🎉')!.click());
     expect(source.getSnapshot().feedReactions).toContainEqual({ targetKind: 'post', targetId: post!.id, memberId: 'demo-1', emoji: '🎉' });
 
-    const input = card.querySelector<HTMLInputElement>('[aria-label="Escribe un comentario"]')!;
-    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '¿A las 9?'); input.dispatchEvent(new Event('input', { bubbles: true })); });
+    await act(async () => { card.querySelector<HTMLButtonElement>('.resource-comments__toggle')!.click(); await new Promise((resolve) => setTimeout(resolve, 20)); });
+    const input = card.querySelector<HTMLTextAreaElement>('[aria-label="Escribe un comentario"]')!;
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(input, '¿A las 9?'); input.dispatchEvent(new Event('input', { bubbles: true })); });
     await act(async () => input.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
     expect(source.getSnapshot().feedComments.some((c) => c.postId === post!.id && c.text === '¿A las 9?')).toBe(true);
   });

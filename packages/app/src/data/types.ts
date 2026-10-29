@@ -27,6 +27,8 @@ import type { PresentationActions, PresentationsSnapshot } from './presentationT
 import type { PracticeActions, PracticeSnapshot } from './practiceTypes';
 import type { Community4Actions, Community4Snapshot } from './community4Types';
 import type { FeedActions, FeedSnapshot } from './feedTypes';
+import type { FeedInteractionActions } from './feedInteractionTypes';
+export type * from './feedInteractionTypes';
 import type { MembershipActions, AdminContentEntry, AdminContentResult } from './membershipTypes';
 export type * from './membershipTypes';
 import type { AgentActions, AgentAiActions, AgentSnapshot } from './agentTypes';
@@ -862,7 +864,7 @@ export interface PublishWorkInput {
 export type MaybePromise<T> = T | Promise<T>;
 
 /** Acciones: corresponden uno a uno con los reducers del módulo. */
-export interface Actions extends MembershipActions, Delivery2Actions, StudyRoomActions, NotificationActions, TrashActions, PresentationActions, PracticeActions, Community4Actions, FeedActions, GuideAiActions, ExamActions, DocumentActions, AgentActions, AgentAiActions {
+export interface Actions extends MembershipActions, Delivery2Actions, StudyRoomActions, NotificationActions, TrashActions, PresentationActions, PracticeActions, Community4Actions, FeedActions, FeedInteractionActions, GuideAiActions, ExamActions, DocumentActions, AgentActions, AgentAiActions {
   setTyping(scope: MessageScope, conversationId: Id, typing: boolean): MaybePromise<void>;
   completeOnboarding(): MaybePromise<void>;
   replaceSpacedCardSource(cardId: Id, expectedVersion: number, sourceKind: SpacedSourceKind, sourceId: Id): MaybePromise<void>;

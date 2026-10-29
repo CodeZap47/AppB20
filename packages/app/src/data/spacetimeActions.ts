@@ -7,6 +7,7 @@ import { createNotificationActions } from './notificationActions';
 import { createPracticeActions } from './practiceActions';
 import { createCommunity4Actions } from './community4Actions';
 import { createFeedActions } from './feedActions';
+import { createFeedInteractionActions, type FeedShareClientOptions } from './feedInteractionActions';
 import { createAgentActions } from './agentActions';
 import { helpResponse } from './helpResponse';
 import { inviteLinkUrl, newInviteCode } from '../auth/inviteLink';
@@ -43,7 +44,7 @@ const teachingUpdate = (input: SaveTeachingPracticeInput) => ({
 });
 
 /** Los reducers confirman los permisos en el servidor; nunca se modifica la caché de forma optimista. */
-export function createSpacetimeActions(getConnection: () => DbConnection, identity: () => string, files?: ResourceTransport): Omit<Actions, keyof DocumentActions | keyof GuideAiActions | keyof ExamActions | keyof AgentAiActions | keyof MembershipActions> {
+export function createSpacetimeActions(getConnection: () => DbConnection, identity: () => string, files?: ResourceTransport, sharing?: FeedShareClientOptions): Omit<Actions, keyof DocumentActions | keyof GuideAiActions | keyof ExamActions | keyof AgentAiActions | keyof MembershipActions> {
   const stickers = new StickerTransport(getConnection, identity);
   let queue = Promise.resolve();
   function serial<T>(task: () => Promise<T>): Promise<T> {
@@ -117,6 +118,7 @@ export function createSpacetimeActions(getConnection: () => DbConnection, identi
     ...createPracticeActions(getConnection, identity),
     ...createCommunity4Actions(getConnection),
     ...createFeedActions(getConnection),
+    ...createFeedInteractionActions(getConnection, sharing),
     ...createAgentActions(getConnection),
     ...createPresentationActions(getConnection, identity),
     ...createStudyRoomActions(getConnection, identity),

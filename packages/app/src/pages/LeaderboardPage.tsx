@@ -1,4 +1,5 @@
-import { Fragment, useMemo, useState, type CSSProperties } from 'react';
+import { Fragment, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { ResourceComments } from '../components/whatsNew/ResourceComments';
 import { Link, useParams, useSearchParams } from 'react-router';
 import {
   breakdown,
@@ -6,6 +7,8 @@ import {
   CONTRIBUTION_RULES,
   NOT_SCORED,
   RECOGNITIONS,
+  leaderChanges,
+  rankingFeedId,
   type ContributionKind,
   type RecognitionId,
 } from '@b20/core';
@@ -147,6 +150,21 @@ function NotFound() {
 /** Contribuciones (3.6): leaderboard del grupo por periodo, con las reglas a la vista. */
 export function LeaderboardPage() {
   const data = useSnapshot();
+  const [params] = useSearchParams();
+  const linkedAnnouncement = params.get('aviso');
+  const announcements = leaderChanges(data).slice(-6).reverse().map((change) => ({
+    id: rankingFeedId(change),
+    title: `${data.members.find((member) => member.id === change.memberId)?.displayName ?? 'Integrante'} · ${change.periodLabel} · ${change.points} puntos`,
+  }));
+  if (linkedAnnouncement && !announcements.some((entry) => entry.id === linkedAnnouncement)) {
+    announcements.unshift({ id: linkedAnnouncement, title: 'Aviso de contribuciones compartido' });
+  }
+  useEffect(() => {
+    if (!linkedAnnouncement) return;
+    const element = document.getElementById('ranking-shared-announcement');
+    element?.focus({ preventScroll: true });
+    element?.scrollIntoView?.({ block: 'center' });
+  }, [linkedAnnouncement]);
   const { periods, period, choose, query } = usePeriod(data);
   const board = useMemo(() => buildLeaderboard(data, period.window), [data, period]);
   const memberOf = (id: string) => data.members.find((m) => m.id === id);
@@ -175,6 +193,10 @@ export function LeaderboardPage() {
 
       <div className="detail">
         <div className="detail__main">
+          {announcements.length > 0 && <section className="panel" id="ranking-shared-announcement" tabIndex={-1} aria-label="Conversaciones de los avisos del ranking">
+            <h2>Avisos del ranking</h2>
+            {announcements.map((entry) => <ResourceComments key={entry.id} target={{ kind: 'ranking', id: entry.id }} title={entry.title} initiallyOpen={entry.id === linkedAnnouncement} />)}
+          </section>}
           {ranked.length === 0 ? (
             <section className="panel">
               <Empty icon="users" title="Aún no hay aportes en este periodo">

@@ -1,3 +1,4 @@
+import { ResourceComments } from '../components/whatsNew/ResourceComments';
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
@@ -362,6 +363,7 @@ export function GuidePage() {
                 </p>
               )}
               <ResourceSection kind="guide" id={guide.id} version={guide.version} canEdit={Boolean(data.me) && !guide.withdrawnAt} />
+              <ResourceComments target={{ kind: 'guide', id: guide.id }} title="Comentarios de la guía" />
             </article>
           )}
           {tab === 'fuentes' && <fieldset disabled={Boolean(guide.withdrawnAt)} style={{ border: 0, padding: 0, margin: 0 }}><SourcesTab guide={guide} /></fieldset>}

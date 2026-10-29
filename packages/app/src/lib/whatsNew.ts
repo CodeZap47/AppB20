@@ -1,4 +1,4 @@
-import { celebrationDate, type ExamSummary, type FeedTargetKind } from '@b20/core';
+import { celebrationDate, rankingFeedId, type ExamSummary, type FeedTargetKind } from '@b20/core';
 import type { Assignment, Birthday, FeedPost, Id, Note, Snapshot } from '../data/types';
 import { formatDate, memberName, parseDay } from './format';
 import { unreadMessages as unreadChatMessages } from './chat';
@@ -298,6 +298,7 @@ function rankingNews(snapshot: Snapshot, now: Date): NewsItem[] {
   return leaderChanges(snapshot, now).map((change) => ({
     key: `rk${change.memberId}-${change.at.getTime()}`,
     kind: 'ranking',
+    resource: { kind: 'ranking', id: rankingFeedId(change) },
     subjectId: undefined,
     actorId: change.memberId,
     text: change.tiedWith.length

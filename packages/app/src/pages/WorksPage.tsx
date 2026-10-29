@@ -1,3 +1,4 @@
+import { ResourceComments } from '../components/whatsNew/ResourceComments';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { ExamMaterialLink } from '../components/ExamMaterialLink';
 import { AgentHelpLink } from '../components/AgentHelpLink';
@@ -617,6 +618,7 @@ export function AssignmentPage() {
               Aquí aparecerá lo que suba cada alumno o equipo, cada uno por separado.
             </Empty>
           )}
+          <ResourceComments target={{ kind: 'assignment', id: assignment.id }} title="Comentarios de la tarea" />
         </div>
 
         <aside className="detail__side">

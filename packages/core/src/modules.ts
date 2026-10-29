@@ -8,6 +8,19 @@
 
 export type Stage = 0 | 1 | 2 | 3;
 
+export interface FeedCreateAction {
+  /** Identificador estable de la acción, independiente de su texto y del módulo padre. */
+  readonly id: string;
+  readonly label: string;
+  readonly path: string;
+  /** Menor primero. Sin prioridad se conserva el orden del catálogo y de sus acciones. */
+  readonly priority?: number;
+}
+
+export interface AvailableFeedCreateAction extends FeedCreateAction {
+  readonly moduleId: string;
+}
+
 export interface ModuleInfo {
   /** Identificador estable; también se usa como ruta. */
   id: string;
@@ -21,6 +34,8 @@ export interface ModuleInfo {
   worksWithoutAi: boolean;
   /** Ya tiene pantalla propia aunque su etapa no haya llegado: aparece en la navegación. */
   ready?: boolean;
+  /** Entradas explícitas para crear publicaciones del grupo desde el feed. */
+  readonly feedCreateActions?: readonly FeedCreateAction[];
 }
 
 export const MODULES: readonly ModuleInfo[] = [
@@ -49,6 +64,10 @@ export const MODULES: readonly ModuleInfo[] = [
     summary: 'Tareas, exámenes y actividades de clase, con lo que subió cada quien.',
     stage: 1,
     worksWithoutAi: true,
+    feedCreateActions: [
+      { id: 'task', label: 'Crear tarea', path: '/m/tareas/nueva', priority: 0 },
+      { id: 'activity', label: 'Registrar actividad', path: '/m/actividades/nueva' },
+    ],
   },
   {
     id: 'notas',
@@ -57,6 +76,7 @@ export const MODULES: readonly ModuleInfo[] = [
     summary: 'Apuntes por materia, parcial y tema.',
     stage: 1,
     worksWithoutAi: true,
+    feedCreateActions: [{ id: 'note', label: 'Compartir apunte', path: '/m/notas/nueva?visibilidad=grupo', priority: 1 }],
   },
   {
     id: 'preguntas',
@@ -65,6 +85,7 @@ export const MODULES: readonly ModuleInfo[] = [
     summary: 'Dudas del grupo con respuestas y revisiones.',
     stage: 1,
     worksWithoutAi: true,
+    feedCreateActions: [{ id: 'question', label: 'Hacer pregunta', path: '/m/preguntas/nueva', priority: 2 }],
   },
   {
     id: 'perfiles',
@@ -89,6 +110,7 @@ export const MODULES: readonly ModuleInfo[] = [
     summary: 'Guías por materia y parcial con fuentes y omisiones visibles.',
     stage: 1,
     worksWithoutAi: false,
+    feedCreateActions: [{ id: 'guide', label: 'Crear guía', path: '/m/guias/nueva' }],
   },
   {
     id: 'examenes',
@@ -98,6 +120,7 @@ export const MODULES: readonly ModuleInfo[] = [
     stage: 2,
     worksWithoutAi: true,
     ready: true,
+    feedCreateActions: [{ id: 'exam', label: 'Preparar examen', path: '/m/examenes/nuevo' }],
   },
   {
     id: 'votaciones',
@@ -107,6 +130,7 @@ export const MODULES: readonly ModuleInfo[] = [
     stage: 2,
     worksWithoutAi: true,
     ready: true,
+    feedCreateActions: [{ id: 'poll', label: 'Crear votación', path: '/m/votaciones/nueva' }],
   },
   {
     id: 'salas',
@@ -116,6 +140,7 @@ export const MODULES: readonly ModuleInfo[] = [
     stage: 2,
     worksWithoutAi: true,
     ready: true,
+    feedCreateActions: [{ id: 'room', label: 'Crear sala', path: '/m/salas/nueva' }],
   },
   {
     id: 'ayuda',
@@ -125,6 +150,7 @@ export const MODULES: readonly ModuleInfo[] = [
     stage: 2,
     worksWithoutAi: true,
     ready: true,
+    feedCreateActions: [{ id: 'help', label: 'Publicar ayuda', path: '/m/ayuda/nueva' }],
   },
   {
     id: 'retos',
@@ -134,6 +160,7 @@ export const MODULES: readonly ModuleInfo[] = [
     stage: 2,
     worksWithoutAi: true,
     ready: true,
+    feedCreateActions: [{ id: 'challenge', label: 'Crear reto', path: '/m/retos/nuevo' }],
   },
   {
     id: 'revision-codigo',
@@ -143,6 +170,7 @@ export const MODULES: readonly ModuleInfo[] = [
     stage: 2,
     worksWithoutAi: true,
     ready: true,
+    feedCreateActions: [{ id: 'review', label: 'Pedir revisión de código', path: '/m/revision-codigo/nueva' }],
   },
   {
     id: 'museo-bugs',
@@ -152,6 +180,7 @@ export const MODULES: readonly ModuleInfo[] = [
     stage: 2,
     worksWithoutAi: true,
     ready: true,
+    feedCreateActions: [{ id: 'museum', label: 'Documentar bug', path: '/m/museo-bugs?crear=1' }],
   },
   {
     id: 'aprende-ensenando',
@@ -170,6 +199,7 @@ export const MODULES: readonly ModuleInfo[] = [
     stage: 2,
     worksWithoutAi: true,
     ready: true,
+    feedCreateActions: [{ id: 'collection', label: 'Crear colección de repaso', path: '/m/repaso/nueva?visibilidad=grupo' }],
   },
   {
     id: 'agente',
@@ -188,6 +218,7 @@ export const MODULES: readonly ModuleInfo[] = [
     stage: 2,
     worksWithoutAi: true,
     ready: true,
+    feedCreateActions: [{ id: 'opportunity', label: 'Compartir oportunidad', path: '/m/oportunidades?crear=1' }],
   },
   {
     id: 'leaderboard',
@@ -239,7 +270,21 @@ export function modulesForStage(stage: Stage): ModuleInfo[] {
 
 /** Lo que va en la navegación: el MVP y los módulos que ya tienen pantalla. */
 export function navigableModules(): ModuleInfo[] {
-  return MODULES.filter((m) => m.stage <= 1 || m.ready);
+  return MODULES.filter(moduleAvailable);
+}
+
+function moduleAvailable(module: ModuleInfo): boolean {
+  return module.stage <= 1 || module.ready === true;
+}
+
+/** Solo creaciones declaradas y disponibles; las tres prioridades iniciales preceden al catálogo. */
+export function availableFeedCreateActions(modules: readonly ModuleInfo[] = MODULES): readonly AvailableFeedCreateAction[] {
+  return modules.filter(moduleAvailable).flatMap((module) =>
+    (module.feedCreateActions ?? []).map((action) => ({ ...action, moduleId: module.id })),
+  ).sort((a, b) => {
+    const first = a.priority ?? Number.POSITIVE_INFINITY; const second = b.priority ?? Number.POSITIVE_INFINITY;
+    return first === second ? 0 : first - second;
+  });
 }
 
 export function findModule(id: string): ModuleInfo | undefined {

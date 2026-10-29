@@ -2,6 +2,7 @@ import { purgePresentationAiSource } from './presentationAiHandlers';
 import { purgeExamSpacedSource } from './examSpaced';
 import { purgeDocumentSource } from './documentHandlers';
 import { memberIdentityFor } from './authIdentity';
+import { purgeFeedThread } from './feedInteractionLifecycle';
 import { SenderError } from 'spacetimedb/server';
 import { ScheduleAt, Timestamp } from 'spacetimedb';
 import { retentionDeadline, retentionExpired } from '../../core/src/retention';
@@ -175,6 +176,7 @@ function purgeOne(ctx: Ctx, row: RetentionRow) {
   ctx.db.contentRetention.key.update({ ...row, state: 'purging' });
   for (const target of targets) {
     const split = target.indexOf(':'); const kind = target.slice(0, split); const id = BigInt(target.slice(split + 1));
+    purgeFeedThread(ctx, kind, id);
     purgeAiSource(ctx, kind, id);
     purgeMuseum(ctx.db, kind, id);
     purgeAgentSource(ctx.db, kind, id);

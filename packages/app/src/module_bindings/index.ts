@@ -66,6 +66,7 @@ import CommentQuestionReducer from "./comment_question_reducer";
 import CompleteOnboardingReducer from "./complete_onboarding_reducer";
 import CompletePresentationAttemptReducer from "./complete_presentation_attempt_reducer";
 import CompleteTeachingPracticeReducer from "./complete_teaching_practice_reducer";
+import ConfigureFeedShareServiceReducer from "./configure_feed_share_service_reducer";
 import ControlStudyRoomTimerReducer from "./control_study_room_timer_reducer";
 import CreateActivityReducer from "./create_activity_reducer";
 import CreateAssignmentReducer from "./create_assignment_reducer";
@@ -258,6 +259,9 @@ import * as CreateStickerPackNativeProcedure from "./create_sticker_pack_native_
 import * as DocumentPreparationProcedure from "./document_preparation_procedure";
 import * as ExamActionProcedure from "./exam_action_procedure";
 import * as ExamEvaluationAiProcedure from "./exam_evaluation_ai_procedure";
+import * as FeedShareActionProcedure from "./feed_share_action_procedure";
+import * as FeedSharePreviewProcedure from "./feed_share_preview_procedure";
+import * as FeedThreadProcedure from "./feed_thread_procedure";
 import * as GetFileDownloadAccessProcedure from "./get_file_download_access_procedure";
 import * as GetFileUploadStatusProcedure from "./get_file_upload_status_procedure";
 import * as GetResourceManifestProcedure from "./get_resource_manifest_procedure";
@@ -1312,6 +1316,7 @@ const reducersSchema = __reducers(
   __reducerSchema("complete_onboarding", CompleteOnboardingReducer),
   __reducerSchema("complete_presentation_attempt", CompletePresentationAttemptReducer),
   __reducerSchema("complete_teaching_practice", CompleteTeachingPracticeReducer),
+  __reducerSchema("configure_feed_share_service", ConfigureFeedShareServiceReducer),
   __reducerSchema("control_study_room_timer", ControlStudyRoomTimerReducer),
   __reducerSchema("create_activity", CreateActivityReducer),
   __reducerSchema("create_assignment", CreateAssignmentReducer),
@@ -1506,6 +1511,9 @@ const proceduresSchema = __procedures(
   __procedureSchema("document_preparation", DocumentPreparationProcedure.params, DocumentPreparationProcedure.returnType),
   __procedureSchema("exam_action", ExamActionProcedure.params, ExamActionProcedure.returnType),
   __procedureSchema("exam_evaluation_ai", ExamEvaluationAiProcedure.params, ExamEvaluationAiProcedure.returnType),
+  __procedureSchema("feed_share_action", FeedShareActionProcedure.params, FeedShareActionProcedure.returnType),
+  __procedureSchema("feed_share_preview", FeedSharePreviewProcedure.params, FeedSharePreviewProcedure.returnType),
+  __procedureSchema("feed_thread", FeedThreadProcedure.params, FeedThreadProcedure.returnType),
   __procedureSchema("get_file_download_access", GetFileDownloadAccessProcedure.params, GetFileDownloadAccessProcedure.returnType),
   __procedureSchema("get_file_upload_status", GetFileUploadStatusProcedure.params, GetFileUploadStatusProcedure.returnType),
   __procedureSchema("get_resource_manifest", GetResourceManifestProcedure.params, GetResourceManifestProcedure.returnType),

@@ -154,6 +154,8 @@ import { DemoCommunity4Store } from './community4Demo';
 import { DemoAgentStore } from './agentStore';
 import { emptyAgent, type AgentActions, type AgentAiActions } from './agentTypes';
 import { DemoFeedStore } from './feedDemo';
+import { DemoFeedInteractionStore } from './feedInteractionDemo';
+import type { FeedInteractionActions } from './feedInteractionTypes';
 import { demoContentInventory, demoReferencedFileReadable } from './demoContentInventory';
 import type { AdminContentResult, ModerateContentInput } from './membershipTypes';
 import { contentImpactSignature } from './membershipTypes';
@@ -291,6 +293,7 @@ export class DemoDataSource implements DataSource {
   #community4: DemoCommunity4Store;
   #agent: DemoAgentStore;
   #feed: DemoFeedStore;
+  #feedInteractions: DemoFeedInteractionStore;
   #helpVersions: DemoHelpVersions;
   #teachingVersions: DemoTeachingVersions;
   #batchDepth = 0;
@@ -331,6 +334,7 @@ export class DemoDataSource implements DataSource {
     this.#community4 = new DemoCommunity4Store({ state: () => this.#state, active: () => this.#activeMember(), current: () => this.getSnapshot(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit(), createQuestion: (input) => this.askQuestion(input) });
     this.#agent = new DemoAgentStore({ state: () => this.#state, active: () => this.#activeMember(), current: () => this.getSnapshot(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit() });
     this.#feed = new DemoFeedStore({ state: () => this.#state, active: () => this.#activeMember(), current: () => this.getSnapshot(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit(), available: (kind, id) => !this.#withdrawals.get(`${kind}:${id}`)?.withdrawnAt && !this.#trash?.blocksRead(kind, id) });
+    this.#feedInteractions = new DemoFeedInteractionStore({ state: () => this.#state, source: () => this, active: () => this.#activeMember(), now: () => this.#now(), id: () => this.#id(), emit: () => this.#emit(), available: (kind, id) => !this.#withdrawals.get(`${kind}:${id}`)?.withdrawnAt && !this.#trash?.blocksRead(kind, id) });
     this.#trash = new DemoTrashStore({ state: () => this.#state, active: () => this.#activeMember(), now: () => this.#now(), emit: () => this.#emit(), resources: () => this.#academic.resources(),
       extraContent: (kind, id) => { const row = this.#contentRow(kind, id); return row ? { ownerIds: this.#contentAuthors(kind, id), version: row.version ?? 1, personal: kind === 'note' && (row as Note).visibility === 'personal' } : undefined; },
       extraTargets: (targets) => { for (const row of this.#feed.raw().feedComments) if (targets.has(`feed_post:${row.postId}`)) targets.add(`feed_comment:${row.id}`); },
@@ -410,6 +414,12 @@ export class DemoDataSource implements DataSource {
   previewAgentAi = (...args: Parameters<AgentAiActions['previewAgentAi']>) => this.#agent.previewAgentAi(...args);
   runAgentAiStep = () => this.#agent.runAgentAiStep();
   listAgentAiRuns = () => this.#agent.listAgentAiRuns();
+  readFeedThread = (...args: Parameters<FeedInteractionActions['readFeedThread']>) => this.#feedInteractions.readFeedThread(...args);
+  addFeedThreadComment = (...args: Parameters<FeedInteractionActions['addFeedThreadComment']>) => this.#feedInteractions.addFeedThreadComment(...args);
+  deleteFeedThreadComment = (...args: Parameters<FeedInteractionActions['deleteFeedThreadComment']>) => this.#feedInteractions.deleteFeedThreadComment(...args);
+  createFeedShare = (...args: Parameters<FeedInteractionActions['createFeedShare']>) => this.#feedInteractions.createFeedShare(...args);
+  listFeedShares = (...args: Parameters<FeedInteractionActions['listFeedShares']>) => this.#feedInteractions.listFeedShares(...args);
+  revokeFeedShare = (...args: Parameters<FeedInteractionActions['revokeFeedShare']>) => this.#feedInteractions.revokeFeedShare(...args);
   toggleFeedReaction = (...args: Parameters<FeedActions['toggleFeedReaction']>) => this.#feed.toggleFeedReaction(...args);
   createFeedPost = (...args: Parameters<FeedActions['createFeedPost']>) => this.#feed.createFeedPost(...args);
   editFeedPost = (...args: Parameters<FeedActions['editFeedPost']>) => this.#feed.editFeedPost(...args);
@@ -741,7 +751,7 @@ export class DemoDataSource implements DataSource {
     result.groupMessages = result.groupMessages.map((row) => redact(row, 'group_message'));
     result.channelMessages = result.channelMessages.map((row) => redact(row, 'channel_message'));
     result.reactions = result.reactions.filter((row) => row.scope === 'direct' || !this.#withdrawals.get(`${row.scope}_message:${row.messageId}`)?.withdrawnAt);
-    return { ...result, ...this.#notifications.snapshot(result), ...this.#practice.snapshot(), ...this.#community4.snapshot(result), ...this.#agent.snapshot(result), ...this.#feed.snapshot(result) };
+    return this.#feedInteractions.filterSnapshot({ ...result, ...this.#notifications.snapshot(result), ...this.#practice.snapshot(), ...this.#community4.snapshot(result), ...this.#agent.snapshot(result), ...this.#feed.snapshot(result) });
   }
 
   #emit() {

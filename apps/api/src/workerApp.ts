@@ -17,17 +17,20 @@ import { examRoutes } from './ai/examRoutes.ts';
 import { agentAiRoutes } from './ai/agentRoutes.ts';
 import { moodleRoutes } from './integrations/moodleRoutes.ts';
 import { invitationLinkRoutes } from './invitations/linkRoutes.ts';
+import { feedSharePreviewRoutes, feedShareRoutes } from './shares/routes.ts';
+import type { ShareWorkerEnv } from './shares/protocol.ts';
 import type { AgentProvider } from './ai/agentProvider.ts';
 import type { GuideProvider } from './ai/guideProvider.ts';
 import type { AiProvider } from './ai/provider.ts';
 
-type WorkerContext = { Bindings: AiWorkerEnv; Variables: AuthVariables & { sessionToken: string; files: FileDatabase; ai: AiDatabase } };
+type WorkerContext = { Bindings: AiWorkerEnv & ShareWorkerEnv; Variables: AuthVariables & { sessionToken: string; files: FileDatabase; ai: AiDatabase } };
 interface WorkerOptions {
   auth?: AuthOptions;
   database?: (env: FileWorkerEnv) => FileDatabase;
   aiDatabase?: (env: AiWorkerEnv) => AiDatabase;
   moodleFetch?: typeof fetch;
   invitationFetch?: typeof fetch;
+  shareFetch?: typeof fetch;
   aiProvider?: AiProvider;
   guideProvider?: GuideProvider;
   agentProvider?: AgentProvider;
@@ -98,6 +101,8 @@ export function createWorkerApp(options: WorkerOptions = {}) {
   // Autenticada con su propio secreto: la extensión de Moodle no tiene sesión de B20.
   app.route('/integrations/moodle', moodleRoutes({ fetchFn: options.moodleFetch }));
   app.route('/admin/invitation-links', invitationLinkRoutes({ fetchFn: options.invitationFetch }));
+  app.route('/shares', feedShareRoutes({ fetchFn: options.shareFetch }));
+  app.route('/s', feedSharePreviewRoutes({ fetchFn: options.shareFetch }));
   app.use('/files/*', async (c, next) => {
     if (!c.env.FILES) return c.json({ error: 'La compatibilidad con archivos anteriores no está configurada en este servicio.' }, 503);
     let auth: AuthOptions;

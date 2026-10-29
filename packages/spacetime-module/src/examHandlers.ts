@@ -1,5 +1,6 @@
 import { sendExamToSpaced } from './examSpaced';
 import { memberIdentityFor } from './authIdentity';
+import { invalidateFeedShares } from './feedInteractionLifecycle';
 import { SenderError } from 'spacetimedb/server';
 import { aiHash, aiRecord, aiSourceFingerprint, aiUuid, sanitizeAiText, validateAiGenerationConfig,
   type AiGenerationConfig, type AiPreparation } from '../../core/src/ai';
@@ -39,7 +40,11 @@ function requireVersion(ctx: Ctx, examId: string, version: unknown) { const row 
 function data(row: VersionRow) { return JSON.parse(row.json) as StoredVersion; }
 function attemptData(row: AttemptRow) { return JSON.parse(row.json) as StoredAttempt; }
 function ownAttempt(ctx: Ctx, attemptId: unknown) { activeMember(ctx); const row = ctx.db.examAttempt.id.find(uuid(attemptId)); if (!row || !row.actor.isEqual(memberIdentityFor(ctx))) fail('unavailable', 'El intento no está disponible.'); return row; }
-function bump(ctx: Ctx, exam: ExamRow, changes: Partial<ExamRow> = {}) { const next = { ...exam, ...changes, revision: exam.revision + 1, updatedAt: ctx.timestamp }; ctx.db.studyExam.id.update(next); return next; }
+function bump(ctx: Ctx, exam: ExamRow, changes: Partial<ExamRow> = {}) {
+  const next = { ...exam, ...changes, revision: exam.revision + 1, updatedAt: ctx.timestamp };
+  if (exam.visibility === 'group' && (next.visibility !== 'group' || next.archived || !next.readyVersion)) invalidateFeedShares(ctx, 'exam', exam.id);
+  ctx.db.studyExam.id.update(next); return next;
+}
 function mutable(ctx: Ctx, raw: Record<string, unknown>) {
   const exam = own(ctx, raw.examId); expectVersion(exam.revision, integer(raw.expectedRevision, 'Revisión'));
   const version = requireVersion(ctx, exam.id, raw.version);

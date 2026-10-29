@@ -1,4 +1,5 @@
 import { memberIdentityFor } from './authIdentity';
+import { invalidateFeedShares } from './feedInteractionLifecycle';
 import { SenderError } from 'spacetimedb/server';
 import { cleanFeedComment, cleanFeedPost, cleanFeedReaction, feedReactionKey } from '../../core/src/feed';
 import { activeMember, bumpMaterial, isActive, log, requireSubject, requireText, type Ctx, type ViewDb } from './moduleContext';
@@ -68,6 +69,7 @@ export function deleteFeedPost(ctx: Ctx, input: { postId: bigint }) {
   const own = post.author.isEqual(memberIdentityFor(ctx));
   if (!own && !me.isCreator) throw new SenderError('Solo quien publicó o un administrador puede eliminarla.');
   ctx.db.feedPost.id.update({ ...post, text: '', deletedAt: ctx.timestamp, deletedBy: memberIdentityFor(ctx) });
+  invalidateFeedShares(ctx, 'post', post.id);
   bumpMaterial(ctx, 'feed_post', post.id);
   for (const reaction of [...ctx.db.feedReaction.target.filter(`post:${post.id}`)]) ctx.db.feedReaction.key.delete(reaction.key);
   if (!own) log(ctx, 'moderate', 'feed_post', post.id);

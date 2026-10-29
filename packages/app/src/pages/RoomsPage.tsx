@@ -1,3 +1,4 @@
+import { ResourceComments } from '../components/whatsNew/ResourceComments';
 import { Fragment, useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { ROOM_LIMITS, roomRemainingMs, roomTimerMinutesError } from '@b20/core';
@@ -133,6 +134,7 @@ export function RoomPage() {
   const joined = membership?.status === 'joined';
   return <><Link to={BASE} className="back">← Salas de estudio</Link><header className="page-header"><div><p className="eyebrow">{data.subjects.find((subject) => subject.id === room.subjectId)?.name} · {room.topic}</p><h1>{room.title}</h1><p className="muted">Organiza {memberName(data.members, room.organizerId)}</p></div><RoomBadge room={room} /></header>
     <section className="panel rooms-agenda"><p className="prewrap">{room.objective}</p><p><strong>Horario previsto:</strong> {formatTime(room.startsAt)} — {formatTime(room.endsAt)}</p><p className="muted">{room.participantCount}{room.capacity ? ` de ${room.capacity}` : ''} inscritos.{room.status === 'scheduled' && ' La sesión comienza cuando el organizador la inicia.'}</p>{joined && activeRoom(room) && <Link className="button secondary" to={`${BASE}/${room.id}/editar`}>Editar horario y detalles</Link>}</section>
+    {room.visibility === 'group' && <ResourceComments target={{ kind: 'room', id: room.id }} title="Comentarios del anuncio de la sala" />}
     {joined ? <RoomContent key={`${data.me.id}:${room.id}:${membership.joinedAt?.getTime() ?? membership.updatedAt.getTime()}`} room={room} data={data} /> : <RoomAdmission room={room} membership={membership} />}
   </>;
 }

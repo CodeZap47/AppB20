@@ -166,6 +166,6 @@ export function createSpacetimeDataSource(options: ConnectionOptions, factory?: 
   source.setAiClient(ai);
   const files = new ResourceTransport({ getConnection: source.getConnection, getIdentity: source.getIdentity,
     legacy: legacyApiUrl ? { apiUrl: legacyApiUrl, getToken: options.getToken ?? (() => options.token) } : undefined });
-  return Object.assign(source, createSpacetimeActions(source.getConnection, source.getIdentity, files), createMembershipActions(source.getConnection, { apiUrl: options.invitationApiUrl ?? options.apiUrl ?? config.invitationApiUrl, getToken: options.getToken ?? (() => options.token) }), createGuideAiActions(ai), createExamActions(ai), createDocumentActions(ai), { presentationFeatures: createPresentationFeatureActions(ai) }, createAgentAiActions(ai)) as
+  return Object.assign(source, createSpacetimeActions(source.getConnection, source.getIdentity, files, { apiUrl: (options.apiUrl ?? config.aiApiUrl) || config.invitationApiUrl, getToken: () => source.getSnapshot().me?.status === 'active' ? (options.getToken ?? (() => options.token))() : undefined }), createMembershipActions(source.getConnection, { apiUrl: options.invitationApiUrl ?? options.apiUrl ?? config.invitationApiUrl, getToken: options.getToken ?? (() => options.token) }), createGuideAiActions(ai), createExamActions(ai), createDocumentActions(ai), { presentationFeatures: createPresentationFeatureActions(ai) }, createAgentAiActions(ai)) as
     SpacetimeDataSource & Actions;
 }

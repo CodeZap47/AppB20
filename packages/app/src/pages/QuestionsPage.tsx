@@ -704,7 +704,7 @@ function AnswerCard({
   const mine = useful.some((item) => item.memberId === meId);
   const canMark = meId && answer.authorId !== meId && !answer.withdrawnAt;
   return (
-    <article className={accepted ? 'panel qa-answer answer--accepted' : 'panel qa-answer'}>
+    <article className={accepted ? 'panel qa-answer answer--accepted' : 'panel qa-answer'} id={`respuesta-${answer.id}`} tabIndex={-1}>
       <header className="qa-answer__meta">
         <Avatar member={author} size={28} />
         <span className="qa-answer__who">
@@ -757,8 +757,16 @@ export function QuestionPage() {
 
 function QuestionDetail() {
   const { questionId = '' } = useParams();
+  const [params] = useSearchParams();
   const source = useDataSource();
   const { me, questions, answers, members, subjects, notes, museumEntries, answerUsefulness } = useSnapshot();
+  const linkedAnswer = params.get('respuesta');
+  useEffect(() => {
+    if (!answers.some((entry) => entry.id === linkedAnswer && entry.questionId === questionId && !entry.withdrawnAt)) return;
+    const element = document.getElementById(`respuesta-${linkedAnswer}`);
+    element?.focus({ preventScroll: true });
+    element?.scrollIntoView?.({ block: 'center' });
+  }, [questionId, linkedAnswer, answers]);
   const { error, pending, run } = useAction();
   const [answer, setAnswer] = useState('');
   const queue = useResourceUploadQueue();

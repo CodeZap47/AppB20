@@ -885,6 +885,45 @@ export type FeedReaction = __Infer<typeof FeedReaction>;
 export const FeedReactions = __t.object("FeedReactions", {});
 export type FeedReactions = __Infer<typeof FeedReactions>;
 
+export const FeedShare = __t.object("FeedShare", {
+  id: __t.u64(),
+  tokenHash: __t.string(),
+  target: __t.string(),
+  targetKind: __t.string(),
+  targetId: __t.string(),
+  createdBy: __t.identity(),
+  createdAt: __t.timestamp(),
+  revokedAt: __t.option(__t.timestamp()),
+  invalidatedAt: __t.option(__t.timestamp()),
+});
+export type FeedShare = __Infer<typeof FeedShare>;
+
+export const FeedShareServiceConfig = __t.object("FeedShareServiceConfig", {
+  id: __t.u8(),
+  identity: __t.identity(),
+  enabled: __t.bool(),
+});
+export type FeedShareServiceConfig = __Infer<typeof FeedShareServiceConfig>;
+
+export const FeedThreadComment = __t.object("FeedThreadComment", {
+  id: __t.u64(),
+  target: __t.string(),
+  author: __t.identity(),
+  text: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type FeedThreadComment = __Infer<typeof FeedThreadComment>;
+
+export const FeedThreadReceipt = __t.object("FeedThreadReceipt", {
+  key: __t.string(),
+  target: __t.string(),
+  actor: __t.identity(),
+  requestHash: __t.string(),
+  commentId: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type FeedThreadReceipt = __Infer<typeof FeedThreadReceipt>;
+
 export const FileServiceConfig = __t.object("FileServiceConfig", {
   id: __t.u32(),
   identity: __t.identity(),

@@ -1,3 +1,4 @@
+import { ResourceComments } from '../components/whatsNew/ResourceComments';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ExamMaterialLink } from '../components/ExamMaterialLink';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router';
@@ -39,7 +40,7 @@ function EvidenceCard({
 }) {
   const mine = Boolean(meId && evidence.participantIds.includes(meId));
   return (
-    <article className="panel evidence">
+    <article className="panel evidence" id={`evidencia-${evidence.id}`} tabIndex={-1}>
       <header className="evidence__header">
         <AvatarStack
           members={evidence.participantIds.map((id) => members.find((m) => m.id === id))}
@@ -167,7 +168,15 @@ function EvidenceForm({ activityId, onDone }: { activityId: string; onDone: () =
 
 export function ActivityPage() {
   const { activityId = '' } = useParams();
+  const [params] = useSearchParams();
   const { me, activities, assignments, evidences, members, subjects, terms, notes } = useSnapshot();
+  const linkedEvidence = params.get('evidencia');
+  useEffect(() => {
+    if (!evidences.some((entry) => entry.id === linkedEvidence && entry.activityId === activityId && !entry.withdrawnAt)) return;
+    const element = document.getElementById(`evidencia-${linkedEvidence}`);
+    element?.focus({ preventScroll: true });
+    element?.scrollIntoView?.({ block: 'center' });
+  }, [activityId, linkedEvidence, evidences]);
   const [adding, setAdding] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const activity = activities.find((a) => a.id === activityId);
@@ -309,6 +318,7 @@ export function ActivityPage() {
               Sube lo que hizo tu equipo: código, observaciones o resultados.
             </Empty>
           )}
+          <ResourceComments target={{ kind: 'activity', id: activity.id }} title="Comentarios de la actividad" />
         </div>
 
         <aside className="detail__side">

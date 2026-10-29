@@ -55,6 +55,7 @@
   },
   "secrets": {
     "required": [
+      "SHARE_SERVICE_TOKEN",
       "AI_SERVICE_TOKEN",
       "AI_MASTER_KEYS_JSON",
       "NOTIFICATION_SERVICE_TOKEN",

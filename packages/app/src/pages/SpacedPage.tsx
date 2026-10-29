@@ -1,3 +1,4 @@
+import { ResourceComments } from '../components/whatsNew/ResourceComments';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { MAX_SPACED_TITLE_LENGTH, MAX_SPACED_QUESTION_LENGTH, MAX_SPACED_EXPLANATION_LENGTH, MAX_SPACED_HINT_LENGTH, SPACED_INTERVAL_DAYS, SPACED_RATING_LABEL, type SpacedRating, type SpacedSourceKind } from '@b20/core';
@@ -180,7 +181,9 @@ function CollectionForm({ data, collection }: { data: Snapshot; collection?: Spa
   const [title, setTitle] = useState(collection?.title ?? '');
   const [subjectId, setSubjectId] = useState(collection?.subjectId ?? data.subjects.find((s) => s.id === params.get('materia'))?.id ?? data.subjects[0]?.id ?? '');
   const [termId, setTermId] = useState(collection?.termId ?? '');
-  const [visibility, setVisibility] = useState<'personal' | 'group'>(collection?.visibility ?? 'personal');
+  const [visibility, setVisibility] = useState<'personal' | 'group'>(() =>
+    collection?.visibility ?? (params.get('visibilidad') === 'grupo' ? 'group' : 'personal'),
+  );
   const [expectedVersion, setExpectedVersion] = useState(collection?.version);
   const { error, pending, run } = useAction();
   const busy = useRef(false);
@@ -252,6 +255,7 @@ function CollectionDetail({ data, collection }: { data: Snapshot; collection: Sp
       {unavailable.length > 0 && <section className="spaced-section"><h3>Referencias por corregir</h3><ul className="spaced-card-list">{unavailable.map((card) => <SourceRepair key={`${card.id}:${card.version}`} data={data} collection={collection} card={card} />)}</ul></section>}
     </section>}
     {!collection.archived && <AiStudyModulePanel collection={collection} />}
+    {collection.visibility === 'group' && <ResourceComments target={{ kind: 'spaced', id: collection.id }} title="Comentarios de la colección" />}
     <section className="spaced-section"><h2>Tu historial de esta colección</h2>{reviews.length ? <ul className="spaced-history">{reviews.map((review) => <li key={review.id}><span className="spaced-history-question">{cards.find((c) => c.id === review.cardId)?.question ?? 'Tarjeta con fuente no disponible'}</span><strong>{SPACED_RATING_LABEL[review.rating]}</strong><span>Versión {review.cardVersion} · {formatTime(review.reviewedAt)}</span><span className="muted">Programada para {dueLabel(review.dueAt)}</span></li>)}</ul> : <p className="muted">Tus revisiones aparecerán aquí después de estudiar.</p>}</section>
   </>;
 }
